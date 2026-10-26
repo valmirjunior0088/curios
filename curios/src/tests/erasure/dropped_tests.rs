@@ -74,28 +74,28 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
         /std/Io/pure(())
         "#;
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
-    let mut ersd = None;
+    let mut anf = None;
 
     compile_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::Ersd(module) = stage {
-                ersd = Some(format!("{module}"));
+            if let Stage::Anf(module) = stage {
+                anf = Some(format!("{module}"));
             }
         },
     )
     .expect("source compiles");
 
-    let ersd = ersd.expect("ersd stage observed");
+    let anf = anf.expect("anf stage observed");
     assert!(
-        ersd.contains("$/std/Char/to_nat(128512)"),
-        "Char literal did not collapse to its Nat carrier:\n{ersd}"
+        anf.contains("$/std/Char/to_nat(128512)"),
+        "Char literal did not collapse to its Nat carrier:\n{anf}"
     );
     assert!(
-        ersd.contains("$/std/Str/to_bytes(x\"c3a9f09f9880\")"),
-        "Str literal did not collapse to its packed Bytes carrier:\n{ersd}"
+        anf.contains("$/std/Str/to_bytes(x\"c3a9f09f9880\")"),
+        "Str literal did not collapse to its packed Bytes carrier:\n{anf}"
     );
 }
 

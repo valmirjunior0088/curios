@@ -50,7 +50,7 @@ pub fn part_digests(
 /// A field of a constructor's row as its declaring item erased it: its shape, and for a field at a family, that family's name.
 #[derive(Debug, Clone)]
 pub struct ErasedField {
-    pub shape: curios_ersd::FieldShape,
+    pub shape: curios_anf::FieldShape,
     pub family: Option<String>,
 }
 

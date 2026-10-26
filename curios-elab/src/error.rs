@@ -1044,7 +1044,7 @@ pub enum Error {
     },
     /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
     ExplicitWitnessParam,
-    /// A natural-dispatch case key that does not fit `ersd`'s `NatCase`. A `Nat` *value* is unbounded through every erased stage — only materialization refuses one — but a key selects an arm of a branch table, which is a slot rather than a value.
+    /// A natural-dispatch case key that does not fit `anf`'s `NatCase`. A `Nat` *value* is unbounded through every erased stage — only materialization refuses one — but a key selects an arm of a branch table, which is a slot rather than a value.
     NatCaseKeyOverflow {
         value: Natural,
     },
@@ -1845,22 +1845,22 @@ impl Error {
 
     /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `extents` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
     pub fn refused_by_verifier(
-        error: curios_ersd::VerifyError,
-        extents: &BTreeMap<curios_ersd::ValueId, Extent>,
+        error: curios_anf::VerifyError,
+        extents: &BTreeMap<curios_anf::ValueId, Extent>,
         names: &ErasedNames,
     ) -> Self {
         // A member and a callee by the name erasure minted each for, and by the erased program's own where it minted it for none: a lambda written in place, a fragment linked past the names of its items.
-        let member = |value: curios_ersd::ValueId, erased: String| match names.values.get(&value) {
+        let member = |value: curios_anf::ValueId, erased: String| match names.values.get(&value) {
             Some(name) => ErasedName::Named(*name),
             None => ErasedName::Erased(erased),
         };
-        let callee = |call: curios_ersd::CycleCall| match names.functions.get(&call.function) {
+        let callee = |call: curios_anf::CycleCall| match names.functions.get(&call.function) {
             Some(name) => ErasedName::Named(*name),
             None => ErasedName::Erased(call.name),
         };
 
         match error {
-            curios_ersd::VerifyError::EvaluationCycle { steps } => {
+            curios_anf::VerifyError::EvaluationCycle { steps } => {
                 let extent = steps
                     .first()
                     .and_then(|step| extents.get(&step.value))
@@ -1873,7 +1873,7 @@ impl Error {
                 }
                 .at_opt(extent)
             }
-            curios_ersd::VerifyError::InitializerPerformsEffect {
+            curios_anf::VerifyError::InitializerPerformsEffect {
                 member: erased,
                 value,
                 through,

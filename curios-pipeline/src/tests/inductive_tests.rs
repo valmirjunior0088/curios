@@ -353,7 +353,7 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
 
 #[test]
 fn impossible_inductive_arm_lowers_to_unreachable() {
-    // The element is read at run time so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
+    // The element is read at run time so the scrutinee stays runtime — a fully-constant vector would be folded whole by ANF's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -371,11 +371,11 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             end)
     "#;
 
-    let (ersd, cont) = compile_printed_stages(source).unwrap();
+    let (anf, cont) = compile_printed_stages(source).unwrap();
 
     assert!(
-        ersd.contains("unreachable"),
-        "expected Ersd output to contain unreachable, got {ersd}",
+        anf.contains("unreachable"),
+        "expected ANF output to contain unreachable, got {anf}",
     );
     assert!(
         cont.contains("unreachable"),

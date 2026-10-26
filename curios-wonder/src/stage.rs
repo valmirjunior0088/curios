@@ -95,7 +95,7 @@ pub fn stage(
     }
 }
 
-/// The rung `name` of a library — the last of `units`, compiled against the ones before it and the prelude — asked through `file`, handed to `shown`. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `ersd` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
+/// The rung `name` of a library — the last of `units`, compiled against the ones before it and the prelude — asked through `file`, handed to `shown`. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `anf` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
 ///
 /// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the file asked through, since a unit is several files and the rung's printer reprints one. `core` is the unit's lowered module, which a unit restored from a store holds without its items, so the unit is lowered again in this process with no store. `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
 pub fn unit_stage(

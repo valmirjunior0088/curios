@@ -283,7 +283,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_let_values(&mut self, values: &'a [(EmissionValueName, EmissionValue)]) {
         for (value_name, value) in values {
-            // No aggregate has a back-edge — a recursive knot ties through a cell, and `curios-ersd`'s recursion rules refuse a tuple or list that evaluates itself — so every field is already bound and each construction is a single `struct.new` / `array.new_fixed` (via `emit_data`).
+            // No aggregate has a back-edge — a recursive knot ties through a cell, and `curios-anf`'s recursion rules refuse a tuple or list that evaluates itself — so every field is already bound and each construction is a single `struct.new` / `array.new_fixed` (via `emit_data`).
             match value {
                 EmissionValue::Pure(value) => {
                     self.declare_local(value_name);

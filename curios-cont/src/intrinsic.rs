@@ -97,7 +97,7 @@ pub enum Intrinsic {
     ListRest,
     ListAppend,
     ListConcat(usize),
-    /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
+    /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the ANF census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
     /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`Intrinsic::BytesChunk`].
     ListFlat(usize),
@@ -106,7 +106,7 @@ pub enum Intrinsic {
     RowGet(RowId, usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
-    /// Whether the operand is a bare payload — an i31, or the boxed magnitude of a `Nat` or `Int` past it — (1) or a row struct (0): the dispatch of a variant encoding whose one scalar-payload constructor rides bare. The boxed magnitude is its own final type, which no row shares, so admitting it keeps the two answers disjoint for a `Nat` or `Int` payload as for a word. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
+    /// Whether the operand is a bare payload — an i31, or the boxed magnitude of a `Nat` or `Int` past it — (1) or a row struct (0): the dispatch of a variant encoding whose one scalar-payload constructor rides bare. The boxed magnitude is its own final type, which no row shares, so admitting it keeps the two answers disjoint for a `Nat` or `Int` payload as for a word. A representation question, which is why it exists in this crate's vocabulary and not in ANF: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,
     /// `(value) -> value`: the bare payload of the constructor [`Intrinsic::IsImmediate`] just answered for, passed through unchanged.
     ///
@@ -527,7 +527,7 @@ impl Intrinsic {
 
     /// What this operation does beyond producing its result, *as emitted* — which is not what it means in the language.
     ///
-    /// The `MayTrap` set is what is partial in the language — a division, a narrowing of an `Flt` to `Nat` or `Int`, an index and a projection — which `curios-ersd`'s `Semantics` says too. `Nat` and `Int` arithmetic is not in it: both are unbounded at run time, so a sum or a product that outgrows the i31 becomes a boxed magnitude rather than a failure, and allocating one is invisible, as an `Flt` box is.
+    /// The `MayTrap` set is what is partial in the language — a division, a narrowing of an `Flt` to `Nat` or `Int`, an index and a projection — which `curios-anf`'s `Semantics` says too. `Nat` and `Int` arithmetic is not in it: both are unbounded at run time, so a sum or a product that outgrows the i31 becomes a boxed magnitude rather than a failure, and allocating one is invisible, as an `Flt` box is.
     ///
     /// Exhaustive on purpose: a wildcard defaulting to `Total` would silently classify every guarded operation it missed as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> IntrinsicEffect {

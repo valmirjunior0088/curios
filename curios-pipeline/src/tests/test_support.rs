@@ -64,7 +64,7 @@ pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
 
 pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let entrypoint = entrypoint_of(source);
-    let mut ersd = String::new();
+    let mut anf = String::new();
     let mut cont = String::new();
 
     compile_with_prelude(
@@ -72,13 +72,13 @@ pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), S
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
-            Stage::Ersd(stage) => ersd = format!("{stage}"),
+            Stage::Anf(stage) => anf = format!("{stage}"),
             Stage::Cont(stage) => cont = format!("{stage}"),
             _ => {}
         },
     )?;
 
-    Ok((ersd, cont))
+    Ok((anf, cont))
 }
 
 /// Whether a report spells a metavariable by its id — `?2659` — which no report should.
@@ -111,7 +111,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
 /// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the program's own items erased over the archived prelude's erased forms and linked with what they reach — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
 /// Over the archive rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. It is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
-pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
+pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
     let entrypoint = entrypoint_of(source);
     let (program, _foreigns, _records, _anchors) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(

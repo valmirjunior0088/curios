@@ -4,7 +4,7 @@
 //!
 //! Reusable declarations bind surviving input levels in a [`UniverseContext`]. Flexible classifier levels take their principal least solution when one exists; genuinely non-principal choices remain residual constrained parameters. Every external occurrence instantiates the stored context freshly. Local schemes may temporarily refer to ambient metas and are capture-safely rewritten beneath the enclosing declaration's parameters; recursive members instead share one context and one internal instance.
 //!
-//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their extents and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
+//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their extents and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before ANF.
 
 use {
     super::{Extent, Global},

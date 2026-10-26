@@ -10,7 +10,7 @@ use {
 
 /// How many value bits a small `Nat` or `Int` holds — the width of an `i31ref`'s payload, read signed, and the one width in the whole pipeline that is a fact about the target rather than about the language.
 ///
-/// A `Nat` and an `Int` share one runtime form, and it is a reference: an i31 when the value lies in `[-2³⁰, 2³⁰)`, and a boxed magnitude otherwise, never both. This width is where the two meet, so it bounds the fast path every arithmetic lowering keeps inline and nothing else — no value refuses at it. Above this crate nothing knows the number: `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced.
+/// A `Nat` and an `Int` share one runtime form, and it is a reference: an i31 when the value lies in `[-2³⁰, 2³⁰)`, and a boxed magnitude otherwise, never both. This width is where the two meet, so it bounds the fast path every arithmetic lowering keeps inline and nothing else — no value refuses at it. Above this crate nothing knows the number: `curios-core` computes unbounded and `curios-anf`'s constants carry whatever the theory produced.
 pub const ENVELOPE_BITS: i32 = 31;
 
 /// Whether `value` is a `Nat` the i31 holds: below `2³⁰`, since the i31 is read signed for both carriers.
@@ -29,7 +29,7 @@ pub fn int_is_small(value: &Integer) -> bool {
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
 }
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
+// Sigils follow the naming scheme shared with `curios-anf` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(NodeId, "~n");
 id!(ValueId, "~v");
 id!(FunctionId, "~f");
@@ -67,7 +67,7 @@ pub enum ValueExpr {
     Literal(Literal),
     List(Vec<Atom>),
     Tuple(Vec<Atom>),
-    /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`Atom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The Ersd door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
+    /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`Atom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The ANF door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
     Row(RowId, Vec<Atom>),
 }
 

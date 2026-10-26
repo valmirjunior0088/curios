@@ -27,7 +27,7 @@ impl Handle {
     /// The first handle token a host mints, one past the standard streams' so a minted file or socket handle never collides with one; each host counts up from here with a [`TokenMint`].
     pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
-    /// The canonical byte encoding of a token: its little-endian [`Natural`] bytes — one zero byte for zero, never the empty string, and never padded to a fixed width. This is the one place the convention is spelled: [`TokenMint`] mints through it, hosts key their tables on the bytes it returns, and the `ersd → cont` lowering calls it for the stdio constants `Handle(0/1/2)` — so the three ends cannot drift.
+    /// The canonical byte encoding of a token: its little-endian [`Natural`] bytes — one zero byte for zero, never the empty string, and never padded to a fixed width. This is the one place the convention is spelled: [`TokenMint`] mints through it, hosts key their tables on the bytes it returns, and the `anf → cont` lowering calls it for the stdio constants `Handle(0/1/2)` — so the three ends cannot drift.
     pub fn encode(token: &Natural) -> Vec<u8> {
         token.to_bytes_le()
     }

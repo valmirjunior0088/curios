@@ -1,6 +1,6 @@
 //! Fixtures the reduction suites share: a name, a discharged bound, a context, and a literal.
 //!
-//! The module is `pub`: the sibling suites across `reduce` consume it, and `into_ersd`'s suite reads `qed`.
+//! The module is `pub`: the sibling suites across `reduce` consume it, and `into_anf`'s suite reads `qed`.
 
 use {
     crate::*,

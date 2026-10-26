@@ -61,7 +61,7 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "tests", SUBJECT],
         &["wonder", "cost", SUBJECT],
         &["wonder", "stage", "core", SUBJECT],
-        &["wonder", "stage", "ersd", SUBJECT],
+        &["wonder", "stage", "anf", SUBJECT],
         &["wonder", "at", "1:1", SUBJECT],
         &["wonder", "declarations", SUBJECT],
         &["wonder", "server"],
@@ -610,7 +610,7 @@ wonder stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, opt
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder stage ersd SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
+wonder stage anf SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

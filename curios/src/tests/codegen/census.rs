@@ -154,7 +154,7 @@ enum Consumption {
 
 /// One tuple construction, as the survey needs to read it.
 ///
-/// The leading literal is what a variant classification rests on: `curios-ersd`'s door lowers a tagged constructor to its row `(tag, payload…)` with the tag a literal `Nat`, so a construction whose slot zero is a literal is one a family's discriminant travels in front of. A construction whose slot zero is a *value* is either an ordinary product or a variant the return protocol already rebuilt from fields — which is why the count of those is reported rather than assumed to be zero.
+/// The leading literal is what a variant classification rests on: `curios-anf`'s door lowers a tagged constructor to its row `(tag, payload…)` with the tag a literal `Nat`, so a construction whose slot zero is a literal is one a family's discriminant travels in front of. A construction whose slot zero is a *value* is either an ordinary product or a variant the return protocol already rebuilt from fields — which is why the count of those is reported rather than assumed to be zero.
 #[derive(Debug, Clone, Copy)]
 struct TupleSite {
     node: NodeId,

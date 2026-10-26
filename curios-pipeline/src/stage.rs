@@ -13,8 +13,8 @@ pub enum Stage<'a> {
     ///
     /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_module` takes, and [`Stage::Core`] is not.
     CoreElab(&'a curios_core::Program),
-    Ersd(&'a curios_ersd::Module),
-    ErsdOptm(&'a curios_ersd::Module),
+    Anf(&'a curios_anf::Module),
+    AnfOptm(&'a curios_anf::Module),
     Cont(&'a curios_cont::Module),
     ContOptm(&'a curios_cont::Module),
     Wasm(&'a curios_wasm::Module),
@@ -28,15 +28,15 @@ impl<'a> Stage<'a> {
         "text",
         "core",
         "core-elab",
-        "ersd",
-        "ersd-optm",
+        "anf",
+        "anf-optm",
         "cont",
         "cont-optm",
         "wasm",
         "wasm-optm",
     ];
 
-    /// Whether `name` is a rung a unit has: its text, its lowered module and its elaborated one, the three names [`Stage::NAMES`] opens with. From `ersd` on a program's entry roots what is rendered, and a unit has none.
+    /// Whether `name` is a rung a unit has: its text, its lowered module and its elaborated one, the three names [`Stage::NAMES`] opens with. From `anf` on a program's entry roots what is rendered, and a unit has none.
     pub fn of_a_unit(name: &str) -> bool {
         Self::NAMES[..3].contains(&name)
     }
@@ -47,8 +47,8 @@ impl<'a> Stage<'a> {
             Stage::Text(_) => "text",
             Stage::Core(_) => "core",
             Stage::CoreElab(_) => "core-elab",
-            Stage::Ersd(_) => "ersd",
-            Stage::ErsdOptm(_) => "ersd-optm",
+            Stage::Anf(_) => "anf",
+            Stage::AnfOptm(_) => "anf-optm",
             Stage::Cont(_) => "cont",
             Stage::ContOptm(_) => "cont-optm",
             Stage::Wasm(_) => "wasm",
@@ -63,8 +63,8 @@ impl fmt::Display for Stage<'_> {
             Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
             Stage::Core(program) => write!(f, "{program}"),
             Stage::CoreElab(program) => write!(f, "{program}"),
-            Stage::Ersd(module) => write!(f, "{module}"),
-            Stage::ErsdOptm(module) => write!(f, "{module}"),
+            Stage::Anf(module) => write!(f, "{module}"),
+            Stage::AnfOptm(module) => write!(f, "{module}"),
             Stage::Cont(module) => write!(f, "{module}"),
             Stage::ContOptm(module) => write!(f, "{module}"),
             // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.

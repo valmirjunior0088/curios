@@ -1,6 +1,6 @@
 //! Arena-backed high CPS.
 //!
-//! The surface of this module is intentionally small: Ersd lowering constructs a [`Module`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`Module::value_use_counts`]) rather than maintained as a shadow arena.
+//! The surface of this module is intentionally small: ANF lowering constructs a [`Module`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`Module::value_use_counts`]) rather than maintained as a shadow arena.
 
 use {
     super::{
@@ -30,7 +30,7 @@ pub struct Module {
     functions: Arena<FunctionId, Function>,
     continuations: Arena<ContinuationId, Continuation>,
     field_groups: BTreeMap<ContinuationId, Vec<FieldGroup>>,
-    /// The nominal rows this module's [`ValueExpr::Row`](super::ValueExpr::Row)s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
+    /// The nominal rows this module's [`ValueExpr::Row`](super::ValueExpr::Row)s belong to, appended by the ANF door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
     rows: Vec<Option<Row>>,
     /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. This identity survives optimization independently of whether the entry can return a suspension; `entry_suspension` answers that from the current graph.
     suspension: Option<RowId>,
@@ -140,7 +140,7 @@ impl Module {
         &self.field_groups
     }
 
-    /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`ValueExpr::Row`](super::ValueExpr::Row).
+    /// Register a nominal row and hand back its identity. The ANF door is the only caller; see [`ValueExpr::Row`](super::ValueExpr::Row).
     pub fn add_row(&mut self, row: Row) -> RowId {
         let id = self.reserve_row();
         self.define_row(id, row);
@@ -456,7 +456,7 @@ impl Module {
         })
     }
 
-    /// Mint a value from a whole definition: a copy of another value carries everything that value states, and the Ersd door states what erasure recorded.
+    /// Mint a value from a whole definition: a copy of another value carries everything that value states, and the ANF door states what erasure recorded.
     pub fn add_value_def(&mut self, definition: ValueDef) -> ValueId {
         self.values.mint(definition)
     }

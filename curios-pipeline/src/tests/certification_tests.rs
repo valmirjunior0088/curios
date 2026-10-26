@@ -261,7 +261,7 @@ let subject : /std/Nat = double(2) + spin(0);
         &entrypoint_of(source),
         &RootSource::none(),
         |stage| {
-            if let Stage::Ersd(module) = stage {
+            if let Stage::Anf(module) = stage {
                 functions = module
                     .functions()
                     .iter()

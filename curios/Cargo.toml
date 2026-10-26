@@ -49,7 +49,7 @@ curios-cont = { workspace = true }
 curios-elab = { workspace = true }
 curios-emit = { workspace = true }
 # Its test support too: a module's digest, the census's verdict and the weight of a description's copy, which the codegen and format suites pin.
-curios-ersd = { workspace = true, features = ["test-support"] }
+curios-anf = { workspace = true, features = ["test-support"] }
 curios-num = { workspace = true }
 # Where the standard library is authored, for the transport test that asks about one of its files.
 curios-std = { workspace = true }

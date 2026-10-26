@@ -1,7 +1,7 @@
 //! A binder whose producer names no carrier — a parameter, a call's result, a payload read — states the register carrier its type names, read at the type the binder is checked at, and a type naming none states nothing.
 
 use {
-    curios_ersd::{Module, RegisterShape},
+    curios_anf::{Module, RegisterShape},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
 };
@@ -25,19 +25,19 @@ const STATING: &str = r#"
 
 fn erased(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
-    let mut ersd = None;
+    let mut anf = None;
     compile_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::Ersd(module) = stage {
-                ersd = Some(module.clone());
+            if let Stage::Anf(module) = stage {
+                anf = Some(module.clone());
             }
         },
     )
     .expect("source compiles");
-    ersd.expect("ersd stage observed")
+    anf.expect("anf stage observed")
 }
 
 /// What each binder named `name` states.

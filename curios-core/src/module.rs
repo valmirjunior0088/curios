@@ -804,7 +804,7 @@ pub struct RecItem {
 impl RecItem {
     /// This group with universe data projected out of every member, in place.
     ///
-    /// The universe context is cleared here as it is on a [`Definition`]: the projection's whole purpose is that no universe data survives into Ersd.
+    /// The universe context is cleared here as it is on a [`Definition`]: the projection's whole purpose is that no universe data survives into ANF.
     pub fn projected(&self) -> Self {
         Self {
             definitions: self.definitions.clone(),

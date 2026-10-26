@@ -1,6 +1,6 @@
 //! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted Cont. What a `%` slot shows is the corpus's `/data/fmt`.
 //!
-//! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ersd `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
+//! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
     super::{cont_optm, run},
@@ -9,16 +9,16 @@ use {
     curios_text::{Entrypoint, RootSource},
 };
 
-/// Whether the printed Ersd still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Error`'s product line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.
-fn names_parse_code(ersd: &str) -> bool {
-    ersd.lines()
+/// Whether the printed ANF still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Error`'s product line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.
+fn names_parse_code(anf: &str) -> bool {
+    anf.lines()
         .filter(|line| line.contains("/std/Parse/"))
         .any(|line| !line.starts_with("family ") && !line.starts_with("product "))
 }
 
 #[test]
 fn print_partial_evaluation_reduces_residual() {
-    // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators.
+    // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ANF `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators.
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io, Try, Process};
 
@@ -69,7 +69,7 @@ fn print_partial_evaluation_reduces_residual() {
 
 #[test]
 fn print_runtime_args_specializes_spine() {
-    // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
+    // The mixed case: a literal format string with runtime hole arguments. The ANF `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the anf-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io, Try, Process};
 
@@ -90,28 +90,28 @@ fn print_runtime_args_specializes_spine() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let mut ersd_optm = None;
+    let mut anf_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::ErsdOptm(module) = stage {
-                ersd_optm = Some(format!("{module}"));
+            if let Stage::AnfOptm(module) = stage {
+                anf_optm = Some(format!("{module}"));
             }
         },
     )
     .expect("compile succeeded");
 
-    let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
+    let anf = anf_optm.expect("Stage::AnfOptm observed");
     assert!(
-        ersd.contains("$/std/Fmt/go_with("),
-        "expected the spine-specialized fold called, got:\n{ersd}",
+        anf.contains("$/std/Fmt/go_with("),
+        "expected the spine-specialized fold called, got:\n{anf}",
     );
     assert!(
-        !ersd.contains("parse_fmt") && !names_parse_code(&ersd) && !ersd.contains("rec ~"),
-        "expected the parser and the generic fold pruned, got:\n{ersd}",
+        !anf.contains("parse_fmt") && !names_parse_code(&anf) && !anf.contains("rec ~"),
+        "expected the parser and the generic fold pruned, got:\n{anf}",
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Bob"]).build();
@@ -137,8 +137,8 @@ fn print_err_formats_to_stderr() {
 }
 
 #[test]
-fn print_constant_args_collapses_at_ersd() {
-    // The fully-constant case: every input to `Fmt/print` is a literal, so the ersd `evaluate` pass runs the *entire* program at compile time and residualizes the one effect boundary — the ersd-optm module's body is a single `#/std/print(<final bytes>)` call, the `Parse` combinator web and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write` plumbing reaches codegen.
+fn print_constant_args_collapses_at_anf() {
+    // The fully-constant case: every input to `Fmt/print` is a literal, so the ANF `evaluate` pass runs the *entire* program at compile time and residualizes the one effect boundary — the anf-optm module's body is a single `#/std/print(<final bytes>)` call, the `Parse` combinator web and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write` plumbing reaches codegen.
     let source = r#"
         use /std/{Fmt};
 
@@ -149,7 +149,7 @@ fn print_constant_args_collapses_at_ersd() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let mut ersd_optm = None;
+    let mut anf_optm = None;
     let mut cont_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
@@ -157,24 +157,24 @@ fn print_constant_args_collapses_at_ersd() {
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
-            Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
+            Stage::AnfOptm(module) => anf_optm = Some(format!("{module}")),
             Stage::ContOptm(module) => cont_optm = Some(format!("{module}")),
             _ => {}
         },
     )
     .expect("compile succeeded");
 
-    let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
+    let anf = anf_optm.expect("Stage::AnfOptm observed");
     // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
-        ersd.contains(
+        anf.contains(
             "ffi//std/internal/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
         ),
-        "expected the folded write residual, got:\n{ersd}",
+        "expected the folded write residual, got:\n{anf}",
     );
     assert!(
-        !names_parse_code(&ersd),
-        "expected the parser web pruned, got:\n{ersd}",
+        !names_parse_code(&anf),
+        "expected the parser web pruned, got:\n{anf}",
     );
 
     let cont = cont_optm.expect("Stage::ContOptm observed");
@@ -214,20 +214,19 @@ fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::Ersd(module) = stage {
+            if let Stage::Anf(module) = stage {
                 linked = Some(module.clone());
             }
         },
     )
     .expect("fixture compiles");
-    let copy = curios_ersd::test_support::heaviest_description_copy(
-        &linked.expect("Stage::Ersd observed"),
-    )
-    .expect("a `print` holds a description");
+    let copy =
+        curios_anf::test_support::heaviest_description_copy(&linked.expect("Stage::ANF observed"))
+            .expect("a `print` holds a description");
 
     assert!(
         copy.charged <= copy.cap,
-        "the heaviest description a constant `print` copies weighs {} nodes, past the {} of `curios-ersd`'s `DESCRIPTION_COPY_NODE_LIMIT`: the evaluator declines the copy, and no constant `print` folds",
+        "the heaviest description a constant `print` copies weighs {} nodes, past the {} of `curios-anf`'s `DESCRIPTION_COPY_NODE_LIMIT`: the evaluator declines the copy, and no constant `print` folds",
         copy.charged,
         copy.cap,
     );

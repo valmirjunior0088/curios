@@ -5,7 +5,7 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
 use {
-    super::ersd_optm,
+    super::anf_optm,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::{fmt::Write, time::Instant},
@@ -107,7 +107,7 @@ const TAIL: &str = "/std/print(\"ok\")\n";
 const SEQUENCED: &str = "/std/Parse/chain";
 
 /// How many emitted functions carry `needle` in their debug name — one copy of a source function per hit.
-fn copies(module: &curios_ersd::Module, needle: &str) -> usize {
+fn copies(module: &curios_anf::Module, needle: &str) -> usize {
     module
         .functions()
         .iter()
@@ -122,7 +122,7 @@ fn copies(module: &curios_ersd::Module, needle: &str) -> usize {
 }
 
 /// Every emitted function, live slots only.
-fn emitted(module: &curios_ersd::Module) -> usize {
+fn emitted(module: &curios_anf::Module) -> usize {
     module.functions().iter().flatten().count()
 }
 
@@ -285,7 +285,7 @@ fn combinator_sharing_measurements() {
         for rules in [2usize, 4, 8, 12, 16] {
             let source = grammar(rules, inner);
             let start = Instant::now();
-            let module = ersd_optm(&source);
+            let module = anf_optm(&source);
             let elapsed = start.elapsed().as_secs_f64();
             println!(
                 "{rules:<6} {label:<16} {:<12} {:<10} {elapsed:.2} s",
@@ -541,9 +541,9 @@ fn a_conjunction_web_of_twenty_definitions_is_refused_as_a_mismatch() {
 /// Eight rules rather than sixteen because this one is not ignored.
 #[test]
 fn an_application_inside_a_continuation_is_shared_like_one_at_item_level() {
-    let absent = copies(&ersd_optm(&grammar(8, Inner::None)), SEQUENCED);
-    let inside = copies(&ersd_optm(&grammar(8, Inner::InBlock)), SEQUENCED);
-    let hoisted = copies(&ersd_optm(&grammar(8, Inner::Hoisted)), SEQUENCED);
+    let absent = copies(&anf_optm(&grammar(8, Inner::None)), SEQUENCED);
+    let inside = copies(&anf_optm(&grammar(8, Inner::InBlock)), SEQUENCED);
+    let hoisted = copies(&anf_optm(&grammar(8, Inner::Hoisted)), SEQUENCED);
 
     assert!(
         absent > 0,

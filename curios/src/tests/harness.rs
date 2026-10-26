@@ -5,7 +5,7 @@ mod sequence_tests;
 
 use {
     super::{
-        error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text, test_program,
+        anf_optm, anf_optm_tests, error, run, run_tests_program, run_text, test_program,
         tests_error,
     },
     curios_native::MockHost,
@@ -350,7 +350,7 @@ fn a_test_body_sequences_assertions_and_lifted_io() {
 }
 
 /// Whether any optimized function's debug name starts with `needle` — presence of a definition in the arena, by the name erasure stamped.
-fn survives(module: &curios_ersd::Module, needle: &str) -> bool {
+fn survives(module: &curios_anf::Module, needle: &str) -> bool {
     module.functions().iter().flatten().any(|function| {
         function
             .debug_name
@@ -453,8 +453,8 @@ fn the_ordinary_program_holds_no_test_the_test_program_keeps() {
         test the_answer_holds = Test/assert(42 == 42);
         /std/print("ran\n")
         "#;
-    assert!(!survives(&ersd_optm(source), "/the_answer_holds"));
-    assert!(survives(&ersd_optm_tests(source), "/the_answer_holds"));
+    assert!(!survives(&anf_optm(source), "/the_answer_holds"));
+    assert!(survives(&anf_optm_tests(source), "/the_answer_holds"));
 }
 
 #[test]

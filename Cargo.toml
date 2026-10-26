@@ -13,7 +13,7 @@ members = [
     "curios-wasm",
     "curios-cont",
     "curios-emit",
-    "curios-ersd",
+    "curios-anf",
     "curios-core",
     "curios-analysis",
     "curios-cert",
@@ -72,7 +72,7 @@ curios-print = { path = "curios-print" }
 curios-wasm = { path = "curios-wasm" }
 curios-cont = { path = "curios-cont" }
 curios-emit = { path = "curios-emit" }
-curios-ersd = { path = "curios-ersd" }
+curios-anf = { path = "curios-anf" }
 curios-core = { path = "curios-core" }
 curios-analysis = { path = "curios-analysis" }
 curios-cert = { path = "curios-cert" }

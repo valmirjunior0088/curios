@@ -14,7 +14,7 @@ profile = [
     "curios-profile/enabled",
     "curios-text/profile",
     "curios-elab/profile",
-    "curios-ersd/profile",
+    "curios-anf/profile",
     "curios-unit/profile",
     "dep:curios-std",
 ]
@@ -49,7 +49,7 @@ curios-document = { workspace = true }
 curios-utilities = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
-curios-ersd = { workspace = true }
+curios-anf = { workspace = true }
 curios-text = { workspace = true }
 curios-std = { workspace = true }
 curios-package = { workspace = true }

@@ -1,6 +1,6 @@
-//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Module`) and `curios-ersd` (which consumes the erased output of [`erase_unit`]). The kernel that independently re-checks what this crate accepts is `curios-cert`.
+//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Module`) and `curios-anf` (which consumes the erased output of [`erase_unit`]). The kernel that independently re-checks what this crate accepts is `curios-cert`.
 //!
-//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; `into_ersd` ([`erase_unit`]) strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
+//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; `into_anf` ([`erase_unit`]) strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
 //!
 //! # What this stage starts from
 //!
@@ -8,7 +8,7 @@
 //!
 //! That they are types rather than a re-seeded context and two values passed apart is `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`'s decision; the lowered module carries only its own items.
 //!
-//! `Type` is internally indexed by canonical algebraic `Level`s even though the surface term is nullary. Written levels and elaborator classifiers occupy distinct `UniverseMetaId`s, each carrying where it came from — a `Type` written in an input position is chosen, a use's instance level an occurrence, any other inferred; inequalities are solved transactionally with term metavariables, and declaration finalization settles each level by where it stands — one the signature holds where conversion compares it kept as the declaration's parameter, an occurrence nothing holds at its least value, a chosen level bounded only by one other chosen level at that level — before generalizing what is left into a closed `UniverseContext`. A written type therefore sits where its reduct does, which the kernel relies on when it types one as written (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Top-level and local definitions instantiate those contexts freshly, while every member of a recursive group shares one monomorphic instance internally. [`validate_universes`] is the closure and instance-arity gate on zonked Core. The Core-to-Ersd boundary then projects through a validated universe-erased module, removing instances, contexts, and nominal vectors before any runtime representation is built.
+//! `Type` is internally indexed by canonical algebraic `Level`s even though the surface term is nullary. Written levels and elaborator classifiers occupy distinct `UniverseMetaId`s, each carrying where it came from — a `Type` written in an input position is chosen, a use's instance level an occurrence, any other inferred; inequalities are solved transactionally with term metavariables, and declaration finalization settles each level by where it stands — one the signature holds where conversion compares it kept as the declaration's parameter, an occurrence nothing holds at its least value, a chosen level bounded only by one other chosen level at that level — before generalizing what is left into a closed `UniverseContext`. A written type therefore sits where its reduct does, which the kernel relies on when it types one as written (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Top-level and local definitions instantiate those contexts freshly, while every member of a recursive group shares one monomorphic instance internally. [`validate_universes`] is the closure and instance-arity gate on zonked Core. The Core-to-ANF boundary then projects through a validated universe-erased module, removing instances, contexts, and nominal vectors before any runtime representation is built.
 //!
 //! Everything else is that pipeline's machinery: `reduce` is budget-bounded type-level evaluation (`normalize` for full normal forms); `convert` decides definitional equality, solving metavariables and distinguishing hard mismatches from goals merely blocked on unsolved metas (`Outcome`) so `typing` can park and retry them; `resolve` implements witness (concept) resolution with global coherence checks. The term language and its printer belong to `curios-core`, and the shared inversion, positivity, and totality analyses to `curios-analysis`; this crate drives those analyses and renders their refusals as [`Error`]s.
 //!
@@ -92,9 +92,9 @@ pub use elaborate::{
 #[cfg(test)]
 mod walk_tests;
 
-mod into_ersd;
-use into_ersd::*;
-pub use into_ersd::{
+mod into_anf;
+use into_anf::*;
+pub use into_anf::{
     ErasedBaseline, ErasedUnit, Erasures, Projection, erase_program, erase_unit, erase_unit_over,
 };
 

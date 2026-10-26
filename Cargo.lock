@@ -567,6 +567,7 @@ dependencies = [
  "clap",
  "curios-abi",
  "curios-algebra",
+ "curios-anf",
  "curios-archive",
  "curios-binaryen",
  "curios-browser",
@@ -577,7 +578,6 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-emit",
- "curios-ersd",
  "curios-native",
  "curios-num",
  "curios-package",
@@ -615,6 +615,18 @@ dependencies = [
  "curios-analysis",
  "curios-cert",
  "curios-core",
+ "curios-num",
+ "curios-profile",
+ "curios-utilities",
+]
+
+[[package]]
+name = "curios-anf"
+version = "0.16.16"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-cont",
  "curios-num",
  "curios-profile",
  "curios-utilities",
@@ -722,10 +734,10 @@ dependencies = [
  "curios-abi",
  "curios-algebra",
  "curios-analysis",
+ "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-core",
- "curios-ersd",
  "curios-num",
  "curios-profile",
  "curios-utilities",
@@ -741,18 +753,6 @@ dependencies = [
  "curios-profile",
  "curios-utilities",
  "curios-wasm",
-]
-
-[[package]]
-name = "curios-ersd"
-version = "0.16.16"
-dependencies = [
- "curios-abi",
- "curios-archive",
- "curios-cont",
- "curios-num",
- "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -820,6 +820,7 @@ name = "curios-pipeline"
 version = "0.16.16"
 dependencies = [
  "curios-abi",
+ "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-cont",
@@ -827,7 +828,6 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-emit",
- "curios-ersd",
  "curios-prelude",
  "curios-profile",
  "curios-std",
@@ -857,12 +857,12 @@ name = "curios-prelude-archive"
 version = "0.16.16"
 dependencies = [
  "curios-abi",
+ "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-core",
  "curios-document",
  "curios-elab",
- "curios-ersd",
  "curios-package",
  "curios-profile",
  "curios-std",
@@ -928,10 +928,10 @@ name = "curios-unit"
 version = "0.16.16"
 dependencies = [
  "curios-abi",
+ "curios-anf",
  "curios-archive",
  "curios-core",
  "curios-elab",
- "curios-ersd",
  "curios-text",
  "curios-utilities",
 ]

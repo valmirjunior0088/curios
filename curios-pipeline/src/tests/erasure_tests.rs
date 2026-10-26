@@ -3,13 +3,13 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_ersd::{Analysis, Rhs, Statement, test_support::shape},
+    curios_anf::{Analysis, Rhs, Statement, test_support::shape},
     curios_text::RootSource,
     curios_wasm::to_bytes,
 };
 
 #[test]
-fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
+fn repeated_compilation_restores_an_unmutated_anf_prefix() {
     let source = "let subject : /std/Nat = /std/Nat/add(20, 22);
 /std/Io/pure(())";
     let first = compile(source).unwrap();
@@ -37,7 +37,7 @@ fn every_stage_is_observed_once_in_names_order() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
+    // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_anf::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         let subject : /std/Nat = id(/std/Nat, 5);
@@ -64,7 +64,7 @@ fn dead_user_definition_is_still_typechecked() {
 #[test]
 fn a_program_links_the_library_its_entry_reaches() {
     // The entrypoint pulls in string formatting, so the program links the library behind it — every construct the corpus uses — and what was erased an item at a time verifies as one module.
-    let module = erase_to_ersd(r#"/std/Fmt/print("hello")"#);
+    let module = erase_to_anf(r#"/std/Fmt/print("hello")"#);
     assert!(
         module.functions().len() > 100,
         "the program linked the library it reaches: {} functions",
@@ -75,7 +75,7 @@ fn a_program_links_the_library_its_entry_reaches() {
 /// A program that constructs or matches a declaration's values holds the declaration's row and nothing of what its type former erased to: `/std/Cli/Alternative` is a parameterised type, whose former erases to a function no program applies.
 #[test]
 fn a_program_holds_a_declarations_row_without_its_type_former() {
-    let module = erase_to_ersd(
+    let module = erase_to_anf(
         r#"
         let held : /std/Cli/Alternative(/std/Nat) =
             /std/Cli/Alternative { long = "depth", help = "how deep", value = 2 };
@@ -105,15 +105,15 @@ fn a_program_holds_a_declarations_row_without_its_type_former() {
 fn arena_erasure_is_deterministic_across_compiles() {
     let source = "let subject : /std/Nat = /std/Nat/add(20, 22);
 /std/Io/pure(())";
-    let first = shape(&erase_to_ersd(source));
-    let second = shape(&erase_to_ersd(source));
+    let first = shape(&erase_to_anf(source));
+    let second = shape(&erase_to_anf(source));
     assert_eq!(first, second);
 }
 
 #[test]
 fn arena_erasure_stores_no_captures_for_the_prelude() {
     // Functions carry no capture lists anywhere in what a program links; free values are derived on demand. The analysis on the linked module is the witness that derivation covers every function.
-    let module = erase_to_ersd(
+    let module = erase_to_anf(
         "let subject : /std/Str = /std/Nat/to_str(7);
 /std/Io/pure(())",
     );
@@ -135,7 +135,7 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
         source.push_str(&format!("let x{index} = {index} + 1;\n"));
     }
     source.push_str("/std/Io/pure(())");
-    let module = erase_to_ersd(&source);
+    let module = erase_to_anf(&source);
 
     // Printing is half of what must survive the depth, so the deep module is still rendered.
     let _ = module.to_string();
@@ -175,10 +175,10 @@ fn a_method_call_erases_to_the_projection_it_forwards_to() {
         /std/Io/pure(())
     "#;
 
-    let (ersd, _) = compile_printed_stages(source).unwrap();
+    let (anf, _) = compile_printed_stages(source).unwrap();
 
     // The wrapper's own definition is still there, for pruning to drop; what must be gone is every call to it.
-    let calls = ersd
+    let calls = anf
         .lines()
         .filter(|line| line.contains("$/Twice/twice(") && !line.trim_start().starts_with("let ~f"))
         .collect::<Vec<_>>();

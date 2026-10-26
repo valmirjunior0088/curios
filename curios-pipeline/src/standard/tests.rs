@@ -10,6 +10,7 @@ use {
             lowering_stored, restored, traces_stored,
         },
     },
+    curios_anf::FieldShape,
     curios_core::{
         Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
         ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
@@ -19,7 +20,6 @@ use {
         elaborate_and_zonk_unit_over,
         test_support::{part_digests, written_for_reader},
     },
-    curios_ersd::FieldShape,
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{

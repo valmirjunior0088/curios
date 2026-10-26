@@ -193,8 +193,8 @@ fn run_tests_program(source: &str) -> Vec<u8> {
     io.output().to_vec()
 }
 
-/// [`ersd_optm`]'s sibling on the synthesized-tail path: the optimized Ersd arena of `source` compiled as its own test program.
-fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
+/// [`anf_optm`]'s sibling on the synthesized-tail path: the optimized ANF arena of `source` compiled as its own test program.
+fn anf_optm_tests(source: &str) -> curios_anf::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
@@ -204,7 +204,7 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
             &RootSource::none().tested(),
             vec![Qualifier::empty()],
             |stage| {
-                if let Stage::ErsdOptm(module) = stage {
+                if let Stage::AnfOptm(module) = stage {
                     captured = Some(module.clone());
                 }
             },
@@ -212,28 +212,28 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
         )
         .expect("fixture compiles as a test program");
 
-    captured.expect("the pipeline emits the optimized Ersd stage")
+    captured.expect("the pipeline emits the optimized ANF stage")
 }
 
-/// Compile through production and hand back the optimized Ersd arena — the module the door's sequence-usage census judges.
-fn ersd_optm(source: &str) -> curios_ersd::Module {
+/// Compile through production and hand back the optimized ANF arena — the module the door's sequence-usage census judges.
+fn anf_optm(source: &str) -> curios_anf::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
     compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::ErsdOptm(module) = stage {
+        if let Stage::AnfOptm(module) = stage {
             captured = Some(module.clone());
         }
     })
     .expect("fixture compiles");
 
-    captured.expect("the pipeline emits the optimized Ersd stage")
+    captured.expect("the pipeline emits the optimized ANF stage")
 }
 
 /// Whether the census settles `family`'s `constructor` field named `field` in `source` — the named assertion surface over the door's verdict, so a fixture pins the settling by name instead of grepping a dump for the op the settling later becomes.
 fn census_settles(source: &str, family: &str, constructor: &str, field: &str) -> bool {
-    curios_ersd::test_support::census_settles_constructor_field(
-        &ersd_optm(source),
+    curios_anf::test_support::census_settles_constructor_field(
+        &anf_optm(source),
         family,
         constructor,
         field,

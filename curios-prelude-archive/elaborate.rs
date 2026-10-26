@@ -171,7 +171,7 @@ fn archive(
         .unwrap_or_else(|refusal| panic!("elaborated /{root} is not zonked: {refusal}"));
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
-    let ersd = erase_unit(
+    let anf = erase_unit(
         DEFAULT_BUDGET,
         SYNTAX,
         Erasures::of(predecessors, erased).fixed(&vec![true; predecessors.len()]),
@@ -190,7 +190,7 @@ fn archive(
     //
     // One table per image, not one across both: rkyv shares by pointer address *within* a single image, so a structure collapsed across the two would still be written into each of them — a shared table would buy nothing and would report a distinct-structure count no image actually has.
     //
-    // `ersd` is deliberately not included: an erased form is flat, index-addressed arenas with no shared pointers to collapse, and it already interns its constants by value.
+    // `anf` is deliberately not included: an erased form is flat, index-addressed arenas with no shared pointers to collapse, and it already interns its constants by value.
     let sharing = Sharing::new();
     let core = core.shared(&sharing);
     // Plain stdout, not `cargo:warning=`: this is a metric nobody acts on during a build, and a line that shouts on every build of every consumer teaches readers to skim `warning:` — which is the habit that loses a real one later. Cargo captures it to `target/<profile>/build/<pkg>-<hash>/output`, where `-vv` or a reader who went looking will find it.
@@ -200,7 +200,7 @@ fn archive(
     );
 
     // Uncertified: no certifier can walk it from here. `curios-prelude`'s build files its record, and that crate certifies the unit as it restores it.
-    Uncertified::new(prepared, core, ersd, traces)
+    Uncertified::new(prepared, core, anf, traces)
 }
 
 /// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.

@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn declaration_produces_a_wasm_import() {
-    // Must actually *run* `frobnicate` — a foreign call yields a description (`Io(Nat)`), and one the program never forces is pruned by `curios_ersd::optimize` along with its import, before codegen ever sees it.
+    // Must actually *run* `frobnicate` — a foreign call yields a description (`Io(Nat)`), and one the program never forces is pruned by `curios_anf::optimize` along with its import, before codegen ever sees it.
     let module = compile(
         r#"
             foreign frobnicate(Nat, Bytes) -> Nat;

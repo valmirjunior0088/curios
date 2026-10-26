@@ -2,8 +2,8 @@
 
 use {
     super::{compiled_of, run, timed},
-    crate::{optimize, tests::ersd_optm},
-    curios_ersd::{FieldShape, Module},
+    crate::{optimize, tests::anf_optm},
+    curios_anf::{FieldShape, Module},
     curios_native::Compiled,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -39,10 +39,10 @@ const PARSE_DIGITS: &str = include_str!(concat!(
     "/../programs/parse_digits.crs"
 ));
 
-/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/internal/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
+/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/internal/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_anf::test_support`'s convention.
 #[test]
 fn a_recorded_shape_survives_to_the_program_schema() {
-    let module = ersd_optm(SPINES);
+    let module = anf_optm(SPINES);
     let family = module
         .families()
         .iter()
@@ -165,7 +165,7 @@ fn optimized_wat(source: &str) -> String {
 #[test]
 #[ignore = "measurement, counted: reports the census rather than asserting"]
 fn field_shape_census() {
-    let module = ersd_optm(SPINES);
+    let module = anf_optm(SPINES);
     let mut classes = BTreeMap::<&str, usize>::new();
     for shape in field_shapes(&module) {
         *classes.entry(shape_class(shape)).or_default() += 1;

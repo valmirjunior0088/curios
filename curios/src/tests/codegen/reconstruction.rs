@@ -42,7 +42,7 @@ let walk(n: Nat, seed: Nat) -> Option({at: Nat, seen: Nat, low: Holds(0 <= at)})
 "#;
 
 struct Fixture {
-    erased: curios_ersd::Module,
+    erased: curios_anf::Module,
     cont: curios_cont::Module,
     wasm: curios_wasm::Module,
     foreigns: ForeignStore,
@@ -57,7 +57,7 @@ fn compile(source: &str) -> Fixture {
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
-            Stage::ErsdOptm(module) => erased = Some(module.clone()),
+            Stage::AnfOptm(module) => erased = Some(module.clone()),
             Stage::ContOptm(module) => cont = Some(module.clone()),
             _ => {}
         },
@@ -86,11 +86,11 @@ fn tail_erased(fixture: &Fixture) {
         }
         let block = module.block(id).unwrap();
         for (i, &id) in block.statements.iter().enumerate() {
-            let Some(curios_ersd::Statement::Let { result, rhs }) = module.statement(id) else {
+            let Some(curios_anf::Statement::Let { result, rhs }) = module.statement(id) else {
                 continue;
             };
             blocks.extend(rhs.sub_blocks());
-            if matches!(rhs, curios_ersd::Rhs::Apply { callee: curios_ersd::Atom::Function(callee), .. } if *callee == function)
+            if matches!(rhs, curios_anf::Rhs::Apply { callee: curios_anf::Atom::Function(callee), .. } if *callee == function)
             {
                 calls += 1;
                 assert_eq!(
@@ -99,7 +99,7 @@ fn tail_erased(fixture: &Fixture) {
                     "nothing reconstructs after recursion: {module}"
                 );
                 assert!(
-                    matches!(block.terminator, curios_ersd::Terminator::Return(curios_ersd::Atom::Value(value)) if value == *result),
+                    matches!(block.terminator, curios_anf::Terminator::Return(curios_anf::Atom::Value(value)) if value == *result),
                     "the block immediately returns its recursive call: {module}"
                 );
             }

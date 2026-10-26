@@ -1,6 +1,6 @@
 //! An arm is erased under what it was elaborated under, however it is lowered: a case split under its scrutinee's refinement, an expression scrutinee as well as a variable, and a fold's step under none, since reduction takes it at every tail. Erasure reads the type of each head it eliminates off the finished term and judges nothing, so a proof an arm passes is erased by its sort whatever is in scope, and what the refinement decides is a type's head: a case split's arm calls what has a function type only at the scrutinee's case, and is read with the scrutinee standing for that case.
 //!
-//! Mutation-checked: with the refinement taken out of the successor arm and the cons arm of erasure's case splits (`curios-elab`'s `into_ersd/lower/eliminate.rs`), each case split below panics at `erase: applied a non-function`, and the two folds, whose steps refine nothing, are unmoved.
+//! Mutation-checked: with the refinement taken out of the successor arm and the cons arm of erasure's case splits (`curios-elab`'s `into_anf/lower/eliminate.rs`), each case split below panics at `erase: applied a non-function`, and the two folds, whose steps refine nothing, are unmoved.
 
 use crate::tests::run;
 

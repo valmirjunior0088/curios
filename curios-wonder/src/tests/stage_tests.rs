@@ -51,10 +51,10 @@ fn a_rung_reached_before_the_failure_is_still_answered() {
     }
 }
 
-/// The other side of the same boundary: a rung the program never reached has not been answered, and stays a refusal. `ersd` sits past elaboration, which is where this program stops.
+/// The other side of the same boundary: a rung the program never reached has not been answered, and stays a refusal. `anf` sits past elaboration, which is where this program stops.
 #[test]
 fn a_rung_the_program_never_reached_is_refused() {
-    let refusal = rung("ersd", REFUSED_LATER).expect_err("ersd is never reached");
+    let refusal = rung("anf", REFUSED_LATER).expect_err("anf is never reached");
     assert!(
         matches!(refusal, crate::Refusal::Diagnostics(diagnostics) if !diagnostics.is_empty()),
         "expected the refusal to carry what stopped the program"
@@ -68,7 +68,7 @@ fn a_rung_of_a_program_that_compiles_carries_no_diagnostics() {
     assert!(rendering.diagnostics.is_empty());
 }
 
-/// A library has the rungs a unit has, each reprinting what the unit holds of it, and no rung past them: from `ersd` on a program's entry roots what is rendered.
+/// A library has the rungs a unit has, each reprinting what the unit holds of it, and no rung past them: from `anf` on a program's entry roots what is rendered.
 #[test]
 fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
     const LIBRARY: &str = "use /std/{Nat};\npub let answer: Nat = 42;\n";
@@ -96,5 +96,5 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
         assert_eq!(rendering.name, name);
         assert!(handed.contains("answer"), "{name} reprinted {handed:?}");
     }
-    assert!(matches!(rung("ersd"), Err(crate::Refusal::Unit)));
+    assert!(matches!(rung("anf"), Err(crate::Refusal::Unit)));
 }

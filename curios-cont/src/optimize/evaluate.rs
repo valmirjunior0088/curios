@@ -3,14 +3,14 @@ use {
     curios_num::{Floating, Integer, Natural},
 };
 
-/// The allowance the growing folds take here: `curios-ersd`'s own bound on a folded scalar, since a folded `Nat` or `Int` past the i31 materializes as a boxed constant and one wider than that could not have come down from the stage above. A literal count may still ask for a numeral no machine holds, and past this the fold declines.
+/// The allowance the growing folds take here: `curios-anf`'s own bound on a folded scalar, since a folded `Nat` or `Int` past the i31 materializes as a boxed constant and one wider than that could not have come down from the stage above. A literal count may still ask for a numeral no machine holds, and past this the fold declines.
 const FOLD_ALLOWANCE_BITS: u64 = 65_536 * 8;
 
 /// Fold one intrinsic over literal operands, or decline.
 ///
-/// **A proven trap declines here, where `curios-ersd`'s fold records it.** This answer is two-way — a literal or nothing — so an operation whose value leaves its carrier is left standing, and the guard `into_wasm` emits for it traps at the execution point instead. Recording the trap would be more precise and is what the erased fold does with its three-way outcome; declining is correct either way, and it is the convention `NatDiv` follows for a zero divisor.
+/// **A proven trap declines here, where `curios-anf`'s fold records it.** This answer is two-way — a literal or nothing — so an operation whose value leaves its carrier is left standing, and the guard `into_wasm` emits for it traps at the execution point instead. Recording the trap would be more precise and is what the erased fold does with its three-way outcome; declining is correct either way, and it is the convention `NatDiv` follows for a zero divisor.
 ///
-/// A growth decline uses that same answer. The carriers are unbounded from `curios-ersd` down, so multiplication and the left shifts are the two operations that can be asked to build without bound; past [`FOLD_ALLOWANCE_BITS`] they leave the operation standing exactly as a trap does.
+/// A growth decline uses that same answer. The carriers are unbounded from `curios-anf` down, so multiplication and the left shifts are the two operations that can be asked to build without bound; past [`FOLD_ALLOWANCE_BITS`] they leave the operation standing exactly as a trap does.
 pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
     let literals = args
         .iter()

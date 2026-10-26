@@ -3,6 +3,7 @@
 use {
     super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
+    curios_anf::lower_to_cont,
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
@@ -17,7 +18,6 @@ use {
         erase_program, erase_unit, validate_entry_universes,
     },
     curios_emit::into_wasm,
-    curios_ersd::lower_to_cont,
     curios_text::{
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
@@ -775,7 +775,7 @@ where
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
 ///
-/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder diagnostics` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_ersd` — private, so named here rather than linked — returns no `Result` at all.
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder diagnostics` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
@@ -872,13 +872,13 @@ impl Entered {
     ///
     /// The program's final term is erased here and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
     ///
-    /// The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
+    /// The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
     fn erased(
         &self,
         budget: u64,
         predecessors: Predecessors<'_>,
         syntax: &SyntaxRegistry,
-    ) -> Result<curios_ersd::Module, CompileError> {
+    ) -> Result<curios_anf::Module, CompileError> {
         let units = predecessors
             .units()
             .iter()
@@ -1201,22 +1201,22 @@ pub fn examine_entrypoint(
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
-fn lower_from_ersd<O>(
-    mut ersd_module: curios_ersd::Module,
+fn lower_from_anf<O>(
+    mut anf_module: curios_anf::Module,
     observe: &mut O,
 ) -> (curios_wasm::Module, ForeignStore)
 where
     O: FnMut(Stage<'_>),
 {
-    curios_profile::profile!("lower_from_ersd");
-    observe(Stage::Ersd(&ersd_module));
+    curios_profile::profile!("lower_from_anf");
+    observe(Stage::Anf(&anf_module));
 
-    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
-    curios_ersd::optimize_verified(&mut ersd_module);
+    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_anf::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
+    curios_anf::optimize_verified(&mut anf_module);
 
-    observe(Stage::ErsdOptm(&ersd_module));
+    observe(Stage::AnfOptm(&anf_module));
 
-    let cont_module = lower_to_cont(&ersd_module);
+    let cont_module = lower_to_cont(&anf_module);
 
     observe(Stage::Cont(&cont_module));
 
@@ -1334,7 +1334,7 @@ pub(crate) fn compile_lowered(
     let kept = predecessors.projected();
     let erased = predecessors.erased();
     let scope = Erasures::of(&cores, &erased).keeping(&kept).fixed(&fixed);
-    let ersd = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
+    let anf = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
         let refusal = elaborator_refusal(
             &error,
             core.as_module(),
@@ -1350,7 +1350,7 @@ pub(crate) fn compile_lowered(
     let core = core.into_module();
 
     Ok((
-        Uncertified::new(lowered, core, ersd, traces).certified(rechecked.certification),
+        Uncertified::new(lowered, core, anf, traces).certified(rechecked.certification),
         entry,
     ))
 }
@@ -1657,7 +1657,7 @@ pub enum Progress<'a> {
 
 /// Compile the program `source` is through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor — an embedder that will run the module builds its `ffi`-tier bindings (`curios-native`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
-/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the Ersd optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
+/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the ANF optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_anf::lower_to_cont`).
 ///
 /// **`source` is borrowed, so the caller still owns the loader it was made over when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold.
 pub fn compile_entrypoint<O>(
@@ -1748,10 +1748,10 @@ where
     let compiled = match tested && entered.records.is_empty() {
         true => None,
         false => {
-            let ersd_module = entered.erased(budget, predecessors, syntax)?;
+            let anf_module = entered.erased(budget, predecessors, syntax)?;
 
             // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-            Some(lower_from_ersd(ersd_module, observe))
+            Some(lower_from_anf(anf_module, observe))
         }
     };
 

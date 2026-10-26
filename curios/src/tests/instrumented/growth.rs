@@ -78,7 +78,7 @@ const STAGES: [&str; 11] = [
     "lower",
     "elaborate",
     "erase",
-    "ersd-optm",
+    "anf-optm",
     "cont",
     "cont-optm",
     "emit",
@@ -106,8 +106,8 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
                 Stage::Text(_) => 1,
                 Stage::Core(_) => 2,
                 Stage::CoreElab(_) => 3,
-                Stage::Ersd(_) => 4,
-                Stage::ErsdOptm(_) => 5,
+                Stage::Anf(_) => 4,
+                Stage::AnfOptm(_) => 5,
                 Stage::Cont(_) => 6,
                 Stage::ContOptm(_) => 7,
                 Stage::Wasm(_) => 8,
@@ -258,14 +258,14 @@ const HELD_SLOPE: f64 = 3.0;
 /// | List | 1000 | 1.98 erase | 2.00 erase | 2.00 elaborate | 2.00 binaryen |
 /// | ListOpen | 400 | 3.80 binaryen | 2.00 erase | 2.11 cont | 2.83 cont |
 /// | Arms | 250 | 6.15 binaryen | 2.00 erase | 2.03 cranelift | 2.56 cranelift |
-/// | Parameters | 400 | 2.20 ersd-optm | 2.00 erase | 2.08 cont | 2.24 ersd-optm |
+/// | Parameters | 400 | 2.20 anf-optm | 2.00 erase | 2.08 cont | 2.24 anf-optm |
 /// | ParametersSummed | 100 | 2.84 binaryen | 2.00 erase | 2.06 cranelift | 2.37 cranelift |
 /// | LetsSummed | 250 | 3.94 cranelift | 2.00 erase | 2.17 cont | 3.49 cranelift |
 /// | ProductCommuted | 128 | 3.21 cont | 2.00 erase | 2.03 elaborate | 2.82 cont |
 /// | Tuple | 250 | 2.05 lower | 2.00 erase | 2.00 parse | 2.03 elaborate |
 /// | Fields | 250 | 2.07 elaborate | 2.00 erase | 2.00 erase | 2.01 elaborate |
 /// | StructReaders | 250 | 2.16 elaborate | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | Constructors | 250 | 2.18 ersd-optm | 2.00 erase | 2.02 ersd-optm | 2.46 ersd-optm |
+/// | Constructors | 250 | 2.18 anf-optm | 2.00 erase | 2.02 anf-optm | 2.46 anf-optm |
 /// | Values | 250 | 2.15 lower | 2.00 erase | 2.00 erase | 2.00 erase |
 /// | DefaultedMatches | 250 | 2.20 binaryen | 2.00 erase | 2.00 binaryen | 3.00 parse |
 /// | ComparedConstructions | 250 | 2.07 binaryen | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
@@ -279,7 +279,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// | Matches | 200 | 3.36 binaryen | 2.00 erase | 2.01 cranelift | 2.80 cranelift |
 /// | ChainedMatches | 100 | 2.93 binaryen | 2.00 erase | 2.09 cont-optm | 2.29 cranelift |
 /// | Lambdas | 100 | 2.06 cont | 2.47 elaborate | 2.07 erase | 2.52 cont |
-/// | Lists | 400 | 3.70 binaryen | 2.00 erase | 2.01 emit | 2.68 ersd-optm |
+/// | Lists | 400 | 3.70 binaryen | 2.00 erase | 2.01 emit | 2.68 anf-optm |
 /// | Lets | 100 | 2.13 erase | 2.00 erase | 2.00 elaborate | 2.33 erase |
 /// | Arrow | 1000 | 2.06 elaborate | 2.00 erase | 2.08 elaborate | 2.05 elaborate |
 /// | StringLiteral | 2000 | 2.01 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |

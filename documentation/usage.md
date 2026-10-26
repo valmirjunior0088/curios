@@ -324,7 +324,7 @@ No subject at all is the governing package entire for `diagnostics` and `tests`,
 
 `at` and `declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build. A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder. A declaration of the library the compiler was built with is placed where its source file still holds the text it was built from, and its row ends at what it is declared as where no file does, which is every such row under an installed compiler; its head and prose are read off the text the compiler holds of it, and are answered either way.
 
-`stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, lowered again in the asking process with no store, and `core-elab` its elaborated declarations, compiled over the store as a build compiles them. From `ersd` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
+`stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, lowered again in the asking process with no store, and `core-elab` its elaborated declarations, compiled over the store as a build compiles them. From `anf` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
 
 A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming what would declare it, the `mod` line for a module and the `[[executables]]` row for a program, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-std/src/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 
@@ -337,8 +337,8 @@ The stages, in the order the compiler passes them:
 | `text` | the surface syntax tree, reprinted |
 | `core` | the lowered core term, which nothing has checked yet |
 | `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
-| `ersd` | the erased term |
-| `ersd-optm` | the erased term after optimization |
+| `anf` | the erased term, in A-normal form |
+| `anf-optm` | the erased term in A-normal form, after optimization |
 | `cont` | the continuation IR |
 | `cont-optm` | the continuation IR after optimization |
 | `wasm` | the emitted WebAssembly module |

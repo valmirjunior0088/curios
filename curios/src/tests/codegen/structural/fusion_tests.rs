@@ -28,7 +28,7 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
     assert_eq!(run(source), b"ok\n");
 }
 
-/// A list stored into a field the Ersd census marks indexed-only settles at the store, and the settle over the literal's unshared construction tree fuses into one exact flat build (`flatten_indexed_lists` in `curios-cont`): the spliced rebuild becomes a `ListFlat` in place of the concat-of-rope-nodes the lowering honestly writes, and the read answers the same element. The reads reach the census through `/std/List/try_get`, so the fixture also pins the census's deferral through saturated known calls — the shape every real read has at the arena.
+/// A list stored into a field the ANF census marks indexed-only settles at the store, and the settle over the literal's unshared construction tree fuses into one exact flat build (`flatten_indexed_lists` in `curios-cont`): the spliced rebuild becomes a `ListFlat` in place of the concat-of-rope-nodes the lowering honestly writes, and the read answers the same element. The reads reach the census through `/std/List/try_get`, so the fixture also pins the census's deferral through saturated known calls — the shape every real read has at the arena.
 #[test]
 fn indexed_field_store_fuses_to_flat_build() {
     let source = r#"

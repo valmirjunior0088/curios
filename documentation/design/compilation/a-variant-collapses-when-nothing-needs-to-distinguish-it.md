@@ -1,6 +1,6 @@
 # A variant collapses when nothing needs to distinguish it
 
-**Decision.** A variant family's runtime encoding is decided per family at the one-way door, `curios-ersd`'s `lower_to_cont`, as a pure function of its registered schema, and a family pays for discrimination only where discrimination can happen:
+**Decision.** A variant family's runtime encoding is decided per family at the one-way door, `curios-anf`'s `lower_to_cont`, as a pure function of its registered schema, and a family pays for discrimination only where discrimination can happen:
 
 - a **single-constructor family** collapses as the struct with the same relevant row erases: one payload is the bare value, several an untagged row, none the interned `Nat` zero, and its matches do not dispatch;
 - a **multi-constructor family with exactly one immediate-unary constructor** — one carrying one always-immediate payload, or one `Nat` or `Int` — rides that constructor as its bare payload while the siblings keep their rows, and a match opens with an `IsImmediate` test (`ref.test (ref i31)`, and `ref.test (ref $big)` behind it) instead of a tag read, which is never read at all when one boxed constructor remains;
@@ -10,7 +10,7 @@ Eligibility is recorded at erasure, the last walk holding the types: each releva
 
 **Rationale.**
 
-- **The door decides because the tag is born there.** Ersd keeps `Construct` and `MatchVariant` semantic, so there is nothing to erase earlier, only a dispatch encoding to decline; deciding per family from the schema alone makes every construction and match agree with no shared state, over a whole-program lowering.
+- **The door decides because the tag is born there.** ANF keeps `Construct` and `MatchVariant` semantic, so there is nothing to erase earlier, only a dispatch encoding to decline; deciding per family from the schema alone makes every construction and match agree with no shared state, over a whole-program lowering.
 - **`IsImmediate` is asked only where its answers are disjoint by construction**: the bare constructor's payload is an i31 or a `$big`, every sibling a row, and `$big` a final type no row can be. A packed payload is not admitted, since its boxed rope is not cheaply told from a row, and two immediate-unary constructors would collide on the same immediates.
 - **A wrapper adding no information adds no representation**, which removes the cost asymmetry between `struct Meters { Nat }` and `induct Meters | m(Nat) end` for values at rest, where call-pattern specialization cannot reach. The immediate encoding, OCaml's int-versus-block split drawn per family, removes the leaf allocations of tree-shaped data — half the objects of the binary-trees workload (`trees_leaf_rides_its_payload`).
 - **Padding at rest is the price of one heap type per family**, which is what lets a slot's carrier be read downstream, and grouping slots by carrier limits the filler to the slots constructors disagree on. One width also lets a variant in flight split as a product does: the per-character path of an idiomatic UTF-8 walk allocates nothing, `/std/Str/step` taking its scan as field parameters (`curios`'s `tests::codegen` ladder).
