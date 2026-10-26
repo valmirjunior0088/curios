@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, infer},
+    crate::{Error, check, infer},
     curios_core::{Func, Let, Subterm, Term},
 };
 
@@ -39,6 +39,23 @@ fn a_binder_marked_at_a_type_that_is_no_proposition_is_refused() {
         tail: tail.with_proofs(&[true]),
     }));
     assert_eq!(infer(&mut kernel, &block), Err(Error::NoProof(nat_type())));
+}
+
+/// The checked half of the λ rule holds a binder's mark as the inferred half does: a literal checked against a function type, the route a definition's leading λ takes, states no proof at a type that is no proposition, and the same literal unmarked is admitted.
+#[test]
+fn a_checked_binder_marked_at_a_type_that_is_no_proposition_is_refused() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let against = Term::func_type([(binder(1, "m"), nat_type())], nat_type());
+
+    let marked = stating(Term::func([(n, nat_type())], Term::free_var(&n)), &[true]);
+    assert_eq!(
+        check(&mut kernel, &marked, &against),
+        Err(Error::NoProof(nat_type()))
+    );
+
+    let unmarked = stating(Term::func([(n, nat_type())], Term::free_var(&n)), &[false]);
+    assert_eq!(check(&mut kernel, &unmarked, &against), Ok(()));
 }
 
 /// A type is no proof, and neither is a family: a binder at a sort and one at a function into a sort are refused a mark. Conversion reads the reduct of a type, so the machine evaluates one before it binds it, however completely erasure deletes it.

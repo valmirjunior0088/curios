@@ -1043,6 +1043,7 @@ fn check_lambda(
                         expected: Box::new(theirs),
                     });
                 }
+                hold_proof(kernel, walk.binds_proof(), &mine)?;
                 let binder = kernel.advance_assumed(&mut walk, &theirs);
                 if parameters {
                     kernel.bind_parameter(&binder);

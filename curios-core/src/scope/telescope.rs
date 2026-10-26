@@ -687,6 +687,11 @@ impl<'a, B: Bound> Lockstep<'a, B> {
             _ => Step::Mismatch,
         }
     }
+
+    /// Whether the left binder at this position binds a proof, the left one naming the binders ([`Cursor::binds_proof`]).
+    pub fn binds_proof(&self) -> bool {
+        self.left.binds_proof()
+    }
 }
 
 impl<B: Bound> Advance for Lockstep<'_, B> {
