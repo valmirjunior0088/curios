@@ -1,6 +1,10 @@
 //! Which payload binders an index target set determines, and the position a value of the family carries each one at — the answer erasure reads a pinned payload back from once the constructor itself is gone.
 
-use {super::*, curios_core::Global, curios_utilities::Qualifier};
+use {
+    super::*,
+    curios_core::{Global, Level},
+    curios_utilities::Qualifier,
+};
 
 fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
@@ -103,4 +107,14 @@ fn a_binder_under_a_constructor_is_not_pinned() {
     )]);
 
     assert!(!pinned.contains(&a));
+}
+
+/// `mk(@a) : (a.{0})` names its binder through a universe instance — the occurrence the board's two `through an instance` tickets were each missed at, here landing in the refusing direction. The walk reads a bare `Var` target and no `Instance` wrapping one, so an instance-wrapped target determines nothing and the arm stays mandatory: under-pinning refuses the large elimination, where over-pinning would eliminate a proposition's payload into data. A local carries no scheme, so the elaborator never spells a payload binder this way; a module built by hand can, as the board's tickets are.
+#[test]
+fn a_binder_under_a_universe_instance_is_not_pinned() {
+    let a = binder(1, "a");
+    let instanced = Term::instance_of(&a, vec![Level::zero()]);
+
+    assert!(!pinned_by_targets(&[instanced.clone()]).contains(&a));
+    assert!(!wholly_pinned(&[a], &[instanced]));
 }

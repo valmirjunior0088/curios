@@ -2251,3 +2251,113 @@ fn a_spine_of_stuck_folds_reduces_alike_with_its_classifications_kept_and_withou
         );
     }
 }
+
+/// A `Bool` the kernel holds as `true`, or as a name with no value, for a match on it to fire or to stand stuck on a neutral.
+fn define_guard(kernel: &mut Kernel, guard: &Free, defined: bool) {
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    match defined {
+        true => kernel.define(
+            guard,
+            &bool_type,
+            &Term::intrinsic(Intrinsic::Bool(true)),
+            &UniverseContext::default(),
+        ),
+        false => kernel.declare(guard, &bool_type, &UniverseContext::default()),
+    }
+    .expect("a name is declared once");
+}
+
+/// A payload type reduction cannot fire is read as nothing the walk concludes from: `Bad`'s constructor takes `match g | false => Nat | true => Bad end`, and with `g` a `Bool` the kernel holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. The walk reads a stuck form through its children at `Mixed`, so the self-occurrence in an arm is a non-strict path back and the set is refused by the rule — not for the budget, a stuck reduction being no refusal. The control defines `g` as `true`: the match fires to `Bad`, a strict self-occurrence, and the set is admitted, which says the refusal is the stuck shape's.
+#[test]
+fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let guard = Free::local(30, Some("g"));
+    let payload = Term::bool_match(
+        Term::free_var(&guard),
+        None,
+        Term::type_ground(),
+        Term::intrinsic(Intrinsic::NatType),
+        bad_type,
+    );
+
+    for defined in [false, true] {
+        let mut kernel = kernel();
+        define_guard(&mut kernel, &guard, defined);
+        let mut inducts = BTreeMap::new();
+        inducts.insert(bad_name, single_payload(payload.clone(), Term::type_ground()));
+        for (name, entry) in &inducts {
+            kernel
+                .declare_induct(name, entry)
+                .expect("a name is declared once");
+        }
+
+        let verdict = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
+        match defined {
+            false => assert!(
+                matches!(&verdict, Err(PositivityRefusal::NotPositive(refusal)) if refusal.name == bad_name),
+                "a match stuck on a neutral, refused by the rule: {verdict:?}",
+            ),
+            true => assert_eq!(
+                verdict
+                    .ok()
+                    .and_then(|vectors| vectors.get(&bad_name).cloned()),
+                Some(Vec::new()),
+                "the match fired to a strict self-occurrence is admitted",
+            ),
+        }
+    }
+}
+
+/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the kernel holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Env::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
+#[test]
+fn a_call_argument_stuck_on_a_neutral_grades_unread() {
+    let name = Global::Authored(Qualifier::from(["T"]));
+    let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let f = Free::local(2, Some("f"));
+    let a = Free::local(3, Some("a"));
+    let t = Free::local(5, Some("t"));
+    let guard = Free::local(30, Some("g"));
+    let argument = Term::bool_match(
+        Term::free_var(&guard),
+        None,
+        self_type.clone(),
+        Term::free_var(&t),
+        Term::free_var(&t),
+    );
+    let rec = Term::rec(
+        vec![(
+            f,
+            Term::func_type([(a, self_type.clone())], nat()),
+            Term::func(
+                [(a, self_type.clone())],
+                Term::induct_match(
+                    Term::free_var(&a),
+                    None,
+                    nat(),
+                    [("c", vec![t], Term::apply(Term::free_var(&f), [argument]))],
+                ),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    for (defined, expected) in [(false, Totality::Partial), (true, Totality::Total)] {
+        let mut kernel = kernel();
+        kernel
+            .declare_induct(&name, &single_payload(self_type.clone(), Term::type_ground()))
+            .expect("a name is declared once");
+        define_guard(&mut kernel, &guard, defined);
+
+        assert_eq!(
+            group_totality(&mut kernel, group),
+            Ok(expected),
+            "with `g` {}",
+            if defined { "defined" } else { "a neutral" },
+        );
+    }
+}
