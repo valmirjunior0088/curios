@@ -1,6 +1,6 @@
 //! The free-monoid destructors. `Nat`, `Bytes`, and `List` are the native intrinsics that are free monoids on their generators (the unary unit, bytes, elements). Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode — peel the empty identity or a single leading generator off the scrutinee — and that decode is `uncons`, one match arm per carrier; the catamorphism driver in `reduce` consumes the `Layer` it returns and never inspects the carrier's representation again. The eliminator-side analogue of `spine::peel_intrinsic`: a new free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
-//! For `Bytes` and `List`, the same front decode also feeds the operation level: `Bytes/get`/`Bytes/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_atom`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bytes` reflects the peeled head two ways — a `Nat` byte for the eliminator, a one-byte `Bytes` chunk for the operations — while `List`'s head is the element term for both.
+//! For `Bytes` and `List`, the same front decode also feeds the operation level: `Bytes/get`/`Bytes/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_atom`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bytes` reflects the peeled head two ways — a `Byte` for the eliminator, a one-byte `Bytes` chunk for the operations — while `List`'s head is the element term for both.
 //!
 //! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. The measure is how many generators a value carries, folded off the spine, and it is read two ways: `get` and `slice` locate a window through [`FreeMonoid::segments`], which yields the operands they will read *into*, while `len` goes through `bytes_measure`, which answers for strictly more values because a length can be known where a generator cannot. Neither takes a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment. The two-strategy entry that *does* take one — `reduce::intrinsic`'s `FreeMonoid::window` — reaches its symbolic half only once these have declined, so a measurable value still costs no budget.
 //!
@@ -12,7 +12,7 @@ use {
     curios_num::Binary,
 };
 
-/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bytes`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
+/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Byte` for `Bytes`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
 pub enum Layer {
     Empty,
     Cons { head: Option<Term>, tail: Term },
@@ -24,7 +24,7 @@ pub enum Layer {
 pub enum FreeMonoid {
     /// The free monoid on one payload-less generator: the unary naturals. `succ` peels to its predecessor with no head.
     Unary,
-    /// The free monoid on bytes. Its generator is a byte, reflected back into the eliminator as a `Nat`.
+    /// The free monoid on bytes. Its generator is a byte, reflected back into the eliminator as a `Byte`.
     Bytes,
     /// The free monoid on its elements. Its generator is the element term itself.
     List,
@@ -59,7 +59,7 @@ impl FreeMonoid {
 
         match peel_front(&term) {
             Front::Empty => Layer::Empty,
-            // The peeled byte is the eliminator's `Nat`-typed head generator.
+            // The peeled byte is the eliminator's `Byte`-typed head generator.
             Front::Cons { head, tail } => Layer::Cons {
                 head: Some(head.into_atom()),
                 tail,
@@ -83,7 +83,7 @@ impl FreeMonoid {
     }
 }
 
-/// A leading generator peeled off a `Bytes` value: a concrete byte (`Literal`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bytes/get`/`Bytes/slice` into a one-byte `Bytes` chunk.
+/// A leading generator peeled off a `Bytes` value: a concrete byte (`LiteralByte`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Byte`, `Bytes/get`/`Bytes/slice` into a one-byte `Bytes` chunk.
 enum Head {
     LiteralByte(u8),
     Symbolic(Term),
@@ -386,7 +386,7 @@ impl FreeMonoid {
     ///
     /// **The one place a carrier says what a measured node is.** The walks below are one walk over this, as the structural eliminator is one recursion over [`FreeMonoid::uncons`]: a carrier that could be measured differently by `get` than by `slice` is the shape this removes. `Unary` answers `None` throughout — its spine carries the value rather than operands, and nothing indexes into it.
     ///
-    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to the rule it uses otherwise. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` — conversion holds a window's very emptiness undecidable (`curios-algebra`'s word strip answers `Undecided` against the empty value) — so admitting it would be a *new* definitional equation on the soundness board's weakest row. It buys nothing here, since an accumulation's spine is literals.
+    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** A segment is what `get` and `slice` read *into*, and only a literal run can be narrowed where a window's edge falls inside it — `reduce::intrinsic`'s `bytes_piece` and `list_piece` hold every located segment to that — so anything else answers `None`, and every caller then falls back to the rule it uses otherwise. A window is the near miss: its length is the count it was cut to, which `len`'s homomorphism reads off the window on `/sys`'s `s + l <= len(b)` precondition, but its contents are not in hand to be narrowed. It costs nothing here, since an accumulation's spine is literals.
     fn spine<'a>(self, value: &'a Term) -> Option<Spine<'a>> {
         match (self, &**value) {
             (FreeMonoid::Bytes, Subterm::Intrinsic(Intrinsic::Bytes(run))) => {
