@@ -6,13 +6,13 @@ use {
     curios_num::Natural,
 };
 
-fn nat(builder: &mut AnfBuilder, value: u32) -> Atom {
+fn nat(builder: &mut Builder, value: u32) -> Atom {
     Atom::Constant(builder.constant(Constant::Nat(Natural::from(value))))
 }
 
 /// A fragment defining `adder`, a function of one parameter that hands back a function adding it to its argument, and the function's identity in it.
 fn adder() -> (Module, FunctionId) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let outer = builder.reserve_function();
     let inner = builder.reserve_function();
     let n = builder.value(Some("n".into()));
@@ -38,7 +38,7 @@ fn adder() -> (Module, FunctionId) {
 
 /// A fragment whose one item applies an imported function of one parameter, under `interface`, to `1`, and the value the item binds.
 fn applying(interface: Interface) -> (Module, ValueId) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let callee = builder.import_function(Some("adder".into()), 1, interface);
     let one = nat(&mut builder, 1);
     let result = builder.item_value(

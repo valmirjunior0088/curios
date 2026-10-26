@@ -2,7 +2,7 @@
 //!
 //! Every producer (erasure, the transformations' reification paths, and the tests) constructs modules through this type: it owns identity allocation, the open-block discipline that gives the operand law its home ("bound as a statement in the innermost open block"), schema and recursion registration, constant and foreign interning, and finalization, which runs the module verifier. The arena mutators on [`Module`] stay crate-private behind it.
 //!
-//! The module's item list is the outermost block: `let_value`, `let_functions`, and `let_rec` emit into the innermost open block, and with no block open they append to the top-level item list — one uniform emission path, so a producer walking an expression never cares whether it is lowering an item body or a nested position. The `item_*` forms are the explicit top-level surface (they assert no block is open). Blocks nest as a stack — [`open_block`](AnfBuilder::open_block) pushes, [`seal_block`](AnfBuilder::seal_block) pops and freezes the block with its terminator.
+//! The module's item list is the outermost block: `let_value`, `let_functions`, and `let_rec` emit into the innermost open block, and with no block open they append to the top-level item list — one uniform emission path, so a producer walking an expression never cares whether it is lowering an item body or a nested position. The `item_*` forms are the explicit top-level surface (they assert no block is open). Blocks nest as a stack — [`open_block`](Builder::open_block) pushes, [`seal_block`](Builder::seal_block) pops and freezes the block with its terminator.
 
 #[cfg(test)]
 mod tests;
@@ -20,7 +20,7 @@ use {
 
 /// A checked module under construction. See the module documentation.
 #[derive(Debug, Default)]
-pub struct AnfBuilder {
+pub struct Builder {
     module: Module,
     open_blocks: Vec<Vec<StatementId>>,
     /// Identities handed out by [`reserve_function`](Self::reserve_function) and not yet defined.
@@ -29,7 +29,7 @@ pub struct AnfBuilder {
     reserved_functions: BTreeSet<FunctionId>,
 }
 
-impl AnfBuilder {
+impl Builder {
     pub fn new() -> Self {
         Self::default()
     }

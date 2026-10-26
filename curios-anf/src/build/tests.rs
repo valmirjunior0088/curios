@@ -1,7 +1,7 @@
 use {crate::*, curios_num::Natural};
 
 fn doubling_module() -> Result<Module, VerifyError> {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
@@ -26,7 +26,7 @@ fn a_representative_module_builds_and_verifies() {
 
 #[test]
 fn a_recursive_function_builds_through_reserve_and_define() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
 
     let n = builder.value(Some("n".into()));
@@ -87,7 +87,7 @@ fn a_recursive_function_builds_through_reserve_and_define() {
 
 #[test]
 fn a_mixed_recursive_group_builds() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
 
     // rec { fn produce() = consume; consume = produce() dormant knot }
     let produce = builder.reserve_function();
@@ -115,7 +115,7 @@ fn a_mixed_recursive_group_builds() {
 
 #[test]
 fn a_dangling_reservation_is_a_construction_fault() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.reserve_function();
     builder.open_block();
     let unit = builder.constant(Constant::Unit);
@@ -136,7 +136,7 @@ fn a_dangling_reservation_is_a_construction_fault() {
 
 #[test]
 fn an_unsealed_block_is_a_construction_fault() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let fault = builder.construction_fault();
     assert!(
@@ -153,7 +153,7 @@ fn an_unsealed_block_is_a_construction_fault() {
 
 #[test]
 fn a_missing_entry_breaks_the_structure() {
-    let builder = AnfBuilder::new();
+    let builder = Builder::new();
     let fault = builder.module().structure_fault(Entry::Required);
     assert!(
         matches!(
@@ -171,14 +171,14 @@ fn a_missing_entry_breaks_the_structure() {
 #[test]
 #[should_panic(expected = "a fault in the compiler rather than the program")]
 fn finalize_panics_on_a_malformed_module() {
-    let _ = AnfBuilder::new().finalize();
+    let _ = Builder::new().finalize();
 }
 
 /// The builder's own faults panic the same way, before the module is walked at all.
 #[test]
 #[should_panic(expected = "a fault in the compiler rather than the program")]
 fn finalize_panics_on_a_construction_fault() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let _ = builder.finalize();
 }

@@ -5,7 +5,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-fn add(builder: &mut AnfBuilder, left: ValueId, right: ValueId) -> ValueId {
+fn add(builder: &mut Builder, left: ValueId, right: ValueId) -> ValueId {
     builder.let_value(
         None,
         Rhs::Operation {
@@ -17,7 +17,7 @@ fn add(builder: &mut AnfBuilder, left: ValueId, right: ValueId) -> ValueId {
 
 /// `outer(x)` binds `middle(y)`, which binds `inner(z) = x + y + z`: a region three functions deep, each naming what the ones around it bind.
 fn nested_regions() -> (Module, [FunctionId; 3], [ValueId; 2]) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let outer = builder.reserve_function();
     let middle = builder.reserve_function();
     let inner = builder.reserve_function();

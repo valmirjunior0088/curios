@@ -5,7 +5,7 @@ use {
     std::sync::Arc,
 };
 
-fn nat(builder: &mut AnfBuilder, value: u32) -> Atom {
+fn nat(builder: &mut Builder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(Natural::from(value)));
     Atom::Constant(constant)
 }
@@ -65,7 +65,7 @@ fn has_nat_operand(module: &curios_cps::Module, value: u32) -> bool {
 
 #[test]
 fn a_scalar_module_lowers_to_verified_cps() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = nat(&mut builder, 1);
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(one));
     builder.open_block();
@@ -89,7 +89,7 @@ fn a_scalar_module_lowers_to_verified_cps() {
 
 #[test]
 fn bool_and_byte_collapse_onto_the_nat_carrier() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let t = builder.constant(Constant::Bool(true));
     let f = builder.constant(Constant::Bool(false));
@@ -122,7 +122,7 @@ fn bool_and_byte_collapse_onto_the_nat_carrier() {
 
 #[test]
 fn byte_to_nat_is_the_identity() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let byte = builder.constant(Constant::Byte(9));
     let widened = builder.let_value(
@@ -152,7 +152,7 @@ fn byte_to_nat_is_the_identity() {
 
 #[test]
 fn a_variant_match_lowers_to_tag_dispatch() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Opt".into()));
     let none = builder.constructor(family, Some("none".into()), vec![]);
     let some = builder.constructor(
@@ -228,7 +228,7 @@ fn a_variant_match_lowers_to_tag_dispatch() {
 
 #[test]
 fn a_single_constructor_family_collapses_to_its_bare_payload() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Id".into()));
     let wrap = builder.constructor(
         family,
@@ -286,7 +286,7 @@ fn a_single_constructor_family_collapses_to_its_bare_payload() {
 
 #[test]
 fn an_immediate_constructor_rides_its_payload() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Tree".into()));
     let leaf = builder.constructor(
         family,
@@ -380,7 +380,7 @@ fn an_immediate_constructor_rides_its_payload() {
 
 #[test]
 fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Wide".into()));
     let one = builder.constructor(
         family,
@@ -462,7 +462,7 @@ fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch(
 
 #[test]
 fn two_immediate_constructors_decline_the_encoding() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Either".into()));
     let left = builder.constructor(
         family,
@@ -505,7 +505,7 @@ fn two_immediate_constructors_decline_the_encoding() {
 
 #[test]
 fn a_collapsed_pair_is_an_untagged_tuple() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Pair".into()));
     let both = builder.constructor(
         family,
@@ -575,7 +575,7 @@ fn a_collapsed_pair_is_an_untagged_tuple() {
 
 #[test]
 fn a_collapsed_nullary_constructor_is_the_interned_zero() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("One".into()));
     let only = builder.constructor(family, Some("only".into()), vec![]);
 
@@ -625,7 +625,7 @@ fn a_collapsed_nullary_constructor_is_the_interned_zero() {
 /// The anonymous tuple row is shared by every tuple of its width, so its fields name no type: a list read by length out of one pair and a scalar stored into another meet at the same field key, and a settle inserted on that verdict would wrap the scalar. Neither construction settles.
 #[test]
 fn a_shared_tuple_field_is_never_settled() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let pair = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(2),
@@ -699,7 +699,7 @@ fn a_shared_tuple_field_is_never_settled() {
 
 #[test]
 fn folds_lower_to_accumulator_loops() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let five = nat(&mut builder, 5);
     builder.open_block();
@@ -742,7 +742,7 @@ fn folds_lower_to_accumulator_loops() {
 
 #[test]
 fn a_sequence_fold_reads_through_its_grain() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
@@ -812,7 +812,7 @@ fn a_sequence_fold_reads_through_its_grain() {
 /// **No later pass can undo that**, which is why the check belongs at the point of emission: `BytesSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
 #[test]
 fn an_unused_fold_suffix_is_not_sliced() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
@@ -863,7 +863,7 @@ fn an_unused_fold_suffix_is_not_sliced() {
 /// A group with a function member and a computed member ties through the same cells a value-only knot does: the function member's forward reference to the computed member is a cell read at its entry, never a direct capture of a value that does not exist yet.
 #[test]
 fn a_mixed_recursive_group_lowers_through_cells() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let produce = builder.reserve_function();
     let consume = builder.value(Some("consume".into()));
     builder.open_block();
@@ -907,7 +907,7 @@ fn a_mixed_recursive_group_lowers_through_cells() {
 #[test]
 fn a_value_only_knot_lowers_through_cells() {
     // rec { lazy = Pair { force: fn() = lazy } } — the knot ties through a compiler-internal cell: allocated, stored once, read at closure entry.
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
         fields: ProductFields::Declared(vec![
@@ -947,7 +947,7 @@ fn a_value_only_knot_lowers_through_cells() {
 
 #[test]
 fn a_halt_lowers_to_its_node() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let three = nat(&mut builder, 3);
     let exit = builder.foreign(Arc::new(ForeignFunction {
@@ -972,7 +972,7 @@ fn a_halt_lowers_to_its_node() {
 
 #[test]
 fn io_constants_ride_the_binary_carrier() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let stdout = builder.constant(Constant::Handle(1));
     let width = builder.let_value(
@@ -995,7 +995,7 @@ fn io_constants_ride_the_binary_carrier() {
 #[test]
 fn a_knot_member_read_only_by_an_item_is_kept() {
     // rec { lazy = Pair { force: fn() = lazy, mark: 0 } }; let read = lazy.mark — the only read is a top-level item, which lives in no block. A member is dropped when nothing outside its initializer reads it, and a scan of the blocks alone would miss this read, dropping the member and lowering the item's operand to a value the arena lacks.
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
         fields: ProductFields::Declared(vec![
@@ -1044,7 +1044,7 @@ fn a_knot_member_read_only_by_an_item_is_kept() {
 /// The lowering stamps each continuation with the role it fills, which is what lets a dump name a block instead of numbering it. Nothing below reads these — `curios-emit` takes function names only — so they are display and no more; contification adds the contified function's own name on top of them.
 #[test]
 fn every_lowered_continuation_carries_the_role_it_fills() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let identity = builder.reserve_function();
     let subject = builder.value(Some("subject".into()));
     builder.open_block();

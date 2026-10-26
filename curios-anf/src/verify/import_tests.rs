@@ -2,7 +2,7 @@
 
 use crate::*;
 
-fn fault_of(builder: &AnfBuilder) -> Option<StructuralRule> {
+fn fault_of(builder: &Builder) -> Option<StructuralRule> {
     builder
         .module()
         .structure_fault(Entry::Absent)
@@ -10,8 +10,8 @@ fn fault_of(builder: &AnfBuilder) -> Option<StructuralRule> {
 }
 
 /// A fragment importing a family of three constructors, holding those at `positions`, whose one item matches a value of it with an arm for each it holds and no default.
-fn matching(positions: &[usize]) -> AnfBuilder {
-    let mut builder = AnfBuilder::new();
+fn matching(positions: &[usize]) -> Builder {
+    let mut builder = Builder::new();
     let family = builder.import_family(Some("Tri".into()), 3);
     let constructors = positions
         .iter()
@@ -55,7 +55,7 @@ fn a_match_over_an_imported_family_covers_every_constructor_it_declares() {
 
 #[test]
 fn an_imported_constructor_stands_at_a_position_its_family_has() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.import_family(None, 2);
     builder.import_constructor(family, 2, None, 0);
 
@@ -64,7 +64,7 @@ fn an_imported_constructor_stands_at_a_position_its_family_has() {
 
 #[test]
 fn two_imported_constructors_stand_at_two_positions() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.import_family(None, 2);
     builder.import_constructor(family, 1, None, 0);
     builder.import_constructor(family, 1, None, 0);
@@ -73,8 +73,8 @@ fn two_imported_constructors_stand_at_two_positions() {
 }
 
 /// A fragment importing a product of width three, whose one item projects field `field` out of an imported value of it.
-fn projecting(field: u32) -> AnfBuilder {
-    let mut builder = AnfBuilder::new();
+fn projecting(field: u32) -> Builder {
+    let mut builder = Builder::new();
     let schema = builder.import_product(Some("Triple".into()), 3);
     let product = builder.import_value(Some("triple".into()));
     builder.item_value(

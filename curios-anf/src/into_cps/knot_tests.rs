@@ -1,13 +1,13 @@
 //! The knot protocol: publication before forcing, storage-only captures, and the cached and reentrant paths.
 
 use {
-    crate::{AnfBuilder, Atom, Constant, Operation, Rhs, Terminator, lower_to_cps},
+    crate::{Atom, Builder, Constant, Operation, Rhs, Terminator, lower_to_cps},
     curios_num::Natural,
     std::collections::BTreeSet,
 };
 
 fn knot() -> curios_cps::Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let constant = builder.constant(Constant::Nat(Natural::from(41u32)));
     let seed = builder.item_value(Some("seed".into()), Rhs::Alias(Atom::Constant(constant)));
     let left = builder.value(Some("left".into()));

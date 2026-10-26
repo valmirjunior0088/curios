@@ -1,7 +1,7 @@
 use {crate::*, curios_num::Natural};
 
 fn doubling_module() -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
@@ -30,7 +30,7 @@ fn use_counts_are_exact() {
 /// outer(p) { x = alias glob; functions inner; return inner } inner() { s = NatAdd(x, p); return s } Free values: inner frees x and p; outer frees only glob (x and p are bound in outer, and inner's frees propagate into outer before subtraction).
 #[test]
 fn free_values_derive_transitively_through_nested_functions() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let glob = builder.item_value(Some("glob".into()), Rhs::Alias(Atom::Constant(zero)));
 
@@ -86,7 +86,7 @@ fn free_values_derive_transitively_through_nested_functions() {
 /// Recursion through nesting is visible in the reference graph: outer binds inner (edge) and inner calls outer (edge), so they form one recursive component.
 #[test]
 fn nesting_recursion_forms_one_component() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let outer = builder.reserve_function();
     let inner = builder.reserve_function();
 
@@ -121,7 +121,7 @@ fn nesting_recursion_forms_one_component() {
 
 #[test]
 fn components_distinguish_recursion_from_plain_calls() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let looping = builder.reserve_function();
     let plain = builder.reserve_function();
 
@@ -177,7 +177,7 @@ fn analysis_is_deterministic() {
 /// Analyzing a deep module costs heap, not native stack.
 #[test]
 fn a_deep_module_analyzes_without_native_stack() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
     builder.open_block();

@@ -2,7 +2,7 @@ use {crate::*, curios_num::Natural};
 
 /// A module whose entry forces a description and tests what it answers, in the shape erasure binds the test: the value arm returns the answer, and the suspended arm carries the suspension on. Where `suspends`, the description also builds a suspension with `New`, which it never answers.
 fn tested_entry(suspends: bool) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let seven = builder.constant(Constant::Nat(Natural::from(7u32)));
 
     let description = builder.reserve_function();

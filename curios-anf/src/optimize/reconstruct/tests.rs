@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::{
-        Analysis, AnfBuilder, CellOperation, Constant, Field, NatCase, Operation, ProductFields,
+        Analysis, Builder, CellOperation, Constant, Field, NatCase, Operation, ProductFields,
         ProductSchema, VariantArm,
     },
 };
@@ -18,7 +18,7 @@ fn finish(module: &mut Module) {
 }
 
 fn product_fixture(order: &[u32], depth: usize) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(2),
@@ -84,7 +84,7 @@ fn shared_reconstruction_chains_settle_in_one_invocation() {
 }
 
 fn variant_fixture(wrapper: bool, effect: bool, default: bool) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(None);
     let some = builder.constructor(family, None, vec![Field::opaque(None)]);
     let none = builder.constructor(family, None, vec![]);
@@ -251,7 +251,7 @@ fn a_retained_unit_is_not_assumed_to_equal_an_opaque_field() {
 }
 
 fn recursive_unit_fixture(mixed: bool) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(2),
@@ -357,7 +357,7 @@ fn one_nonunit_return_prevents_the_unit_rewrite() {
 
 #[test]
 fn state_work_in_a_producer_survives_forwarding_its_answer() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(2),
@@ -429,7 +429,7 @@ fn state_work_in_a_producer_survives_forwarding_its_answer() {
 #[test]
 fn a_computed_member_keeps_its_force_even_when_its_initializer_builds_unit() {
     for unit_field in [false, true] {
-        let mut builder = AnfBuilder::new();
+        let mut builder = Builder::new();
         let schema = builder.product(ProductSchema {
             debug_name: None,
             fields: ProductFields::Shared(2),
@@ -484,7 +484,7 @@ fn a_computed_member_keeps_its_force_even_when_its_initializer_builds_unit() {
 }
 
 fn many_returns(count: usize) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(2),

@@ -12,7 +12,7 @@ fn a_self_recursive_function(total: bool) -> Module {
 }
 
 fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let id = builder.reserve_function();
     let param = builder.value(Some("n".into()));
     builder.open_block();
@@ -121,7 +121,7 @@ fn only_a_total_and_effect_free_function_crosses_as_droppable() {
 /// A call through a field of a product the module constructs is a call to what the construction holds — the shape a concept method's call erases to, the method projected off its witness and applied, which pruning would otherwise judge an unknown callee and keep for effect. A projection off a product the walk cannot see constructed stays unknown.
 #[test]
 fn a_call_through_a_constructed_products_field_is_judged_as_that_field() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Dict".into()),
         fields: ProductFields::Declared(vec![Field::opaque(Some("method".into()))]),

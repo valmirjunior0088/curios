@@ -6,13 +6,13 @@ use {
     curios_num::Natural,
 };
 
-fn nat(builder: &mut AnfBuilder, value: u32) -> Atom {
+fn nat(builder: &mut Builder, value: u32) -> Atom {
     Atom::Constant(builder.constant(Constant::Nat(Natural::from(value))))
 }
 
 /// A fragment defining `successor`, a function adding one to its argument, and the function's identity in it.
 fn successor() -> (Module, FunctionId) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let n = builder.value(Some("n".into()));
     let one = nat(&mut builder, 1);
@@ -36,7 +36,7 @@ fn successor() -> (Module, FunctionId) {
 
 /// A fragment whose entry applies an imported function of one parameter, under `interface`, to `1`.
 fn caller(interface: Interface) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let callee = builder.import_function(Some("successor".into()), 1, interface);
     let one = nat(&mut builder, 1);
     builder.open_block();
@@ -55,7 +55,7 @@ fn caller(interface: Interface) -> Module {
 
 /// The same program built as one module, for a linked one to be held to.
 fn whole() -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let n = builder.value(Some("n".into()));
     let one = nat(&mut builder, 1);
@@ -138,7 +138,7 @@ fn a_constant_two_fragments_spell_is_one_in_the_program() {
 
 /// A fragment constructing a pair over a schema of its own, bound as its one item.
 fn pair() -> (Module, ProductId) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
         fields: ProductFields::Declared(vec![Field::opaque(None), Field::opaque(None)]),
@@ -266,7 +266,7 @@ fn a_row_no_fragment_declares_is_imported_at_what_its_readers_state() {
 /// A fragment's imported product is the module's import at the width the fragment states, and lists no field.
 #[test]
 fn an_imported_product_is_imported_at_its_width() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.import_product(Some("Pair".into()), 2);
     let one = nat(&mut builder, 1);
     builder.item_value(
@@ -314,7 +314,7 @@ fn a_fragments_rows_are_linked_without_its_items() {
 
 #[test]
 fn an_imported_value_stands_for_the_atom_it_resolves_to() {
-    let mut defining = AnfBuilder::new();
+    let mut defining = Builder::new();
     let one = nat(&mut defining, 1);
     let bound = defining.item_value(
         Some("one".into()),
@@ -325,7 +325,7 @@ fn an_imported_value_stands_for_the_atom_it_resolves_to() {
     );
     let defining = defining.into_module().expect("the fragment verifies");
 
-    let mut using = AnfBuilder::new();
+    let mut using = Builder::new();
     let imported = using.import_value(Some("one".into()));
     using.open_block();
     let entry = using.seal_block(Terminator::Return(Atom::Value(imported)));
@@ -351,7 +351,7 @@ fn an_imported_value_stands_for_the_atom_it_resolves_to() {
 
 /// A fragment whose one item is a computed member initialized by applying an imported function of no parameter, under `interface`.
 fn initialized_through(interface: Interface) -> Result<Module, VerifyError> {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let callee = builder.import_function(Some("callee".into()), 0, interface);
     let member = builder.value(Some("member".into()));
     builder.open_block();
@@ -385,7 +385,7 @@ fn an_initializer_is_refused_for_the_effect_an_imported_callee_performs() {
 
 #[test]
 fn a_function_that_applies_its_parameter_says_so_in_its_interface() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let callback = builder.value(Some("callback".into()));
     let ignored = builder.value(Some("ignored".into()));
@@ -419,7 +419,7 @@ fn only_an_item_that_could_be_observable_computes() {
     let (constructed, _) = pair();
     assert!(!constructed.computes());
 
-    let mut applying = AnfBuilder::new();
+    let mut applying = Builder::new();
     let callee = applying.import_function(None, 0, Interface::default());
     applying.item_value(
         None,

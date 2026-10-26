@@ -57,7 +57,7 @@ pub type Externals<'s> = &'s dyn Fn(&Global) -> Option<&'s ErasedItem>;
 
 /// One item's erasure state: the checked builder constructing its fragment and the environment mapping Core names to their operands there.
 pub struct Lowering<'s> {
-    builder: curios_anf::AnfBuilder,
+    builder: curios_anf::Builder,
     environment: Environment,
     /// The erased forms of the items this one may name.
     externals: Externals<'s>,
@@ -140,7 +140,7 @@ impl<'s> Lowering<'s> {
     /// A fresh erasure, of one item, reading other items' erased forms through `externals`.
     pub fn over(externals: Externals<'s>) -> Self {
         Self {
-            builder: curios_anf::AnfBuilder::new(),
+            builder: curios_anf::Builder::new(),
             environment: Environment::default(),
             externals,
             values: Vec::new(),

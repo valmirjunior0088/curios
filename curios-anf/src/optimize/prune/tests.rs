@@ -8,7 +8,7 @@ use {
 /// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
 #[test]
 fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let _pure_unused = builder.item_value(
         Some("pure_unused".into()),
@@ -60,7 +60,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
 /// A dead function web (mutually recursive combinators, never referenced) drops whole; a reached recursive group survives whole.
 #[test]
 fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
 
     // Dead web: rec { a() = b(); b() = a() }
     let a = builder.reserve_function();
@@ -118,7 +118,7 @@ fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
 #[test]
 fn pruning_is_deterministic() {
     let build = || {
-        let mut builder = AnfBuilder::new();
+        let mut builder = Builder::new();
         let one = builder.constant(Constant::Nat(Natural::from(1u32)));
         let _dead = builder.item_value(
             None,

@@ -5,7 +5,7 @@ use {
     std::sync::Arc,
 };
 
-fn nat_atom(builder: &mut AnfBuilder, value: u32) -> Atom {
+fn nat_atom(builder: &mut Builder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(Natural::from(value)));
     Atom::Constant(constant)
 }
@@ -13,7 +13,7 @@ fn nat_atom(builder: &mut AnfBuilder, value: u32) -> Atom {
 /// A recursive group function called by the computed member's eager initializer — a supported program.
 #[test]
 fn a_join_all_shaped_knot_verifies() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
 
     // rec { fn go(i) = go(i); result = go(0) }
     let go = builder.reserve_function();
@@ -52,7 +52,7 @@ fn a_join_all_shaped_knot_verifies() {
 /// The self-referential lazy value: a value-only group whose knot closes through a closure constructed by the initializer. The reference to the member under initialization is dormant, so it is admitted; the lowering knots it through a cell.
 #[test]
 fn a_self_referential_lazy_value_verifies() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
         fields: ProductFields::Declared(vec![Field::opaque(Some("force".into()))]),
@@ -88,7 +88,7 @@ fn a_self_referential_lazy_value_verifies() {
 /// A later computed member may evaluate an earlier one; only forward and self evaluation are unsatisfiable.
 #[test]
 fn a_backward_computed_reference_verifies() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let first = builder.value(Some("first".into()));
     let second = builder.value(Some("second".into()));
     builder.open_block();
@@ -109,7 +109,7 @@ fn a_backward_computed_reference_verifies() {
 /// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size`. Forced by need, that is legal — reading `size` runs its initializer first.
 #[test]
 fn a_forward_reference_through_a_called_function_is_forced_first() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let build = builder.reserve_function();
     let table = builder.value(Some("table".into()));
     let size = builder.value(Some("size".into()));
@@ -152,7 +152,7 @@ fn a_forward_reference_through_a_called_function_is_forced_first() {
 /// The same knot closed into a cycle — `size = table` — is what no forcing can satisfy: `table`'s initializer evaluates `size` through `build`, and `size`'s evaluates `table`. The refusal names the path and the call.
 #[test]
 fn a_cycle_through_a_called_function_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let build = builder.reserve_function();
     let table = builder.value(Some("table".into()));
     let size = builder.value(Some("size".into()));
@@ -199,7 +199,7 @@ fn a_cycle_through_a_called_function_is_rejected() {
 /// The same knot with `size` ahead of `table`, which by need makes no difference to.
 #[test]
 fn a_backward_reference_through_a_called_function_verifies() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let build = builder.reserve_function();
     let size = builder.value(Some("size".into()));
     let table = builder.value(Some("table".into()));
@@ -242,7 +242,7 @@ fn a_backward_reference_through_a_called_function_verifies() {
 /// The fold shape: `rec { table = each(step); fn step(n) = n + table }` where `each(f)` nests a `go` that captures `f` and applies it, and `step` reads `table` — so `table`'s initializer evaluates `table`. The stepper is handed to a combinator rather than called, and the combinator applies it only through a capture two functions down — which the summary follows, because an applied capture names a value of the scope that binds it, and that scope is `each`'s parameter list.
 #[test]
 fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initializer() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let each = builder.reserve_function();
     let step = builder.reserve_function();
     let table = builder.value(Some("table".into()));
@@ -319,7 +319,7 @@ fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initiali
 /// The bind shape: a stepper over a sibling handed to a combinator that only *stores* it — `keep(f) = Box { f }` — stays dormant, which is what keeps a parser knot built over its own members legal.
 #[test]
 fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Box".into()),
         fields: ProductFields::Declared(vec![Field::opaque(Some("held".into()))]),
@@ -379,7 +379,7 @@ fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
 /// An initializer performs no effect: forced by need it runs later than it is written, or never, and an exit — or a host call, or a cell — cannot be moved that way. It is refused where it is declared.
 #[test]
 fn an_initializer_that_performs_an_effect_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let member = builder.value(Some("member".into()));
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
@@ -412,7 +412,7 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
 /// A computed-only evaluation cycle has no satisfiable initialization order.
 #[test]
 fn a_computed_only_cycle_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let first = builder.value(Some("first".into()));
     let second = builder.value(Some("second".into()));
     builder.open_block();
@@ -434,7 +434,7 @@ fn a_computed_only_cycle_is_rejected() {
 #[test]
 fn an_unused_direct_self_knot_is_admitted() {
     // `rec loop = loop; 0` is language-accepted: nothing forces `loop`, so its initializer never runs, and the lowering drops it.
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
     let init = builder.seal_block(Terminator::Return(Atom::Value(value)));
@@ -452,7 +452,7 @@ fn an_unused_direct_self_knot_is_admitted() {
 /// A fragment cannot tell whether another module reads a member only its own initializer reads, so it is admitted there and named, for whoever erases a read of it to refuse: with a second member the fragment does read, which is no such knot, left out.
 #[test]
 fn a_fragment_names_the_self_knots_nothing_of_it_forces() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let knot = builder.value(Some("knot".into()));
     let plain = builder.value(Some("plain".into()));
     builder.open_block();
@@ -477,7 +477,7 @@ fn a_fragment_names_the_self_knots_nothing_of_it_forces() {
 #[test]
 fn a_used_direct_self_knot_is_rejected() {
     // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. A self-read is an edge like any other once something forces the member, so this is refused here rather than admitted with the unused shape to trap as a black hole at runtime.
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
     let init = builder.seal_block(Terminator::Return(Atom::Value(value)));
@@ -499,7 +499,7 @@ fn a_used_direct_self_knot_is_rejected() {
 /// An operation names its result's carrier, so a register stated on its result would state one fact twice, and could state it otherwise than the operation computes it.
 #[test]
 fn a_carrier_stated_on_an_operations_result_is_refused() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let one = nat_atom(&mut builder, 1);
     let sum = builder.let_value(
@@ -528,7 +528,7 @@ fn a_carrier_stated_on_an_operations_result_is_refused() {
 /// A field read names no carrier — a polymorphic slot hands back a reference — so the binding may state the one its type names.
 #[test]
 fn a_carrier_stated_on_a_field_read_verifies() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
         fields: ProductFields::Declared(vec![
@@ -562,7 +562,7 @@ fn a_carrier_stated_on_a_field_read_verifies() {
 
 #[test]
 fn an_unbound_value_use_is_out_of_scope() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let unbound = builder.value(Some("unbound".into()));
     builder.open_block();
     let early = builder.let_value(None, Rhs::Alias(Atom::Value(unbound)));
@@ -583,7 +583,7 @@ fn an_unbound_value_use_is_out_of_scope() {
 
 #[test]
 fn a_value_bound_inside_a_function_is_out_of_scope_after_it() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     builder.open_block();
     let one = nat_atom(&mut builder, 1);
@@ -609,7 +609,7 @@ fn a_value_bound_inside_a_function_is_out_of_scope_after_it() {
 
 #[test]
 fn an_operation_arity_mismatch_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let one = nat_atom(&mut builder, 1);
     let sum = builder.let_value(
@@ -636,7 +636,7 @@ fn an_operation_arity_mismatch_is_rejected() {
 
 #[test]
 fn an_unsaturated_direct_application_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let param = builder.value(None);
     builder.open_block();
@@ -669,7 +669,7 @@ fn an_unsaturated_direct_application_is_rejected() {
 /// The mapper is `ListMap`'s second operand — the list comes first, like every sequence operation. A rule reading the first operand would check nothing, since a list value never looks like a function atom.
 #[test]
 fn a_two_parameter_mapper_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let mapper = builder.reserve_function();
     let left = builder.value(None);
     let right = builder.value(None);
@@ -710,7 +710,7 @@ fn a_two_parameter_mapper_is_rejected() {
 
 #[test]
 fn a_match_missing_a_constructor_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let family = builder.family(Some("Shape".into()));
     let circle = builder.constructor(family, Some("circle".into()), vec![Field::opaque(None)]);
     let _square = builder.constructor(family, Some("square".into()), vec![Field::opaque(None)]);
@@ -757,7 +757,7 @@ fn a_match_missing_a_constructor_is_rejected() {
 
 #[test]
 fn duplicate_switch_keys_are_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
     builder.open_block();
@@ -800,7 +800,7 @@ fn duplicate_switch_keys_are_rejected() {
 
 #[test]
 fn a_block_with_two_owners_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
     builder.open_block();
@@ -829,14 +829,14 @@ fn a_block_with_two_owners_is_rejected() {
     );
 }
 
-fn nat_bool(builder: &mut AnfBuilder) -> Atom {
+fn nat_bool(builder: &mut Builder) -> Atom {
     let constant = builder.constant(Constant::Bool(true));
     Atom::Constant(constant)
 }
 
 #[test]
 fn a_leaked_block_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);
     let leaked = builder.seal_block(Terminator::Return(zero));
@@ -859,7 +859,7 @@ fn a_leaked_block_is_rejected() {
 
 #[test]
 fn a_projection_out_of_range_is_rejected() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Declared(vec![Field::opaque(None), Field::opaque(None)]),
@@ -921,8 +921,8 @@ fn a_deep_malformed_module_diagnoses_without_native_stack() {
 }
 
 /// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed` the innermost block references a value that is never bound.
-fn deep_switch_chain(depth: usize, malformed: bool) -> AnfBuilder {
-    let mut builder = AnfBuilder::new();
+fn deep_switch_chain(depth: usize, malformed: bool) -> Builder {
+    let mut builder = Builder::new();
     let zero = nat_atom(&mut builder, 0);
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(zero));
 

@@ -7,7 +7,7 @@ use {
 /// `make(x) = (y) => x + y`, bound as an item.
 ///
 /// Applying it folds to a closure over `x`, so reifying the result deep-copies `inner` with the capture substituted — the shape whose duplication the reification memo exists to remove.
-fn define_maker(builder: &mut AnfBuilder) -> FunctionId {
+fn define_maker(builder: &mut Builder) -> FunctionId {
     let make = builder.reserve_function();
     let inner = builder.reserve_function();
     let x = builder.value(Some("x".into()));
@@ -34,7 +34,7 @@ fn define_maker(builder: &mut AnfBuilder) -> FunctionId {
 }
 
 /// A function bound by its own item whose body applies `make` to a literal — one block-owned candidate.
-fn define_host(builder: &mut AnfBuilder, make: FunctionId, one: ConstantId, name: &str) {
+fn define_host(builder: &mut Builder, make: FunctionId, one: ConstantId, name: &str) {
     let host = builder.reserve_function();
     builder.open_block();
     let applied = builder.let_value(
@@ -51,7 +51,7 @@ fn define_host(builder: &mut AnfBuilder, make: FunctionId, one: ConstantId, name
 
 /// Two candidates, each inside a block of its own item, folding to one specialization.
 fn two_block_candidates() -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let make = define_maker(&mut builder);
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     define_host(&mut builder, make, one, "first");
@@ -122,7 +122,7 @@ fn a_block_candidates_copy_is_bound_at_item_level() {
 }
 
 /// A recursive value's dictionary: `rec { dict = init { method(x) = x; product(method, 0) } }`, with `get(d) = d.0` bound at item level to project the method out.
-fn define_knot(builder: &mut AnfBuilder) -> (ValueId, FunctionId, FunctionId) {
+fn define_knot(builder: &mut Builder) -> (ValueId, FunctionId, FunctionId) {
     let schema = builder.product(ProductSchema {
         debug_name: Some("Dict".into()),
         fields: ProductFields::Declared(vec![
@@ -172,7 +172,7 @@ fn define_knot(builder: &mut AnfBuilder) -> (ValueId, FunctionId, FunctionId) {
 /// A candidate outside the knot — `get(dict)` in a host of its own — folds to a closure over `method`, which is bound inside the knot's initializer. Copied out to the host it would carry the knot's dispatch with it: this is the shape that would unroll a mutually recursive witness group one level per round, exponentially once a member also reaches itself. The candidate is left the call it was, and nothing is copied.
 #[test]
 fn a_knots_function_is_not_copied_out_of_its_initializer() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let (dict, _, get) = define_knot(&mut builder);
     let host = builder.reserve_function();
     builder.open_block();
@@ -208,7 +208,7 @@ fn a_knots_function_is_not_copied_out_of_its_initializer() {
 /// Within the initializer the same closure still folds: a candidate there — `pick(method)` with `pick(f) = f` — is the parser-knot construction the fold exists for, and its copy is bound where the knot's own blocks can see it.
 #[test]
 fn a_knots_function_still_folds_within_its_initializer() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let pick = builder.reserve_function();
     let f = builder.value(Some("f".into()));
     builder.open_block();
@@ -255,9 +255,9 @@ fn a_knots_function_still_folds_within_its_initializer() {
 
 /// The item `apply f(argument)`, where `f` is a one-parameter function whose body `body` builds around the parameter — the candidate whose folded constant a sequence test reads back.
 fn sequence_candidate(
-    builder: &mut AnfBuilder,
+    builder: &mut Builder,
     argument: Atom,
-    body: impl FnOnce(&mut AnfBuilder, ValueId) -> ValueId,
+    body: impl FnOnce(&mut Builder, ValueId) -> ValueId,
 ) -> ValueId {
     let function = builder.reserve_function();
     let parameter = builder.value(Some("s".into()));
@@ -276,7 +276,7 @@ fn sequence_candidate(
 }
 
 /// Finish the fixture with an entry returning zero, fold it, and read the constant `value` was folded to.
-fn folded(mut builder: AnfBuilder, value: ValueId) -> Constant {
+fn folded(mut builder: Builder, value: ValueId) -> Constant {
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
@@ -307,7 +307,7 @@ fn folded(mut builder: AnfBuilder, value: ValueId) -> Constant {
 /// `uncons s | x[] => 0 | x[_, ..t] => BytesLen(t)` over `x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
 #[test]
 fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
@@ -349,7 +349,7 @@ fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
 /// `uncons s | [] => 0 | [_, ..t] => ListGet(ListSlice(t, 1, 1), 0)` over `[10, 20, 30]`: a slice of the suffix indexes from the suffix's own start, not the list's, so the answer is the third element.
 #[test]
 fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let operands = Vec::from([10, 20, 30].map(|element| {
         Atom::Constant(builder.constant(Constant::Nat(Natural::from(element as u32))))
     }));
@@ -412,7 +412,7 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
 /// `fold s | x[] => 0 | x[_, ..t]; acc => BytesLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
 #[test]
 fn a_fold_step_sees_the_suffix_after_its_element() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
@@ -461,7 +461,7 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
 }
 
 /// `id(f) = f`, bound as an item, so applying it to a function yields that function as a closure over nothing.
-fn define_identity(builder: &mut AnfBuilder) -> FunctionId {
+fn define_identity(builder: &mut Builder) -> FunctionId {
     let id = builder.reserve_function();
     let f = builder.value(Some("f".into()));
     builder.open_block();
@@ -475,7 +475,7 @@ fn define_identity(builder: &mut AnfBuilder) -> FunctionId {
 ///
 /// The candidate is `id(inner)`. Both operands are closed, so it folds — to a closure over `inner` capturing *nothing*, because the interpreter reaches `inner` as a function identity rather than by evaluating the block that binds `z`. `inner`'s body still names `z`, which is bound in a block and nowhere else.
 fn a_closure_over_a_block_bound_value() -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let id = define_identity(&mut builder);
     let host = builder.reserve_function();
     let inner = builder.reserve_function();
@@ -534,7 +534,7 @@ fn a_closure_whose_uncovered_free_value_is_block_bound_is_not_reified() {
 }
 
 /// `describe(x)` answers a description over `x`, bound as an item: one whose performance answers `x` where it ends, and one that forces `describe(x)` again where it loops, as a write that resends does through its bind's continuation.
-fn define_describer(builder: &mut AnfBuilder, loops: bool) -> FunctionId {
+fn define_describer(builder: &mut Builder, loops: bool) -> FunctionId {
     let describe = builder.reserve_function();
     let performance = builder.reserve_function();
     let x = builder.value(Some("x".into()));
@@ -578,7 +578,7 @@ fn define_describer(builder: &mut AnfBuilder, loops: bool) -> FunctionId {
 
 /// A module whose one candidate is `describe(1)`, inside a host of its own.
 fn a_described_candidate(loops: bool) -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let describe = define_describer(&mut builder, loops);
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     define_host(&mut builder, describe, one, "host");

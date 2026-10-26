@@ -1,6 +1,6 @@
 //! Module builders the CPS suites share, so a test states only the flow it is about.
 //!
-//! Every file here hand-assembles a `Module` node by node — there is no builder in the product to lean on, the way the ANF suites lean on `AnfBuilder` — and each would otherwise re-derive the same closing move: reserve a function, reserve its return continuation, define it as `main`, make it the entry. [`module_with`] is that move, and the rest are the shaped fixtures more than one suite reaches for.
+//! Every file here hand-assembles a `Module` node by node — there is no builder in the product to lean on, the way the ANF suites lean on `curios_anf::Builder` — and each would otherwise re-derive the same closing move: reserve a function, reserve its return continuation, define it as `main`, make it the entry. [`module_with`] is that move, and the rest are the shaped fixtures more than one suite reaches for.
 //!
 //! `pub(super)` rather than private: these are consumed by the suites across the crate, and by nothing outside it.
 

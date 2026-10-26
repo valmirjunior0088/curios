@@ -174,7 +174,7 @@ impl Module {
 
     /// [`verify`](Self::verify) for a *fragment* — what one item erased to, which carries no entrypoint, so there is no entry block and its absence is not a fault, and whose imports are bound before its first item.
     ///
-    /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a fragment cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the fragment is the thing that gets *stored*: a unit's erased forms are serialized without ever passing through [`AnfBuilder::finalize`](crate::AnfBuilder::finalize), and without this the first walk over those bytes is the verification of a later program linked from them, which reports the fault against that program.
+    /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a fragment cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the fragment is the thing that gets *stored*: a unit's erased forms are serialized without ever passing through [`Builder::finalize`](crate::Builder::finalize), and without this the first walk over those bytes is the verification of a later program linked from them, which reports the fault against that program.
     ///
     /// What it costs is the `verify_fragment` rows of the profile the prelude's elaborating build files, one for each item: `cargo xtask profile-prelude elaboration <PATH>`.
     pub fn verify_fragment(&self) -> Result<(), VerifyError> {

@@ -2,11 +2,11 @@
 
 use {
     super::*,
-    crate::{AnfBuilder, Constant, ConstantId, Field, ProductFields, ProductSchema, Terminator},
+    crate::{Builder, Constant, ConstantId, Field, ProductFields, ProductSchema, Terminator},
 };
 
 fn fixture(matching: bool) -> (Rebindings, Atom, Atom) {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: ProductFields::Shared(1),

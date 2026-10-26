@@ -12,7 +12,7 @@ fn nat(value: u32) -> Constant {
 }
 
 fn doubling_module() -> Module {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(nat(1));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
@@ -45,7 +45,7 @@ entry =
 /// A register a binder states prints at the binder, spelled as a literal's carrier is: here a function's parameters, one a float and one a word.
 #[test]
 fn a_stated_register_prints_at_its_binder() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let x = builder.value(Some("x".into()));
     let flag = builder.value(Some("flag".into()));
@@ -68,7 +68,7 @@ fn a_stated_register_prints_at_its_binder() {
 
 #[test]
 fn a_recursive_module_prints_exactly() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let function = builder.reserve_function();
     let n = builder.value(Some("n".into()));
     let zero = builder.constant(nat(0));
@@ -141,7 +141,7 @@ entry =
 
 #[test]
 fn schemas_and_constants_print_deterministically() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
         fields: ProductFields::Declared(vec![
@@ -197,7 +197,7 @@ fn printing_is_deterministic_across_constructions() {
 /// A module nested fifty thousand blocks deep prints from a thread of the default stack: the walk recurses as the blocks nest, on a stack that grows for it.
 #[test]
 fn a_deep_module_prints_on_a_stack_that_grows_for_it() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let zero = builder.constant(nat(0));
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
     builder.open_block();
@@ -230,7 +230,7 @@ fn a_deep_module_prints_on_a_stack_that_grows_for_it() {
 /// A lifted function printed at top level would show an empty parameter list and a body naming its enclosing function's parameter, which is an open term. Nesting at the binding site is what closes it.
 #[test]
 fn a_closure_nests_inside_the_function_that_binds_its_captures() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let outer = builder.reserve_function();
     let inner = builder.reserve_function();
     let m = builder.value(Some("m".into()));
@@ -274,7 +274,7 @@ entry =
 /// A group binds its members in one `let … and …`, exactly as the surface declares mutually recursive definitions.
 #[test]
 fn a_function_group_prints_as_one_and_chain() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let first = builder.reserve_function();
     let second = builder.reserve_function();
     let zero = builder.constant(nat(0));
@@ -308,7 +308,7 @@ entry =
 /// A `Rec` group mixes functions with values forced on first read. It spells `let rec` where a plain `Functions` group spells `let`, so the two never collapse into one reading.
 #[test]
 fn a_recursive_group_prints_as_a_let_rec_chain() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let step = builder.reserve_function();
     let table = builder.value(Some("table".into()));
     let zero = builder.constant(nat(0));
@@ -344,7 +344,7 @@ entry =
 /// The surface writes a `Bool` match true-arm first; the representation stores false first, and the printer reorders rather than exposing the field order.
 #[test]
 fn a_bool_match_prints_its_true_arm_first_with_statement_free_arms_riding() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let flag = builder.constant(Constant::Bool(true));
     let yes = builder.constant(nat(1));
     let no = builder.constant(nat(2));
@@ -382,7 +382,7 @@ entry =
 /// `_` is what a hintless value nothing reads *is*, following `curios-core`'s rule for an unreferenced unnameable binder. A hinted one keeps its hint, because the hint is information the elaborator recorded.
 #[test]
 fn an_unread_binder_spells_a_hole_only_when_it_is_also_hintless() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(nat(1));
     let two = builder.constant(nat(2));
     builder.open_block();
@@ -406,7 +406,7 @@ entry =
 /// The faithfulness boundary: a binding read exactly once still prints as a binding. Collapsing it would read better and would erase a `ValueId` the module holds.
 #[test]
 fn a_single_use_binding_is_not_inlined() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let one = builder.constant(nat(1));
     builder.open_block();
     let bound = builder.let_value(
@@ -433,7 +433,7 @@ entry =
 /// The header declares what the program refers to and nothing else — a dense schema arena is never pruned, so without this a five-line program carries the rows of everything it linked.
 #[test]
 fn an_unreached_schema_or_foreign_row_is_not_declared() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let used = builder.product(ProductSchema {
         debug_name: Some("Used".into()),
         fields: ProductFields::Declared(vec![Field::opaque(Some("only".into()))]),
@@ -478,7 +478,7 @@ entry =
 /// Reachability is a fixpoint: a reached row's field shapes name further rows, and a header that declared a shape in terms of an identity it never introduced would be unreadable.
 #[test]
 fn a_reached_row_pulls_in_the_rows_its_field_shapes_name() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let innermost = builder.product(ProductSchema {
         debug_name: Some("Innermost".into()),
         fields: ProductFields::Declared(vec![Field::immediate(Some("leaf".into()))]),
@@ -520,7 +520,7 @@ fn a_reached_row_pulls_in_the_rows_its_field_shapes_name() {
 /// A field name two reached rows share cannot name a field on its own, so a projection through it takes its schema — `build_shorten`'s shortest-unambiguous rule, applied to fields.
 #[test]
 fn a_projection_qualifies_a_field_name_two_reached_rows_share() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let left = builder.product(ProductSchema {
         debug_name: Some("Left".into()),
         fields: ProductFields::Declared(vec![Field::opaque(Some("shared".into()))]),
@@ -585,7 +585,7 @@ entry =
 /// An imported row prints what its import states: a product its width, and a family its count and each constructor the fragment holds at its position.
 #[test]
 fn an_imported_row_prints_what_its_import_states() {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let triple = builder.import_product(Some("Triple".into()), 3);
     let family = builder.import_family(Some("Tri".into()), 3);
     let last = builder.import_constructor(family, 2, Some("c".into()), 0);

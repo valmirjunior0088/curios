@@ -7,10 +7,10 @@ use {
 
 /// A module whose entry calls `f` on a `Nat` a host call answers, so evaluation cannot close it, and whose `f(n)` dispatches on `n`: `0` answers what `base` builds, and any other `n` answers what `leaf` builds, handed the builder, `f`, `n` and `n - 1`. The module after optimization, printed.
 fn optimized(
-    base: impl FnOnce(&mut AnfBuilder) -> Atom,
-    leaf: impl FnOnce(&mut AnfBuilder, FunctionId, ValueId, ValueId) -> Atom,
+    base: impl FnOnce(&mut Builder) -> Atom,
+    leaf: impl FnOnce(&mut Builder, FunctionId, ValueId, ValueId) -> Atom,
 ) -> String {
-    let mut builder = AnfBuilder::new();
+    let mut builder = Builder::new();
     let f = builder.reserve_function();
     let n = builder.value(Some("n".into()));
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
@@ -85,7 +85,7 @@ fn optimized(
 }
 
 /// `n - 1` handed to `f`, and its answer.
-fn recur(builder: &mut AnfBuilder, f: FunctionId, pred: ValueId) -> Atom {
+fn recur(builder: &mut Builder, f: FunctionId, pred: ValueId) -> Atom {
     Atom::Value(builder.let_value(
         None,
         Rhs::Apply {
@@ -95,7 +95,7 @@ fn recur(builder: &mut AnfBuilder, f: FunctionId, pred: ValueId) -> Atom {
     ))
 }
 
-fn operation(builder: &mut AnfBuilder, operation: Operation, left: Atom, right: Atom) -> Atom {
+fn operation(builder: &mut Builder, operation: Operation, left: Atom, right: Atom) -> Atom {
     Atom::Value(builder.let_value(
         None,
         Rhs::Operation {
@@ -105,7 +105,7 @@ fn operation(builder: &mut AnfBuilder, operation: Operation, left: Atom, right: 
     ))
 }
 
-fn sequence(builder: &mut AnfBuilder, operation: SequenceOp, operands: Vec<Atom>) -> Atom {
+fn sequence(builder: &mut Builder, operation: SequenceOp, operands: Vec<Atom>) -> Atom {
     Atom::Value(builder.let_value(
         None,
         Rhs::Sequence {
@@ -116,12 +116,12 @@ fn sequence(builder: &mut AnfBuilder, operation: SequenceOp, operands: Vec<Atom>
 }
 
 /// A base answering `value`.
-fn constant(value: Constant) -> impl FnOnce(&mut AnfBuilder) -> Atom {
+fn constant(value: Constant) -> impl FnOnce(&mut Builder) -> Atom {
     move |builder| Atom::Constant(builder.constant(value))
 }
 
 /// A base answering the empty list.
-fn empty_list(builder: &mut AnfBuilder) -> Atom {
+fn empty_list(builder: &mut Builder) -> Atom {
     sequence(builder, SequenceOp::ListBuild, vec![])
 }
 
