@@ -1895,7 +1895,7 @@ impl Convert {
                     .map(|other| {
                         let result = context
                             .metavar_entry(*other)
-                            .map(|entry| format!("{}", entry.result))
+                            .map(|entry| format!("{}", entry.result()))
                             .unwrap_or_else(|| "<no birth record>".into());
                         format!("?{} : {result}", other.0)
                     })
