@@ -736,7 +736,7 @@ impl<'s> Context<'s> {
     /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
     pub fn enter_item(&mut self, declaration: Option<Global>) {
         self.underway.credits.begin_item();
-        self.underway.scheme_open = true;
+        self.underway.attempt.universe_solver.open_scheme();
         self.underway.defining = false;
         self.enter_declaration(declaration);
     }
@@ -3001,7 +3001,7 @@ impl<'s> Context<'s> {
             Ok::<_, UniverseError>(())
         })
         .map_err(Error::from)?;
-        self.underway.scheme_open = false;
+        self.underway.attempt.universe_solver.close_scheme();
         let solver = &self.underway.attempt.universe_solver;
         let terms = terms
             .iter()
@@ -3023,7 +3023,7 @@ impl<'s> Context<'s> {
             .closing_universes(|solver| solver.finalize(interface, internal, compared))
             .map_err(Error::from)?;
         universe_context.quality_count = self.generalize_written_sorts()?;
-        self.underway.scheme_open = false;
+        self.underway.attempt.universe_solver.close_scheme();
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(universe_context)
     }
@@ -3059,7 +3059,7 @@ impl<'s> Context<'s> {
             solver.finalize_at_instance(metas, instance, parameter_count)
         })
         .map_err(Error::from)?;
-        self.underway.scheme_open = false;
+        self.underway.attempt.universe_solver.close_scheme();
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(())
     }
@@ -3071,12 +3071,8 @@ impl<'s> Context<'s> {
         instance: &[Level],
         determined: &[Level],
     ) -> Result<(), Error> {
-        let open = self.underway.scheme_open;
-        self.closing_universes(|solver| match open {
-            true => solver.pin_instance(instance, determined),
-            false => solver.close_instance(minted, instance, determined),
-        })
-        .map_err(Error::from)?;
+        self.closing_universes(|solver| solver.settle_instance(minted, instance, determined))
+            .map_err(Error::from)?;
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(())
     }

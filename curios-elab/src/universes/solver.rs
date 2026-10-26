@@ -649,6 +649,8 @@ pub struct UniverseSolver {
     weak: Vec<(Level, Level)>,
     /// What [`UniverseSolver::zonk`] has made of a solved metavariable, kept once it names no metavariable at all, so a chain of solutions is followed once rather than at every read of a level that names its head ([`ZonkedLevels`]).
     zonked: RefCell<ZonkedLevels>,
+    /// Whether the declaration being elaborated can still settle a universe level: from `Context::enter_item` until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves ([`UniverseSolver::settle_instance`]).
+    scheme_open: bool,
 }
 
 /// The zonked solutions [`UniverseSolver::zonk`] keeps, each with how many solutions stood when it was taken.
@@ -744,6 +746,30 @@ impl UniverseSolver {
             consistency: None,
             weak: Vec::new(),
             zonked: RefCell::default(),
+            scheme_open: false,
+        }
+    }
+
+    /// Open the scheme of the item about to elaborate: its levels may settle until it closes.
+    pub fn open_scheme(&mut self) {
+        self.scheme_open = true;
+    }
+
+    /// Close the item's scheme, its levels finalized.
+    pub fn close_scheme(&mut self) {
+        self.scheme_open = false;
+    }
+
+    /// Settle the levels a witness's scheme minted at one use: pinned to what its goal fixes while the item's scheme is open ([`Self::pin_instance`]), and closed there once it has closed ([`Self::close_instance`]).
+    pub fn settle_instance(
+        &mut self,
+        minted: &[Level],
+        instance: &[Level],
+        determined: &[Level],
+    ) -> Result<(), UniverseError> {
+        match self.scheme_open {
+            true => self.pin_instance(instance, determined),
+            false => self.close_instance(minted, instance, determined),
         }
     }
 

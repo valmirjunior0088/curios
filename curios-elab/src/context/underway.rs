@@ -35,8 +35,6 @@ pub struct Underway {
     pub declaration: Option<Global>,
     /// Whether the value being elaborated is a definition's its author wrote at the top level (`Context::enter_value`): a region of its own, which a `!` refused there names.
     pub defining: bool,
-    /// Whether the declaration being elaborated can still settle a universe level: from `Context::enter_item` until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
-    pub scheme_open: bool,
     /// What each auto-lift site named as written, under the extent its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
     pub embedding_sites: Vec<(Extent, EmbeddingSite)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
@@ -59,7 +57,6 @@ impl Default for Underway {
             broken: BTreeSet::new(),
             declaration: None,
             defining: false,
-            scheme_open: false,
             embedding_sites: Vec::new(),
             imports: Imports::default(),
         }
