@@ -15,7 +15,7 @@ use {
 
 /// The declaration registries and the witness table. `Context` holds exactly one of these.
 #[derive(Debug, Default)]
-pub(crate) struct Program<'s> {
+pub struct Program<'s> {
     /// The units in scope: asked where these stores hold nothing under a name, and never written.
     scope: Option<&'s dyn InScope>,
     /// Inductive declarations, keyed by the type's qualified name ("Result").
@@ -41,21 +41,17 @@ pub(crate) struct Program<'s> {
 }
 
 impl<'s> Program<'s> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     /// Read through to `scope` where these stores hold nothing under a name.
-    pub(crate) fn read_through(&mut self, scope: &'s dyn InScope) {
+    pub fn read_through(&mut self, scope: &'s dyn InScope) {
         self.scope = Some(scope);
     }
 
     /// Record a new inductive declaration's metadata. Called once per `induct` declaration as a module is seeded into the context. Errs with `DuplicateInduct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Program::update_induct`] instead.
-    pub(crate) fn register_induct(
-        &mut self,
-        name: &Global,
-        induct_decl: InductDecl,
-    ) -> Result<(), Error> {
+    pub fn register_induct(&mut self, name: &Global, induct_decl: InductDecl) -> Result<(), Error> {
         if self.induct_decl(name).is_some() {
             return Err(Error::duplicate_induct(*name));
         }
@@ -64,7 +60,7 @@ impl<'s> Program<'s> {
     }
 
     /// Overwrite an already-registered inductive's metadata with a rebuilt telescope — called mid-elaboration by `elaborate_induct_indices`/ `elaborate_induct_constructors` to refine the same declaration's own entry, not to register a new one, so unlike [`Program::register_induct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked [`Program::induct_decl`] first (a construction bug otherwise, not a user-facing case).
-    pub(crate) fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
+    pub fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
         assert!(
             self.induct_decls.contains_key(name),
             "update_induct: '{}' is not already registered",
@@ -74,23 +70,19 @@ impl<'s> Program<'s> {
     }
 
     /// Look up an inductive declaration by the type's qualified name.
-    pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+    pub fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.induct_decls
             .get(name)
             .or_else(|| self.scope?.induct_decl(name))
     }
 
     /// Take `name`'s inductive entry out, if it has one — a refused declaration's, or a withheld one's. Nothing elaborated against a removed entry survives it: the item that declared it is out, and every item that could reach it is withheld.
-    pub(crate) fn remove_induct(&mut self, name: &Global) {
+    pub fn remove_induct(&mut self, name: &Global) {
         self.induct_decls.remove(name);
     }
 
     /// Record a new struct declaration's metadata. Called once per `struct` declaration as a module is seeded into the context (elaboration or erasure). Errs with `DuplicateStruct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Program::update_struct`] instead.
-    pub(crate) fn register_struct(
-        &mut self,
-        name: &Global,
-        struct_decl: StructDecl,
-    ) -> Result<(), Error> {
+    pub fn register_struct(&mut self, name: &Global, struct_decl: StructDecl) -> Result<(), Error> {
         if self.struct_decl(name).is_some() {
             return Err(Error::duplicate_struct(*name));
         }
@@ -99,7 +91,7 @@ impl<'s> Program<'s> {
     }
 
     /// Overwrite an already-registered struct's metadata with rebuilt field types — called mid-elaboration by `elaborate_struct` to refine the same declaration's own entry, not to register a new one, so unlike [`Program::register_struct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked [`Program::struct_decl`] first (a construction bug otherwise, not a user-facing case).
-    pub(crate) fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
+    pub fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
         assert!(
             self.struct_decls.contains_key(name),
             "update_struct: '{}' is not already registered",
@@ -109,23 +101,19 @@ impl<'s> Program<'s> {
     }
 
     /// Look up a struct declaration by the type's qualified name.
-    pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+    pub fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.struct_decls
             .get(name)
             .or_else(|| self.scope?.struct_decl(name))
     }
 
     /// Take `name`'s struct entry out, if it has one — see [`Program::remove_induct`].
-    pub(crate) fn remove_struct(&mut self, name: &Global) {
+    pub fn remove_struct(&mut self, name: &Global) {
         self.struct_decls.remove(name);
     }
 
     /// Record a new concept declaration's resolution metadata (its record shape is registered separately, as an ordinary structure). Called once per `concept` declaration when a module's registries are seeded. Errs with `DuplicateConcept` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration.
-    pub(crate) fn register_concept(
-        &mut self,
-        name: &Global,
-        concept: ConceptDecl,
-    ) -> Result<(), Error> {
+    pub fn register_concept(&mut self, name: &Global, concept: ConceptDecl) -> Result<(), Error> {
         if self.concept(name).is_some() {
             return Err(Error::duplicate_concept(*name));
         }
@@ -134,13 +122,13 @@ impl<'s> Program<'s> {
     }
 
     /// Look up a concept by its qualified name.
-    pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
+    pub fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.concepts
             .get(name)
             .or_else(|| self.scope?.concept(name))
     }
 
-    pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
+    pub fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
         assert!(
             self.concepts.contains_key(name),
             "update_concept: '{}' is not already registered",
@@ -150,17 +138,17 @@ impl<'s> Program<'s> {
     }
 
     /// The concepts the unit registers, for validation at seed time (superclass acyclicity): a unit in scope validated its own where it was compiled.
-    pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
+    pub fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
         &self.concepts
     }
 
     /// Take `name`'s concept entry out, if it has one — see [`Program::remove_induct`].
-    pub(crate) fn remove_concept(&mut self, name: &Global) {
+    pub fn remove_concept(&mut self, name: &Global) {
         self.concepts.remove(name);
     }
 
     /// Record the prefixes one seeded module's unit claims. Called once per module as it enters the context — the scope's, then the unit's own.
-    pub(crate) fn mount(&mut self, mounts: &[Mount]) {
+    pub fn mount(&mut self, mounts: &[Mount]) {
         for mount in mounts {
             if !self.mounts.contains(mount) {
                 self.mounts.push(mount.clone());
@@ -169,7 +157,7 @@ impl<'s> Program<'s> {
     }
 
     /// The mount owning `name`, or `None` for a name no mounted prefix claims — an anonymous witness above all, whose declaring module is carried separately.
-    pub(crate) fn mount_of(&self, name: &Global) -> Option<&Mount> {
+    pub fn mount_of(&self, name: &Global) -> Option<&Mount> {
         match name {
             Global::Authored(qualifier) => Mount::owning(&self.mounts, qualifier),
             Global::Witness(_) => None,
@@ -181,7 +169,7 @@ impl<'s> Program<'s> {
     /// A tuple key therefore contributes nothing to ownership, and the orphan rule reads, for one: such a witness is declared where its concept is declared. That is the standing an intrinsic former already has, and it is what makes the standard library's arity ceiling a promise — two independent packages each declaring `Show({Nat, Nat})` would collide at link with neither in the wrong. A function type is not keyed at all, so it never reaches this question ([Concepts resolve with global coherence](../../../documentation/design/surface/concepts-resolve-with-global-coherence.md) records why).
     ///
     /// `None` is not "unknown" — it is "claimed by no authored mount", which no declaring mount can equal: an ordinary consumer never *matches* it, it only ever fails to.
-    pub(crate) fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
+    pub fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
         match head {
             HeadKey::Nominal(name) => self.mount_of(name),
             _ => None,
@@ -189,7 +177,7 @@ impl<'s> Program<'s> {
     }
 
     /// The witness registered under `(concept, key)`, if any: the unit's own, or the one a unit in scope declares there, made of its definition's own type, universe context and module.
-    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Witness> {
+    pub fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Witness> {
         if let Some(witness) = self.witness_table.get(&(*concept, *key)) {
             return Some(witness.clone());
         }
@@ -206,7 +194,7 @@ impl<'s> Program<'s> {
     }
 
     /// The name of the witness registered under `(concept, key)`, the unit's own or the one a unit in scope declares there: [`Program::witness`] without the witness made.
-    pub(crate) fn witness_name(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
+    pub fn witness_name(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
         match self.witness_table.get(&(*concept, *key)) {
             Some(witness) => Some(witness.name),
             None => self.scope?.witness(concept, key),
@@ -214,7 +202,7 @@ impl<'s> Program<'s> {
     }
 
     /// Whether a witness is registered under `(concept, key)`, the unit's own or a unit's in scope.
-    pub(crate) fn witness_registered(&self, concept: &Global, key: &WitnessKey) -> bool {
+    pub fn witness_registered(&self, concept: &Global, key: &WitnessKey) -> bool {
         self.witness_table.contains_key(&(*concept, *key))
             || self
                 .scope
@@ -222,7 +210,7 @@ impl<'s> Program<'s> {
     }
 
     /// Every key a witness of `concept` is registered under, with the module declaring it, in key order — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
-    pub(crate) fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
+    pub fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
         let own = self
             .witness_table
             .iter()
@@ -244,7 +232,7 @@ impl<'s> Program<'s> {
     }
 
     /// Insert a witness under its key, returning the previous occupant and its declaring module on a collision (the caller reports `DuplicateWitness`, which names the modules and is placed by the witnesses): the unit's own, or the one a unit in scope declares there. The façade stamps the write on an actual insert.
-    pub(crate) fn insert_witness(
+    pub fn insert_witness(
         &mut self,
         concept: Global,
         key: WitnessKey,
@@ -264,7 +252,7 @@ impl<'s> Program<'s> {
     }
 
     /// Take every table entry the witness `name` holds, handing back the keys it stood under — what a refused declaration's registration leaves behind, for the caller to poison. A witness registers before its body elaborates, so a refused one may well be in the table.
-    pub(crate) fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
+    pub fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
         let keys = self
             .witness_table
             .iter()
@@ -279,7 +267,7 @@ impl<'s> Program<'s> {
     }
 
     /// Rewrite a registered witness's generalized scheme once its signature finalizes. Panics if `name` was never registered. The façade stamps the write.
-    pub(crate) fn update_witness_scheme(
+    pub fn update_witness_scheme(
         &mut self,
         name: &Global,
         universe_context: UniverseContext,
@@ -297,12 +285,12 @@ impl<'s> Program<'s> {
     /// Record a definition's totality the moment it is defined.
     ///
     /// A declaration elaborates after what it reads, so everything a definition mentions outside its own group is already classified and one pass per definition suffices.
-    pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
+    pub fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
         self.totality.insert(*name, totality);
     }
 
     /// File a finished definition's vector, replacing what an earlier elaboration of the name left.
-    pub(crate) fn record_definition_variances(
+    pub fn record_definition_variances(
         &mut self,
         name: &Global,
         variances: &[Variance],
@@ -315,7 +303,7 @@ impl<'s> Program<'s> {
     }
 
     /// The vector of a definition irrelevant in some level, with its arity.
-    pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
+    pub fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
         self.variances
             .get(name)
             .map(|(variances, arity)| (variances.as_slice(), *arity))
@@ -323,7 +311,7 @@ impl<'s> Program<'s> {
     }
 
     /// File a finished definition's field vectors, replacing what an earlier elaboration of the name left.
-    pub(crate) fn record_field_variances(
+    pub fn record_field_variances(
         &mut self,
         name: &Global,
         fields: &[Vec<Variance>],
@@ -340,11 +328,7 @@ impl<'s> Program<'s> {
     }
 
     /// The vector of field `slot` of a definition one of whose fields is irrelevant in some level, with its arity.
-    pub(crate) fn field_variances(
-        &self,
-        name: &Global,
-        slot: usize,
-    ) -> Option<(&[Variance], usize)> {
+    pub fn field_variances(&self, name: &Global, slot: usize) -> Option<(&[Variance], usize)> {
         match self.field_variances.get(name) {
             Some((fields, arity)) => Some((fields.get(slot)?.as_slice(), *arity)),
             None => self.scope?.definition(name)?.field_irrelevance(slot),
@@ -352,7 +336,7 @@ impl<'s> Program<'s> {
     }
 
     /// File which of a finished definition's binders its value is a field of, replacing what an earlier elaboration of the name left.
-    pub(crate) fn record_parameter_field(
+    pub fn record_parameter_field(
         &mut self,
         name: &Global,
         field: Option<ParameterField>,
@@ -365,7 +349,7 @@ impl<'s> Program<'s> {
     }
 
     /// The field of one of its binders a definition's value is, with its arity.
-    pub(crate) fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
+    pub fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
         match self.parameter_fields.get(name) {
             Some(filed) => Some(*filed),
             None => self.scope?.definition(name)?.parameter_field(),
@@ -373,7 +357,7 @@ impl<'s> Program<'s> {
     }
 
     /// File the sort a finished definition's value inhabits, where its value is a type, replacing what an earlier elaboration of the name left.
-    pub(crate) fn record_definition_value_sort(&mut self, name: &Global, sort: Option<&Term>) {
+    pub fn record_definition_value_sort(&mut self, name: &Global, sort: Option<&Term>) {
         match sort {
             Some(sort) => self.value_sorts.insert(*name, sort.clone()),
             None => self.value_sorts.remove(name),
@@ -381,14 +365,14 @@ impl<'s> Program<'s> {
     }
 
     /// The sort a definition's value inhabits, where it files one: this unit's, then a unit's in scope.
-    pub(crate) fn definition_value_sort(&self, name: &Global) -> Option<&Term> {
+    pub fn definition_value_sort(&self, name: &Global) -> Option<&Term> {
         self.value_sorts
             .get(name)
             .or_else(|| self.scope?.definition(name)?.value_sort)
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.
-    pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
+    pub fn definition_totality(&self, name: &Global) -> Option<Totality> {
         self.totality
             .get(name)
             .copied()

@@ -10,37 +10,37 @@ use {
 
 /// The half of a context that exists because a unit is being elaborated.
 #[derive(Debug)]
-pub(crate) struct Underway {
+pub struct Underway {
     // What the attempt under way mints and solves — its metavariables with their solutions, its universe levels with their solver, what it noted of its goals; flat and frame-independent. See [`Attempt`].
-    pub(super) attempt: Attempt,
+    pub attempt: Attempt,
     // Which of the unit's declarations have not finished, and what the attempt under way read of them; see [`Needs`].
-    pub(super) needs: Needs,
+    pub needs: Needs,
     // The witnesses the unit declares, as they are known before they elaborate; see [`DeclaredWitnesses`].
-    pub(super) witnesses: DeclaredWitnesses,
+    pub witnesses: DeclaredWitnesses,
     // The written binders the proofs the elaborator wrote read, which `unused-binder` does not report; see [`Credits`].
-    pub(super) credits: Credits,
+    pub credits: Credits,
     // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
-    pub(super) checked: CheckedTerms,
+    pub checked: CheckedTerms,
     // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
-    pub(super) posture: Posture,
+    pub posture: Posture,
     /// The declarations the unit's items make, as the lowering hands them on, by which each name the unit declares is placed among its items — every item's, the ones a recompile keeps among them: which names are the unit's own (`Context::proof_may_apply`), and where a goal's report is placed (`Context::written_at`).
-    pub(super) declarations: Declarations,
+    pub declarations: Declarations,
     /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on (`Context::offer_lemmas`). A context no unit was begun in offers whatever is in scope.
-    pub(super) offering: bool,
+    pub offering: bool,
     /// What the unit's lowering minted, declaration by declaration: what each declaration's state starts above (`Context::begin_state`).
-    pub(super) minted: Rc<Minted>,
+    pub minted: Rc<Minted>,
     /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
-    pub(super) broken: BTreeSet<Global>,
+    pub broken: BTreeSet<Global>,
     /// The declaration being elaborated (`Context::enter_declaration`); `None` for an entry's final term.
-    pub(super) declaration: Option<Global>,
+    pub declaration: Option<Global>,
     /// Whether the value being elaborated is a definition's its author wrote at the top level (`Context::enter_value`): a region of its own, which a `!` refused there names.
-    pub(super) defining: bool,
+    pub defining: bool,
     /// Whether the declaration being elaborated can still settle a universe level: from `Context::enter_item` until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
-    pub(super) scheme_open: bool,
+    pub scheme_open: bool,
     /// What each auto-lift site named as written, under the extent its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
-    pub(super) embedding_sites: Vec<(Extent, EmbeddingSite)>,
+    pub embedding_sites: Vec<(Extent, EmbeddingSite)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
-    pub(super) imports: Imports,
+    pub imports: Imports,
 }
 
 impl Default for Underway {

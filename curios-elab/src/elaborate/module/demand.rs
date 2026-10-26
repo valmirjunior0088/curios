@@ -43,7 +43,7 @@ enum Standing {
 }
 
 /// The declarations a demand found on a cycle, by their written items' places, in the order they were asked for.
-pub(super) struct Cycle(Vec<usize>);
+pub struct Cycle(Vec<usize>);
 
 /// What one attempt at a declaration made of each of its items, held until the attempt is known to stand.
 enum Outcome {
@@ -57,20 +57,20 @@ enum Outcome {
 
 /// The baseline a unit is compiled over, as its walk reads it: an earlier text of the unit as it elaborated, what each of its declarations asked, and what the new text's lowering made again of it.
 #[derive(Clone, Copy)]
-pub(super) struct Over<'a> {
-    pub(super) baseline: &'a Module,
-    pub(super) places: &'a Places,
-    pub(super) traces: &'a Traces,
+pub struct Over<'a> {
+    pub baseline: &'a Module,
+    pub places: &'a Places,
+    pub traces: &'a Traces,
     /// The names whose lowered item is not the baseline's own: new to the unit, or lowered again (`PreparedText::lowered_anew`).
-    pub(super) relowered: &'a BTreeSet<Global>,
+    pub relowered: &'a BTreeSet<Global>,
     /// The names the baseline declared and the new text's lowering does not (`PreparedText::dropped`).
-    pub(super) dropped: &'a BTreeSet<Global>,
+    pub dropped: &'a BTreeSet<Global>,
     /// Who asked what, of the baseline's traces: what the walk finds the declarations an edit could reach by.
-    pub(super) readers: &'a Readers,
+    pub readers: &'a Readers,
     /// The scope, whose baseline layer answers for every declaration the walk does not hold, and for each it holds from where the walk keeps it.
-    pub(super) established: &'a Established<'a>,
+    pub established: &'a Established<'a>,
     /// What a store holds of declarations elaborated before, where the walk may take a declaration from it ([`found`]).
-    pub(super) candidates: Option<&'a dyn Candidates>,
+    pub candidates: Option<&'a dyn Candidates>,
 }
 
 /// One declaration the walk holds: where it stands, whether it was kept, and over a baseline what the walk knows of what the edit reached of it.
@@ -108,7 +108,7 @@ struct Reached {
 }
 
 /// The walk over one unit's declarations.
-pub(super) struct Demand<'a> {
+pub struct Demand<'a> {
     module: &'a Module,
     /// The declarations `module`'s items make, by which a name is asked for.
     declarations: &'a Declarations,
@@ -116,10 +116,10 @@ pub(super) struct Demand<'a> {
     held: BTreeMap<usize, Held>,
     /// The declarations being asked for, outermost first.
     demanded: Vec<usize>,
-    pub(super) poison: Poison,
-    pub(super) survivors: Survivors,
+    pub poison: Poison,
+    pub survivors: Survivors,
     /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it: over a baseline, the baseline's traces with each declaration made filed in place of the one it replaces, and each the unit no longer declares taken out.
-    pub(super) traces: Traces,
+    pub traces: Traces,
     /// The baseline the unit is compiled over, where it is compiled over one.
     over: Option<Over<'a>>,
     /// What each name elaborated again over a baseline left as the baseline holds it.
@@ -133,7 +133,7 @@ pub(super) struct Demand<'a> {
     /// Whether a declaration is decided by asking its trace again, as a walk that knows nothing of what an edit reached does: while the prover's vocabulary is asked for where the edit reached it, so the declarations settled before the offer are the ones its new reads reach.
     asking: bool,
     /// Who asked what, of the unit's traces as the walk files them: the baseline's, with the edges of each declaration made or dropped replaced. `None` for a unit compiled whole, whose readers are made where a recompile over it first asks.
-    pub(super) readers: Option<Readers>,
+    pub readers: Option<Readers>,
     /// The names the unit declares and the baseline did not.
     gained: Vec<Global>,
     /// What each part a record read of a finished declaration, or of another unit, digests to now: asked once, however many records read it. `None` where it will not digest.
@@ -153,7 +153,7 @@ fn read_again(over: Over<'_>, question: &Question) -> bool {
 
 impl<'a> Demand<'a> {
     /// The walk over `module`, whose items make `declarations`: holding every declaration where the unit is compiled whole, and none until it is told what an edit reached ([`Demand::reach`]) where it is compiled `over` a baseline.
-    pub(super) fn new(
+    pub fn new(
         module: &'a Module,
         declarations: &'a Declarations,
         poison: Poison,
@@ -189,7 +189,7 @@ impl<'a> Demand<'a> {
     }
 
     /// The items of every declaration the walk holds, in the order the declarations are written: whose lowered entries the context registers and whose witnesses it declares, before anything is asked for.
-    pub(super) fn held_items(&self) -> impl Iterator<Item = &'a Item> + '_ {
+    pub fn held_items(&self) -> impl Iterator<Item = &'a Item> + '_ {
         let (module, declarations) = (self.module, self.declarations);
         self.held
             .keys()
@@ -198,7 +198,7 @@ impl<'a> Demand<'a> {
     }
 
     /// Every name of a declaration the walk holds: the ones not finished when the walk begins.
-    pub(super) fn held_names(&self) -> BTreeSet<Global> {
+    pub fn held_names(&self) -> BTreeSet<Global> {
         self.held_items()
             .flat_map(Item::declared_names)
             .copied()
@@ -206,7 +206,7 @@ impl<'a> Demand<'a> {
     }
 
     /// Every name of a declaration elaborated again over a baseline: each one the walk holds and did not keep. Empty for a unit compiled whole.
-    pub(super) fn made_names(&self) -> BTreeSet<Global> {
+    pub fn made_names(&self) -> BTreeSet<Global> {
         if self.over.is_none() {
             return BTreeSet::new();
         }
@@ -224,7 +224,7 @@ impl<'a> Demand<'a> {
     /// Taken where the walk ends, off the traces that stood. A part that will not digest is recorded nowhere, and a read with no record does not stand.
     ///
     /// **Kept by its changes over a baseline.** The baseline's table records what the baseline's traces read, which the walk's traces began as and changed only at the declarations it made or dropped: a part one of those read and no declaration reads now is taken out, and so is every part of a name the unit now declares; a part a declaration made reads is recorded, digested again where the unit declaring it moved. A part a kept declaration read of a unit that moved digests to what it did, or the declaration would have been made, so its record stands; and a walk that made and dropped nothing, in a scope that did not move, holds the baseline's table. Compiled whole, every trace is read.
-    pub(super) fn note_foreign(&mut self, scope: &Established<'_>) {
+    pub fn note_foreign(&mut self, scope: &Established<'_>) {
         let Some(over) = self.over else {
             let mut read = Foreign::default();
             for trace in self.traces.each() {
@@ -334,7 +334,7 @@ impl<'a> Demand<'a> {
     /// Elaborate every declaration the walk holds, each after what it reads: the declarations of `vocabulary` and what they read first, then the rest with the unit's lemmas on offer.
     ///
     /// **Over a baseline, what the edit reached is decided as what it read is, and nothing else is asked.** Each marked declaration is taken once what it read is decided ([`Held`]). The vocabulary reads what it read where the edit reached none of the declarations settled before the offer, so each declaration stands on its side of the offer and none is asked for ahead of it; where the edit reached one, the vocabulary is asked for as a walk over no baseline asks for it, and a declaration that falls out of what it reads is answered otherwise about the offer, and made.
-    pub(super) fn all(&mut self, context: &mut Context, vocabulary: &BTreeSet<Global>) {
+    pub fn all(&mut self, context: &mut Context, vocabulary: &BTreeSet<Global>) {
         let owners = self.owners(vocabulary.iter().copied(), usize::MAX);
         let Some(over) = self.over else {
             for declaration in owners {
@@ -439,7 +439,7 @@ impl<'a> Demand<'a> {
     /// Mark what the edit could reach, holding each declaration marked: every declaration the lowering made again, every reader of an answer that moved, then every declaration that read a marked one. Where that reaches the prover's vocabulary, every declaration is held. The baseline answers for every declaration not held, and every name it held that the unit no longer declares is withheld, from here on.
     ///
     /// Asked before the context holds anything of the unit: what stands at a witness key here is the scope's alone, and the baseline answers for nothing yet.
-    pub(super) fn reach(&mut self, context: &Context, vocabulary: &BTreeSet<Global>) {
+    pub fn reach(&mut self, context: &Context, vocabulary: &BTreeSet<Global>) {
         let Some(over) = self.over else {
             return;
         };

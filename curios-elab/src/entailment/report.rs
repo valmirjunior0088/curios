@@ -42,7 +42,7 @@ pub enum Conclusion {
 }
 
 /// How a search ended, before it is spelled for the report.
-pub(super) enum SearchOutcome {
+pub enum SearchOutcome {
     Counterexample(Vec<(Monomial, Rational)>),
     Exhausted(usize),
     Unwritten,
@@ -71,7 +71,7 @@ impl Refusal {
     }
 
     /// [`Refusal::terms`], each to be written over.
-    pub(crate) fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         let Self {
             considered,
             unread,
@@ -167,7 +167,7 @@ fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> V
 /// Whether no program takes `outcome`'s values, where it is a counterexample: a value that is no integer, or an atom that, with each variable's value put in, reduces to a literal other than its own value. An assignment this cannot refute is read as the search read it: an atom that names a local given no value, or that reduces to no literal, is not checked.
 ///
 /// Asked once the search is over and only for a report, as what a report names an atom by is ([`Facts::beneath`]); a reduction that fails refutes nothing.
-pub(super) fn refuted(context: &mut Context, views: &LinearViews, outcome: &SearchOutcome) -> bool {
+pub fn refuted(context: &mut Context, views: &LinearViews, outcome: &SearchOutcome) -> bool {
     let SearchOutcome::Counterexample(assignment) = outcome else {
         return false;
     };

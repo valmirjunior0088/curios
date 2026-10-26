@@ -31,7 +31,7 @@ use {
 /// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term. An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `Error::CannotInfer` at its occurrence extent. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
 ///
 /// Substitution replaces a metavariable node by its solution. A solution is spelled with the birth telescope's names and is *not* in general a closed term; the occurrence's spine (its delayed substitution) records what each birth binder corresponds to at the splice site, so `zonk_term` resolves by rewriting the solution through it. Every solved occurrence carries its spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no bare copy of a birthed hole survives to be spliced.
-pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
+pub fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(&Zonk::new(context), term)
 }
 
@@ -66,13 +66,13 @@ impl<'a> std::ops::Deref for Zonk<'a> {
 ///
 /// Sound only while the solutions and the universe solver stand as they did at the first term, which the caller states where it holds one.
 #[derive(Default)]
-pub(crate) struct ZonkPass {
+pub struct ZonkPass {
     zonked: NodeMemo,
 }
 
 impl ZonkPass {
     /// `term` zonked within this pass, as [`zonk`] zonks it alone.
-    pub(crate) fn zonk(&mut self, context: &Context, term: &Term) -> Result<Term, Error> {
+    pub fn zonk(&mut self, context: &Context, term: &Term) -> Result<Term, Error> {
         let pass = Zonk {
             context,
             zonked: RefCell::new(mem::take(&mut self.zonked)),
@@ -84,7 +84,7 @@ impl ZonkPass {
 }
 
 /// Materialize the solutions already committed for term metavariables without rejecting holes that remain legitimately deferred. Universe levels are preserved verbatim: declaration finalization rewrites them only after this pass has exposed the levels hidden in solved term-meta solutions.
-pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
+pub fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
     if !value.has_metavar() {
         return value.clone();
     }
@@ -255,15 +255,15 @@ fn zonk_concept_decl(context: &Zonk, concept: &ConceptDecl) -> Result<ConceptDec
 }
 
 /// What one finished item leaves for every other declaration to read, meta-free: the item, and the registry entries its names declare.
-pub(crate) struct Published {
-    pub(crate) item: Item,
-    pub(crate) induct_decls: Vec<(Global, InductDecl)>,
-    pub(crate) struct_decls: Vec<(Global, StructDecl)>,
-    pub(crate) concepts: Vec<(Global, ConceptDecl)>,
+pub struct Published {
+    pub item: Item,
+    pub induct_decls: Vec<(Global, InductDecl)>,
+    pub struct_decls: Vec<(Global, StructDecl)>,
+    pub concepts: Vec<(Global, ConceptDecl)>,
 }
 
 /// Zonk one finished item and the registry entries it declares: strictly, so what is published holds no metavariable of the declaration that wrote it, and a hole the declaration left unsolved is refused where it stands rather than once every item has elaborated.
-pub(crate) fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error> {
+pub fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error> {
     let zonk = &Zonk::new(context);
     let published = zonk_item(zonk, item)?;
     let mut induct_decls = Vec::new();
@@ -290,7 +290,7 @@ pub(crate) fn zonk_published(context: &Context, item: &Item) -> Result<Published
 }
 
 /// Zonk a program's entry — its body and the type it was judged at — and validate its universes against the schemes `module`, the program's zonked module, declares.
-pub(crate) fn zonk_entry(
+pub fn zonk_entry(
     context: &Context,
     module: &Module,
     entry: &Entrypoint,
@@ -308,7 +308,7 @@ pub(crate) fn zonk_entry(
     Ok(entry)
 }
 
-pub(crate) fn validate_bound_universes<B: Bound>(
+fn validate_bound_universes<B: Bound>(
     value: &B,
     parameter_count: usize,
     owner: &str,
@@ -723,7 +723,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
 }
 
 /// [`validate_universes`] for `items`, some of `module`'s, each held to the schemes `module` declares where `places` says it holds each name: what a unit compiled over a baseline validates of what it made again, every other item having been validated where the baseline was compiled.
-pub(crate) fn validate_universes_in(
+pub fn validate_universes_in(
     module: &Module,
     places: &Places,
     items: &[&Item],
@@ -917,16 +917,12 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
 }
 
 /// Where a written goal was met: its id, its first occurrence's extent, and its owning definition when it sits inside one (the suggestion pools exclude the owner).
-pub(crate) type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
+pub type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
 
 /// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
 /// The walk covers what strict zonking covers, in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
-pub(crate) fn goal_sites(
-    context: &Context,
-    module: &Module,
-    entry: Option<&Entrypoint>,
-) -> Vec<GoalSite> {
+pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>) -> Vec<GoalSite> {
     /// The sites collected so far, shared into the scan closures.
     type GoalSites = Rc<RefCell<Vec<GoalSite>>>;
 
@@ -1040,7 +1036,7 @@ pub(crate) fn goal_sites(
 /// Report the goals met at `sites` ([`goal_sites`]) as display-ready reports, in the state they were written in — the only one that knows them — each with the candidates that fit it, drawn from `items`, the unit's items as they elaborated, and a program's entry.
 ///
 /// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; each is then written as a program writes it where the goal stands ([`written`](fn@crate::written)), standing on the frames the goal was born under, and its universe instances are erased ([`project_erased_universes`]), so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
-pub(crate) fn report_goals(
+pub fn report_goals(
     context: &mut Context,
     sites: &[GoalSite],
     items: &[Item],
@@ -1654,7 +1650,7 @@ fn zonk_telescope(context: &Zonk, telescope: &Telescope<Term>) -> Result<Telesco
 }
 
 /// Like [`zonk_field_telescope`], for a declaration's nested arity: the parameter domains, then the telescope they terminate in — a family's indices, a structure's fields.
-pub(crate) fn zonk_arity(
+pub fn zonk_arity(
     context: &Context,
     arity: &Telescope<Telescope<()>>,
 ) -> Result<Telescope<Telescope<()>>, Error> {
@@ -1698,7 +1694,7 @@ fn tabled_quality(table: &[Quality], quality: &Quality) -> Quality {
 }
 
 /// `value` with each sort's quality as far as it is solved, and one nothing has decided as the `Type` it closes as: the form a report shows, to a reader who writes no quality metavariable.
-pub(crate) fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
+pub fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
     if !context.universes().has_qualities() {
         return value.clone();
     }
@@ -1728,7 +1724,7 @@ fn held_universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
-pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
+pub fn zonk_universe_levels_scoped<B: Bound>(
     value: &B,
     solver: &UniverseSolver,
 ) -> Result<B, UniverseError> {

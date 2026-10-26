@@ -123,7 +123,7 @@ impl InductMatch<'_> {
 
 impl Lowering<'_> {
     /// Erase a match by its elimination form.
-    pub(super) fn erase_match(
+    pub fn erase_match(
         &mut self,
         context: &mut Retyping,
         m: &Match,
@@ -429,7 +429,7 @@ impl Lowering<'_> {
     /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop is emitted here rather than spelled by the library, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
     ///
     /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
-    pub(super) fn erase_list_fold(
+    pub fn erase_list_fold(
         &mut self,
         context: &mut Retyping,
         element: &Term,

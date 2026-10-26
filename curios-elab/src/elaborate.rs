@@ -3,7 +3,7 @@ use align::*;
 
 mod apply;
 use apply::*;
-pub(crate) use apply::{SlotPositions, attempt_discharge, ordinal, premise_label, retry_discharge};
+pub use apply::{SlotPositions, attempt_discharge, ordinal, premise_label, retry_discharge};
 
 mod aggregate;
 use aggregate::*;
@@ -13,11 +13,11 @@ use struct_::*;
 
 mod binding;
 use binding::*;
-pub(crate) use binding::{embeds, is_monad, monad_shape, numeral_default, region_flex};
+pub use binding::{embeds, is_monad, monad_shape, numeral_default, region_flex};
 
 mod metavar;
 use metavar::*;
-pub(crate) use metavar::{trivially_inhabited, waits_as_reference};
+pub use metavar::{trivially_inhabited, waits_as_reference};
 
 mod intrinsic;
 use intrinsic::*;
@@ -64,11 +64,7 @@ impl Mode {
     }
 }
 
-pub(crate) fn elaborate(
-    context: &mut Context,
-    term: &Term,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
+pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
     // Guarded by [`recurse`]: a child position is elaborated by descending into it, so the cycle `elaborate → elaborate_apply → check → elaborate` costs native frames per link of a right-nested argument spine. Nothing in the corpus produces a deep one — a string literal's proof is constant-size — but depth is a function of the input rather than of anything anyone wrote, and this is what makes that affordable rather than fatal.
     recurse(|| {
         // Route through the elaboration cache: ground, local-free subterms — which the lowerer emits as `Rc`-shared DAGs — elaborate once per distinct node instead of once per occurrence. Placing stays outside it, since extents are excluded from `Term` equality: occurrences differing only in extent share one un-stamped entry and restamp per occurrence.
@@ -110,7 +106,7 @@ fn elaborate_ascribed(
 }
 
 /// Synthesize a lambda no expectation reached, for the term that awaits its type and has read its parts ([`Context::complete`](super::Context)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused, and the body read with no expectation, as its annotations leave it. Only a completion may ask for it — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The extent restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
-pub(crate) fn elaborate_func_settle(
+pub fn elaborate_func_settle(
     context: &mut Context,
     func: &Func,
     term: &Term,

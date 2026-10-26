@@ -27,7 +27,7 @@ use {
 };
 
 /// The context a report is built in: the elaboration's own, entered only where a report is made, so a display spends, mints and caches where a refusal stands.
-pub(crate) struct Reporting<'r, 's>(&'r mut Context<'s>);
+pub struct Reporting<'r, 's>(&'r mut Context<'s>);
 
 impl<'s> Deref for Reporting<'_, 's> {
     type Target = Context<'s>;
@@ -59,7 +59,7 @@ impl fmt::Debug for Pending {
 }
 
 /// A report showing `terms`, each held as reading the context gives it ([`held`]) and handed to `build` where the report is made, standing on the frames the context stands on now.
-pub(crate) fn pending<const N: usize>(
+pub fn pending<const N: usize>(
     context: &mut Context,
     terms: [&Term; N],
     build: impl for<'r, 's> FnOnce(&mut Reporting<'r, 's>, [Term; N]) -> Error + 'static,
@@ -74,7 +74,7 @@ pub(crate) fn pending<const N: usize>(
 }
 
 /// A mismatch between `this` and `that`, the sides of a conversion about `term`, with what the conversion said beside it: the report [`display_mismatch`] chooses, built where it is reported.
-pub(crate) fn mismatch(
+pub fn mismatch(
     context: &mut Context,
     term: &Term,
     this: &Term,
@@ -96,7 +96,7 @@ pub(crate) fn mismatch(
 }
 
 /// Two terms a type states at one position, which differ, with what the conversion that compared them said beside it ([`Error::terms_differ`]).
-pub(crate) fn terms_differ(
+pub fn terms_differ(
     context: &mut Context,
     written: &Term,
     expected: &Term,
@@ -138,7 +138,7 @@ fn held_beside(context: &Context, beside: Option<Beside>) -> Option<Beside> {
 
 impl Error {
     /// This error with every report it holds built, each standing on the frames it was raised on: the reports a refusal shows, made where the refusal stands and before what its attempt wrote is undone, and settled for their reader after ([`Error::settled`]).
-    pub(crate) fn shown(self, context: &mut Context) -> Self {
+    pub fn shown(self, context: &mut Context) -> Self {
         match self {
             Self::Pending(pending) => {
                 let Pending { frames, build } = *pending;
@@ -183,7 +183,7 @@ impl Error {
 }
 
 /// The two sides of a conversion the drain keeps for the report a written goal gets, in display form: a goal is always reported, so the drain is where its report is made.
-pub(crate) fn obligation_shown(context: &mut Context, this: &Term, that: &Term) -> (Term, Term) {
+pub fn obligation_shown(context: &mut Context, this: &Term, that: &Term) -> (Term, Term) {
     let mut reporting = Reporting(context);
 
     (
@@ -207,7 +207,7 @@ fn held(context: &Context, term: &Term) -> Term {
 /// Best-effort display form for a report: `term` as reading the context gives it ([`held`]), deep-[`normalize`]d so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery, and its recursive names given back again for whatever normalization exposed. A normalization that exhausts its budget falls back to the held form.
 ///
 /// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the report writes it as the operator where its refusal is settled ([`written`](fn@crate::written)), resolution answering there with that binder.
-pub(crate) fn resolved_for_display(reporting: &mut Reporting, term: &Term) -> Term {
+pub fn resolved_for_display(reporting: &mut Reporting, term: &Term) -> Term {
     let held = held(reporting, term);
     let resolved = normalize(reporting, held.clone()).unwrap_or(held);
 

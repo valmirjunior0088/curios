@@ -29,16 +29,16 @@ use {
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type.
-pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
+pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
 
 /// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed. Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`.
-pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
+pub fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
 
-pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
+pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     reduce_forced(context, term.clone()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(term.clone(), refusal)
@@ -47,7 +47,7 @@ pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Er
 }
 
 /// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit type so proof-irrelevance and eta fire at the terms' real sort. The inverter uses it to compare a binder's competing forcings at the binder's own type.
-pub(crate) fn convert_at(
+pub fn convert_at(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -61,7 +61,7 @@ pub(crate) fn convert_at(
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports as its type-of-a-type, so a proposition checks against `Prop`. Wraps `Sort::of`, mapping an exhausted budget to an error like the helpers above.
-pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
+pub fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
     Sort::of(context, type_).map(Sort::term).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(type_.clone(), refusal)
@@ -70,7 +70,7 @@ pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Err
 }
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
-pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     is_prop_in(context, &mut Opened::default(), type_, "is_prop")
 }
 
@@ -93,7 +93,7 @@ fn is_prop_in(
 }
 
 /// The quality of the sort `type_` inhabits, as far as it is solved: the one its head's declaration settles where it settles one ([`Sort::declared_quality`]), read before anything is run, and otherwise `Sort::of`'s, mapping an exhausted budget like the helpers above.
-pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality, Error> {
+pub fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality, Error> {
     Sort::declared_quality(context, &Binders::default(), &Opened::default(), type_)
         .and_then(|declared| match declared {
             Some(quality) => Ok(quality),
@@ -107,11 +107,7 @@ pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality,
 }
 
 /// Hold `type_` to a proposition where a rule admits nothing else of it: answers whether it is one, having decided its sort where that was a quality nothing had solved. A type, and a sort its declaration leaves to a caller, is none. `site` is the term the rule is asked of, which a `Sort` this decides is reported with.
-pub(crate) fn hold_prop(
-    context: &mut Context,
-    type_: &Term,
-    site: Option<Extent>,
-) -> Result<bool, Error> {
+pub fn hold_prop(context: &mut Context, type_: &Term, site: Option<Extent>) -> Result<bool, Error> {
     let quality = quality_of(context, type_)?;
     probe_open_sort(context, "hold_prop", quality);
 
@@ -123,10 +119,7 @@ pub(crate) fn hold_prop(
 }
 
 /// What a term at `type_` is called where it owes what a proof owes, and `None` where it owes nothing: a proof where the type is a proposition, and a value at a sort its declaration leaves to a caller, which is a proof at the use that states `Prop`. What the termination of an erased position is taken by, where [`is_prop`] answers for what is known a proof.
-pub(crate) fn proof_position(
-    context: &mut Context,
-    type_: &Term,
-) -> Result<Option<&'static str>, Error> {
+pub fn proof_position(context: &mut Context, type_: &Term) -> Result<Option<&'static str>, Error> {
     let quality = quality_of(context, type_)?;
     probe_open_sort(context, "proof_position", quality);
 
@@ -138,7 +131,7 @@ pub(crate) fn proof_position(
 }
 
 /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` ([`Sort::declared_into_prop`]), under the binders a surrounding walk has opened: what erasure's classifier asks before it reduces a type to read it.
-pub(crate) fn is_declared_prop_in(
+fn is_declared_prop_in(
     context: &mut Context,
     opened: &Opened,
     type_: &Term,
@@ -157,7 +150,7 @@ pub(crate) fn is_declared_prop_in(
 /// A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — is a proof only through `opened`, which is threaded rather than assumed for the reason [`is_prop_in`] states.
 ///
 /// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value. A `true` holds at every instantiation: a sort, a proposition and a function into one stay what they are under any substitution. Erasure asks through its reader ([`crate::Retyping`]), of a declaration's signature for what the declaration stores and of a slot's type for what the slot holds.
-pub(crate) fn is_erasable_in(
+pub fn is_erasable_in(
     context: &mut Context,
     opened: &mut Opened,
     type_: &Term,
@@ -221,7 +214,7 @@ fn erasable_end(
 /// It is what a published item's binders are asked, once, as the item is published ([`crate::state_proof_binders`]), and what the closed machine then leaves as written. The question is narrower than [`is_erasable_in`]'s on purpose. Erasure computes neither a proof nor a type, but a judgment reads a type: conversion compares the reduct it is handed, and two instances of a definition apart in a level are one type or two by whether they reach it as written or as what they unfold to. A proof's value is read by nothing.
 ///
 /// A `true` holds at every instantiation, as [`is_erasable_in`]'s does, and a `false` says only that this reading computes the value.
-pub(crate) fn is_proof_in(
+pub fn is_proof_in(
     context: &mut Context,
     opened: &mut Opened,
     type_: &Term,
@@ -262,7 +255,7 @@ fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result
 }
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
-pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
+pub fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = match &**term {
         Subterm::Metavar(_) => {
             let sort = context.fresh_sort("type left to inference");
@@ -297,7 +290,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 /// Where a term of the declaration decided the sort `type_` stands at, that sort being a `Sort` the declaration wrote ([`UniverseSolver::written_decision`](crate::UniverseSolver::written_decision)): the term, where its check was recorded. `None` where `type_` stands at no such sort. A refusal that follows from the decision asks before it names a sort its reader did not write.
 ///
 /// A type at a written `Sort` is a variable or an application of one, so the sort is read off the neutral's own type, where the written quality still stands for itself.
-pub(crate) fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Extent>> {
+pub fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Extent>> {
     let reduced = reduce_forced(context, type_.clone()).ok()?;
     let sort = synth_neutral(context, &Binders::default(), &Opened::default(), &reduced).ok()??;
 
@@ -312,7 +305,7 @@ pub(crate) fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Opt
 /// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
 ///
 /// It is asked of conversion at [`Relation::Below`](crate::Relation::Below), so the relation is the problem's and no property of a walk made here: a function type's domains are equations and its codomain keeps the relation, a pair that waits on a metavariable is parked as the subsumption it is, and its retry resumes as one.
-pub(crate) fn expect(
+pub fn expect(
     context: &mut Context,
     term: &Term,
     inferred: &Term,
@@ -345,7 +338,7 @@ pub(crate) fn expect(
 /// Whether a *weak-head-reduced* term is stuck on an unsolved metavariable — headed by one, applied from one, eliminated on one, or projected from one.
 ///
 /// The four shapes are one fact: reduction cannot proceed until some metavariable is solved, so nothing about the term is decided yet. Conversion already treats each of them as [`Outcome::Blocked`](crate::Outcome) rather than as a mismatch; this is the same reading for the checked-only introduction forms, which otherwise refuse a program one step before the turnaround that would have solved the blocker. `Count(?L)` is the case that motivates the `Match` arm: the payload type of a description-indexed constructor, stuck until the index is known.
-pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
+pub fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
     match &**reduced {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::Match(matched) => stuck_on_metavar(context, &matched.head),
@@ -376,7 +369,7 @@ fn annotated(context: &mut Context, func: &Func) -> bool {
 /// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one, or a `!` whose region is headed by one, or a bare variable whose type leads with a hidden binder at an expected type stuck on one under an elimination. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
 ///
 /// Every form that parks itself as a checking problem is answered here by the predicate it parked under, since a retry asks this before it elaborates ([`retry_checking`]): a form this did not know would be elaborated, park itself again under a fresh placeholder and fill the one it had, which a drain reads as a solution landed, without end.
-pub(crate) fn blocked_on_metavar(
+pub fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
     ty: &Term,
@@ -436,7 +429,7 @@ pub(crate) fn blocked_on_metavar(
 }
 
 /// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. A filled recursive slot is ground and not walked: it stands for its member, and it is the one solution the occurs check does not hold, filled with a body that may name it again, through a signature read through the slots or another solution, so stopping there is what ends the walk.
-pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
+pub fn transitively_ground(context: &Context, id: MetavarId) -> bool {
     match context.metavar_solution(id) {
         None => false,
         Some(_) if context.is_rec_slot(id) => true,
@@ -449,7 +442,7 @@ pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
 
 impl Context<'_> {
     /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs standing on the frames it holds: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
-    pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
+    pub fn retry_parked(&mut self) -> Result<(), Error> {
         // Never retry inside an oracle: re-validation reads every failure but exhaustion as a rejected candidate, so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.
         if self.parking_suppressed() {
             return Ok(());
@@ -469,7 +462,7 @@ impl Context<'_> {
     }
 
     /// Complete the awaiting term `term`, which has read its parts and met its expectation: retry what a solution woke, take one choice among the problems it awaits, and start again, until none is left to take. Each choice is taken only here, where nothing the term reads can inform it any more, so what the term is admitted at does not follow the order of its parts. Inside an oracle nothing parks, so nothing waits to be taken.
-    pub(crate) fn complete(&mut self, term: Option<AwaitId>) -> Result<(), Error> {
+    pub fn complete(&mut self, term: Option<AwaitId>) -> Result<(), Error> {
         if self.parked_len() == 0 || self.parking_suppressed() {
             return Ok(());
         }
@@ -840,7 +833,7 @@ impl Context<'_> {
     }
 
     /// Retry every currently parked problem once without requiring the store to become empty, and take the choices no term awaits any more, as a term's completion takes its own ([`Context::complete`]): the item is the outermost term. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked. The choices are taken here and not left to the drain, since two of them mint levels, which are the declaration's only while its own are open: a witness resolved once those have closed closes the levels it mints by itself, apart from the declaration's, and an imitation's instance of its family would be closed by nothing.
-    pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
+    pub fn sweep_parked(&mut self) -> Result<(), Error> {
         let parked = self.take_parked();
         for goal in parked {
             retry_one(self, goal)?;
@@ -875,7 +868,7 @@ impl Context<'_> {
     }
 
     /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and held frames do not pile up.
-    pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
+    pub fn drain_parked(&mut self) -> Result<(), Error> {
         self.drain_store()?;
         self.hold_shapes()
     }
@@ -1101,7 +1094,7 @@ fn watched_blockers(
 }
 
 /// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
-pub(crate) fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
+pub fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
     match origin {
         Some(MetavarOrigin::Implicit(origin)) => Watched::Implicit {
             callee: callee(context, &origin.func),
@@ -1122,12 +1115,12 @@ pub(crate) fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarO
 }
 
 /// A metavariable's insertion provenance and the extent of the occurrence it was read off — what a report names a blocker by.
-pub(crate) type Provenance = (MetavarOrigin, Option<Extent>);
+pub type Provenance = (MetavarOrigin, Option<Extent>);
 
 /// Every metavariable occurrence across `terms` that carries an origin, by id, with the extent of its first occurrence.
 ///
 /// Memoized on node identity: the hook only records an id's first occurrence, which a memoized walk still reaches first, and `convert`'s solver asks this of a candidate — a reduct, whose tree can be exponential in its depth — whenever it postpones one.
-pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
+pub fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
     let origins: Rc<RefCell<BTreeMap<MetavarId, Provenance>>> =
         Rc::new(RefCell::new(BTreeMap::new()));
     for term in terms {
@@ -1151,7 +1144,7 @@ pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance
 }
 
 /// The spines `id` occurs at in `term`, one per occurrence: what a restriction spells the embedding metavariable's entries through ([`Context::metavar_restriction`]).
-pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<MetavarSpine> {
+pub fn metavar_spines(term: &Term, id: MetavarId) -> Vec<MetavarSpine> {
     let spines: Rc<RefCell<Vec<MetavarSpine>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&spines);
     let mut visit = Visit::rewriting_shared(
@@ -1176,7 +1169,7 @@ pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<MetavarSpine> {
 }
 
 /// `term` with each label of a block read as the value `values` pairs it with, the last binding first since a value may name the bindings before its own. Captured and released, which reaches a metavariable's spine: what a block's end makes of whatever its type still names ([`Context::block_restriction`]).
-pub(crate) fn read_by_value(term: Term, values: &[(Free, Term)]) -> Term {
+pub fn read_by_value(term: Term, values: &[(Free, Term)]) -> Term {
     values.iter().rev().fold(term, |term, (label, value)| {
         match term.mentions_free(label) {
             true => term.capture(&[label]).release(&[value]),
@@ -1186,7 +1179,7 @@ pub(crate) fn read_by_value(term: Term, values: &[(Free, Term)]) -> Term {
 }
 
 /// `term` with each name `values` pairs with a value read as that value wherever the term names it outside a metavariable's occurrence, which is kept as it stands: its spine is the renaming a restriction reads the occurrence through ([`Context::metavar_restriction`]), and a value written into it is no renaming. A value is inserted as it stands under whatever binders enclose the name, so it carries no loose index.
-pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term {
+pub fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term {
     if values.is_empty() {
         return term.clone();
     }
@@ -1223,7 +1216,7 @@ pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term 
 }
 
 /// The locals `term` names outside its metavariables' occurrences: those [`read_outside_spines`] reads, so a reader gathering values for it gathers none it would leave standing in a spine, which is as wide as the scope the occurrence was born in. Read off the term's free set where it holds no metavariable, and otherwise by a walk that visits each node once, passes over every occurrence and every subterm that names no local, and reads a subterm that holds no metavariable off its free set.
-pub(crate) fn locals_outside_spines(term: &Term) -> BTreeSet<Free> {
+pub fn locals_outside_spines(term: &Term) -> BTreeSet<Free> {
     let locals = |term: &Term| term.free_vars().locals().copied().collect::<Vec<_>>();
     if !term.has_metavar() {
         return locals(term).into_iter().collect();
@@ -1394,7 +1387,7 @@ fn retry_checking(
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
 /// That is a typing fact, not an analysis, because every host operation returns `Io`. `Cell/get(c)` denotes differently before and after a `Cell/set`, and an equation for it would read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False` — but it has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all. And no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding, a binder `f` included.
-pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     if !records_case_equation(&context.kernel_spelling(head)) {
         return Ok(());
     }
@@ -1443,15 +1436,15 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
 }
 
 /// The family a match's scrutinee is a value of, as an inductive arm is entered at ([`enter_induct_case`]): its name, its instance, its parameters and its actual indices.
-pub(crate) struct InductCase<'a> {
-    pub(crate) name: &'a Global,
-    pub(crate) universes: &'a Universes,
-    pub(crate) params: &'a [Term],
-    pub(crate) actual_indices: &'a [Term],
+pub struct InductCase<'a> {
+    pub name: &'a Global,
+    pub universes: &'a Universes,
+    pub params: &'a [Term],
+    pub actual_indices: &'a [Term],
 }
 
 /// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the kernel solve them, both directions. Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
-pub(crate) fn enter_induct_case(
+pub fn enter_induct_case(
     context: &mut Context,
     head: &Term,
     family: InductCase<'_>,
@@ -1491,7 +1484,7 @@ pub(crate) fn enter_induct_case(
 }
 
 /// Why the arm at `value` of a match on `head` is never taken, where a guard says so: its own, which is always another case ([`unreachable_arm`]), or that of an arm around it, which the arm's case contradicts ([`contradicted_guard`]). Asked where an error leaves the arm, and of each arm around a bound given up under one.
-pub(crate) fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Option<DeadArm> {
+pub fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Option<DeadArm> {
     if let Some(case) = unreachable_arm(context, head, value) {
         return Some(DeadArm::Guard {
             guard: head.clone(),
@@ -1587,7 +1580,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 /// One application layer of `term` opened: its head reduced to a function and the body instantiated at the arguments as written, or `None` where `term` is no application or its head reduces to no function of its arity. No argument is reduced.
 ///
 /// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong would reach `Telescope::open`'s assertion as a panic.
-pub(crate) fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
+pub fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let Subterm::Apply(apply) = &**term else {
         return Ok(None);
     };
@@ -1602,7 +1595,7 @@ pub(crate) fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Te
 }
 
 /// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.
-pub(crate) enum MotiveShape<'a> {
+pub enum MotiveShape<'a> {
     /// An intrinsic carrier (`Bool`, `Nat`, `List`, `Bytes`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
     Intrinsic(&'a Term),
     /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
@@ -1616,7 +1609,7 @@ pub(crate) enum MotiveShape<'a> {
 
 impl MotiveShape<'_> {
     /// The motive's binder count: one per index, then the scrutinee.
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         match self {
             MotiveShape::Intrinsic(_) => 1,
             MotiveShape::Induct { indices, .. } => indices.len() + 1,
@@ -1698,7 +1691,7 @@ impl MotiveShape<'_> {
 /// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form. A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope (`Term::match_motive_written`): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
 ///
 /// The elided hole — the bare metavariable `into_core` mints for an absent motive — is neither: it is wrapped at the eliminator's arity and left for synthesis or for `solve` to fill in.
-pub(crate) fn check_motive(
+pub fn check_motive(
     context: &mut Context,
     shape: &MotiveShape<'_>,
     motive: &Scope<Many>,

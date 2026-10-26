@@ -27,9 +27,9 @@ use {
 /// The obligations are stated over *terms*, not over the names those terms mention, because a `rec` written inline in an erased position mentions no name at all. Reporting the reached definitions alone would let `rec Bad : Type = Sink(Bad)`, written as a local binding, satisfy every closure while retying exactly the knot the closure exists to forbid.
 ///
 /// The site is what the position is a position of, an identity a refusal words for its reader ([`ErasedSite`]). It is shared rather than owned, which matters because there is one position per *annotated node* and a passing build reads none of them: an owned site would be a copy per node built and dropped on every successful compile. One walk carries one site — [`annotations`] says so where it deduplicates — so it is made once per call and every position it pushes clones a refcount.
-pub(crate) struct Position {
-    pub(crate) term: Term,
-    pub(crate) site: Rc<ErasedSite>,
+pub struct Position {
+    pub term: Term,
+    pub site: Rc<ErasedSite>,
 }
 
 fn push(positions: &mut Vec<Position>, site: &Rc<ErasedSite>, term: &Term) {
@@ -42,7 +42,7 @@ fn push(positions: &mut Vec<Position>, site: &Rc<ErasedSite>, term: &Term) {
 /// Every term in a type position.
 ///
 /// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`.
-pub(crate) fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Position> {
+pub fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Position> {
     let mut positions = Vec::new();
 
     for definition in definitions(module) {
@@ -98,7 +98,7 @@ pub(crate) fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec
 }
 
 /// The definitions these positions name — the seeds of the reachability walk.
-pub(crate) fn seeds(positions: &[Position]) -> BTreeSet<Global> {
+pub fn seeds(positions: &[Position]) -> BTreeSet<Global> {
     let mut seeds = BTreeSet::new();
     for position in positions {
         mark(&position.term, &mut seeds);
@@ -229,7 +229,7 @@ fn annotate_node(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Positio
 /// Why one position fails its obligation.
 ///
 /// A position can fail without naming anything: an inline `rec` that does not descend, or a call to a diverging host row, is partial on its own account. Reporting only reached names would miss exactly the shapes that need no name.
-pub(crate) enum Fault {
+pub enum Fault {
     Named(Global),
     Inline,
 }

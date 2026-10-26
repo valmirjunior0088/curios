@@ -18,11 +18,7 @@ use {
 };
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one extent, stamped by `elaborate`'s wrapper — no per-binding extent bookkeeping.
-pub(super) fn elaborate_let(
-    context: &mut Context,
-    let_: &Let,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
+pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {
     curios_profile::profile!("binding::elaborate_let");
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
@@ -89,11 +85,7 @@ pub(super) fn elaborate_let(
 }
 
 /// Elaborate a local `rec` group and its tail. The group's mutually-recursive bindings are one node, so this handles them at once; the tail recurses through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
-pub(super) fn elaborate_rec(
-    context: &mut Context,
-    rec: &Rec,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
+pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
         let group = &rec.group;
         let labels = rec
@@ -267,7 +259,7 @@ fn restriction_leaving(
     })
 }
 
-pub(super) fn elaborate_func(
+pub fn elaborate_func(
     context: &mut Context,
     func: &Func,
     term: &Term,
@@ -285,7 +277,7 @@ pub(super) fn elaborate_func(
 }
 
 /// Park a whole *checking problem*: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable — possibly pinned by a constraint parked moments ago. A fresh placeholder metavariable stands in the rebuilt tree; once the expected type's metas solve, the problem re-checks standing on the frames it holds and the placeholder is solved with the rebuilt term (the spine machinery splices it wherever the occurrence travelled).
-pub(super) fn park_checking(
+pub fn park_checking(
     context: &mut Context,
     term: &Term,
     expected: &Term,
@@ -304,7 +296,7 @@ pub(super) fn park_checking(
 }
 
 /// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar intrinsic. In `Check` mode the expected type pins the choice. One still stuck on an unsolved metavariable that a term awaits parks the literal: what that term has yet to read may give the type, and where nothing does, the term's completion gives the numerals it awaits their shape default together ([`Context::complete`], [`numeral_default`]). Where no term awaits the type, and in `Infer` mode, the literal takes its shape default at once, so the next line reads a type. Decimal literals never reach here; they parse straight to `Flt`.
-pub(super) fn elaborate_num_lit(
+pub fn elaborate_num_lit(
     context: &mut Context,
     num_lit: &NumLit,
     term: &Term,
@@ -447,7 +439,7 @@ fn character_value(context: &Context, character: char) -> Term {
 }
 
 /// The shape default numerals that wait on one type take together, a type each of them realizes at: `Int` where one is signed, since a written sign rules out `Nat`; `Nat` where one is an unsigned number; and the certified `/std/Char` only where every one is a character, a character realizing at `Nat` and `Int` as its code point. A numeral alone is the case of one.
-pub(crate) fn numeral_default<'a>(
+pub fn numeral_default<'a>(
     context: &Context,
     literals: impl IntoIterator<Item = &'a NumLit>,
 ) -> Term {
@@ -606,7 +598,7 @@ fn infix_method(
 }
 
 /// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/std/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own extent, so diagnostics keep anchoring at the written `!`.
-pub(super) fn elaborate_bang(
+pub fn elaborate_bang(
     context: &mut Context,
     bang: &Bang,
     term: &Term,
@@ -799,7 +791,7 @@ fn note_embedding_site(
 }
 
 /// Auto-lift on a checked tail, the region-end twin of [`elaborate_bang`]'s wrap: a term whose named head is declared in a monad other than the region's, checked where the region's monad is rigid, is wrapped in `lift` before it elaborates, so the declared edge carries it or the missing edge is reported — `Some(wrapped)` to elaborate in the tail's place. It fires only where both heads are registered monads, so a mismatch between two data types stays the ordinary mismatch, and it abstains exactly where the `!` oracle does: a flexible region, an unreadable head, or equal keys. The monad gate is read before the head, since most checked nodes sit under a data type and settle on one table lookup.
-pub(super) fn lift_on_check(
+pub fn lift_on_check(
     context: &mut Context,
     term: &Term,
     expected: &Term,
@@ -830,13 +822,13 @@ pub(super) fn lift_on_check(
 }
 
 /// What identifies a monad for the lift oracle: the rigid head, and the keys of the application's *context* arguments — every argument but the last, which is the slot a right-biased partial application abstracts and so the value slot, free to differ between an action and its region. A context argument that keys on nothing, a binder the action's own telescope will solve above all, is `None` and compatible with anything.
-pub(crate) struct MonadShape {
-    pub(crate) head: HeadKey,
-    pub(crate) context: Vec<Option<HeadKey>>,
+pub struct MonadShape {
+    pub head: HeadKey,
+    pub context: Vec<Option<HeadKey>>,
 }
 
 /// The shape of a weak-head-normal monad application, or `None` where its head is not keyable. Each context argument is read as a [`Probe`].
-pub(crate) fn monad_shape(context: &mut Context, whnf: &Term) -> Result<Option<MonadShape>, Error> {
+pub fn monad_shape(context: &mut Context, whnf: &Term) -> Result<Option<MonadShape>, Error> {
     let Some(head) = HeadKey::of_whnf(whnf) else {
         return Ok(None);
     };
@@ -865,7 +857,7 @@ fn context_keys(context: &mut Context, args: &[Term]) -> Result<Vec<Option<HeadK
 }
 
 /// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(State(S), E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
-pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
+pub fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
     region.head != action.head
         || region
             .context
@@ -875,13 +867,13 @@ pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
 }
 
 /// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept's name derives from the registry's bind wrapper, whose namespace is the concept. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.
-pub(crate) fn is_monad(context: &Context, key: &HeadKey) -> bool {
+pub fn is_monad(context: &Context, key: &HeadKey) -> bool {
     let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
     context.witness_declared(&monad, &WitnessKey::from([key.clone()]))
 }
 
 /// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.
-pub(crate) fn region_flex(context: &Context, whnf: &Term) -> bool {
+pub fn region_flex(context: &Context, whnf: &Term) -> bool {
     match &**whnf {
         Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
         Subterm::Apply(apply) => region_flex(context, &apply.head),
@@ -1070,7 +1062,7 @@ fn binder_key(
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. Both operands are checked at a fresh operand-type metavar `?T`, which the operator awaits as a call awaits its implicits: an expected result type pins it for an operator whose method returns its operand type, an operand that is no literal pins it from its own type, and a literal read while it is open waits for it. So `1 + flt` resolves to `Flt` whichever side the literal is on, and literals nothing pins take their default together where the operator completes.
 ///
 /// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/std/ops` concept ([`OperatorSyntax::concept_field`](curios_utilities::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
-pub(super) fn elaborate_infix(
+pub fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
     term: &Term,
@@ -1144,7 +1136,7 @@ pub(super) fn elaborate_infix(
 /// A refusal is the misalignment's: an explicit slot with no binder is a missing-parameter arity error counting the explicit slots, a binder with no slot left is surplus, a hidden binder at a hidden slot of the other mark is out of order, and a marked binder standing at an explicit slot claims what no mark may.
 ///
 /// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included, each under its slot's mark — so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase`.
-pub(super) fn elaborate_func_check(
+pub fn elaborate_func_check(
     context: &mut Context,
     telescope: &Telescope<Term>,
     written_plicities: &[Plicity],
@@ -1254,7 +1246,7 @@ pub(super) fn elaborate_func_check(
 }
 
 /// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — unless `settle` carries the lambda term: the term that awaits its type has read its parts, so no structure is coming from the expectation, so the hole is replaced by a metavariable named after its binder ([`MetavarOrigin::Domain`](curios_core::MetavarOrigin)), pinned by the body or by whatever the settled type later unifies with, and reported by zonk as the parameter whose type was never determined when nothing ever pins it. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
-pub(super) fn elaborate_func_infer(
+pub fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,
     plicities: &[Plicity],

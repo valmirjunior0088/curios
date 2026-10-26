@@ -272,19 +272,19 @@ impl<'a> Unit<'a> {
 
 /// The unit being erased and the units in its scope, read out of their universes.
 #[derive(Debug)]
-pub(crate) struct Projected<'a> {
+pub struct Projected<'a> {
     /// The scope's units in dependency order, then the unit being erased.
     units: Vec<Unit<'a>>,
 }
 
 impl<'a> Projected<'a> {
     /// `scope`'s units, each read by what its unit keeps for erasure where the scope holds that, then `unit`, the one being erased.
-    pub(crate) fn over(scope: Erasures<'a>, unit: &'a Module) -> Self {
+    pub fn over(scope: Erasures<'a>, unit: &'a Module) -> Self {
         Self::with(scope, Unit::made(unit))
     }
 
     /// The units of `scope` and `unit`, whose module is held at `places` and has been read out of its universes as `projection` holds it: a unit erased over a baseline, whose places are its module's own and whose projection is a version of its baseline's.
-    pub(crate) fn revised(
+    pub fn revised(
         scope: Erasures<'a>,
         unit: &'a Module,
         places: &'a Places,
@@ -301,7 +301,7 @@ impl<'a> Projected<'a> {
     }
 
     /// What erasure read of the unit being erased out of its universes: what that unit keeps, a later erasure over it finding it as this one left it.
-    pub(crate) fn into_projection(mut self) -> Projection {
+    pub fn into_projection(mut self) -> Projection {
         let own = self
             .units
             .pop()
@@ -334,7 +334,7 @@ impl<'a> Projected<'a> {
     }
 
     /// The item at `place` of the unit being erased, out of its universes: what its erasure walks.
-    pub(crate) fn own(&self, place: usize) -> &Item {
+    pub fn own(&self, place: usize) -> &Item {
         let own = self
             .units
             .last()

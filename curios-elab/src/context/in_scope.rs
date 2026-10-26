@@ -17,35 +17,35 @@ use {
 
 /// One definition of a unit in scope, as a declaration reads it: every part a reference into the unit that holds it.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Defined<'a> {
-    pub(crate) type_: &'a Term,
+pub struct Defined<'a> {
+    pub type_: &'a Term,
     /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
-    pub(crate) body: Option<&'a Term>,
-    pub(crate) kind: &'a DefinitionKind,
-    pub(crate) universe_context: &'a UniverseContext,
-    pub(crate) totality: Totality,
+    pub body: Option<&'a Term>,
+    pub kind: &'a DefinitionKind,
+    pub universe_context: &'a UniverseContext,
+    pub totality: Totality,
     /// The vector its publication filed, empty where it filed none.
-    pub(crate) variances: &'a [Variance],
+    pub variances: &'a [Variance],
     /// The vector of each field of its value its publication filed, empty where it filed none ([`curios_core::Definition::field_variances`]).
-    pub(crate) field_variances: &'a [Vec<Variance>],
+    pub field_variances: &'a [Vec<Variance>],
     /// The field of one of its binders its value is, where it is one ([`curios_core::Definition::parameter_field`]).
-    pub(crate) parameter_field: Option<ParameterField>,
+    pub parameter_field: Option<ParameterField>,
     /// The sort its value inhabits, where its value is a type ([`curios_core::Definition::value_sort`]).
-    pub(crate) value_sort: Option<&'a Term>,
+    pub value_sort: Option<&'a Term>,
     /// The module declaring it.
-    pub(crate) island: Qualifier,
+    pub island: Qualifier,
 }
 
 impl<'a> Defined<'a> {
     /// Its vector, with how many arguments one spine applies it in full by, where it is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
-    pub(crate) fn irrelevance(&self) -> Option<(&'a [Variance], usize)> {
+    pub fn irrelevance(&self) -> Option<(&'a [Variance], usize)> {
         self.variances
             .contains(&Variance::Irrelevant)
             .then_some((self.variances, self.arity()))
     }
 
     /// The vector of field `slot` of its value, with its arity, where some field is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
-    pub(crate) fn field_irrelevance(&self, slot: usize) -> Option<(&'a [Variance], usize)> {
+    pub fn field_irrelevance(&self, slot: usize) -> Option<(&'a [Variance], usize)> {
         if !self
             .field_variances
             .iter()
@@ -59,7 +59,7 @@ impl<'a> Defined<'a> {
     }
 
     /// The field of one of its binders its value is, with its arity: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
-    pub(crate) fn parameter_field(&self) -> Option<(ParameterField, usize)> {
+    pub fn parameter_field(&self) -> Option<(ParameterField, usize)> {
         Some((self.parameter_field?, self.arity()))
     }
 
@@ -73,7 +73,7 @@ impl<'a> Defined<'a> {
 }
 
 /// The units in scope, answering by name.
-pub(crate) trait InScope: Debug {
+pub trait InScope: Debug {
     /// The definition a unit in scope declares under `name`.
     fn definition(&self, name: &Global) -> Option<Defined<'_>>;
 

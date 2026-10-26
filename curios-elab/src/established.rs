@@ -310,7 +310,7 @@ impl<'a> Established<'a> {
     }
 
     /// Answer, of the baseline, for every declaration but those declaring `withheld`, from here on: the ones the walk holds to decide, and the ones of names the unit no longer declares. Asked by the walk once it knows what its edit could reach, before anything is asked of the unit.
-    pub(crate) fn answer_but<'n>(&self, withheld: impl Iterator<Item = &'n Global>) {
+    pub fn answer_but<'n>(&self, withheld: impl Iterator<Item = &'n Global>) {
         let Some(baseline) = self.units.iter().find(|unit| unit.answering.is_some()) else {
             return;
         };
@@ -325,7 +325,7 @@ impl<'a> Established<'a> {
     }
 
     /// Keep the baseline's declaration declaring `names`: the baseline answers for them from here on. Asked by the walk, where it finds that everything the declaration read stands.
-    pub(crate) fn keep(&self, names: &[&Global]) {
+    pub fn keep(&self, names: &[&Global]) {
         for unit in &self.units {
             for name in names {
                 unit.keep(name);
@@ -347,22 +347,22 @@ impl<'a> Established<'a> {
     }
 
     /// Whether every unit in scope is the one the baseline was compiled after.
-    pub(crate) fn settled(&self) -> bool {
+    pub fn settled(&self) -> bool {
         !self.moved
     }
 
     /// Whether what a baseline read of `name`, which the unit being compiled does not declare, stands unasked: every unit in scope is the one the baseline was compiled after, or the one that declares `name` is. A name no unit declares stands only in the first case, since a unit that moved may have declared it.
-    pub(crate) fn unmoved(&self, name: &Global) -> bool {
+    pub fn unmoved(&self, name: &Global) -> bool {
         !self.moved || self.declaring(name).is_some_and(|unit| !unit.moved)
     }
 
     /// Whether a read of `name`, which the unit being compiled does not declare, is one to record: every one but a read of a fixed unit's declaration.
-    pub(crate) fn recorded(&self, name: &Global) -> bool {
+    pub fn recorded(&self, name: &Global) -> bool {
         self.declaring(name).is_none_or(|unit| !unit.fixed)
     }
 
     /// The digest of the part `question` asks, of the declaration a unit in scope holds under its name ([`part_digest`]): `Ok(None)` where no unit declares the name, or the one that does holds no such part.
-    pub(crate) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
+    pub fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(unit) = question.subject().and_then(|name| self.declaring(name)) else {
             return Ok(None);
         };
@@ -373,7 +373,7 @@ impl<'a> Established<'a> {
     /// Refuse a scope two of whose units declare a witness at one concept and one key.
     ///
     /// Each unit was held to the orphan rule where it was compiled, which is what keeps two units from declaring one witness; a scope is still asked, since its units arrive from a store and a program resolved through either of two would mean two things. The names say it, so nothing is reduced.
-    pub(crate) fn coherent(&self) -> Result<(), Error> {
+    pub fn coherent(&self) -> Result<(), Error> {
         let mut declared = HashMap::<(Global, WitnessKey), (Global, Qualifier)>::new();
         for unit in &self.units {
             for name in unit.witnesses() {

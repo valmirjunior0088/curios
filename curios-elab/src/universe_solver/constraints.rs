@@ -29,7 +29,7 @@ fn heads(constraint: &UniverseConstraint) -> impl Iterator<Item = LevelHead> + '
 ///
 /// `len` and `rewrites` are where a rollback unwinds to; `epoch` is what a reader compares to decide whether anything changed. The two are separate because the journal is conditional and its length does not move on every rewrite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct StoreMark {
+pub struct StoreMark {
     len: usize,
     rewrites: usize,
     epoch: u64,
@@ -41,13 +41,13 @@ pub(super) struct StoreMark {
 ///
 /// Deliberately not part of [`StoreMark`]: a state token compares marks to decide whether the store changed, and entering a scope is not a change to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct StoreScope {
+pub struct StoreScope {
     mark: StoreMark,
     depth: usize,
 }
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct ConstraintStore {
+pub struct ConstraintStore {
     constraints: Vec<UniverseConstraint>,
     occurrences: BTreeMap<LevelHead, BTreeSet<usize>>,
     rewrites: Vec<(usize, UniverseConstraint)>,
@@ -58,24 +58,24 @@ pub(super) struct ConstraintStore {
 }
 
 impl ConstraintStore {
-    pub(super) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.constraints.len()
     }
 
-    pub(super) fn as_slice(&self) -> &[UniverseConstraint] {
+    pub fn as_slice(&self) -> &[UniverseConstraint] {
         &self.constraints
     }
 
-    pub(super) fn iter(&self) -> impl ExactSizeIterator<Item = &UniverseConstraint> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &UniverseConstraint> {
         self.constraints.iter()
     }
 
-    pub(super) fn get(&self, index: usize) -> Option<&UniverseConstraint> {
+    pub fn get(&self, index: usize) -> Option<&UniverseConstraint> {
         self.constraints.get(index)
     }
 
     /// Snapshot the store's position without opening a scope — what a reader compares to decide whether anything moved.
-    pub(super) fn mark(&self) -> StoreMark {
+    pub fn mark(&self) -> StoreMark {
         StoreMark {
             len: self.constraints.len(),
             rewrites: self.rewrites.len(),
@@ -84,7 +84,7 @@ impl ConstraintStore {
     }
 
     /// Open a speculative scope, recording both where the store stood and how deep it already was.
-    pub(super) fn enter(&mut self) -> StoreScope {
+    pub fn enter(&mut self) -> StoreScope {
         let scope = StoreScope {
             mark: self.mark(),
             depth: self.speculation,
@@ -96,7 +96,7 @@ impl ConstraintStore {
     /// End a scope, keeping whatever it left in place. Once nothing is open, the pre-images recorded under the closed scopes can no longer be named and are dropped.
     ///
     /// The depth may only ever be wrong in one direction. A bracket that returns without closing leaves it too *high*, so the journal is dropped later than it could be — wasted memory, and an enclosing close restores past it anyway. Forcing it low while a scope is still open is the unsafe direction: the drop below would take pre-images a pending rollback still needs, and that rollback would then silently restore nothing. Nothing resets this counter outright for exactly that reason.
-    pub(super) fn release(&mut self, scope: StoreScope) {
+    pub fn release(&mut self, scope: StoreScope) {
         self.speculation = scope.depth;
         if self.speculation == 0 {
             self.rewrites.clear();
@@ -106,7 +106,7 @@ impl ConstraintStore {
     /// The constraints mentioning `head`, in insertion order.
     ///
     /// Solving reads a flexible level's bounds through this index. Scanning every constraint per level instead would make finalization quadratic in the number of levels a declaration touches.
-    pub(super) fn mentioning(&self, head: LevelHead) -> impl Iterator<Item = usize> + '_ {
+    pub fn mentioning(&self, head: LevelHead) -> impl Iterator<Item = usize> + '_ {
         self.occurrences
             .get(&head)
             .into_iter()
@@ -130,7 +130,7 @@ impl ConstraintStore {
         }
     }
 
-    pub(super) fn push(&mut self, constraint: UniverseConstraint) -> usize {
+    pub fn push(&mut self, constraint: UniverseConstraint) -> usize {
         let position = self.constraints.len();
         self.constraints.push(constraint);
         self.index(position);
@@ -138,7 +138,7 @@ impl ConstraintStore {
     }
 
     /// Drop the most recently pushed constraint. Only valid when nothing has rewritten it since — which [`ConstraintStore::rollback`], its one caller, guarantees by unwinding the rewrite journal before truncating.
-    pub(super) fn pop(&mut self) {
+    pub fn pop(&mut self) {
         if self.constraints.is_empty() {
             return;
         }
@@ -150,7 +150,7 @@ impl ConstraintStore {
     /// Restore the store to where `scope` began: undo every rewrite recorded since, newest first, then drop the constraints appended since.
     ///
     /// Undoing is not ending. A caller may roll back and keep working inside the same scope, so closing it is [`ConstraintStore::release`]'s job alone and the bracket that opened it is what calls that.
-    pub(super) fn rollback(&mut self, scope: StoreScope) {
+    pub fn rollback(&mut self, scope: StoreScope) {
         while self.rewrites.len() > scope.mark.rewrites {
             let (position, previous) = self.rewrites.pop().expect("rewrite log is non-empty");
             self.unindex(position);
@@ -162,34 +162,34 @@ impl ConstraintStore {
         }
     }
 
-    pub(super) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.constraints.clear();
         self.occurrences.clear();
         self.rewrites.clear();
     }
 
     /// Close every open scope and drop the journal — see `UniverseSolver::abandon_speculation` for where that is sound.
-    pub(super) fn abandon(&mut self) {
+    pub fn abandon(&mut self) {
         self.speculation = 0;
         self.rewrites.clear();
     }
 
     /// How many speculative scopes are open.
     #[cfg(test)]
-    pub(super) fn speculation(&self) -> usize {
+    pub fn speculation(&self) -> usize {
         self.speculation
     }
 
     /// How many pre-images the journal holds.
     #[cfg(test)]
-    pub(super) fn journal_len(&self) -> usize {
+    pub fn journal_len(&self) -> usize {
         self.rewrites.len()
     }
 
     /// Drop every constraint failing `keep` and rebuild the index.
     ///
     /// Retaining renumbers the survivors, so the rewrite journal — which names positions — cannot outlive it. Callers use this only at a declaration boundary, past any mark that could still be rolled back to.
-    pub(super) fn retain(&mut self, keep: impl FnMut(&UniverseConstraint) -> bool) {
+    pub fn retain(&mut self, keep: impl FnMut(&UniverseConstraint) -> bool) {
         self.constraints.retain(keep);
         self.occurrences.clear();
         self.rewrites.clear();
@@ -205,7 +205,7 @@ impl ConstraintStore {
     /// **Widening is rare per substitution and pervasive in aggregate**, which is what the discharge below exists to stop. Almost every individual substitution splices in a constant or a single head and widens nothing — which reads like a refutation of the widening argument and is not one, because the thin tail *compounds*: a widened constraint is then the input to every later substitution landing in it. Without the discharge the store would grow over its own solving, and with it the cost of `check_consistent` and the peak footprint, which is the difference graph a full consistency check builds over the store at its largest.
     ///
     /// Inflating the store is a property of materialising substitutions at all. The alternative is recording `meta := level` and dereferencing lazily — which this compiler already does for term metavariables, where a solution lives in a table and nothing is substituted until `zonk` runs; with the discharge in place it would have to earn its way in on the read side.
-    pub(super) fn substitute_head(
+    pub fn substitute_head(
         &mut self,
         head: LevelHead,
         solution: &Level,

@@ -15,9 +15,9 @@ use {
 };
 
 /// A structure's row as erasure reads it: its schema, and its mask, borrowed from the item that declares the row where another item does.
-pub(super) struct StructRow<'s> {
-    pub(super) schema: Option<curios_ersd::ProductId>,
-    pub(super) mask: Cow<'s, [bool]>,
+pub struct StructRow<'s> {
+    pub schema: Option<curios_ersd::ProductId>,
+    pub mask: Cow<'s, [bool]>,
 }
 
 impl StructRow<'_> {
@@ -38,7 +38,7 @@ fn open_opaque<B: Bound>(context: &mut Retyping, telescope: Telescope<B>) -> Vec
 
 impl<'s> Lowering<'s> {
     /// The memoized layout of a registered structure.
-    pub(super) fn struct_row(
+    pub fn struct_row(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -89,7 +89,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// The family `name`'s row is erased into: a read of the family alone, which imports none of its constructors where another item declares it, and registers the row where this one does.
-    pub(super) fn induct_family(
+    pub fn induct_family(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -106,7 +106,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// The row of `name`'s constructor at `index`: a read of the one constructor, which imports it alone where another item declares the family, and registers the row where this one does.
-    pub(super) fn induct_constructor(
+    pub fn induct_constructor(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -124,7 +124,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// What the declaration of the structure `name` says a value of it is, read off its mask where its row is registered: by this item, or by the item declaring it, read there and imported nothing of. Registered here where this item declares it and has not yet; `None` while that registration is in flight.
-    pub(super) fn struct_relevance(
+    pub fn struct_relevance(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -146,7 +146,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// [`struct_relevance`](Self::struct_relevance) for the one constructor of the inductive `name`.
-    pub(super) fn constructor_relevance(
+    pub fn constructor_relevance(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -319,12 +319,12 @@ impl<'s> Lowering<'s> {
     }
 
     /// Whether `name`'s structure row is being registered right now — see [`Lowering::in_flight`].
-    pub(super) fn in_flight(&self, name: &curios_core::Global) -> bool {
+    pub fn in_flight(&self, name: &curios_core::Global) -> bool {
         self.in_flight.contains(name)
     }
 
     /// The family identity of a registered inductive, minting its row if this is the first reference.
-    pub(super) fn family_identity(
+    pub fn family_identity(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
@@ -336,7 +336,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// The interned anonymous product schema of the given relevant width.
-    pub(super) fn tuple_schema(&mut self, width: usize) -> curios_ersd::ProductId {
+    pub fn tuple_schema(&mut self, width: usize) -> curios_ersd::ProductId {
         if let Some(schema) = self.environment.tuple_schema(width) {
             return schema;
         }
@@ -350,7 +350,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Lower a tuple against its checked tuple type. Every field has its slot, a proof or a type there as the stand-in, and a tuple of one field is that field: its width is its telescope's length, which [`erase_proj`](Self::erase_proj) reads back.
-    pub(super) fn erase_tuple(
+    pub fn erase_tuple(
         &mut self,
         context: &mut Retyping,
         tuple: &Tuple,
@@ -389,7 +389,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Lower a struct value: a newtype is its bare field; anything else is a product over the declaration's schema.
-    pub(super) fn erase_struct(
+    pub fn erase_struct(
         &mut self,
         context: &mut Retyping,
         value: &Struct,
@@ -421,7 +421,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Lower a constructor value to a schema-carrying `Construct`; the discriminant is the constructor's registry position, which the declaring item's family lists it at and an importing item's import states.
-    pub(super) fn erase_variant(
+    pub fn erase_variant(
         &mut self,
         context: &mut Retyping,
         variant: &Variant,
@@ -458,7 +458,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Lower a projection: by relevant-field arithmetic out of a structure, whose declaration says which fields it keeps, and by position out of an anonymous tuple, which keeps them all. A head left with a single field already *is* that field, so the projection vanishes.
-    pub(super) fn erase_proj(
+    pub fn erase_proj(
         &mut self,
         context: &mut Retyping,
         proj: &Proj,

@@ -9,7 +9,7 @@ mod reduction_tests;
 #[cfg(test)]
 mod settlement_tests;
 #[cfg(test)]
-pub(crate) mod test_support;
+pub mod test_support;
 
 use {
     super::{
@@ -220,7 +220,7 @@ enum Reduce {
 }
 
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
-pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
+pub fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
     let members = rec.group.members();
     // The member vector, the ref vector over it, and the opening — one substitution pass per member.
     context.spend(
@@ -253,10 +253,7 @@ fn expose_rec_tail(context: &mut Context, mut term: Term) -> Result<Term, Reduce
 }
 
 /// Delta-unfold one folded recursive application. Ordinary reduction does not call this: eliminators and conversion use it only when the folded call's result shape is demanded or must be compared with a differently-shaped term.
-pub(crate) fn unfold_rec_apply(
-    context: &mut Context,
-    apply: Apply,
-) -> Result<Option<Term>, ReduceError> {
+pub fn unfold_rec_apply(context: &mut Context, apply: Apply) -> Result<Option<Term>, ReduceError> {
     let Apply { head, arguments } = apply;
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
@@ -409,7 +406,7 @@ fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGrou
 }
 
 /// Reduce to WHNF and then force a `rec` head: used wherever an eliminator (`match`/application/projection) demands a value, so an inner `rec` reduces just like a top-level one instead of staying stuck.
-pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+pub fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let reduced = reduce(context, term)?;
     force_rec(context, reduced)
 }
@@ -425,12 +422,12 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 /// The asymmetry with the kernel is *when*, not what. The rule is not in dispute — identify only terms already definitionally equal — and the kernel states it exactly because it judges a module whose levels are settled. This key is computed while they are still being solved: an arm records it on entry and it is then probed for as long as the arm stands, with metavariables solved in between. So "concrete levels kept apart, open ones held together" cannot be a property of a key at all; it is a property of a *comparison*, and the only step that happens after solving is the read. `Context::scrutinee_reduct` and `Context::proj_reduct` make it there, by committing a hit's two unerased spellings to one instance and declining the hit where they cannot be: the two then close together or the declaration is refused where its levels close, and a term the elaborator refined is one the kernel's key answers.
 ///
 /// **Spelled as the arm spells it.** A variable an arm in force refined is read as its value ([`Context::spelled_as_refined`]), at a registration and at a probe alike: the kernel substitutes a case's solution through its arm, an equation the arm restates is keyed at that instance ([`Context::restate_equations`]), and a term here may still name the variable.
-pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
+pub fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
     project_erased_universes(&key_spelling(context, term))
 }
 
 /// `term` as its key spells it, its universes kept: what a hit's two sides are compared in where their instances are held to one.
-pub(crate) fn key_spelling(context: &Context, term: &Term) -> Term {
+pub fn key_spelling(context: &Context, term: &Term) -> Term {
     context.spelled_as_refined(&zonk_solved_term_metas(context, term))
 }
 
@@ -1045,7 +1042,7 @@ fn answered(
 }
 
 /// What an arm that assumes `key` holds says of `term`: `Some(true)` where `term` is `key` to the rule a stuck form is answered by (`curios_analysis::answers`, the pair's atoms classed where the rule hands them back), `Some(false)` where it is `key` negated, and `None` where the arm's equation says nothing of it. Both are read as reduction leaves a stuck form. What the procedure that proves a bound asks before it opens a case split, since a split inside an arm that decides its guard has a case no value reaches.
-pub(crate) fn answered_guard(
+pub fn answered_guard(
     context: &mut Context,
     term: &Term,
     key: &Term,
@@ -1337,7 +1334,7 @@ fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceErr
 /// Reduction re-enters itself once per operand of a nested intrinsic, once per link of a spine peel, and once per level of a match tower, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_BUDGET`](crate::DEFAULT_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
 ///
 /// A budget that bounded *steps* alone would leave the memory such a walk allocates unbounded: a runaway type-level computation would run until the budget stopped it, allocating as it went. A transition costs one unit, a construction costs what it builds, and the [`Cost::FRAME`] charged at this bracket prices the native frame a level takes — so the stack this walk grows into is bounded by the same number that bounds how far it reduces, and both are facts about the program rather than about the host. `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` carries the decision.
-pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // The level itself, charged when it is a new peak — the kernel's `whnf` charges the same row the same way. See [`Context::enter_level`] and [`Cost::FRAME`].
     context.enter_level()?;
     let reduct = recurse(|| reduce_within(context, term));
@@ -1529,7 +1526,7 @@ fn remember(context: &mut Context, declined: u64, entry: Term, result: &Term) {
 /// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A stuck call an arm built, headed by its group's projection where its author wrote the name, keeps its head for the same reason: normalized alone, the projection is forced to its member's body and the call is spelled as that body applied. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime/diagnostic_tests.rs` and `curios-pipeline/src/tests/diagnostic_tests.rs` hold.
 ///
 /// **A term is normalized once per display.** A report shows types elaboration built, and a type is a graph — sixty lines of `let`, each pairing the one before it with itself, state a type of sixty-one nodes — so a walk that normalized every occurrence would rebuild the type's tree, which no budget stops: a remembered reduct is free and a level is charged only where it is a new peak. Every position recurses through `normalize_known`, which keeps what this display has normalized. An answer stays true for the whole display, since the walk changes nothing a normal form reads — no definition, refinement or solution — and every term it is asked about is closed: a binder is opened to a fresh variable before its scope is entered, so two terms that are equal here denote the same thing.
-pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+pub fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     normalize_known(context, &mut HashMap::new(), term)
 }
 
@@ -1685,7 +1682,7 @@ fn normalize_argument_vec(
 }
 
 /// The head of an application, or the term itself: the position a name sits in, and the position a stuck form shows at. An instance wrapper is not looked through — its typed head is not a term — so a caller asking about the head's shape matches `Instance` beside the bare shape it wraps.
-pub(crate) fn applied_head(term: &Term) -> &Term {
+pub fn applied_head(term: &Term) -> &Term {
     match &**term {
         Subterm::Apply(Apply { head, .. }) => head,
         _ => term,
@@ -1693,7 +1690,7 @@ pub(crate) fn applied_head(term: &Term) -> &Term {
 }
 
 /// Whether reducing `written` to `reduced` only unfolded a name into one of the binder-heavy stuck forms — a folded recursive call or recursive group, a stuck `match`, a lambda or a `let`, bare or at the head of an application. `double(n)` over a `rec` is the paradigm: the name unfolds to the folded call's canonical neutral, which spells as the whole group and says nothing the name did not. [`normalize`] keeps the name for display.
-pub(crate) fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
+fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
     matches!(
         &**applied_head(written),
         Subterm::Var(_)

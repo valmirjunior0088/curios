@@ -22,7 +22,7 @@ use {
 ///
 /// `kind` is `None` for a genuine *local* binding — a `let` binder, an opened match scrutinee, a lambda parameter — which no module item declared. It is carried rather than re-derived: the kind is elaboration metadata `into_core` attached where the item was generated, and splitting the definition's name apart to recover it would misread an ordinary definition that merely happens to sit under a generated namespace (see [`DefinitionKind`]'s own docs).
 #[derive(Debug, Clone)]
-pub(crate) struct DefEntry {
+pub struct DefEntry {
     term: Term,
     kind: Option<DefinitionKind>,
     /// Whether the name is a proof its item published ([`curios_core::Definition::proof`]): it stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
@@ -35,11 +35,11 @@ pub(crate) struct DefEntry {
 
 /// A local definition's term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): read in place of the term wherever the kernel's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling.
 #[derive(Debug, Clone)]
-pub(crate) struct ByValue {
+pub struct ByValue {
     /// The term with its solved metavariables materialized and each local definition it names replaced by what that one is by value.
-    pub(crate) term: Term,
+    pub term: Term,
     /// The same with its universe instances erased ([`project_erased_universes`](curios_core::project_erased_universes)): what an equation's key over the definition is spelled from (`shallow_scrutinee`). Built as `term` is, over the erased values beneath, since erasing commutes with substituting what is erased.
-    pub(crate) erased: Term,
+    pub erased: Term,
 }
 
 impl PartialEq for DefEntry {
@@ -49,7 +49,7 @@ impl PartialEq for DefEntry {
 }
 
 impl DefEntry {
-    pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
+    pub fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
         Self {
             by_value: None,
             term,
@@ -60,7 +60,7 @@ impl DefEntry {
     }
 
     /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
-    pub(crate) fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
+    pub fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
         Self {
             by_value: None,
             term,
@@ -71,17 +71,17 @@ impl DefEntry {
     }
 
     /// The entry as the frame at `depth` defines it.
-    pub(super) fn defined_at(self, depth: usize) -> Self {
+    pub fn defined_at(self, depth: usize) -> Self {
         Self { depth, ..self }
     }
 
     /// The depth of the frame that defines the name.
-    pub(super) fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         self.depth
     }
 
     /// The entry of a local definition with its term read by value as `by_value`, where it is defined.
-    pub(super) fn read_by_value(self, by_value: ByValue) -> Self {
+    pub fn read_by_value(self, by_value: ByValue) -> Self {
         Self {
             by_value: Some(by_value),
             ..self
@@ -89,85 +89,85 @@ impl DefEntry {
     }
 
     /// The term by value, as it was read where the name was defined, where the name is a local definition's.
-    pub(super) fn by_value(&self) -> Option<&ByValue> {
+    pub fn by_value(&self) -> Option<&ByValue> {
         self.by_value.as_ref()
     }
 
-    pub(crate) fn body(&self) -> &Term {
+    pub fn body(&self) -> &Term {
         &self.term
     }
 
-    pub(crate) fn kind(&self) -> Option<&DefinitionKind> {
+    pub fn kind(&self) -> Option<&DefinitionKind> {
         self.kind.as_ref()
     }
 
     /// What the name unfolds to: its term, and nothing where it is a proof.
-    pub(super) fn reduct(&self) -> Option<&Term> {
+    pub fn reduct(&self) -> Option<&Term> {
         (!self.proof).then_some(&self.term)
     }
 }
 
 /// One stuck-application refinement: the scrutinee as *written* (unerased, so a settlement can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ScrutineeEntry {
-    pub(crate) original: Term,
-    pub(crate) value: Term,
+pub struct ScrutineeEntry {
+    pub original: Term,
+    pub value: Term,
     /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement skips it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
-    pub(crate) alias: bool,
+    pub alias: bool,
     /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
-    pub(crate) withheld: bool,
+    pub withheld: bool,
     /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`). Its spelling is settled in this frame and goes with it.
-    pub(crate) restates: bool,
+    pub restates: bool,
 }
 
 /// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
 #[derive(Debug, Clone)]
-pub(crate) struct Settled {
-    pub(crate) compared: Term,
-    pub(crate) unerased: Term,
+pub struct Settled {
+    pub compared: Term,
+    pub unerased: Term,
 }
 
 /// What a settlement remembered, beside the deepest frame it read and what else it rests on: it answers only while both stand.
 #[derive(Debug)]
-pub(super) struct KeptWindow {
-    pub(super) window: Window,
-    pub(super) stood: Prefix,
-    pub(super) footing: Footing,
+pub struct KeptWindow {
+    pub window: Window,
+    pub stood: Prefix,
+    pub footing: Footing,
 }
 
 /// The frames through one that stands at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the last took.
 ///
 /// A frame leaves only after every frame inside it, and no two frames take one number, so they all stand while the last does. A copy a stand holds keeps the number of the frame it copies and may hold less than that frame does now, so the stand is what tells the two apart.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Prefix {
-    pub(super) stand: u64,
-    pub(super) depth: usize,
-    pub(super) innermost: u64,
+pub struct Prefix {
+    pub stand: u64,
+    pub depth: usize,
+    pub innermost: u64,
 }
 
 /// What a settlement left for one scrutinee entry.
 #[derive(Debug, Clone)]
-pub(super) struct Spelling {
+pub struct Spelling {
     /// The reduced spelling, or `None` where reducing the key refused.
-    pub(super) settled: Option<Settled>,
+    pub settled: Option<Settled>,
     /// What it rests on beyond the frames outside its entry: it is what its key reduces to while that stands.
-    pub(super) footing: Footing,
+    pub footing: Footing,
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
 ///
 /// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell one instance from another, so the base is kept whole and [`Context::proj_reduct`](crate::Context) holds the two to one instance at the read.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ProjectionEntry {
-    pub(crate) original: Term,
-    pub(crate) value: Term,
+pub struct ProjectionEntry {
+    pub original: Term,
+    pub value: Term,
 }
 
 /// Entries by key, read back in the order they were recorded, persistent: a clone shares every entry, and a record into either leaves the other as it was.
 ///
 /// A hash map's own order differs from one process to the next, and a frame's entries are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run; and a report names an unfolded `rec` group by the first definition it finds of that structure, so two groups of one structure would be spelled either way.
 #[derive(Clone)]
-pub(super) struct Recorded<K, V> {
+pub struct Recorded<K, V> {
     /// Each key's place and value.
     places: Persistent<K, (i64, V)>,
     /// The entries at their places, in the order they were first recorded.
@@ -191,24 +191,24 @@ impl<K: Eq + Hash + Clone, V: Clone> Recorded<K, V> {
         }
     }
 
-    pub(super) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
-    pub(super) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.entries.len()
     }
 
-    pub(super) fn get(&self, key: &K) -> Option<&V> {
+    pub fn get(&self, key: &K) -> Option<&V> {
         self.places.get(key).map(|(_, value)| value)
     }
 
-    pub(super) fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key(&self, key: &K) -> bool {
         self.places.contains_key(key)
     }
 
     /// Record `value` under `key`, in the place the key already holds where it was recorded before.
-    pub(super) fn insert(&mut self, key: K, value: V) {
+    pub fn insert(&mut self, key: K, value: V) {
         let place = match self.places.get(&key) {
             Some((place, _)) => *place,
             None => {
@@ -220,11 +220,11 @@ impl<K: Eq + Hash + Clone, V: Clone> Recorded<K, V> {
         self.entries.insert(place, (key, value));
     }
 
-    pub(super) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.entries.iter().map(|(_, (key, value))| (key, value))
     }
 
-    pub(super) fn keys(&self) -> impl Iterator<Item = &K> {
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
         self.iter().map(|(key, _)| key)
     }
 
@@ -250,7 +250,7 @@ impl<K: Eq + Hash + Clone, V: Clone> Recorded<K, V> {
     }
 
     /// The entries recorded here that `other` records otherwise or not at all, by place, read in time proportional to what the two do not share: a record and one made from it by a few writes are compared at the cost of those writes.
-    pub(super) fn apart_from(&self, other: &Self) -> Vec<(K, V)>
+    pub fn apart_from(&self, other: &Self) -> Vec<(K, V)>
     where
         V: PartialEq,
     {
@@ -264,7 +264,7 @@ impl<K: Eq + Hash + Clone, V: Clone> Recorded<K, V> {
     }
 
     /// Forget `key`, the entries recorded after it keeping their places.
-    pub(super) fn remove(&mut self, key: &K) {
+    pub fn remove(&mut self, key: &K) {
         if let Some((place, _)) = self.places.remove(key) {
             self.entries.remove(place);
         }
@@ -272,25 +272,25 @@ impl<K: Eq + Hash + Clone, V: Clone> Recorded<K, V> {
 }
 
 /// The projection a refinement is registered under, its base's universe instances erased: told apart from another by its hash, so a probe compares no base but the one it asks for.
-pub(super) type Projected = Keyed<(Term, usize)>;
+pub type Projected = Keyed<(Term, usize)>;
 
 /// One name as the scope binds it: its type, its universe context, and the place of its binding among the locals.
 #[derive(Debug, Clone)]
-pub(super) struct Binding {
-    pub(super) type_: Term,
-    pub(super) universes: UniverseContext,
+pub struct Binding {
+    pub type_: Term,
+    pub universes: UniverseContext,
     place: i64,
     /// The depth of the frame that binds the name: what a settlement reading the binding rests on.
-    pub(super) depth: usize,
+    pub depth: usize,
 }
 
 /// One frame: what the scope it was entered for adds, and the scope through it. See the module documentation.
 #[derive(Clone)]
-pub(crate) struct Frame {
+pub struct Frame {
     /// The number the frame took where it was entered, which no other frame of the elaboration takes: a copy made for a writer keeps it.
-    pub(super) number: u64,
+    pub number: u64,
     /// Where the frame stands: the base frame at nought, and a frame entered over another one past it.
-    pub(super) depth: usize,
+    pub depth: usize,
     /// The local frame this one was entered over, as it stood: `None` for the base frame and for the outermost local frame.
     beneath: Option<Rc<Frame>>,
     /// A frame further beneath, which reaching a depth takes where it does not pass the depth: chosen as Myers' applicative random-access stack chooses it, so that reaching any depth takes a logarithm of the distance ([`at`]).
@@ -302,31 +302,31 @@ pub(crate) struct Frame {
     /// The nearest frame beneath that is an arm refining its scrutinee to a case.
     armed_beneath: Option<Rc<Frame>>,
     /// Every name the local frames through this one assume, at its innermost binding — or, for the base frame, the names it assumes itself.
-    pub(super) assumptions: Persistent<Free, Binding>,
+    pub assumptions: Persistent<Free, Binding>,
     /// Every name the local frames through this one define, at its innermost definition — or the base frame's own.
-    pub(super) definitions: Recorded<Free, DefEntry>,
+    pub definitions: Recorded<Free, DefEntry>,
     /// Whether this frame defines a name itself, which its leaving reports.
-    pub(super) defines: bool,
+    pub defines: bool,
     /// The locals of the local frames through this one in binding order, a name bound twice at both places — or the base frame's own.
-    pub(super) locals: Ordered<(Free, Term)>,
+    pub locals: Ordered<(Free, Term)>,
     /// The place the next local takes, and the first place this frame bound itself.
     next_local: i64,
     first_local: i64,
     /// Each name the local frames through this one bind, once, at its innermost binding and in binding order, beside the identity spine over them: what a metavariable born where this frame is innermost is born over, shared, so a birth costs nothing more than the one before it. The base frame keeps neither, its names being no metavariable's binders.
     ///
     /// One entry per name: an arm assumes a generalized hypothesis again under its case-specialized type (`retype_locals`), and a telescope holding a name twice would give every metavariable born there a spine with a repeated argument, which `Convert::solve` cannot invert. The innermost binding is kept, which keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was generalized with it and bound again after it.
-    pub(super) telescope: BirthTelescope,
-    pub(super) spine: MetavarSpine,
+    pub telescope: BirthTelescope,
+    pub spine: MetavarSpine,
     /// How many times the local frames through this one bound a name again or replaced its type: two frames over one chain that count alike bind every name the frame beneath both binds as it does ([`Frames::binds_as`](super::Frames::binds_as)).
-    pub(super) rebound: usize,
+    pub rebound: usize,
     /// The `use`-plicity binders among the locals, in binding order: resolution's search space, scanned innermost first.
-    pub(super) witnesses: Ordered<(Free, Term)>,
+    pub witnesses: Ordered<(Free, Term)>,
     next_witness: i64,
     /// Counterfactual match-arm refinements of a variable (`refine_head`), kept beside the definitions but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
-    pub(super) refinements: Recorded<Free, Term>,
-    pub(super) refinement_projections: Recorded<Projected, ProjectionEntry>,
+    pub refinements: Recorded<Free, Term>,
+    pub refinement_projections: Recorded<Projected, ProjectionEntry>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
-    pub(super) refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
+    pub refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
     /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration and the exit of an inner frame leave it alone, and it is forgotten with its frame and where its key is registered again; otherwise it stands while what it read of the rest does, which it is filed with ([`Footing`]): the solutions committed when it settled, all of them while it held an unsolved metavariable, the levels where it holds a universe metavariable, the answers it was given where it asked a question, and the definitions in view. A footing is read against the stores rather than walked by them, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts.
@@ -334,29 +334,29 @@ pub(crate) struct Frame {
     /// **It is the frame's, behind a cell.** The live context and every judgment that stands on the frame read one memo and settle a key once between them: a spelling rests on the frames below its own, and a frame stands on the same ones wherever it is held.
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
-    pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
+    pub scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///
     /// **It rests on the refinements it read, and on the deepest frame it read.** Every settlement of such an entry withholds the frames from its entry's inwards and reads the refinements of this frame and the frames beneath, which hold still while this one registers nothing more: a registration, and an equation withheld, land in the innermost frame and forget what is kept here. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the deepest frame it read ([`Prefix`], `Frames::begin_reads`) and answers only while that frame still stands, and with a footing that reads every part, since its reducts are many.
     ///
     /// **Shared by the frame's copies**, which the prefix tells apart where a stand holds one.
-    pub(super) settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
+    pub settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
     /// Why the innermost arm through this frame is never taken, where it is an arm its scrutinee's indices rule out. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to read ([`HeldFrames::dead_arm`]).
-    pub(super) dead_arm: Option<Rc<DeadArm>>,
+    pub dead_arm: Option<Rc<DeadArm>>,
     /// The guard and the case of the arm the frame is, where it is an arm that refines its scrutinee to a case — `None` for every other frame. Whether a value reaches such an arm is found by reducing its guard, which nothing does where the arm opens: it is asked where an error leaves the arm, and where a bound nothing discharges under it is given up ([`HeldFrames::arms`]).
-    pub(super) arm: Option<(Term, Term)>,
+    pub arm: Option<(Term, Term)>,
     /// Whether this frame or one beneath is a function's body, whose result type is the region a `!` within it sequences in. Known where the body opens, and read where a `!` there is refused, which may be a retry standing on the frame.
-    pub(super) body: bool,
+    pub body: bool,
 }
 
 impl Frame {
     /// The base frame, which persists for the whole elaboration.
-    pub(super) fn base() -> Self {
+    pub fn base() -> Self {
         Self::entered(0, None)
     }
 
     /// The frame entered as `number` over `beneath`, the innermost local frame, where one stands: it carries the scope through `beneath`.
-    pub(super) fn entered(number: u64, beneath: Option<&Rc<Frame>>) -> Self {
+    pub fn entered(number: u64, beneath: Option<&Rc<Frame>>) -> Self {
         let Some(beneath) = beneath else {
             return Self {
                 number,
@@ -425,19 +425,19 @@ impl Frame {
     }
 
     /// The nearest frame beneath that registers a refinement of any kind, where one does.
-    pub(super) fn refined_beneath(&self) -> Option<&Rc<Frame>> {
+    pub fn refined_beneath(&self) -> Option<&Rc<Frame>> {
         self.refined_beneath.as_ref()
     }
 
     /// Whether the frame registers a refinement of any kind.
-    pub(super) fn refined(&self) -> bool {
+    pub fn refined(&self) -> bool {
         !self.refinements.is_empty()
             || !self.refinement_projections.is_empty()
             || !self.refinement_scrutinees.is_empty()
     }
 
     /// How many scrutinee entries this frame and the frames beneath it register.
-    pub(super) fn scrutinees_through(&self) -> usize {
+    pub fn scrutinees_through(&self) -> usize {
         self.scrutinees_beneath + self.refinement_scrutinees.len()
     }
 
@@ -453,7 +453,7 @@ impl Frame {
     }
 
     /// Bind `name` at `type_`, a local after every other.
-    pub(super) fn bind(&mut self, name: Free, type_: Term) {
+    pub fn bind(&mut self, name: Free, type_: Term) {
         let again = self.place(name, &type_);
         match (self.depth > 0, again) {
             (false, _) => {}
@@ -466,7 +466,7 @@ impl Frame {
     }
 
     /// Bind each of `bindings` in order, as [`Frame::bind`] binds one, with the scope restated once where any is a name bound already rather than once for each: what an arm retyping its locals binds.
-    pub(super) fn bind_all(&mut self, bindings: Vec<(Free, Term)>) {
+    pub fn bind_all(&mut self, bindings: Vec<(Free, Term)>) {
         let mut again = false;
         for (name, type_) in &bindings {
             again |= self.place(*name, type_);
@@ -526,14 +526,14 @@ impl Frame {
     }
 
     /// Whether the innermost binding of `name` is this frame's own, rather than a frame's beneath it.
-    pub(super) fn binds_itself(&self, name: &Free) -> bool {
+    pub fn binds_itself(&self, name: &Free) -> bool {
         self.assumptions
             .get(name)
             .is_some_and(|binding| binding.place >= self.first_local)
     }
 
     /// Replace the type of `name`'s innermost binding, at its place among the locals.
-    pub(super) fn rebind(&mut self, name: &Free, type_: &Term) {
+    pub fn rebind(&mut self, name: &Free, type_: &Term) {
         let Some(mut binding) = self.assumptions.get(name).cloned() else {
             return;
         };
@@ -547,7 +547,7 @@ impl Frame {
     }
 
     /// Replace the universe context of `name`'s innermost binding.
-    pub(super) fn set_universes(&mut self, name: &Free, universes: UniverseContext) {
+    pub fn set_universes(&mut self, name: &Free, universes: UniverseContext) {
         if let Some(mut binding) = self.assumptions.get(name).cloned() {
             binding.universes = universes;
             self.assumptions.insert(*name, binding);
@@ -555,7 +555,7 @@ impl Frame {
     }
 
     /// Drop the place among the locals `name`'s innermost binding stands at, where it is bound: a binding about to be made again.
-    pub(super) fn unbind_local(&mut self, name: &Free) {
+    pub fn unbind_local(&mut self, name: &Free) {
         if let Some(binding) = self.assumptions.get(name) {
             let place = binding.place;
             self.locals.remove(place);
@@ -563,7 +563,7 @@ impl Frame {
     }
 
     /// Drop every binding of `name`: its assumption, its definition, and its places among the locals and the witness binders.
-    pub(super) fn unbind(&mut self, name: &Free) {
+    pub fn unbind(&mut self, name: &Free) {
         if let Some(binding) = self.assumptions.remove(name) {
             self.locals.remove(binding.place);
         }
@@ -580,7 +580,7 @@ impl Frame {
     }
 
     /// Join `name` to the witness binders, after every other.
-    pub(super) fn witness(&mut self, name: Free, type_: Term) {
+    pub fn witness(&mut self, name: Free, type_: Term) {
         self.witnesses.insert(self.next_witness, (name, type_));
         self.next_witness += 1;
     }
@@ -633,7 +633,7 @@ fn jump_over(parent: &Rc<Frame>) -> Rc<Frame> {
 }
 
 /// The frame at `depth` beneath or at `frame`, a local frame: `None` past it and at the base frame's depth.
-pub(super) fn at(frame: &Rc<Frame>, depth: usize) -> Option<&Rc<Frame>> {
+pub fn at(frame: &Rc<Frame>, depth: usize) -> Option<&Rc<Frame>> {
     if depth == 0 || depth > frame.depth {
         return None;
     }
@@ -652,7 +652,7 @@ pub(super) fn at(frame: &Rc<Frame>, depth: usize) -> Option<&Rc<Frame>> {
 }
 
 /// The frames through `frame` that register a refinement, innermost first.
-pub(super) fn refined_through(frame: Option<&Rc<Frame>>) -> Through<'_> {
+pub fn refined_through(frame: Option<&Rc<Frame>>) -> Through<'_> {
     fn link(frame: &Frame) -> Option<&Rc<Frame>> {
         frame.refined_beneath.as_ref()
     }
@@ -682,7 +682,7 @@ fn armed_through(frame: Option<&Rc<Frame>>) -> Through<'_> {
 }
 
 /// A walk down one of a frame's links.
-pub(super) struct Through<'f> {
+pub struct Through<'f> {
     next: Option<&'f Rc<Frame>>,
     link: fn(&Frame) -> Option<&Rc<Frame>>,
 }
@@ -698,7 +698,7 @@ impl<'f> Iterator for Through<'f> {
 }
 
 /// Whether every refinement `these` frames register, of every kind, is one `those` register: what containment between two contexts asks, since a solution resting on a guard is scoped to the arm the guard opens. Asked entry by entry, a frame the two share answering for itself. Each side is the frames that register a refinement.
-pub(super) fn refinements_within(these: &[&Frame], those: &[&Frame]) -> bool {
+pub fn refinements_within(these: &[&Frame], those: &[&Frame]) -> bool {
     these
         .iter()
         .filter(|frame| !those.iter().any(|other| ptr::eq(**frame, *other)))
@@ -716,7 +716,7 @@ pub(super) fn refinements_within(these: &[&Frame], those: &[&Frame]) -> bool {
 }
 
 /// Whether `live`, the innermost local frame that stands, stands over the frames `held` ends in: at `held`'s depth stands the same frame, by its number, with the refinements it had where it was held, and so beneath it. What is added past them, binders and definitions, is not asked about here.
-pub(super) fn stand(live: Option<&Rc<Frame>>, held: Option<&Rc<Frame>>) -> bool {
+pub fn stand(live: Option<&Rc<Frame>>, held: Option<&Rc<Frame>>) -> bool {
     let Some(mut held) = held else {
         return true;
     };
@@ -745,7 +745,7 @@ pub(super) fn stand(live: Option<&Rc<Frame>>, held: Option<&Rc<Frame>>) -> bool 
 ///
 /// The base frame is the elaboration's and is never held: what waits with no local frame standing holds none.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct HeldFrames(Option<Rc<Frame>>);
+pub struct HeldFrames(Option<Rc<Frame>>);
 
 impl HeldFrames {
     pub(super) fn of(innermost: Option<&Rc<Frame>>) -> Self {
@@ -765,43 +765,43 @@ impl HeldFrames {
     }
 
     /// Whether a frame held binds `name` as a local: whether it is a binder of the telescope a metavariable born where the frames were held is born over.
-    pub(crate) fn binds_locally(&self, name: &Free) -> bool {
+    pub fn binds_locally(&self, name: &Free) -> bool {
         self.0
             .as_ref()
             .is_some_and(|frame| frame.assumptions.contains_key(name))
     }
 
     /// Whether no frame is held: what waits where no local frame stood.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.0.is_none()
     }
 
     /// Whether a frame held registers a refinement of any kind: the residual-constraint report notes it, and the caches are told of a judgment that stands on one.
-    pub(crate) fn refined(&self) -> bool {
+    pub fn refined(&self) -> bool {
         refined_through(self.0.as_ref()).next().is_some()
     }
 
     /// Whether a frame held binds a local: what a judgment standing on these reads that the base frame does not hold.
-    pub(crate) fn binds(&self) -> bool {
+    pub fn binds(&self) -> bool {
         self.0
             .as_ref()
             .is_some_and(|frame| !frame.locals.is_empty())
     }
 
     /// The `use`-plicity binders the frames hold, outermost first: the reader position a report about a metavariable born under them is spelled for.
-    pub(crate) fn witnesses(&self) -> impl Iterator<Item = &(Free, Term)> {
+    pub fn witnesses(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.0
             .iter()
             .flat_map(|frame| frame.witnesses.iter().map(|(_, witness)| witness))
     }
 
     /// Why the innermost arm among the frames is never taken, where its scrutinee's indices rule one out: an implicit born there and never solved is reported with it once the arm has closed.
-    pub(crate) fn dead_arm(&self) -> Option<&Rc<DeadArm>> {
+    pub fn dead_arm(&self) -> Option<&Rc<DeadArm>> {
         self.0.as_ref()?.dead_arm.as_ref()
     }
 
     /// The arms among the frames that refine a scrutinee to a case, innermost first: each with its guard and its case, and the frames as far as its own, which are the ones its guard is read under.
-    pub(crate) fn arms(&self) -> Vec<(HeldFrames, Term, Term)> {
+    pub fn arms(&self) -> Vec<(HeldFrames, Term, Term)> {
         armed_through(self.0.as_ref())
             .filter_map(|frame| {
                 let (guard, case) = frame.arm.as_ref()?;
@@ -812,14 +812,14 @@ impl HeldFrames {
     }
 
     /// Whether every refinement these frames register is one `other`'s register: what containment between two birth contexts asks beside their names.
-    pub(crate) fn refinements_within(&self, other: &HeldFrames) -> bool {
+    pub fn refinements_within(&self, other: &HeldFrames) -> bool {
         refinements_within(&self.refined_frames(), &other.refined_frames())
     }
 
     /// The frames both hold, outermost first for as far as they are the same frames, each as `self` holds it: what a metavariable is restricted to when a solution born under `other` embeds it, `self` being the earlier of the two births, whose frames are the ones nothing was written to since.
     ///
     /// Two frames at one depth that bear one number stand over the same frames, so the frames agree up to a depth and differ past it, and the depth is found by halving.
-    pub(crate) fn shared_with(&self, other: &HeldFrames) -> HeldFrames {
+    pub fn shared_with(&self, other: &HeldFrames) -> HeldFrames {
         let (Some(mine), Some(theirs)) = (&self.0, &other.0) else {
             return Self::default();
         };
@@ -841,7 +841,7 @@ impl HeldFrames {
     }
 
     /// The frames held beneath the one numbered as `frame` is, the innermost that stands: what a metavariable born in a block is restricted to where the block ends. Every frame held, where none is that one.
-    pub(crate) fn beneath(&self, frame: &Frame) -> HeldFrames {
+    pub(super) fn beneath(&self, frame: &Frame) -> HeldFrames {
         let Some(held) = &self.0 else {
             return Self::default();
         };

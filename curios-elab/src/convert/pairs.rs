@@ -18,7 +18,7 @@ use {
 ///
 /// **Compared and hashed in what two chains do not share.** A problem hands its chain on to every problem it poses, so two chains are most often one allocation, and each link keeps the hash of the chain from it outward: a chain is a key at the cost of its innermost link, however long the walk that built it.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Pairs(Option<Rc<Unfolded>>);
+pub struct Pairs(Option<Rc<Unfolded>>);
 
 #[derive(Debug)]
 struct Unfolded {

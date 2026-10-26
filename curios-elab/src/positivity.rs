@@ -14,7 +14,7 @@ use {
 /// Runs on a published declaration, so the telescopes the analysis reads are final and meta-free, and over that declaration's entries alone: a group's formers are one item, so the families that name one another are analyzed together. Anything the walk reaches outside them belongs to a declaration that finished before this one — a predecessor unit's, or one of this unit that this one reads — whose vector was written as it was published and answers from this context's registry. Sound because a finished declaration cannot mention this one, so no cycle crosses the boundary.
 ///
 /// The vector is written here and nowhere else: no pass over a unit decides it again, and a recompile leaves a reused declaration's as its baseline published it.
-pub(crate) fn decide_polarities(context: &mut Context, published: &Published) -> Result<(), Error> {
+pub fn decide_polarities(context: &mut Context, published: &Published) -> Result<(), Error> {
     if published.induct_decls.is_empty() && published.struct_decls.is_empty() {
         return Ok(());
     }

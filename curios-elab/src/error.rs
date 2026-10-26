@@ -5,8 +5,8 @@ use display::*;
 mod tests;
 
 use {
-    super::{Context, Erased, ErasedNames, HeldFrames, Pending, Refusal, written},
-    curios_analysis::DeclaredPart,
+    super::{Context, ErasedNames, HeldFrames, Pending, Refusal, written},
+    curios_analysis::{DeclaredPart, Erased},
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
         Free, Global, Islands, Item, Level, Lexicon, Module, Places, Polarity, ReaderNames,
@@ -56,7 +56,7 @@ pub struct ReaderScope {
 
 impl ReaderScope {
     /// The scope of a judgment standing in `frames`, `witnesses` its witness binders.
-    pub(crate) fn held(witnesses: Vec<Free>, frames: HeldFrames) -> Self {
+    pub fn held(witnesses: Vec<Free>, frames: HeldFrames) -> Self {
         Self {
             witnesses: Rc::from(witnesses),
             frames: Some(frames),
@@ -1005,10 +1005,7 @@ pub enum Error {
 
 impl Error {
     /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports what the term did; naming it is this crate's job, which is why the conversion lives on [`Error`] rather than on the core failure. The `exhausted` callback lets each caller decide what a spent budget reports — the term being reduced, or the pair being compared — and is handed the refusal to keep.
-    pub(crate) fn from_reduce(
-        error: ReduceError,
-        exhausted: impl FnOnce(ReduceError) -> Error,
-    ) -> Error {
+    pub fn from_reduce(error: ReduceError, exhausted: impl FnOnce(ReduceError) -> Error) -> Error {
         match error {
             refusal @ ReduceError::Exhausted { .. } => exhausted(refusal),
             ReduceError::BytesGetOutOfBounds { len, index, extent } => {
@@ -1044,14 +1041,14 @@ impl Error {
         }
     }
 
-    pub(crate) fn reduce_exhausted<T: Into<Term>>(term: T, refusal: ReduceError) -> Self {
+    pub fn reduce_exhausted<T: Into<Term>>(term: T, refusal: ReduceError) -> Self {
         Self::ReduceExhausted {
             term: Box::new(term.into()),
             refusal,
         }
     }
 
-    pub(crate) fn convert_exhausted<T: Into<Term>, U: Into<Term>>(
+    pub fn convert_exhausted<T: Into<Term>, U: Into<Term>>(
         this: T,
         that: U,
         refusal: ReduceError,
@@ -1063,7 +1060,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn type_mismatch<U: Into<Term>, V: Into<Term>>(inferred: U, expected: V) -> Self {
+    pub fn type_mismatch<U: Into<Term>, V: Into<Term>>(inferred: U, expected: V) -> Self {
         Self::TypeMismatch {
             inferred: Box::new(inferred.into()),
             expected: Box::new(expected.into()),
@@ -1073,7 +1070,7 @@ impl Error {
     }
 
     /// Two terms a type states at one position, which differ: `written` the program's, `expected` what the type it is held to states there.
-    pub(crate) fn terms_differ<U: Into<Term>, V: Into<Term>>(written: U, expected: V) -> Self {
+    pub fn terms_differ<U: Into<Term>, V: Into<Term>>(written: U, expected: V) -> Self {
         Self::TypeMismatch {
             inferred: Box::new(written.into()),
             expected: Box::new(expected.into()),
@@ -1083,7 +1080,7 @@ impl Error {
     }
 
     /// This report with what conversion declined to compare on the way to it, where it is a type mismatch; any other report says what it says already.
-    pub(crate) fn declined(self, declined: Option<Declined>) -> Self {
+    pub fn declined(self, declined: Option<Declined>) -> Self {
         match self {
             Self::TypeMismatch {
                 inferred,
@@ -1100,11 +1097,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn rejected_candidate<T: Into<Term>>(
-        watched: Watched,
-        candidate: T,
-        error: Error,
-    ) -> Self {
+    pub fn rejected_candidate<T: Into<Term>>(watched: Watched, candidate: T, error: Error) -> Self {
         Self::RejectedCandidate {
             watched,
             candidate: Box::new(candidate.into()),
@@ -1112,28 +1105,28 @@ impl Error {
         }
     }
 
-    pub(crate) fn stranded_sequencing<V: Into<Term>>(sequenced: Option<Term>, region: V) -> Self {
+    pub fn stranded_sequencing<V: Into<Term>>(sequenced: Option<Term>, region: V) -> Self {
         Self::StrandedSequencing {
             sequenced: sequenced.map(Box::new),
             region: Box::new(region.into()),
         }
     }
 
-    pub(crate) fn unembedded_action<U: Into<Term>, V: Into<Term>>(action: U, expected: V) -> Self {
+    pub fn unembedded_action<U: Into<Term>, V: Into<Term>>(action: U, expected: V) -> Self {
         Self::UnembeddedAction {
             action: Box::new(action.into()),
             expected: Box::new(expected.into()),
         }
     }
 
-    pub(crate) fn postponed_check<U: Into<Term>>(expected: U, watching: Vec<Watched>) -> Self {
+    pub fn postponed_check<U: Into<Term>>(expected: U, watching: Vec<Watched>) -> Self {
         Self::PostponedCheck {
             expected: Box::new(expected.into()),
             watching,
         }
     }
 
-    pub(crate) fn postponed_conversion<T: Into<Term>, U: Into<Term>>(
+    pub fn postponed_conversion<T: Into<Term>, U: Into<Term>>(
         this: T,
         that: U,
         watching: Vec<Watched>,
@@ -1147,7 +1140,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn ambiguous_spines<T: Into<Term>, U: Into<Term>>(
+    pub fn ambiguous_spines<T: Into<Term>, U: Into<Term>>(
         watched: Watched,
         one: T,
         another: U,
@@ -1159,25 +1152,25 @@ impl Error {
         }
     }
 
-    pub(crate) fn bang_region_undetermined() -> Self {
+    pub fn bang_region_undetermined() -> Self {
         Self::BangRegionUndetermined
     }
 
-    pub(crate) fn bang_region_not_a_monad<U: Into<Term>>(region: U, owner: RegionOwner) -> Self {
+    pub fn bang_region_not_a_monad<U: Into<Term>>(region: U, owner: RegionOwner) -> Self {
         Self::BangRegionNotAMonad {
             region: Box::new(region.into()),
             owner,
         }
     }
 
-    pub(crate) fn not_a_function<U: Into<Term>, V: Into<Term>>(head_type: U, reduced: V) -> Self {
+    pub fn not_a_function<U: Into<Term>, V: Into<Term>>(head_type: U, reduced: V) -> Self {
         Self::NotAFunction {
             head_type: Box::new(head_type.into()),
             reduced: Box::new(reduced.into()),
         }
     }
 
-    pub(crate) fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
+    pub fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotAFunctionType {
             expected: Box::new(expected.into()),
             argument: None,
@@ -1185,7 +1178,7 @@ impl Error {
     }
 
     /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through an extent wrapper if one is already on.
-    pub(crate) fn at_argument(self, site: ArgumentSite) -> Self {
+    pub fn at_argument(self, site: ArgumentSite) -> Self {
         match self {
             Self::NotAFunctionType {
                 expected,
@@ -1206,52 +1199,48 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_tuple<U: Into<Term>>(head_type: U) -> Self {
+    pub fn not_a_tuple<U: Into<Term>>(head_type: U) -> Self {
         Self::NotATuple {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub(crate) fn not_a_tuple_type<U: Into<Term>>(expected: U, unit_for_a_type: bool) -> Self {
+    pub fn not_a_tuple_type<U: Into<Term>>(expected: U, unit_for_a_type: bool) -> Self {
         Self::NotATupleType {
             expected: Box::new(expected.into()),
             unit_for_a_type,
         }
     }
 
-    pub(crate) fn tuple_arity_mismatch(expected: usize, got: usize) -> Self {
+    pub fn tuple_arity_mismatch(expected: usize, got: usize) -> Self {
         Self::TupleArityMismatch { expected, got }
     }
 
-    pub(crate) fn tuple_index_out_of_bounds(index: usize, arity: usize) -> Self {
+    pub fn tuple_index_out_of_bounds(index: usize, arity: usize) -> Self {
         Self::TupleIndexOutOfBounds { index, arity }
     }
 
-    pub(crate) fn unknown_tuple_label(label: String, available: Vec<String>) -> Self {
+    pub fn unknown_tuple_label(label: String, available: Vec<String>) -> Self {
         Self::UnknownTupleLabel { label, available }
     }
 
-    pub(crate) fn duplicate_tuple_label(label: String) -> Self {
+    pub fn duplicate_tuple_label(label: String) -> Self {
         Self::DuplicateTupleLabel { label }
     }
 
-    pub(crate) fn duplicate_induct(name: Global) -> Self {
+    pub fn duplicate_induct(name: Global) -> Self {
         Self::DuplicateInduct { name }
     }
 
-    pub(crate) fn duplicate_struct(name: Global) -> Self {
+    pub fn duplicate_struct(name: Global) -> Self {
         Self::DuplicateStruct { name }
     }
 
-    pub(crate) fn duplicate_concept(name: Global) -> Self {
+    pub fn duplicate_concept(name: Global) -> Self {
         Self::DuplicateConcept { name }
     }
 
-    pub(crate) fn tuple_field_name_mismatch(
-        written: String,
-        expected: String,
-        position: usize,
-    ) -> Self {
+    pub fn tuple_field_name_mismatch(written: String, expected: String, position: usize) -> Self {
         Self::TupleFieldNameMismatch {
             written,
             expected,
@@ -1259,31 +1248,31 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_nat_type<U: Into<Term>>(head_type: U) -> Self {
+    pub fn not_nat_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotNatType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub(crate) fn not_bool_type<U: Into<Term>>(head_type: U) -> Self {
+    pub fn not_bool_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBoolType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub(crate) fn not_list_type<U: Into<Term>>(head_type: U) -> Self {
+    pub fn not_list_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotListType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub(crate) fn not_bytes_type<U: Into<Term>>(head_type: U) -> Self {
+    pub fn not_bytes_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBytesType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub(crate) fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
+    pub fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
         Self::WrongNumberOfArguments {
             expected,
             got,
@@ -1292,11 +1281,7 @@ impl Error {
     }
 
     /// [`Error::wrong_number_of_arguments`] for a call written with arguments past its list, `answers_a_function` saying whether what the call answers is itself a function.
-    pub(crate) fn arguments_past_the_list(
-        expected: usize,
-        got: usize,
-        answers_a_function: bool,
-    ) -> Self {
+    pub fn arguments_past_the_list(expected: usize, got: usize, answers_a_function: bool) -> Self {
         Self::WrongNumberOfArguments {
             expected,
             got,
@@ -1304,11 +1289,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn surplus_func_binders(surplus: usize, slots: usize) -> Self {
+    pub fn surplus_func_binders(surplus: usize, slots: usize) -> Self {
         Self::SurplusFuncBinders { surplus, slots }
     }
 
-    pub(crate) fn unknown_match_constructor(
+    pub fn unknown_match_constructor(
         type_name: Global,
         tag: String,
         constructors: Vec<String>,
@@ -1320,38 +1305,38 @@ impl Error {
         }
     }
 
-    pub(crate) fn match_case_missing(type_name: Global, tag: String) -> Self {
+    pub fn match_case_missing(type_name: Global, tag: String) -> Self {
         Self::MatchCaseMissing { type_name, tag }
     }
 
-    pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U, no_arms: bool) -> Self {
+    pub fn not_a_induct_type<U: Into<Term>>(head_type: U, no_arms: bool) -> Self {
         Self::NotAInductType {
             head_type: Box::new(head_type.into()),
             no_arms,
         }
     }
 
-    pub(crate) fn large_elim_of_prop(name: Global) -> Self {
+    pub fn large_elim_of_prop(name: Global) -> Self {
         Self::LargeElimOfProp { name }
     }
 
-    pub(crate) fn sort_decided(prop: bool, at_decider: bool) -> Self {
+    pub fn sort_decided(prop: bool, at_decider: bool) -> Self {
         Self::SortDecided { prop, at_decider }
     }
 
-    pub(crate) fn sort_decided_twice(prop: bool, other: Option<Extent>) -> Self {
+    pub fn sort_decided_twice(prop: bool, other: Option<Extent>) -> Self {
         Self::SortDecidedTwice { prop, other }
     }
 
-    pub(crate) fn too_many_sorts(stated: usize) -> Self {
+    pub fn too_many_sorts(stated: usize) -> Self {
         Self::TooManySorts { stated }
     }
 
-    pub(crate) fn record_over_two_sorts() -> Self {
+    pub fn record_over_two_sorts() -> Self {
         Self::RecordOverTwoSorts
     }
 
-    pub(crate) fn informative_prop_struct<F: Into<String>, T: Into<Term>>(
+    pub fn informative_prop_struct<F: Into<String>, T: Into<Term>>(
         name: Global,
         field: F,
         field_type: T,
@@ -1363,7 +1348,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_strictly_positive<T: Into<Term>>(
+    pub fn not_strictly_positive<T: Into<Term>>(
         name: Global,
         part: DeclaredPart,
         site_type: T,
@@ -1377,13 +1362,13 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
+    pub fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
         Self::NotAStructType {
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn struct_arity_mismatch(name: Global, expected: usize, got: usize) -> Self {
+    pub fn struct_arity_mismatch(name: Global, expected: usize, got: usize) -> Self {
         Self::StructArityMismatch {
             name,
             expected,
@@ -1391,7 +1376,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn wrong_number_of_fields(
+    pub fn wrong_number_of_fields(
         name: Global,
         expected: usize,
         got: usize,
@@ -1408,15 +1393,11 @@ impl Error {
     }
 
     /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.
-    pub(crate) fn unknown_declaration(name: Global) -> Self {
+    pub fn unknown_declaration(name: Global) -> Self {
         Self::UnknownDeclaration { name }
     }
 
-    pub(crate) fn unknown_struct_field(
-        name: Global,
-        label: String,
-        available: Vec<String>,
-    ) -> Self {
+    pub fn unknown_struct_field(name: Global, label: String, available: Vec<String>) -> Self {
         Self::UnknownStructField {
             name,
             label,
@@ -1424,53 +1405,49 @@ impl Error {
         }
     }
 
-    pub(crate) fn use_entry_outside_concept(name: Global) -> Self {
+    pub fn use_entry_outside_concept(name: Global) -> Self {
         Self::UseEntryOutsideConcept { name }
     }
 
-    pub(crate) fn spread_not_first(name: Global) -> Self {
+    pub fn spread_not_first(name: Global) -> Self {
         Self::SpreadNotFirst { name }
     }
 
-    pub(crate) fn multiple_spreads(name: Global) -> Self {
+    pub fn multiple_spreads(name: Global) -> Self {
         Self::MultipleSpreads { name }
     }
 
-    pub(crate) fn spread_base_type_mismatch<T: Into<Term>>(name: Global, found: T) -> Self {
+    pub fn spread_base_type_mismatch<T: Into<Term>>(name: Global, found: T) -> Self {
         Self::SpreadBaseTypeMismatch {
             name,
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn unlabeled_spread_override(name: Global) -> Self {
+    pub fn unlabeled_spread_override(name: Global) -> Self {
         Self::UnlabeledSpreadOverride { name }
     }
 
-    pub(crate) fn spread_override_out_of_order(
-        name: Global,
-        label: String,
-        order: Vec<String>,
-    ) -> Self {
+    pub fn spread_override_out_of_order(name: Global, label: String, order: Vec<String>) -> Self {
         Self::SpreadOverrideOutOfOrder { name, label, order }
     }
 
-    pub(crate) fn private_field<F: Into<String>>(name: Global, field: F) -> Self {
+    pub fn private_field<F: Into<String>>(name: Global, field: F) -> Self {
         Self::PrivateField {
             name,
             field: field.into(),
         }
     }
 
-    pub(crate) fn private_representation(name: Global) -> Self {
+    pub fn private_representation(name: Global) -> Self {
         Self::PrivateRepresentation { name }
     }
 
-    pub(crate) fn no_derivation(concept: Global) -> Self {
+    pub fn no_derivation(concept: Global) -> Self {
         Self::NoDerivation { concept }
     }
 
-    pub(crate) fn underivable<T: Into<Term>>(concept: Global, key: T, reason: Underivable) -> Self {
+    pub fn underivable<T: Into<Term>>(concept: Global, key: T, reason: Underivable) -> Self {
         Self::Underivable {
             concept,
             key: Box::new(key.into()),
@@ -1478,11 +1455,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn derive_outside_witness() -> Self {
+    pub fn derive_outside_witness() -> Self {
         Self::DeriveOutsideWitness
     }
 
-    pub(crate) fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {
+    pub fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {
         Self::CtorArityMismatch {
             atom: atom.into(),
             expected,
@@ -1490,21 +1467,21 @@ impl Error {
         }
     }
 
-    pub(crate) fn unbound_variable<T: Into<Term>>(var: T, why: Option<&Unresolved>) -> Self {
+    pub fn unbound_variable<T: Into<Term>>(var: T, why: Option<&Unresolved>) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
             why: why.cloned().map(Box::new),
         }
     }
 
-    pub(crate) fn operator_undefined<T: Into<Term>>(symbol: String, type_: T) -> Self {
+    pub fn operator_undefined<T: Into<Term>>(symbol: String, type_: T) -> Self {
         Self::OperatorUndefined {
             symbol,
             type_: Box::new(type_.into()),
         }
     }
 
-    pub(crate) fn uninferred_implicit(
+    pub fn uninferred_implicit(
         callee: Callee,
         binder: Option<String>,
         bound: Term,
@@ -1522,7 +1499,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn implicit_at_other_sort(
+    pub fn implicit_at_other_sort(
         callee: Callee,
         binder: Option<String>,
         given: Term,
@@ -1536,15 +1513,15 @@ impl Error {
         }
     }
 
-    pub(crate) fn domain_never_determined(binder: Option<String>) -> Self {
+    pub fn domain_never_determined(binder: Option<String>) -> Self {
         Self::DomainNeverDetermined { binder }
     }
 
-    pub(crate) fn witness_member_never_stated() -> Self {
+    pub fn witness_member_never_stated() -> Self {
         Self::WitnessMemberNeverStated
     }
 
-    pub(crate) fn hidden_member_out_of_order(
+    pub fn hidden_member_out_of_order(
         written: Plicity,
         slot: Plicity,
         binder: Option<&str>,
@@ -1556,11 +1533,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn hidden_member_without_slot(written: Plicity) -> Self {
+    pub fn hidden_member_without_slot(written: Plicity) -> Self {
         Self::HiddenMemberWithoutSlot { written }
     }
 
-    pub(crate) fn no_witness<T: Into<Term>>(
+    pub fn no_witness<T: Into<Term>>(
         goal: T,
         callee: Callee,
         role: Option<String>,
@@ -1577,7 +1554,7 @@ impl Error {
     }
 
     /// The cycle through the declarations `members`, in source order: each definition of each by its name, and a witness, which has none, by the type it is declared at.
-    pub(crate) fn declaration_cycle(members: &[&Item]) -> Self {
+    pub fn declaration_cycle(members: &[&Item]) -> Self {
         Self::DeclarationCycle {
             members: members
                 .iter()
@@ -1594,11 +1571,7 @@ impl Error {
     }
 
     /// The top-level group `members`, typed `types`, falling into `parts`: each part the positions of its members among `members`, in the order they are written. A member is named as a cycle's is.
-    pub(crate) fn group_apart(
-        members: &[Definition],
-        types: &[Term],
-        parts: &[Vec<usize>],
-    ) -> Self {
+    pub fn group_apart(members: &[Definition], types: &[Term], parts: &[Vec<usize>]) -> Self {
         Self::GroupApart {
             parts: parts
                 .iter()
@@ -1617,7 +1590,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn goal(scope: Vec<(Term, Term)>, goal: Term, solution: Option<Term>) -> Self {
+    pub fn goal(scope: Vec<(Term, Term)>, goal: Term, solution: Option<Term>) -> Self {
         Self::Goal {
             scope,
             goal: Box::new(goal),
@@ -1625,12 +1598,12 @@ impl Error {
         }
     }
 
-    pub(crate) fn goals(reports: Vec<GoalReport>) -> Self {
+    pub fn goals(reports: Vec<GoalReport>) -> Self {
         Self::Goals(reports)
     }
 
     /// `errors` as one error: the member itself when there is one, otherwise a flat [`Error::Batch`] in the given order. `errors` must not be empty — a batch of nothing is not a failure.
-    pub(crate) fn batch(errors: Vec<Error>) -> Self {
+    pub fn batch(errors: Vec<Error>) -> Self {
         let mut members = Vec::with_capacity(errors.len());
         for error in errors {
             match error {
@@ -1668,7 +1641,7 @@ impl Error {
     }
 
     /// A second witness at `key` of `concept`, declared in `second`, where `first` stands: the witness and its declaring module.
-    pub(crate) fn duplicate_witness(
+    pub fn duplicate_witness(
         concept: Global,
         key: WitnessKey,
         first: (Global, Qualifier),
@@ -1685,7 +1658,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn orphan_witness(concept: Global, key: WitnessKey, witness: Qualifier) -> Self {
+    pub fn orphan_witness(concept: Global, key: WitnessKey, witness: Qualifier) -> Self {
         Self::OrphanWitness {
             concept,
             key,
@@ -1693,7 +1666,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+    pub fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
         goal: T,
         first: U,
         second: V,
@@ -1705,25 +1678,25 @@ impl Error {
         }
     }
 
-    pub(crate) fn cyclic_superclass(concept: Global) -> Self {
+    pub fn cyclic_superclass(concept: Global) -> Self {
         Self::CyclicSuperclass { concept }
     }
 
-    pub(crate) fn unknown_superclass<T: Into<Term>>(concept: Global, target: T) -> Self {
+    pub fn unknown_superclass<T: Into<Term>>(concept: Global, target: T) -> Self {
         Self::UnknownSuperclass {
             concept,
             target: Box::new(target.into()),
         }
     }
 
-    pub(crate) fn invalid_witness_head<T: Into<Term>>(position: usize, head: T) -> Self {
+    pub fn invalid_witness_head<T: Into<Term>>(position: usize, head: T) -> Self {
         Self::InvalidWitnessHead {
             position,
             head: Box::new(head.into()),
         }
     }
 
-    pub(crate) fn witness_key_not_spelled(
+    pub fn witness_key_not_spelled(
         concept: Global,
         key: WitnessKey,
         spelled: Option<WitnessKey>,
@@ -1735,48 +1708,48 @@ impl Error {
         }
     }
 
-    pub(crate) fn parameterless_witness_concept(concept: Global) -> Self {
+    pub fn parameterless_witness_concept(concept: Global) -> Self {
         Self::ParameterlessWitnessConcept { concept }
     }
 
-    pub(crate) fn witness_not_a_concept<T: Into<Term>>(found: T) -> Self {
+    pub fn witness_not_a_concept<T: Into<Term>>(found: T) -> Self {
         Self::WitnessNotAConcept {
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn use_parameter_not_a_concept<T: Into<Term>>(found: T, proposition: bool) -> Self {
+    pub fn use_parameter_not_a_concept<T: Into<Term>>(found: T, proposition: bool) -> Self {
         Self::UseParameterNotAConcept {
             found: Box::new(found.into()),
             proposition,
         }
     }
 
-    pub(crate) fn implicit_concept_member_unfillable<T: Into<Term>>(found: T) -> Self {
+    pub fn implicit_concept_member_unfillable<T: Into<Term>>(found: T) -> Self {
         Self::ImplicitConceptMemberUnfillable {
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn non_regular_witness_premise<T: Into<Term>>(premise: T) -> Self {
+    pub fn non_regular_witness_premise<T: Into<Term>>(premise: T) -> Self {
         Self::NonRegularWitnessPremise {
             premise: Box::new(premise.into()),
         }
     }
 
-    pub(crate) fn nat_case_key_overflow(value: Natural) -> Self {
+    pub fn nat_case_key_overflow(value: Natural) -> Self {
         Self::NatCaseKeyOverflow { value }
     }
 
     /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
-    pub(crate) fn evaluates_itself(member: Free) -> Self {
+    pub fn evaluates_itself(member: Free) -> Self {
         Self::EvaluationCycle {
             steps: vec![(ErasedName::Named(member), None)],
         }
     }
 
     /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `extents` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
-    pub(crate) fn refused_by_verifier(
+    pub fn refused_by_verifier(
         error: curios_ersd::VerifyError,
         extents: &BTreeMap<curios_ersd::ValueId, Extent>,
         names: &ErasedNames,
@@ -1817,11 +1790,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn motive_binder_count(
-        name: Option<Global>,
-        expected: usize,
-        written: usize,
-    ) -> Self {
+    pub fn motive_binder_count(name: Option<Global>, expected: usize, written: usize) -> Self {
         Self::MotiveBinderCount {
             name,
             expected,
@@ -1829,12 +1798,12 @@ impl Error {
         }
     }
 
-    pub(crate) fn missing_arm_not_impossible(tag: Atom) -> Self {
+    pub fn missing_arm_not_impossible(tag: Atom) -> Self {
         Self::MissingArmNotImpossible { tag }
     }
 
     /// Name the declaration this error arose in, by the names it declares. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution, and a batch's members already carry theirs.
-    pub(crate) fn in_declaration(self, names: impl IntoIterator<Item = Global>) -> Self {
+    pub fn in_declaration(self, names: impl IntoIterator<Item = Global>) -> Self {
         match self {
             Self::InDeclaration { .. } | Self::Batch(_) => self,
             error => Self::InDeclaration {
@@ -1845,7 +1814,7 @@ impl Error {
     }
 
     /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, or one a guard gives, found once an error is raised or a bound given up.
-    pub(crate) fn in_dead_arm(self, dead: &DeadArm) -> Self {
+    pub fn in_dead_arm(self, dead: &DeadArm) -> Self {
         Self::InUnreachableArm {
             dead: Box::new(dead.clone()),
             error: Box::new(self),
@@ -1863,7 +1832,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn at(self, extent: Extent) -> Self {
+    pub fn at(self, extent: Extent) -> Self {
         match self {
             Self::Located { .. } | Self::Batch(_) => self,
             error => Self::Located {
@@ -1873,7 +1842,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn at_opt(self, extent: Option<Extent>) -> Self {
+    pub fn at_opt(self, extent: Option<Extent>) -> Self {
         match extent {
             Some(extent) => self.at(extent),
             None => self,
@@ -1881,7 +1850,7 @@ impl Error {
     }
 
     /// Record where this error arose, as its reader stands there. Innermost wins, as for [`Error::at`], and the record goes under a location rather than over it, so the two wrappers stamped together as an error unwinds each stay single. A scope that says nothing records nothing.
-    pub(crate) fn in_scope(self, scope: ReaderScope) -> Self {
+    pub fn in_scope(self, scope: ReaderScope) -> Self {
         if scope.is_empty() {
             return self;
         }
@@ -1933,7 +1902,7 @@ impl Error {
     }
 
     /// This error as it is reported: its reports built ([`Error::shown`]), then every term it shows written as a program writes it where its reader stands ([`written`](fn@crate::written)), standing on the frames it arose in, and those frames let go. What a refusal is made into where it is final, before the context it arose in is undone; written after it is built, since what a pending report shows is only a term once it is. A batch is settled member by member, each where its own reader stands.
-    pub(crate) fn settled(self, context: &mut Context) -> Self {
+    pub fn settled(self, context: &mut Context) -> Self {
         if let Self::Batch(errors) = self {
             return Self::Batch(
                 errors
@@ -2191,7 +2160,7 @@ impl Error {
     }
 
     /// The error under every wrapper.
-    pub(crate) fn unwrapped(&self) -> &Self {
+    pub fn unwrapped(&self) -> &Self {
         match self {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }

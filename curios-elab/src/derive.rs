@@ -38,7 +38,7 @@ fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivatio
 }
 
 /// Check a `Derive` transient against its expected type, writing the body the declaration asked for.
-pub(crate) fn elaborate_derive(
+pub fn elaborate_derive(
     context: &mut Context,
     term: &Term,
     mode: Mode,

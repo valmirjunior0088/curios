@@ -10,24 +10,24 @@ use {
 
 /// A birth telescope. See the module documentation.
 #[derive(Clone, Default)]
-pub(crate) struct BirthTelescope(Ordered<(Free, Term)>);
+pub struct BirthTelescope(Ordered<(Free, Term)>);
 
 impl BirthTelescope {
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// The binders in binding order, each with its type.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &(Free, Term)> + Clone {
+    pub fn iter(&self) -> impl Iterator<Item = &(Free, Term)> + Clone {
         self.0.iter().map(|(_, binder)| binder)
     }
 
     /// The first `count` binders: what a metavariable born before the rest were bound is re-expressed over.
-    pub(crate) fn prefix(&self, count: usize) -> Self {
+    pub fn prefix(&self, count: usize) -> Self {
         self.iter().take(count).cloned().collect::<Vec<_>>().into()
     }
 

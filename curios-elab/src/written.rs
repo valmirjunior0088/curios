@@ -28,7 +28,7 @@ use {
 };
 
 /// `term` as a program writes it for a reader standing in the frames the context stands in: see the module documentation. Infallible: a question that cannot be answered leaves its witness as it stands.
-pub(crate) fn written(context: &mut Context, term: &Term) -> Term {
+pub fn written(context: &mut Context, term: &Term) -> Term {
     Writing {
         entered: Vec::new(),
         layers: vec![HashMap::new()],

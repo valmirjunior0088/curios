@@ -21,7 +21,7 @@ use {
 
 /// Which parts of one name elaborated again came out as the baseline holds them: what a kept declaration's question about the name is answered by.
 #[derive(Clone, Copy, Default)]
-pub(crate) struct Same {
+pub struct Same {
     signature: bool,
     body: bool,
     kind: bool,
@@ -35,7 +35,7 @@ pub(crate) struct Same {
 
 impl Same {
     /// The parts of the definition at `member` of `made` that are those of `held`, the baseline's item under the same name. The registry entries the name keys are the caller's to compare ([`Same::keying`]).
-    pub(crate) fn of(made: &Item, held: &Item, member: usize) -> Self {
+    pub fn of(made: &Item, held: &Item, member: usize) -> Self {
         match (made, held) {
             (Item::Let(made), Item::Let(held)) => Self::of_definition(made, held),
             (Item::Rec(made), Item::Rec(held)) => Self::of_member(made, held, member),
@@ -98,7 +98,7 @@ impl Same {
     }
 
     /// These parts, with whether each registry entry the name keys is the baseline's.
-    pub(crate) fn keying(self, induct: bool, struct_: bool, concept: bool) -> Self {
+    pub fn keying(self, induct: bool, struct_: bool, concept: bool) -> Self {
         Self {
             induct,
             struct_,
@@ -108,7 +108,7 @@ impl Same {
     }
 
     /// The parts that did not come out as the baseline holds them: what a reader of one of them must ask again.
-    pub(crate) fn moved(&self) -> Parts {
+    pub fn moved(&self) -> Parts {
         [
             (self.signature, Parts::SIGNATURE),
             (self.body, Parts::BODY),
@@ -126,7 +126,7 @@ impl Same {
     }
 
     /// Whether the part `question` asks is as the baseline holds it.
-    pub(crate) fn answers(&self, question: &Question) -> bool {
+    pub fn answers(&self, question: &Question) -> bool {
         match question {
             Question::Signature(_) => self.signature,
             Question::Body(_) => self.body,
@@ -149,7 +149,7 @@ impl Same {
 /// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
 ///
 /// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what [`spelled_alike`] compares is what the bytes spell; a universe scheme is held by its inequalities, which is what its equality reads ([`UniverseContext::inequalities`]). Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
-pub(crate) fn part_digest(
+pub fn part_digest(
     module: &Module,
     places: &Places,
     question: &Question,
@@ -162,7 +162,7 @@ pub(crate) fn part_digest(
 }
 
 /// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`: what a walk asks of an item it holds in hand, before any module places it.
-pub(crate) fn item_part_digest(
+pub fn item_part_digest(
     item: &Item,
     place: Place,
     question: &Question,
@@ -354,7 +354,7 @@ fn groups_alike(this: &RecItem, that: &RecItem) -> bool {
 }
 
 /// Whether a name keys one registry entry on both sides, compared by `alike`, or none on either.
-pub(crate) fn entries_alike<D>(
+pub fn entries_alike<D>(
     this: Option<&D>,
     that: Option<&D>,
     alike: impl FnOnce(&D, &D) -> bool,
@@ -366,7 +366,7 @@ pub(crate) fn entries_alike<D>(
     }
 }
 
-pub(crate) fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
+pub fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
     this.universe_context == that.universe_context
         && this.module == that.module
         && this.rep_public == that.rep_public
@@ -393,7 +393,7 @@ pub(crate) fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
         )
 }
 
-pub(crate) fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
+pub fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
     this.universe_context == that.universe_context
         && this.module == that.module
         && this.rep_public == that.rep_public
@@ -403,7 +403,7 @@ pub(crate) fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
         && spelled_alike(&this.result_sort, &that.result_sort)
 }
 
-pub(crate) fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
+pub fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
     this.universe_context == that.universe_context
         && this.fields == that.fields
         && this.supers == that.supers

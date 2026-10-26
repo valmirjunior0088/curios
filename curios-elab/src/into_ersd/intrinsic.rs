@@ -12,15 +12,15 @@ use {
 ///
 /// The one narrowing at the `Nat` half of the Core border. A `Nat` *value* crosses whole — the erased carriers are unbounded too, and only materialization in `curios-emit` refuses one the envelope cannot box — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
 ///
-/// `pub(super)` because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
-pub(super) fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
+/// Shared across `into_ersd` because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
+pub fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
     u32::try_from(value)
         .ok()
         .ok_or_else(|| Error::nat_case_key_overflow(value.clone()))
 }
 
 /// One operand an operation computes with, beside what the roster demands of it.
-pub(super) type Demanded<'a> = (&'a Term, Operand);
+pub type Demanded<'a> = (&'a Term, Operand);
 
 /// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`] demands of it.
 ///
@@ -47,7 +47,7 @@ fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] 
 }
 
 /// The type a demand states. A function's is assembled from its halves under binders minted here, the roster having no name source of its own.
-pub(super) fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
+pub fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
     match demand {
         Operand::At(type_) => type_.clone(),
         Operand::Function { domains, codomain } => {
@@ -65,7 +65,7 @@ pub(super) fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
 
 impl Lowering<'_> {
     /// Resolve an outcome through the declaration's ordinary registered layout.
-    pub(super) fn outcome_constructor(
+    pub fn outcome_constructor(
         &mut self,
         context: &mut Retyping,
         family: SyntaxName,
@@ -131,7 +131,7 @@ impl Lowering<'_> {
     /// `body` runs with a fresh block open, so whatever it erases lands inside the thunk rather than at the construction site — which is what makes an `Io` a description: bound once and forced twice, it performs twice, and substituting a definition for its name never changes behavior. Its `Outcome` seals the block, so a diverging body (a process exit) keeps its own terminator instead of returning.
     ///
     /// What belongs inside is the *performance*, not the operands. `IoPure` erases its value eagerly and hands the closure an atom to return; `IoBind` puts the two forces and the continuation's application inside, because those are what must not happen until the description is run (see the `suspension` module).
-    pub(super) fn thunk(
+    pub fn thunk(
         &mut self,
         hint: Option<&str>,
         body: impl FnOnce(&mut Self) -> Result<Outcome, Error>,
@@ -177,7 +177,7 @@ impl Lowering<'_> {
 }
 
 /// Transcribe one intrinsic. Every arm reads its operands, and the type each is erased at, off the roster ([`computed`]), and keeps the operation it binds.
-pub(super) fn erase_intrinsic(
+pub fn erase_intrinsic(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     intrinsic: &Intrinsic,

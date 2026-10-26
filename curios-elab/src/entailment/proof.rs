@@ -31,7 +31,7 @@ use {
 };
 
 /// What writing a certificate came to.
-pub(super) enum Written {
+pub enum Written {
     /// The proof, not yet checked.
     Proof(Term),
     /// A name the proof applies is not in scope: inside `/std`, an item compiled before the vocabulary.
@@ -39,7 +39,7 @@ pub(super) enum Written {
 }
 
 /// The proof `certificate` stands for over `facts`, the goal where there is one, and what its negation states.
-pub(super) fn write(
+pub fn write(
     context: &mut Context,
     facts: &Facts,
     goal: Option<&Target>,

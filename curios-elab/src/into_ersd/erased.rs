@@ -46,7 +46,7 @@ pub struct ErasedItem {
 
 /// How a name is bound, as an item that uses it reads it.
 #[derive(PartialEq)]
-pub(super) enum Export<'a> {
+pub enum Export<'a> {
     /// To nothing at run time: a proof or a type.
     Dropped,
     /// To a constant, which is read where the name is used.
@@ -134,7 +134,7 @@ impl ErasedItem {
     }
 
     /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
-    pub(crate) fn read_digest(&self, name: &Global) -> Result<String, String> {
+    pub fn read_digest(&self, name: &Global) -> Result<String, String> {
         let export = self.export(name).map(|export| match export {
             Export::Dropped => (0u8, None, None),
             Export::Constant(constant) => (1, Some(constant.clone()), None),
@@ -243,7 +243,7 @@ type InductRowRead<'a> = (
 ///
 /// **By the place the unit's module holds each item at** ([`curios_core::Items::places`]), in maps that are persistent: a unit erased over a baseline whose module is a version of the baseline's is the baseline's index with the forms of what it erased again placed again. What is stored names an item by its rank among the unit's items, read off where the unit is filed ([`Ranking`]).
 #[derive(Debug, Clone, Default)]
-pub struct ErasedIndex {
+struct ErasedIndex {
     /// Each item's erased form, by its place.
     items: Ordered<Rc<Form>>,
     /// The place of the item that declares each name.
@@ -254,16 +254,16 @@ pub struct ErasedIndex {
 
 /// An erased unit's index as it is stored: each name by the rank of the item declaring it among the unit's items, and the ranks of the items that compute, ascending.
 #[curios_archive::archived]
-pub struct RankedIndex {
+struct RankedIndex {
     declared: BTreeMap<Global, u32>,
     computing: Vec<u32>,
 }
 
 /// How an erased unit's index is archived: as a [`RankedIndex`], each place given as its item's rank. A unit restored holds its items at their ranks.
-pub struct Ranking;
+struct Ranking;
 
 /// The field adapter: `#[archived_with(Ranked)]`.
-pub type Ranked = curios_archive::Via<Ranking>;
+type Ranked = curios_archive::Via<Ranking>;
 
 impl curios_archive::Proxy<ErasedIndex> for Ranking {
     type Archivable = RankedIndex;
@@ -395,7 +395,7 @@ impl ErasedUnit {
     }
 
     /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
-    pub(crate) fn item(&self, place: usize) -> &ErasedItem {
+    pub fn item(&self, place: usize) -> &ErasedItem {
         self.form(place)
             .erased
             .get()
@@ -420,7 +420,7 @@ impl ErasedUnit {
     }
 
     /// Where the item declaring `name` sits.
-    pub(crate) fn place(&self, name: &Global) -> Option<usize> {
+    pub fn place(&self, name: &Global) -> Option<usize> {
         self.index.declared.get(name).map(|at| place_of(*at))
     }
 
@@ -459,7 +459,7 @@ impl ErasedUnit {
     }
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
-    pub(crate) fn form_digest(&self, place: usize) -> Result<String, String> {
+    pub fn form_digest(&self, place: usize) -> Result<String, String> {
         self.form(place).object().map(|object| object.digest.hex())
     }
 
@@ -558,7 +558,7 @@ impl ErasedUnit {
 #[cfg(feature = "test-support")]
 impl ErasedUnit {
     /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
-    pub(crate) fn declared_families(&self) -> Vec<crate::test_support::ErasedFamily> {
+    pub fn declared_families(&self) -> Vec<crate::test_support::ErasedFamily> {
         self.forms()
             .flat_map(|form| {
                 let module = form.module();
@@ -600,14 +600,14 @@ impl ErasedUnit {
 
 /// An item's erased form as a unit holds it, with whether evaluating it at initialization computes: what another unit keeps of it without reading it.
 #[derive(Debug, Clone)]
-pub(super) struct Held {
+pub struct Held {
     erased: Rc<Form>,
     computes: bool,
 }
 
 impl Held {
     /// The erased form `object` holds, as a store keeps it, with whether it computes: what a unit takes from a candidate, stored again as the bytes it was read from.
-    pub(super) fn stored(object: Object) -> Result<Held, String> {
+    pub fn stored(object: Object) -> Result<Held, String> {
         let erased = Rc::new(Form {
             erased: Deferred::stored(object.bytes),
             digest: Some(object.digest),

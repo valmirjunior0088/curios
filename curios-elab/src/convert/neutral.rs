@@ -24,7 +24,7 @@ use {
 /// A level a value does not hold is no difference to identify: the walk is handed the context's registries, a nominal family's vector and a definition's, and sets apart the pair at a position either calls irrelevant, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
 ///
 /// A head short of its full application, apart in such a level, is one term where the pair meets at its function type and two at any other, which `curried` says how to read. [`Curried::Declined`] answers [`Identification::Curried`] with nothing inserted, for a caller that goes on to the pair's type: reduction and eta decide it there, as the kernel decides it, and the verdict hands back the pairs it left, which are a weak equation each once the caller holds the two sides one. [`Curried::Compared`] keeps every level of it, for a caller no type directs.
-pub(super) fn identify_universe_levels(
+pub fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
     that: &Term,
@@ -87,7 +87,7 @@ pub(super) fn identify_universe_levels(
 /// It reads no family's variance: the kernel's key is the scrutinee compared with every level, so a key let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
 ///
 /// This is the one write a reduction makes to the solver, so a hit that makes it is noted as a question put to conversion is ([`Context::note_question`]): a scope rolled back past it withdraws the equations, and with them every reduct taken meanwhile. A question asked with nothing committed that meets one answers no, as it does wherever answering yes would commit (`same_uncommitted`).
-pub(crate) fn hold_at_one_instance(
+pub fn hold_at_one_instance(
     context: &mut Context,
     this: &Term,
     that: &Term,
@@ -131,7 +131,7 @@ pub(crate) fn hold_at_one_instance(
 }
 
 /// Whether two spellings disagree on a level decided on both sides, as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. It commits nothing and only ever declines. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
-pub(crate) fn levels_clash_to_conversion(
+pub fn levels_clash_to_conversion(
     context: &Context,
     this: &Term,
     that: &Term,
@@ -245,7 +245,7 @@ enum Alignment {
 
 /// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain; a differing pair is withheld, the question in hand committing nothing; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Identification {
+pub enum Identification {
     Identified,
     Distinct,
     GroundUnequal,
@@ -256,7 +256,7 @@ pub(super) enum Identification {
 
 /// How [`identify_universe_levels`] reads a head short of its full application that is apart in a level its vector calls irrelevant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Curried {
+pub enum Curried {
     /// Left to the pair's type, nothing committed: the caller goes on to reduce the pair and to apply eta at it.
     Declined,
     /// Compared level by level: no type directs the caller, and two instances reduction leaves standing are one where every level is.
@@ -269,7 +269,7 @@ pub(super) enum Curried {
 ///
 /// **A binder is found by its name, and a type asked which it names by the names it holds.** A record's fields are each opened beside the ones before it, and each field's type is asked whether it names any of them: read off a list, field by field, that is the square of the fields.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Opened {
+pub struct Opened {
     /// Each binder at its type, innermost last, beside the position the name stood at before it where it shadows one.
     binders: Vec<(Free, Term, Option<usize>)>,
     positions: HashMap<Free, usize>,
@@ -277,18 +277,18 @@ pub(crate) struct Opened {
 
 impl Opened {
     /// How many binders are open: the mark [`Opened::truncate`] closes back to.
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.binders.len()
     }
 
     /// Open `binder` at `type_`, innermost.
-    pub(crate) fn push(&mut self, binder: Free, type_: Term) {
+    pub fn push(&mut self, binder: Free, type_: Term) {
         let shadowed = self.positions.insert(binder, self.binders.len());
         self.binders.push((binder, type_, shadowed));
     }
 
     /// Close the innermost binder.
-    pub(crate) fn pop(&mut self) {
+    pub fn pop(&mut self) {
         if let Some((binder, _, shadowed)) = self.binders.pop() {
             match shadowed {
                 Some(position) => self.positions.insert(binder, position),
@@ -298,26 +298,26 @@ impl Opened {
     }
 
     /// Close every binder opened past `mark`.
-    pub(crate) fn truncate(&mut self, mark: usize) {
+    pub fn truncate(&mut self, mark: usize) {
         while self.binders.len() > mark {
             self.pop();
         }
     }
 
     /// The type `name` was opened at, where it is open.
-    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
+    pub fn type_of(&self, name: &Free) -> Option<&Term> {
         let position = *self.positions.get(name)?;
 
         Some(&self.binders[position].1)
     }
 
     /// Whether `name` is open.
-    pub(crate) fn binds(&self, name: &Free) -> bool {
+    pub fn binds(&self, name: &Free) -> bool {
         self.positions.contains_key(name)
     }
 
     /// Whether `term` names an open binder, read off the names it holds or the binders open, whichever are fewer.
-    pub(crate) fn names_one_in(&self, term: &Term) -> bool {
+    pub fn names_one_in(&self, term: &Term) -> bool {
         if self.binders.is_empty() || !term.has_local_free() {
             return false;
         }
@@ -339,7 +339,7 @@ impl Opened {
 ///
 /// A label is fresh, so no binder here shadows another, or a name the context holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-pub(crate) struct Binders(Option<Rc<Binder>>);
+pub struct Binders(Option<Rc<Binder>>);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct Binder {
@@ -388,7 +388,7 @@ impl Binders {
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine over a variable or a metavariable, or a stuck elimination) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
 ///
 /// A variable is read off the binders a walk opened (`opened`), then the context, then the binders the problem in hand is posed under (`binders`).
-pub(crate) fn synth_neutral(
+pub fn synth_neutral(
     context: &mut Context,
     binders: &Binders,
     opened: &Opened,
@@ -518,7 +518,7 @@ pub(crate) fn synth_neutral(
 }
 
 /// Recover the parameter types of an application from the head's function type, opening each successive entry with the actual arguments (dependency). `None` when the head's type is unavailable or not a `FuncType` of matching arity — callers fall back to comparing arguments at `Term::type_ground()`.
-pub(super) fn apply_param_types(
+pub fn apply_param_types(
     context: &mut Context,
     binders: &Binders,
     head: &Term,
@@ -550,7 +550,7 @@ pub(super) fn apply_param_types(
 
 /// Report, under `profile`, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
 #[cfg(feature = "profile")]
-pub(super) fn probe_level_fallback(site: &'static str, type_: &Term) {
+pub fn probe_level_fallback(site: &'static str, type_: &Term) {
     curios_profile::note!(
         target: "curios_elab::sort",
         site,
@@ -560,11 +560,11 @@ pub(super) fn probe_level_fallback(site: &'static str, type_: &Term) {
 }
 
 #[cfg(not(feature = "profile"))]
-pub(super) fn probe_level_fallback(_site: &'static str, _type_: &Term) {}
+pub fn probe_level_fallback(_site: &'static str, _type_: &Term) {}
 
 /// Report, under `profile`, that the reader named `reader` took its answer for a sort its declaration leaves to a caller ([`UniverseSolver::left_to_caller`](crate::UniverseSolver::left_to_caller)). Each reader answers for such a sort in the direction it calls safe, and the notes under `curios_elab::sort` that carry a `reader` are what counts which of them meet one, and how often. Diagnostic only: it changes nothing.
 #[cfg(feature = "profile")]
-pub(crate) fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality) {
+pub fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality) {
     if context.universes().left_to_caller(quality) {
         curios_profile::note!(
             target: "curios_elab::sort",
@@ -575,4 +575,4 @@ pub(crate) fn probe_open_sort(context: &Context, reader: &'static str, quality: 
 }
 
 #[cfg(not(feature = "profile"))]
-pub(crate) fn probe_open_sort(_context: &Context, _reader: &'static str, _quality: Quality) {}
+pub fn probe_open_sort(_context: &Context, _reader: &'static str, _quality: Quality) {}

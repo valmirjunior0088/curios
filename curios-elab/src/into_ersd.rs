@@ -25,13 +25,16 @@ mod environment;
 use environment::*;
 
 mod lower;
-pub use lower::*;
+use lower::*;
+pub use lower::{ErasedNames, ErasedProgram, erase_program, erase_unit, erase_unit_over};
 
 mod erased;
-pub use erased::*;
+use erased::*;
+pub use erased::{ErasedItem, ErasedUnit, Erasures};
 
 mod over;
-pub use over::*;
+pub use over::ErasedBaseline;
+use over::*;
 
 mod erased_candidate;
 

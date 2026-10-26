@@ -5,19 +5,24 @@ mod intrinsic;
 use intrinsic::*;
 
 mod linear;
-pub(crate) use linear::*;
+pub use linear::distributed;
+use linear::*;
 
 mod neutral;
-pub(crate) use neutral::*;
+use neutral::*;
+pub use neutral::{
+    Binders, Opened, hold_at_one_instance, levels_clash_to_conversion, probe_open_sort,
+    synth_neutral,
+};
 
 mod occurrence;
 use occurrence::*;
 
 mod pairs;
-pub(crate) use pairs::*;
+pub use pairs::*;
 
 mod sort;
-pub(crate) use sort::*;
+pub use sort::*;
 
 #[cfg(test)]
 mod conversion_tests;
@@ -80,15 +85,15 @@ enum Revalidated {
 
 /// A candidate conversion found for a metavariable, which the check where the metavariable was born refused: the occurrence it was offered at, the candidate in that occurrence's names, and the check's refusal. The problem that offered it is then no pair found apart, and its report is this candidate's ([`Beside::Rejected`]).
 #[derive(Debug)]
-pub(crate) struct Rejected {
-    pub(crate) metavar: Metavar,
-    pub(crate) candidate: Term,
-    pub(crate) error: Error,
+pub struct Rejected {
+    pub metavar: Metavar,
+    pub candidate: Term,
+    pub error: Error,
 }
 
 /// What a conversion run says beside a mismatch, of the problem the run ended on.
 #[derive(Debug)]
-pub(crate) enum Beside {
+pub enum Beside {
     /// What it left uncompared: the two sides the mismatch shows are two it did not decide between.
     Declined(Declined),
     /// The candidate it found and the metavariable's birth refused: the two sides it was comparing were not found apart, and what is refused is a solution.
@@ -97,7 +102,7 @@ pub(crate) enum Beside {
 
 impl Beside {
     /// What was left uncompared, where that is what was said.
-    pub(crate) fn declined(self) -> Option<Declined> {
+    pub fn declined(self) -> Option<Declined> {
         match self {
             Self::Declined(declined) => Some(declined),
             Self::Rejected(_) => None,
@@ -119,7 +124,7 @@ fn instantiate_bound_at<B: Bound>(
         .map_err(ReduceError::Universe)
 }
 
-pub(crate) fn convert(
+pub fn convert(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -133,7 +138,7 @@ pub(crate) fn convert(
 }
 
 /// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. Nor is a level equation tried: two levels the store does not already read as one are withheld ([`Context::withholds`]), so the step that would have joined them does not hold and the pair is read by its value, as the kernel reads two instances it finds apart, by unfolding. Two occurrences of one definition, each at an open level of its own that the value does not read, are one term here whatever the two levels close at. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
-pub(crate) fn same_uncommitted(
+pub fn same_uncommitted(
     context: &mut Context,
     this: &Term,
     that: &Term,
@@ -142,7 +147,7 @@ pub(crate) fn same_uncommitted(
 }
 
 /// [`same_uncommitted`] for a pair asked about inside the unfolding of `pairs`: what a comparison asks of a part of the problem it has in hand, a classing's atoms among them.
-pub(crate) fn same_uncommitted_inside(
+fn same_uncommitted_inside(
     context: &mut Context,
     pairs: &Pairs,
     this: &Term,
@@ -189,7 +194,7 @@ pub(crate) fn same_uncommitted_inside(
 }
 
 /// Which of `atoms` are one by `same`, as a classing asks of them (`curios-analysis`'s `Classes::of`). The comparison is one conversion inside another, so it buys its depth with stack.
-pub(crate) fn classing(
+pub fn classing(
     context: &mut Context,
     atoms: &[Term],
     same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
@@ -200,7 +205,7 @@ pub(crate) fn classing(
 }
 
 /// [`classing`] among the classes `classes` already holds (`curios-analysis`'s `Classes::join`): what a reader asks that meets its atoms a term at a time, as the reader of the facts a bound follows from does.
-pub(crate) fn classing_among(
+pub fn classing_among(
     context: &mut Context,
     classes: &mut Classes,
     atoms: &[Term],
@@ -209,7 +214,7 @@ pub(crate) fn classing_among(
     classes.join(atoms, |this, that| recurse(|| same(context, this, that)))
 }
 
-pub(crate) fn convert_outcome(
+pub fn convert_outcome(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -226,7 +231,7 @@ pub(crate) fn convert_outcome(
 }
 
 /// [`convert_outcome`] for a pair posed under `binders` and inside the unfolding of `pairs`: a comparison conversion makes of its own, of a part of the problem it has in hand.
-pub(crate) fn convert_under(
+fn convert_under(
     context: &mut Context,
     binders: &Binders,
     pairs: &Pairs,
@@ -247,7 +252,7 @@ pub(crate) fn convert_under(
 }
 
 /// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `extent` is the term's, which a level bound raised on the way reports.
-pub(crate) fn subsume_outcome(
+pub fn subsume_outcome(
     context: &mut Context,
     lower: &Term,
     upper: &Term,
@@ -266,7 +271,7 @@ pub(crate) fn subsume_outcome(
 }
 
 /// Decide `problem` at the relation it carries: a question asked afresh, and the retry of a goal an earlier run surrendered, which resumes as what it was asked.
-pub(crate) fn problem_outcome(
+pub fn problem_outcome(
     context: &mut Context,
     problem: Problem,
     extent: Option<Extent>,
@@ -277,7 +282,7 @@ pub(crate) fn problem_outcome(
 
 /// Whether what holding spines equal solves stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Spines {
+pub enum Spines {
     /// A completing term's question of a conversion it awaits: what holding the spines inside it equal would solve, withdrawn once read.
     Offered,
     /// The term's answer: the spines held equal, and what that solves committed.
@@ -286,7 +291,7 @@ pub(crate) enum Spines {
 
 /// What a conversion asked again with spines held came to, where that decided anything of it ([`hold_spines`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct HeldConversion {
+pub struct HeldConversion {
     /// What it solved, each solution as it is spelled once all are in.
     pub solved: Vec<(MetavarId, Term)>,
     /// What is left of it undecided, which stands for it from here on: nothing where it converts, and otherwise the pairs that still wait, as the arguments of an imitated application do where both sides of one are open.
@@ -294,7 +299,7 @@ pub(crate) struct HeldConversion {
 }
 
 /// Ask `problem` again with spines held: every pair of two applications of one global definition met in deciding it, at any depth, agrees where its spines can be made to, by whatever that solves, and an application of an unsolved metavariable met against a type former's node is imitated ([`Context::holding_spines`]). It is the last resort of a conversion left parked, which the term that awaits it takes once it has read its parts. Answers what that came to where it converts or solves anything, and `None` where the problem is no further decided so, or is refused: a refusal of a guess says nothing of the problem. A head that carries an instance is read as a monomorphic one is: what a call infers does not follow a level the definition's body holds.
-pub(crate) fn hold_spines(
+pub fn hold_spines(
     context: &mut Context,
     problem: &Problem,
     reading: Spines,
@@ -329,7 +334,7 @@ pub(crate) fn hold_spines(
 }
 
 /// Whether two answers offered for the metavariable `id` are apart: compared at the type it was born at, under the context and the refinements it was born under, as an oracle and with nothing committed. Two that cannot yet be told apart are not.
-pub(crate) fn answers_differ(
+pub fn answers_differ(
     context: &mut Context,
     id: MetavarId,
     one: &Term,
@@ -412,7 +417,7 @@ enum Spun {
 
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
 #[derive(Debug)]
-pub(crate) enum Outcome {
+pub enum Outcome {
     /// Definitionally equal.
     Converts,
     /// A hard structural mismatch — provably unequal, no solution can help — beside what the problem that ended the run declined to compare, where it declined anything, or the candidate it found and saw refused: the report then says the two sides were not compared rather than found different, or is that candidate's.
@@ -423,7 +428,7 @@ pub(crate) enum Outcome {
 
 /// The relation a conversion problem is asked at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Relation {
+pub enum Relation {
     /// `this ≡ that`.
     Equal,
     /// `this ≤ that`, subsumption: a term of type `this` may stand where `that` is wanted. It differs from equal between two sorts and in a function type's codomain, and is conversion everywhere else (`documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`).
@@ -441,7 +446,7 @@ enum Standing {
 
 /// One conversion constraint, `this ≡ that : type_`, or `this ≤ that` between two types (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked problems to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Problem {
+pub struct Problem {
     pub type_: Term,
     pub this: Term,
     pub that: Term,
@@ -455,7 +460,7 @@ pub(crate) struct Problem {
 
 /// A problem as a run remembers having posed it: its type, its two sides, the relation it is asked at and the unfoldings it stands inside. The binders it is posed under are no part of it: a label is minted once and at one type, so two problems equal in their terms stand under the same binders.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Posed {
+struct Posed {
     type_: Term,
     this: Term,
     that: Term,
@@ -464,7 +469,7 @@ pub(crate) struct Posed {
 }
 
 #[derive(Debug)]
-pub(crate) struct Convert {
+struct Convert {
     // Every problem this run has posed. A run holds where each of its problems does, so one posed again adds nothing it does not already owe, and is not posed: what lets the walk take two equal graphs built apart in their size. Nothing is assumed by it, a problem never being the one posed inside its own unfolding ([`Pairs`]).
     posed: HashSet<Keyed<Posed>>,
     pending: VecDeque<Problem>,
@@ -692,12 +697,12 @@ impl Convert {
         opened
     }
 
-    pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
+    pub fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
         self.enqueue_at(Relation::Equal, type_, this, that);
     }
 
     /// Whether `this ≡ that` at `type_`, asked as a problem of its own under this run's binders and inside its unfoldings, in the strict reading: a pair not yet decidable is not equal.
-    pub(super) fn converts(
+    pub fn converts(
         &self,
         context: &mut Context,
         type_: &Term,

@@ -17,19 +17,15 @@ use {
 };
 
 /// What evaluating an item where it is erased came to.
-pub(super) struct Evaluation {
+pub struct Evaluation {
     /// The item's erased form with what its top-level statements compute in their place, where that leaves it computing nothing.
-    pub(super) erased: Option<ErasedItem>,
+    pub erased: Option<ErasedItem>,
     /// A name of each item the evaluation was linked after, of a unit that is not fixed.
-    pub(super) ran: Vec<Global>,
+    pub ran: Vec<Global>,
 }
 
 /// Evaluate `erased`, the erased form of the next item of `unit`, over what it reaches of `unit` and of `scope`. `None` for an item that computes nothing as it was erased, or that declares a row: there is nothing to evaluate, and nothing is read.
-pub(super) fn evaluate(
-    scope: Erasures<'_>,
-    unit: &ErasedUnit,
-    erased: &ErasedItem,
-) -> Option<Evaluation> {
+pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> Option<Evaluation> {
     if !erased.module().computes() || erased.environment().declares_rows() {
         return None;
     }

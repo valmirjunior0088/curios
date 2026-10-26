@@ -13,7 +13,7 @@ mod tests;
 
 /// How written members failed to meet their slots. Positions are 0-based: `member` among the written members, `slot` among the telescope's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Misaligned {
+pub enum Misaligned {
     /// A plain slot with no plain member written for it.
     Missing,
     /// A plain member written with no plain slot left for it.
@@ -25,7 +25,7 @@ pub(crate) enum Misaligned {
 }
 
 /// The plain slot a surplus hidden member stands at — the one the plain members written before it have reached — or `None` where it is written past the last plain slot. A site that binds reports the first as a mark no plain slot takes and the second as a member that claims nothing.
-pub(crate) fn stands_at(slots: &[Plicity], written: &[Plicity], member: usize) -> Option<usize> {
+pub fn stands_at(slots: &[Plicity], written: &[Plicity], member: usize) -> Option<usize> {
     let plain_before = written[..member]
         .iter()
         .filter(|mark| **mark == Plicity::Explicit)
@@ -39,10 +39,7 @@ pub(crate) fn stands_at(slots: &[Plicity], written: &[Plicity], member: usize) -
 }
 
 /// For each slot, the written member that fills it, or `None` where the slot is left to the elaborator.
-pub(crate) fn align(
-    slots: &[Plicity],
-    written: &[Plicity],
-) -> Result<Vec<Option<usize>>, Misaligned> {
+pub fn align(slots: &[Plicity], written: &[Plicity]) -> Result<Vec<Option<usize>>, Misaligned> {
     let mut fills = Vec::with_capacity(slots.len());
     let mut cursor = 0;
 

@@ -12,7 +12,7 @@ use {
 
 impl Lowering<'_> {
     /// The list `option` crosses as: none of a value for `none`, and the one `some` holds.
-    pub(super) fn option_crossing(
+    pub fn option_crossing(
         &mut self,
         option: curios_ersd::Atom,
         polled: Polled,
@@ -96,7 +96,7 @@ impl Lowering<'_> {
     /// The performance of a call of the row `foreign`, which returns: the description that calls it over `operands` with no token, answering what it answers, or where it answers a token, waiting for it.
     ///
     /// Two functions are defined beside the call. `step(operands, token, dropped)` is the description that calls the row with the lane `(token, dropped)`, and answers the row's answer, its options read back, where the call answers no token; where it answers one, the suspension [`curios_ersd::SuspensionOperation::Later`] builds on it, which every row shares. `again(token, dropped)` is `step` over fillers, since a call that names its token is not read for its operands.
-    pub(super) fn lane_call(
+    pub fn lane_call(
         &mut self,
         foreign: curios_ersd::ForeignId,
         operands: Vec<curios_ersd::Atom>,

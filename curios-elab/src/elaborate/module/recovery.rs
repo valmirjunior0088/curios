@@ -14,22 +14,22 @@ use {
 
 /// A top-level item's position in its module's order, with the entry after the last item: what an item is kept and a refusal filed under, so both come back in item order whatever order the items elaborated in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct ItemStamp(pub(super) usize);
+pub struct ItemStamp(pub usize);
 
 /// The names whose declarations are refused or withheld: what another item must not reach.
 #[derive(Clone)]
-pub(super) struct Poison {
+pub struct Poison {
     names: BTreeSet<Global>,
 }
 
 impl Poison {
     /// Poisoned before the first item: the names a lowering reported broken.
-    pub(super) fn seeded(names: BTreeSet<Global>) -> Self {
+    pub fn seeded(names: BTreeSet<Global>) -> Self {
         Self { names }
     }
 
     /// Poison every name `item` declares.
-    pub(super) fn declare(&mut self, item: &Item) {
+    pub fn declare(&mut self, item: &Item) {
         self.names
             .extend(item.declared_names().into_iter().cloned());
     }
@@ -39,7 +39,7 @@ impl Poison {
     }
 
     /// Whether `item`, as lowered, declares or reaches a poisoned name — the test before it is elaborated. Free when nothing is poisoned, which is every run that refuses nothing.
-    pub(super) fn reaches(&self, module: &Module, item: &Item) -> bool {
+    pub fn reaches(&self, module: &Module, item: &Item) -> bool {
         if self.names.is_empty() {
             return false;
         }
@@ -51,12 +51,12 @@ impl Poison {
     }
 
     /// Whether `name` itself is poisoned — asked of a test the tail would schedule, by name, because a test a predecessor unit declared is no item of this module to reach.
-    pub(super) fn holds(&self, name: &Global) -> bool {
+    pub fn holds(&self, name: &Global) -> bool {
         self.names.contains(name)
     }
 
     /// Whether the entry reaches a poisoned name, through its body or its annotation.
-    pub(super) fn reaches_entry(&self, entry: &Entrypoint) -> bool {
+    pub fn reaches_entry(&self, entry: &Entrypoint) -> bool {
         !self.names.is_empty() && self.any(&entry.reaches())
     }
 }
@@ -64,12 +64,12 @@ impl Poison {
 /// Take a withheld item out, as [`withdraw`] takes a refused one: it never elaborates, so what is taken is what the unit seeded for it.
 ///
 /// **A withheld witness poisons the key it is spelled at.** It registers nothing, so no table entry stands under its name to poison in its place, and every consumer would report `no witness of C(T) found`: a second record for one mistake, at a declaration with nothing wrong with it. The key is known all the same, since a witness is declared under the key its signature spells before anything elaborates, and [`withdraw`] poisons that.
-pub(super) fn withhold(context: &mut Context, item: &Item) {
+pub fn withhold(context: &mut Context, item: &Item) {
     withdraw(context, &item.declared_names());
 }
 
 /// Take `declared` out of every store another item could read: the witness table, poisoning each key a witness held; the witnesses the unit declares and has not elaborated, poisoning the key each was spelled at; the registries; and the base frame. Asked for a refused item and for a withheld one, whose registry entries were seeded before any item elaborated.
-pub(super) fn withdraw(context: &mut Context, declared: &[&Global]) {
+pub fn withdraw(context: &mut Context, declared: &[&Global]) {
     for name in declared {
         for (concept, key) in context.remove_witness(name) {
             context.poison_witness_key(concept, key);
@@ -83,14 +83,14 @@ pub(super) fn withdraw(context: &mut Context, declared: &[&Global]) {
 }
 
 /// Where an attempt at an item began, so what it wrote can be taken back when it is refused or void.
-pub(super) struct ItemMark {
+pub struct ItemMark {
     checked: usize,
     site: Option<Global>,
 }
 
 impl ItemMark {
     /// Remember what an attempt beginning here may have to give back.
-    pub(super) fn begin(context: &Context) -> Self {
+    pub fn begin(context: &Context) -> Self {
         Self {
             checked: context.checked_mark(),
             site: context.checked_site(),
@@ -113,14 +113,14 @@ impl ItemMark {
     }
 
     /// Undo what a refused item wrote since [`ItemMark::begin`] and take its declarations out — see the module documentation for what is undone and what is left.
-    pub(super) fn undo(self, context: &mut Context, declared: &[&Global]) {
+    pub fn undo(self, context: &mut Context, declared: &[&Global]) {
         self.unwind(context);
         withdraw(context, declared);
         Self::close(context);
     }
 
     /// Undo an attempt that read something unfinished: what [`ItemMark::undo`] takes back, with nothing poisoned and the declarations left as `module` seeded them, for the attempt to be made again.
-    pub(super) fn void(self, context: &mut Context, module: &Module, declared: &[&Global]) {
+    pub fn void(self, context: &mut Context, module: &Module, declared: &[&Global]) {
         self.unwind(context);
         for name in declared {
             context.remove_witness(name);
@@ -155,22 +155,22 @@ impl ItemMark {
 }
 
 /// A declaration that wrote goals: the state it elaborated in, which alone knows them, and each of its items that holds one, as it elaborated, with where.
-pub(super) struct Holding {
-    pub(super) state: Attempted,
-    pub(super) items: Vec<(Item, Vec<GoalSite>)>,
+pub struct Holding {
+    pub state: Attempted,
+    pub items: Vec<(Item, Vec<GoalSite>)>,
 }
 
 /// What a unit's walk came to, in item order ([`Survivors::into_parts`]).
-pub(super) struct Survived {
-    pub(super) items: Vec<Item>,
-    pub(super) refusals: Vec<Error>,
-    pub(super) obligations: Vec<Error>,
-    pub(super) held: Vec<Holding>,
+pub struct Survived {
+    pub items: Vec<Item>,
+    pub refusals: Vec<Error>,
+    pub obligations: Vec<Error>,
+    pub held: Vec<Holding>,
 }
 
 /// The items elaborated so far, with the refusals and the broken erasure obligations recorded against their positions.
 #[derive(Default)]
-pub(super) struct Survivors {
+pub struct Survivors {
     kept: Vec<(ItemStamp, Item)>,
     /// Where `kept` holds the item declaring each name.
     declaring: HashMap<Global, usize>,
@@ -181,7 +181,7 @@ pub(super) struct Survivors {
 
 impl Survivors {
     /// Keep an item that elaborated, with the erasure obligations it breaks: reported, and no refusal, since the item stands for the certifier to judge.
-    pub(super) fn keep(&mut self, stamp: ItemStamp, item: Item, obligations: Vec<Error>) {
+    pub fn keep(&mut self, stamp: ItemStamp, item: Item, obligations: Vec<Error>) {
         for name in item.declared_names() {
             self.declaring.insert(*name, self.kept.len());
         }
@@ -191,24 +191,24 @@ impl Survivors {
     }
 
     /// Keep a declaration that wrote goals for their report. No item is produced for one that holds a goal: a unit that holds a goal is refused for the goal, whatever else it holds.
-    pub(super) fn hold(&mut self, holding: Holding) {
+    pub fn hold(&mut self, holding: Holding) {
         self.held.push(holding);
     }
 
     /// Record `error` as `stamp`'s refusal — unless it says the item met a poisoned witness key, which is a dependent's silence rather than a report.
-    pub(super) fn refuse(&mut self, stamp: ItemStamp, error: Error) {
+    pub fn refuse(&mut self, stamp: ItemStamp, error: Error) {
         if !matches!(error.unwrapped(), Error::Poisoned) {
             self.refusals.push((stamp, error));
         }
     }
 
     /// The kept item declaring `name`, where one does.
-    pub(super) fn item(&self, name: &Global) -> Option<&Item> {
+    pub fn item(&self, name: &Global) -> Option<&Item> {
         self.declaring.get(name).map(|kept| &self.kept[*kept].1)
     }
 
     /// Every name the kept items declare.
-    pub(super) fn names(&self) -> BTreeSet<Global> {
+    pub fn names(&self) -> BTreeSet<Global> {
         self.kept
             .iter()
             .flat_map(|(_, item)| item.declared_names())
@@ -217,7 +217,7 @@ impl Survivors {
     }
 
     /// The kept items, the refusals and the broken obligations, each in item order — the entry's refusal after every item's — with the declarations that wrote goals, whose reports are ordered where they are made. Items elaborate when they are asked for, so the order they were kept in is not the module's.
-    pub(super) fn into_parts(mut self) -> Survived {
+    pub fn into_parts(mut self) -> Survived {
         self.kept.sort_by_key(|(stamp, _)| *stamp);
         self.refusals.sort_by_key(|(stamp, _)| *stamp);
         self.obligations.sort_by_key(|(stamp, _)| *stamp);

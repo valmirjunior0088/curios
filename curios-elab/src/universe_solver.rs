@@ -39,7 +39,7 @@ pub struct Occurrence {
 
 impl Occurrence {
     /// The occurrence a term written at `extent` is of `name`, where `name` is a declaration's: only a top-level name is generalized over a scheme, so a use of a local instantiates none.
-    pub(crate) fn naming(name: &Free, extent: Option<Extent>) -> Option<Self> {
+    pub fn naming(name: &Free, extent: Option<Extent>) -> Option<Self> {
         match name {
             Free::Global(instantiated) => Some(Self {
                 instantiated: *instantiated,
@@ -61,7 +61,7 @@ pub struct UniverseMark {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct UniverseStateToken {
+pub struct UniverseStateToken {
     next_meta: usize,
     constraints: StoreMark,
     solution_log_len: usize,
@@ -73,7 +73,7 @@ pub(crate) struct UniverseStateToken {
 
 impl UniverseStateToken {
     /// Whether the solver requires of every level here what it required at `other`: no metavariable minted, no constraint added and no level solved between the two. A weak equation requires nothing, the two instances it came from being one type whatever its levels are, so one recorded between the two is no difference here, though it is a write to whoever asks whether the solver moved at all.
-    pub(crate) fn requires_the_same_as(&self, other: &Self) -> bool {
+    pub fn requires_the_same_as(&self, other: &Self) -> bool {
         self.next_meta == other.next_meta
             && self.constraints == other.constraints
             && self.solution_log_len == other.solution_log_len
@@ -826,7 +826,7 @@ impl UniverseSolver {
         self.constraints.release(mark.constraints);
     }
 
-    pub(crate) fn state_token(&self) -> UniverseStateToken {
+    pub fn state_token(&self) -> UniverseStateToken {
         UniverseStateToken {
             next_meta: self.next_meta,
             constraints: self.constraints.mark(),
@@ -852,7 +852,7 @@ impl UniverseSolver {
     }
 
     /// Release inference constraints after their enclosing declaration has finalized. Any relation that remains externally meaningful has already been projected into that declaration's [`UniverseContext`]; later uses reinsert the stored residual context at fresh instances.
-    pub(crate) fn clear_constraints(&mut self) {
+    pub fn clear_constraints(&mut self) {
         self.constraints.clear();
         self.consistency = None;
         self.weak.clear();
@@ -860,12 +860,12 @@ impl UniverseSolver {
 
     /// How many constraints the store holds — none between declarations, which is what a refused item's boundary must leave.
     #[cfg(test)]
-    pub(crate) fn constraint_count(&self) -> usize {
+    pub fn constraint_count(&self) -> usize {
         self.constraints.len()
     }
 
     /// Close every speculative scope at once and drop the journal. Sound only where no bracket is live: an item boundary a refusal reached by unwinding the recursion the hand-paired brackets sit on, past every `release` they would have called. Anywhere a scope is still open the journal is what its rollback restores from, which is why this is the one place the depth is reset outright rather than restored.
-    pub(crate) fn abandon_speculation(&mut self) {
+    pub fn abandon_speculation(&mut self) {
         self.constraints.abandon();
     }
 
@@ -928,7 +928,7 @@ impl UniverseSolver {
     }
 
     /// Whether the store already reads `left` and `right` as one level, by the level algebra alone once both are zonked: an equation of the two ([`UniverseSolver::add_eq`]) would add no constraint and solve no metavariable.
-    pub(crate) fn reads_as_one(&self, left: &Level, right: &Level) -> Result<bool, UniverseError> {
+    pub fn reads_as_one(&self, left: &Level, right: &Level) -> Result<bool, UniverseError> {
         let left = self.zonk(left)?;
         let right = self.zonk(right)?;
 
@@ -1130,7 +1130,7 @@ impl UniverseSolver {
     }
 
     /// Record `lower ≤ upper` where the store stays consistent with it, and answer whether it did. A relation a use needs and nothing has settled is one the declaration comes to require, as every level settles by where it stands; one the store refuses is taken back, and the use is answered no. A speculative judgment around the use takes the relation back with everything else it recorded.
-    pub(crate) fn settle_leq(
+    pub fn settle_leq(
         &mut self,
         lower: Level,
         upper: Level,
@@ -2396,7 +2396,7 @@ impl UniverseSolver {
 /// A free function on the solver side rather than a method on [`UniverseContext`]: deciding satisfiability is a judgment, and it runs a solver. The context itself is data and knows nothing about how it is checked.
 ///
 /// *Closure* is the other case, and it is [`UniverseContext::is_closed`], decided once on the data and called by both checkers: a second loop would be a second opinion worth nothing about a predicate too simple to have two implementations.
-pub(crate) fn universe_context_validate(context: &UniverseContext) -> Result<(), UniverseError> {
+pub fn universe_context_validate(context: &UniverseContext) -> Result<(), UniverseError> {
     if !context.is_closed() {
         return Err(UniverseError::EscapingLevel);
     }

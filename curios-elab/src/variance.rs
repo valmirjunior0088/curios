@@ -43,7 +43,7 @@ impl Families for Context<'_> {
 }
 
 /// The registries as the structural arms read them, where no type is at hand for eta to apply two curried heads at: the families' vectors, no definition's, and a head short of its full application compared level by level, which is the kernel's rule for two instances that reduction leaves standing.
-pub(crate) struct Structural<'a>(pub(crate) &'a Context<'a>);
+pub struct Structural<'a>(pub &'a Context<'a>);
 
 impl Families for Structural<'_> {
     fn induct(&self, name: &Global) -> Option<&InductDecl> {
@@ -60,7 +60,7 @@ impl Families for Structural<'_> {
 }
 
 /// The reading of a caller that holds two spellings of one term to one instance, or carries one to the other — a refinement key's hit and the reduction table's second door: no family and no definition, so every level is compared where it stands, no former is read as its node, nothing is set apart as curried, and sorts are paired beside levels, a sort being as much a part of an instance as a level is.
-pub(crate) struct EveryPosition;
+pub struct EveryPosition;
 
 impl Families for EveryPosition {
     fn induct(&self, _: &Global) -> Option<&InductDecl> {
@@ -87,7 +87,7 @@ impl Families for EveryPosition {
 /// Record each of `names`' variance vectors on its registry entry: the families of one group, analyzed together as that group finalizes, so a later item that compares two of their instances reads them.
 ///
 /// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and the group is refused for the budget: the vector it leaves claims less than the families' own, and on record it would refuse two instances a later item compares, with no word of the budget.
-pub(crate) fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), Error> {
+pub fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), Error> {
     curios_profile::profile!("record_variances");
     let (inducts, structs) = spliced(context, names);
 
@@ -122,10 +122,7 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) -> Resul
 /// The levels still open that the families among `names` hold, the group they close with: what an instance of one holds in its index types, payloads, fields and targets, read by the walk their vectors are computed by once their levels have closed ([`record_variances`]). `None` where a telescope may hold any level, a metavariable in it being still unsolved.
 ///
 /// A level it reports is one two instances would be told apart by, so it is the family's parameter. A level of a telescope it does not report is one no instance holds. A reduction the budget refuses reads its term as holding every level it carries, and is no error here: what is reported claims less.
-pub(crate) fn family_levels(
-    context: &mut Context,
-    names: &[Global],
-) -> Option<BTreeSet<UniverseMetaId>> {
+pub fn family_levels(context: &mut Context, names: &[Global]) -> Option<BTreeSet<UniverseMetaId>> {
     curios_profile::profile!("family_levels");
     let (inducts, structs) = spliced(context, names);
     let found = held_by(context, Declarations::of(&inducts, &structs));
@@ -190,7 +187,7 @@ fn spliced(
 /// **Any other definition is read as written.** Every level its body mentions beneath its own binders is held. The walk forces each closed part of what it reads, which for a type is how an alias is seen through and for a function's body is its closed computations run, the cost a vector exists to save; and a level a value's term mentions is nearly always one its instances differ in.
 ///
 /// Either way a vector claims an irrelevance only where unfolding two instances at the same arguments gives one term, which is what lets conversion require nothing of that level. A reduction the budget refuses refuses the definition, as it refuses a family's group ([`record_variances`]): read as holding every level it carries, it left a vector that claims less, and every later comparison of two instances unfolded them through the reduction that had outrun this one.
-pub(crate) fn definition_variances(
+pub fn definition_variances(
     context: &mut Context,
     universe_context: &UniverseContext,
     type_: &Term,
@@ -254,7 +251,7 @@ pub(crate) fn definition_variances(
 /// Which of a record-valued definition's universe parameters each field of its value holds, read where its levels have closed: one vector per field of the struct or tuple literal its body is beneath its own binders, each one entry per parameter of `universe_context`, and none for any other definition or one that takes no parameter.
 ///
 /// A field is read as written, every level its value mentions held, its binders' annotations among them: a projection of the definition applied in full unfolds to that value, whether or not it is applied in turn, and two lambdas apart in an annotation alone are decided by the type they meet at, so a field claims no irrelevance in a level one of its annotations names. What it leaves out is the literal's own instance and the other fields, the levels a witness is polymorphic in where its concept states a sort-valued member and a method projected from it holds none of.
-pub(crate) fn field_variances(
+pub fn field_variances(
     universe_context: &UniverseContext,
     type_: &Term,
     body: &Term,
@@ -295,7 +292,7 @@ pub(crate) fn field_variances(
 }
 
 /// Which of a definition's binders its value is a field of, read where its levels have closed: the value beneath the definition's own binders a projection, by slot, of one of them, and `None` for any other definition ([`curios_core::Definition::parameter_field`]).
-pub(crate) fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterField> {
+pub fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterField> {
     let Subterm::FuncType(FuncType {
         telescope: outer, ..
     }) = &**type_
@@ -326,7 +323,7 @@ pub(crate) fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterFiel
 /// The levels `type_`, a declaration's signature while its levels are still open, holds where conversion compares them: in each of its domains and in a terminal that is no sort, at a position no family or definition is irrelevant in. They are what [`UniverseSolver::finalize`](crate::UniverseSolver::finalize) holds as the declaration's parameters.
 ///
 /// A terminal sort is unread, cumulativity lifting it, and every other part is read as it is written ([`compared_in`]). Where a part may hold any level, every level the signature mentions is held.
-pub(crate) fn compared_levels(context: &mut Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
+pub fn compared_levels(context: &mut Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
     curios_profile::profile!("compared_levels");
     let type_ = &zonk_solved_term_metas(context, type_);
     let mut parts = Vec::new();
@@ -385,7 +382,7 @@ fn compared_in(context: &Context, parts: &[Term]) -> Option<BTreeSet<UniverseMet
 /// The body is read as a signature's parts are ([`compared_in`]), as it is written: a binder's annotation is unread, being the signature's to hold, and a member of a group is read as a `let` is, its siblings standing as the names they are assumed under. Where the body may hold any level, every level it mentions is held.
 ///
 /// `lifted` are the levels of the declaration's result sort alone, and none of them is held, nor any level conversion has joined to one: a body restates the sort it answers at wherever it says what it answers, in a match's motive, and cumulativity lifts the result there as at the signature's terminal.
-pub(crate) fn body_levels(
+pub fn body_levels(
     context: &Context,
     type_: &Term,
     body: &Term,
@@ -421,7 +418,7 @@ fn answers_a_type(type_: &Term) -> bool {
 /// The entries of one declaration are exactly the set to analyze, and anything outside it answers from this context's registry, for the reason [`decide_polarities`](super::decide_polarities) gives. The carried vector is the one taken as the family's group finalized, and it stays: the declaration's later items were compared under it, so a stored unit hands a later compile the reading its own items had and a reused family is read as a re-elaborated one is. What this run decides is that it claims no irrelevance the final telescopes deny. It may claim less, a telescope having held a metavariable since solved, and that family is counted rather than rewritten.
 ///
 /// A reduction the budget refused reads its term as mentioning every level, so a denial that follows one may be the budget's alone, and the budget is what is reported.
-pub(crate) fn hold_variances(context: &mut Context, published: &Published) -> Result<(), Error> {
+pub fn hold_variances(context: &mut Context, published: &Published) -> Result<(), Error> {
     if published.induct_decls.is_empty() && published.struct_decls.is_empty() {
         return Ok(());
     }

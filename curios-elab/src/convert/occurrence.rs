@@ -8,7 +8,7 @@ use {
 /// Replace every occurrence of a subject term in `t` — matched by the same term equality conversion uses, at any depth (binder names are entropy-fresh, so a free-named subject cannot be captured by an inner scope) — with its birth binder's name. Top-down: an outer match wins and is not descended into. Subjects are pairwise distinct by construction, so the match is unambiguous.
 ///
 /// Memoized on node identity: the answer at a node is a function of the node and the subjects alone, and a candidate is a reduct, whose tree can be exponential in its depth.
-pub(super) fn abstract_occurrences(t: &Term, subjects: &[(Term, Free)]) -> Term {
+pub fn abstract_occurrences(t: &Term, subjects: &[(Term, Free)]) -> Term {
     if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
         return Term::free_var(name);
     }
@@ -26,7 +26,7 @@ pub(super) fn abstract_occurrences(t: &Term, subjects: &[(Term, Free)]) -> Term 
 }
 
 /// `Some(metavar)` iff `term` is an unsolved bare metavariable head. (`reduce` already resolves solved metavariables, so a metavariable surviving to weak-head normal form is necessarily unsolved.)
-pub(super) fn as_metavar(term: &Term) -> Option<&Metavar> {
+pub fn as_metavar(term: &Term) -> Option<&Metavar> {
     match &**term {
         Subterm::Metavar(metavar) => Some(metavar),
         _ => None,
@@ -34,7 +34,7 @@ pub(super) fn as_metavar(term: &Term) -> Option<&Metavar> {
 }
 
 /// `true` iff a match scrutinee is stuck on a metavariable itself — bare, or an application headed by one. This is the side that could not reduce, so its stuck layer may trail the partner's; decomposing across that misalignment is what the match-match gate above forbids.
-pub(super) fn flex_scrutinee(term: &Term) -> bool {
+pub fn flex_scrutinee(term: &Term) -> bool {
     match &**term {
         Subterm::Metavar(_) => true,
         Subterm::Apply(apply) => matches!(&*apply.head, Subterm::Metavar(_)),
@@ -43,11 +43,7 @@ pub(super) fn flex_scrutinee(term: &Term) -> bool {
 }
 
 /// The variables a metavariable is applied to, where the application is a pattern: each argument, read through the solutions already committed, is a local variable no other argument shares and no entry of the metavariable's own spine names. `None` otherwise: a repeated variable, or one the spine carries as well, leaves more than one abstraction, and a global is no binder to abstract.
-pub(super) fn pattern_variables(
-    context: &Context,
-    metavar: &Metavar,
-    apply: &Apply,
-) -> Option<Vec<Free>> {
+pub fn pattern_variables(context: &Context, metavar: &Metavar, apply: &Apply) -> Option<Vec<Free>> {
     let mut variables = Vec::with_capacity(apply.arguments.len());
     for argument in apply.params() {
         let argument = zonk_solved_term_metas(context, argument);
@@ -72,7 +68,7 @@ pub(super) fn pattern_variables(
 /// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), a folded recursive call with an argument that is so stuck, or an elimination — application, projection — headed by such a shape or by an unsolved metavariable itself. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
 ///
 /// The metavariable-headed application is the case [`Convert::imitate_flex_apply`](super::Convert::imitate_flex_apply) states the rule for and only covers against a nominal type: `?f(a) ≡ t` against a *value* `t` has no imitation to try, but refuting nothing proves nothing either — a constant solution could still exist, and pinning `a` later may expose an abstraction. A hard mismatch here would make `Eq/cong(?, h)` report "type mismatch" for a hole standing exactly where the function belongs.
-pub(super) fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
+pub fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
     let has_unsolved = |term: &Term| {
         term.metavars()
             .iter()

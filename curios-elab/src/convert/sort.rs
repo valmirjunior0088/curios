@@ -15,14 +15,14 @@ use {
 
 /// The universe a type inhabits: its quality, as far as it is solved, and its level.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Sort {
-    pub(crate) quality: Quality,
-    pub(crate) level: Level,
+pub struct Sort {
+    pub quality: Quality,
+    pub level: Level,
 }
 
 impl Sort {
     /// The quality of a record of fields at `this` and at `that`: a type's where either is one, a proposition's where both are, and an open one where it is the only one that is not a proposition's. Two open qualities apart have no join a sort can state, and are read as a type's, which is what a quality nothing decides closes as.
-    pub(crate) fn join(this: Quality, that: Quality) -> Quality {
+    pub fn join(this: Quality, that: Quality) -> Quality {
         match (this, that) {
             (Quality::Type, _) | (_, Quality::Type) => Quality::Type,
             (Quality::Prop, other) | (other, Quality::Prop) => other,
@@ -32,7 +32,7 @@ impl Sort {
     }
 
     /// `Type` at `level`.
-    pub(crate) fn type_at(level: Level) -> Sort {
+    pub fn type_at(level: Level) -> Sort {
         Sort {
             quality: Quality::Type,
             level,
@@ -40,7 +40,7 @@ impl Sort {
     }
 
     /// `Prop` at `level`.
-    pub(crate) fn prop_at(level: Level) -> Sort {
+    pub fn prop_at(level: Level) -> Sort {
         Sort {
             quality: Quality::Prop,
             level,
@@ -48,23 +48,23 @@ impl Sort {
     }
 
     /// Whether this is a sort of propositions. One whose quality is open is not: irrelevance is taken where a type is known a proposition, and a sort not decided yet, or left to a caller, is not known one.
-    pub(crate) fn is_prop(&self) -> bool {
+    pub fn is_prop(&self) -> bool {
         self.quality.is_prop()
     }
 
     /// [`Sort::is_prop`] as the reader named `reader` asks it, noted under `profile` where the answer is taken for a sort the declaration leaves to a caller ([`probe_open_sort`]).
-    pub(crate) fn is_prop_to(&self, context: &Context, reader: &'static str) -> bool {
+    pub fn is_prop_to(&self, context: &Context, reader: &'static str) -> bool {
         probe_open_sort(context, reader, self.quality);
         self.is_prop()
     }
 
     /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, at the quality and the level that type states, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].
-    pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
+    pub fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Opened::default(), type_)
     }
 
     /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`], because assuming a binder bumps the mutation stamp that validates the memoization caches, and a walk that assumed at every binder would invalidate them.
-    pub(crate) fn of_in(
+    pub fn of_in(
         context: &mut Context,
         opened: &mut Opened,
         type_: &Term,
@@ -75,7 +75,7 @@ impl Sort {
     /// [`Sort::of_in`] for a type a conversion problem holds, under the binders the problem is posed under ([`Binders`]) as well.
     ///
     /// Remembered per type while the context stands as it did (`Caches::sorts`), for a type with no loose index that names none of `opened` and none of `binders`: such a type's sort is a function of the context alone, and probing here, at every field and domain the rules below ask about, is what makes a record of two fields at one type cost one classification. A type that names a problem's binder is classified each time: read where the binders are not in hand it falls to the conservative answer, and that answer remembered would be served to a reading that has them, a verdict following the order of questions.
-    pub(crate) fn of_under(
+    pub fn of_under(
         context: &mut Context,
         binders: &Binders,
         opened: &mut Opened,
@@ -391,7 +391,7 @@ impl Sort {
     }
 
     /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the kernel's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken.
-    pub(crate) fn declared_into_prop(
+    pub fn declared_into_prop(
         context: &mut Context,
         binders: &Binders,
         opened: &Opened,
@@ -402,7 +402,7 @@ impl Sort {
     }
 
     /// The quality `type_`, as written, lands in by its head's declaration, where the declaration settles it, `Prop` or `Type`: exact, since no proposition stands where a type is wanted and no type where a proposition is, so nothing reduced is read. `None` where the head is no declaration, or the quality is one its use decides.
-    pub(crate) fn declared_quality(
+    pub fn declared_quality(
         context: &mut Context,
         binders: &Binders,
         opened: &Opened,
@@ -454,10 +454,7 @@ impl Sort {
     }
 
     /// The sort `type_` stands at where it is written as a definition that publishes the sort of its value ([`curios_core::Definition::value_sort`]): a name, at the universes an occurrence of it states. Read before anything is run, so the value is not walked to learn it. `None` for any other type.
-    pub(crate) fn published(
-        context: &mut Context,
-        type_: &Term,
-    ) -> Result<Option<Sort>, ReduceError> {
+    pub fn published(context: &mut Context, type_: &Term) -> Result<Option<Sort>, ReduceError> {
         let (var, universes) = match &**type_ {
             Subterm::Var(var) => (var, None),
             Subterm::Instance(Instance {
@@ -483,7 +480,7 @@ impl Sort {
     }
 
     /// The universe term this sort denotes. The inverse of [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.
-    pub(crate) fn term(self) -> Term {
+    pub fn term(self) -> Term {
         Term::sort_at(self.quality, self.level)
     }
 

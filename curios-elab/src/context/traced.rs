@@ -76,7 +76,7 @@ impl<N, K> Question<N, K> {
     }
 
     /// The question with its name spelled by `name` and its key by `key`, or the first refusal of either: how a trace is written into a unit's table and read back out of it.
-    pub(crate) fn spelled<M, L, E>(
+    pub fn spelled<M, L, E>(
         self,
         mut name: impl FnMut(N) -> Result<M, E>,
         mut key: impl FnMut(K) -> Result<L, E>,
@@ -116,10 +116,7 @@ pub enum Answered<N = Global> {
 
 impl<N> Answered<N> {
     /// The answer with its name spelled by `name`, or its refusal.
-    pub(crate) fn spelled<M, E>(
-        self,
-        name: impl FnOnce(N) -> Result<M, E>,
-    ) -> Result<Answered<M>, E> {
+    pub fn spelled<M, E>(self, name: impl FnOnce(N) -> Result<M, E>) -> Result<Answered<M>, E> {
         Ok(match self {
             Answered::Part => Answered::Part,
             Answered::Witness(found) => Answered::Witness(found.map(name).transpose()?),
@@ -146,7 +143,7 @@ impl Hash for Once {
 
 /// The trace of the judgment under way: its questions in the order each was first asked, with what each was answered.
 #[derive(Debug, Default)]
-pub(crate) struct Traced {
+pub struct Traced {
     /// The names the judgment's own declaration declares, whose parts it asks of itself.
     own: Vec<Global>,
     seen: RefCell<HashSet<Once>>,
@@ -155,14 +152,14 @@ pub(crate) struct Traced {
 
 impl Traced {
     /// Begin the trace of a judgment of the declaration declaring `own`: the next question is its first.
-    pub(crate) fn begin(&mut self, own: &[&Global]) {
+    pub fn begin(&mut self, own: &[&Global]) {
         self.own.clear();
         self.own.extend(own.iter().copied());
         self.take();
     }
 
     /// Note that `question` was asked and answered `answered`, where it has not been asked since the trace was begun and is not the declaration's of itself: of a part of a name it declares, or answered by a witness it declares.
-    pub(crate) fn note(&self, question: Question, answered: Answered) {
+    pub fn note(&self, question: Question, answered: Answered) {
         if !self.seen.borrow_mut().insert(Once(question)) {
             return;
         }
@@ -179,18 +176,18 @@ impl Traced {
     }
 
     /// Whether `question` has been asked since the trace was begun.
-    pub(crate) fn noted(&self, question: Question) -> bool {
+    pub fn noted(&self, question: Question) -> bool {
         self.seen.borrow().contains(&Once(question))
     }
 
     /// The trace so far, taken: the next question is the first of another.
-    pub(crate) fn take(&mut self) -> Trace<Question, Answered> {
+    pub fn take(&mut self) -> Trace<Question, Answered> {
         self.seen.get_mut().clear();
         mem::take(self.trace.get_mut())
     }
 
     /// The trace so far, set aside whole for [`Traced::put_back`]: a judgment run beside the one traced asks nothing on its behalf.
-    pub(crate) fn set_aside(&mut self) -> AsideTrace {
+    pub fn set_aside(&mut self) -> AsideTrace {
         AsideTrace {
             seen: mem::take(self.seen.get_mut()),
             trace: mem::take(self.trace.get_mut()),
@@ -198,14 +195,14 @@ impl Traced {
     }
 
     /// Put back the trace `aside` holds, dropping what was asked since it was set aside.
-    pub(crate) fn put_back(&mut self, aside: AsideTrace) {
+    pub fn put_back(&mut self, aside: AsideTrace) {
         *self.seen.get_mut() = aside.seen;
         *self.trace.get_mut() = aside.trace;
     }
 }
 
 /// A trace set aside ([`Traced::set_aside`]).
-pub(crate) struct AsideTrace {
+pub struct AsideTrace {
     seen: HashSet<Once>,
     trace: Trace<Question, Answered>,
 }

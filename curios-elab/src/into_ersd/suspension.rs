@@ -11,15 +11,15 @@ use {
 
 /// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Polled {
-    pub(super) family: curios_ersd::FamilyId,
-    pub(super) some: curios_ersd::ConstructorId,
-    pub(super) none: curios_ersd::ConstructorId,
+pub struct Polled {
+    pub family: curios_ersd::FamilyId,
+    pub some: curios_ersd::ConstructorId,
+    pub none: curios_ersd::ConstructorId,
 }
 
 impl Lowering<'_> {
     /// Bind `rhs` in the innermost open block and hand back its value.
-    pub(super) fn let_atom(&mut self, rhs: curios_ersd::Rhs) -> curios_ersd::Atom {
+    pub fn let_atom(&mut self, rhs: curios_ersd::Rhs) -> curios_ersd::Atom {
         curios_ersd::Atom::Value(self.builder.let_value(None, rhs))
     }
 
@@ -34,7 +34,7 @@ impl Lowering<'_> {
         })
     }
 
-    pub(super) fn applied(
+    pub fn applied(
         &mut self,
         callee: curios_ersd::Atom,
         arguments: Vec<curios_ersd::Atom>,
@@ -48,7 +48,7 @@ impl Lowering<'_> {
     }
 
     /// A block of its own, returning what `body` computes in it.
-    pub(super) fn block(
+    pub fn block(
         &mut self,
         body: impl FnOnce(&mut Self) -> curios_ersd::Atom,
     ) -> curios_ersd::BlockId {
@@ -88,7 +88,7 @@ impl Lowering<'_> {
     }
 
     /// The performance of `Io/suspend(on, filled, cancel, rest)`: the suspension itself.
-    pub(super) fn perform_suspend(
+    pub fn perform_suspend(
         &mut self,
         on: curios_ersd::Atom,
         filled: curios_ersd::Atom,
@@ -102,7 +102,7 @@ impl Lowering<'_> {
     }
 
     /// The performance of `Io/bind(action, continuation)`: force the action, then force what the continuation makes of its value in tail position — or, where the action suspended, answer that suspension with the continuation as its last frame.
-    pub(super) fn perform_bind(
+    pub fn perform_bind(
         &mut self,
         action: curios_ersd::Atom,
         continuation: curios_ersd::Atom,
@@ -124,7 +124,7 @@ impl Lowering<'_> {
     }
 
     /// The performance of `Io/advance(action, done, suspended)`: force the action and hand its value to `done`, or the handles, the cells, the cancel and a description resuming it to `suspended`, forcing the description either makes in tail position.
-    pub(super) fn perform_advance(
+    pub fn perform_advance(
         &mut self,
         action: curios_ersd::Atom,
         done: curios_ersd::Atom,
@@ -150,7 +150,7 @@ impl Lowering<'_> {
     }
 
     /// What the entry hands the host for `answer`, the forced program: its value, or a suspension the host advances without knowing its frames or reading its cells. `polled` is how a cell's poll answers.
-    pub(super) fn yield_to_host(
+    pub fn yield_to_host(
         &mut self,
         answer: curios_ersd::Atom,
         polled: Polled,
@@ -167,7 +167,7 @@ impl Lowering<'_> {
     }
 
     /// The family of `/std/Option` and its two constructors, which a cell's poll answers.
-    pub(super) fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
+    pub fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
         let syntax = context.syntax().option;
         Ok(Polled {
             family: self.induct_family(context, &Global::Authored(syntax.family.qualifier()))?,
@@ -234,7 +234,7 @@ impl Lowering<'_> {
     }
 
     /// Define a description named `name` in the innermost open block, its performance what `body` computes, and hand it back.
-    pub(super) fn description(
+    pub fn description(
         &mut self,
         name: &str,
         body: impl FnOnce(&mut Self) -> curios_ersd::Atom,

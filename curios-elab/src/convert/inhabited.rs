@@ -15,7 +15,7 @@ use {
 /// It is what irrelevance and eta derive, read off the type: any two inhabitants of such a type convert by them, down to each field. Read off the type it poses no problem about the two sides, so it answers where eta cannot be fired. `curios-cert`'s classifier of the same name carries the argument, and this one answers the same question so that a program the two disagree on does not exist.
 ///
 /// It ends at a struct that reaches itself: one met again while it is being judged answers no where its declaration reaches itself, and is judged again where it was met through a parameter. Every other type is forced as eta by the goal's type forces it, and bounded by the budget as that is. A field's type is judged under the fields before it, opened at binders, and one that still waits on a metavariable answers no.
-pub(super) fn one_inhabitant(
+pub fn one_inhabitant(
     context: &mut Context,
     binders: &Binders,
     type_: &Term,

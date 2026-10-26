@@ -17,7 +17,7 @@ use {
 };
 
 /// Spell every unfolded top-level `rec` in `term` by its definitions' names. Display-only — see the module documentation. The table of groups is gathered only when the term holds a `Rec` node at all, which a mismatch rarely does.
-pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
+pub fn refold_recs(context: &Context, term: &Term) -> Term {
     if !term.mentions_rec() {
         return term.clone();
     }
@@ -48,7 +48,7 @@ pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
 /// `term` with every lambda that is applied where it stands contracted: `((a, b) => f(a, b))(x, y)` spelled `f(x, y)`. Display-only.
 ///
 /// A reduct holds such a redex wherever reduction stopped above it. A definition unfolded at an argument that is itself a function leaves that function's value applied under the binders reduction did not enter: `Ord/Transitive(Ord/le(ord))` unfolds to a bound over `((a, b) => Ordering/is_le(ord(a, b)))(x, y)`. A reader would not have written the redex, and it does not read back: a lambda's parameters take their types from an annotation or from the position it is checked at, and an applied lambda has neither.
-pub(crate) fn contract_redexes(term: &Term) -> Term {
+pub fn contract_redexes(term: &Term) -> Term {
     // Memoized on node identity, as the refold is and for its reason.
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
@@ -93,7 +93,7 @@ pub(crate) fn contract_redexes(term: &Term) -> Term {
 /// Reduction opens a name to its group to see whether a call computes, and a call that does not compute stays headed by the group. Committed so, a solution holds a copy of the callee: re-validating it elaborates the callee's every member again, the kernel is handed the copy, and a copy that elaboration rebuilt under another spelling of one of its goals is another term to conversion, which unfolds the two side by side. The name is what the author wrote, and reduction opens it to the same group again.
 ///
 /// Exact, where [`refold_recs`] is display's: a group is recognized by reduction's own record of the name it opened it from in the declaration in progress ([`Context::member_names`]), and an instance of a universe-polymorphic one by its record of having opened that instance ([`Context::instance_of`]), so the names are the definitions the declaration unfolded and the levels a member is named at are the ones it was opened at, none read back off the copy. A group neither records — a local `rec`, a group no name of this declaration's unfolded to — stands as it was.
-pub(crate) fn named_members(context: &Context, term: &Term) -> Term {
+pub fn named_members(context: &Context, term: &Term) -> Term {
     if !term.mentions_rec() {
         return term.clone();
     }

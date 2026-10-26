@@ -55,7 +55,7 @@ pub struct TraceRecord {
 
 impl TraceRecord {
     /// The record of a declaration that asked `asked`, which no filing has completed.
-    pub(crate) fn new(asked: Trace<Question, Answered>) -> Self {
+    pub fn new(asked: Trace<Question, Answered>) -> Self {
         Self {
             asked,
             made: OnceCell::new(),
@@ -64,11 +64,7 @@ impl TraceRecord {
     }
 
     /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
-    pub(crate) fn restored(
-        asked: Trace<Question, Answered>,
-        made: Option<Made>,
-        digest: Digest,
-    ) -> Self {
+    pub fn restored(asked: Trace<Question, Answered>, made: Option<Made>, digest: Digest) -> Self {
         let traced = Self::new(asked);
         if let Some(made) = made {
             let _ = traced.made.set(Some(made));
@@ -161,22 +157,22 @@ pub struct Foreign {
 
 impl Foreign {
     /// The digest recorded of the part `question` asks: `None` where nothing asked it, `Some(None)` where the name declared no such part.
-    pub(crate) fn digest(&self, question: &Question) -> Option<&Option<String>> {
+    pub fn digest(&self, question: &Question) -> Option<&Option<String>> {
         self.read.get(question)
     }
 
     /// Record `digest` as what the part `question` asks had, in place of what was recorded of it.
-    pub(crate) fn record(&mut self, question: Question, digest: Option<String>) {
+    pub fn record(&mut self, question: Question, digest: Option<String>) {
         self.read.insert(question, digest);
     }
 
     /// Take out what was recorded of the part `question` asks: no declaration reads it now.
-    pub(crate) fn forget(&mut self, question: &Question) {
+    pub fn forget(&mut self, question: &Question) {
         self.read.remove(question);
     }
 
     /// This table as a walk revises it that made again or dropped some of the declarations it was read off, the table of every other standing: each part of `read` — one a declaration made again reads now — recorded, digested again where nothing was recorded of it or `moved` says the unit declaring it moved, and taken out where it will not digest; each part of `dropped` — one a declaration made again or dropped read before — taken out where `read_now` says no declaration reads it now; and each part of `declared` — one of a name the unit declares now — taken out.
-    pub(crate) fn revised(
+    pub fn revised(
         &self,
         read: impl IntoIterator<Item = Question>,
         dropped: impl IntoIterator<Item = Question>,
@@ -215,12 +211,12 @@ impl Foreign {
 
 impl Traces {
     /// File `record` as the declaration written as `name`'s: another unit's record of it, held where that unit holds it, or one a store held.
-    pub(crate) fn share(&mut self, name: Global, record: HeldTrace) {
+    pub fn share(&mut self, name: Global, record: HeldTrace) {
         self.declarations.insert(name, record);
     }
 
     /// Take out the trace held under `name`, where one is: a declaration no longer written as it.
-    pub(crate) fn forget(&mut self, name: &Global) {
+    pub fn forget(&mut self, name: &Global) {
         self.declarations.remove(name);
     }
 
@@ -230,7 +226,7 @@ impl Traces {
     }
 
     /// The trace of the declaration written as `name`, as the unit holds it.
-    pub(crate) fn held(&self, name: &Global) -> Option<&HeldTrace> {
+    pub fn held(&self, name: &Global) -> Option<&HeldTrace> {
         self.declarations.get(name)
     }
 
@@ -245,17 +241,17 @@ impl Traces {
     }
 
     /// Hold `foreign` as what the declarations read of declarations the unit does not hold.
-    pub(crate) fn read(&mut self, foreign: Rc<Foreign>) {
+    pub fn read(&mut self, foreign: Rc<Foreign>) {
         self.foreign = foreign;
     }
 
     /// The declarations settled before the unit's lemmas were offered. See the field.
-    pub(crate) fn before(&self) -> &BTreeSet<Global> {
+    pub fn before(&self) -> &BTreeSet<Global> {
         &self.before
     }
 
     /// Hold `before` as the declarations settled before the unit's lemmas were offered.
-    pub(crate) fn settle_before(&mut self, before: BTreeSet<Global>) {
+    pub fn settle_before(&mut self, before: BTreeSet<Global>) {
         self.before = Rc::new(before);
     }
 
@@ -265,12 +261,12 @@ impl Traces {
     }
 
     /// Hold `order` as the order the unit's items are stored in.
-    pub(crate) fn ordered(&mut self, order: Order) {
+    pub fn ordered(&mut self, order: Order) {
         self.order = order;
     }
 
     /// Every declaration's trace, in the order of the names the declarations are written as.
-    pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
+    pub fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.iter().map(|(_, trace)| &***trace)
     }
 
@@ -287,22 +283,22 @@ impl Traces {
 pub struct Parts(u16);
 
 impl Parts {
-    pub(crate) const SIGNATURE: Parts = Parts(1);
-    pub(crate) const BODY: Parts = Parts(1 << 1);
-    pub(crate) const KIND: Parts = Parts(1 << 2);
-    pub(crate) const TOTALITY: Parts = Parts(1 << 3);
-    pub(crate) const VARIANCES: Parts = Parts(1 << 4);
-    pub(crate) const INDUCT: Parts = Parts(1 << 5);
-    pub(crate) const STRUCT: Parts = Parts(1 << 6);
-    pub(crate) const CONCEPT: Parts = Parts(1 << 7);
-    pub(crate) const ERASED: Parts = Parts(1 << 8);
-    pub(crate) const RAN: Parts = Parts(1 << 9);
-    pub(crate) const SORT: Parts = Parts(1 << 10);
+    pub const SIGNATURE: Parts = Parts(1);
+    pub const BODY: Parts = Parts(1 << 1);
+    pub const KIND: Parts = Parts(1 << 2);
+    pub const TOTALITY: Parts = Parts(1 << 3);
+    pub const VARIANCES: Parts = Parts(1 << 4);
+    pub const INDUCT: Parts = Parts(1 << 5);
+    pub const STRUCT: Parts = Parts(1 << 6);
+    pub const CONCEPT: Parts = Parts(1 << 7);
+    pub const ERASED: Parts = Parts(1 << 8);
+    pub const RAN: Parts = Parts(1 << 9);
+    pub const SORT: Parts = Parts(1 << 10);
     /// Every part: what a declaration made or taken away moves of what it declares.
-    pub(crate) const ALL: Parts = Parts((1 << 11) - 1);
+    pub const ALL: Parts = Parts((1 << 11) - 1);
 
     /// The part `question` asks of the name it is about, where it asks one: a witness's key, whether one is declared and whether lemmas are on offer ask none.
-    pub(crate) fn of(question: &Question) -> Option<Parts> {
+    pub fn of(question: &Question) -> Option<Parts> {
         Some(match question {
             Question::Signature(_) => Parts::SIGNATURE,
             Question::Body(_) => Parts::BODY,
@@ -322,7 +318,7 @@ impl Parts {
     }
 
     /// The question asking each part of `name` in this set.
-    pub(crate) fn questions(self, name: Global) -> impl Iterator<Item = Question> {
+    pub fn questions(self, name: Global) -> impl Iterator<Item = Question> {
         [
             (Parts::SIGNATURE, Question::Signature(name)),
             (Parts::BODY, Question::Body(name)),
@@ -342,12 +338,12 @@ impl Parts {
     }
 
     /// Both sets of parts.
-    pub(crate) fn with(self, other: Parts) -> Parts {
+    pub fn with(self, other: Parts) -> Parts {
         Parts(self.0 | other.0)
     }
 
     /// Whether the two sets share a part.
-    pub(crate) fn meets(self, other: Parts) -> bool {
+    pub fn meets(self, other: Parts) -> bool {
         self.0 & other.0 != 0
     }
 }
@@ -371,16 +367,16 @@ pub struct Readers {
 ///
 /// **One answer for the key.** A key no declaration of the unit is declared at is answered by the units in scope alone, the same to every declaration that asks; a key one of the unit's declarations is declared at is told apart by which witnesses the unit declares there.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Keyed {
-    pub(crate) readers: Vec<Global>,
-    pub(crate) answered: KeyAnswers,
+pub struct Keyed {
+    pub readers: Vec<Global>,
+    pub answered: KeyAnswers,
 }
 
 /// What one witness key was answered: the witness found standing there, where a goal asked, and whether one was declared there, where that was asked.
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct KeyAnswers {
-    pub(crate) found: Option<Option<Global>>,
-    pub(crate) declared: Option<bool>,
+pub struct KeyAnswers {
+    pub found: Option<Option<Global>>,
+    pub declared: Option<bool>,
 }
 
 /// The edges one declaration's trace adds: each name it asked about with the parts it asked, each key it asked at with what it was answered there, and what it was answered about the unit's lemmas.
@@ -484,7 +480,7 @@ impl Readers {
     }
 
     /// Replace the edges of the declaration written as `reader`: those `earlier`, the trace it held, added are taken out, and those `trace`, the one it holds now, adds are put in. `None` on either side is a declaration that held, or holds, no trace.
-    pub(crate) fn replace(
+    pub fn replace(
         &mut self,
         reader: Global,
         earlier: Option<&Trace<Question, Answered>>,
@@ -551,12 +547,12 @@ impl Readers {
     }
 
     /// The declarations that asked about `name`, each with the parts it asked.
-    pub(crate) fn of_name(&self, name: &Global) -> &[(Global, Parts)] {
+    pub fn of_name(&self, name: &Global) -> &[(Global, Parts)] {
         self.parts.get(name).map_or(&[], Vec::as_slice)
     }
 
     /// Whether some declaration asked the part `question` asks of the name it is about.
-    pub(crate) fn asks(&self, question: &Question) -> bool {
+    pub fn asks(&self, question: &Question) -> bool {
         let (Some(name), Some(asked)) = (question.subject(), Parts::of(question)) else {
             return false;
         };
@@ -565,24 +561,24 @@ impl Readers {
     }
 
     /// The declarations that asked at `concept` and `key`: for the witness standing there, or whether one is declared there.
-    pub(crate) fn at_key(&self, concept: Global, key: WitnessKey) -> &[Global] {
+    pub fn at_key(&self, concept: Global, key: WitnessKey) -> &[Global] {
         self.keys
             .get(&(concept, key))
             .map_or(&[], |keyed| keyed.readers.as_slice())
     }
 
     /// What the declaration written as `reader` was answered about the unit's lemmas being on offer, where it asked.
-    pub(crate) fn lemmas(&self, reader: &Global) -> Option<bool> {
+    pub fn lemmas(&self, reader: &Global) -> Option<bool> {
         self.lemmas.get(reader).copied()
     }
 
     /// Every name a question was about, each once, in no stated order: what a unit in scope that moved is read again by.
-    pub(crate) fn names(&self) -> impl Iterator<Item = &Global> {
+    pub fn names(&self) -> impl Iterator<Item = &Global> {
         self.parts.iter().map(|(name, _)| name)
     }
 
     /// Every declaration that asked something of the unit as a whole — the witness at a key, whether one is declared there, whether lemmas are on offer — in no stated order: erasure asks none of them, and keeps no form whose trace holds one.
-    pub(crate) fn asked_whole(&self) -> impl Iterator<Item = &Global> {
+    pub fn asked_whole(&self) -> impl Iterator<Item = &Global> {
         self.keys
             .iter()
             .flat_map(|(_, keyed)| keyed.readers.iter())
@@ -590,7 +586,7 @@ impl Readers {
     }
 
     /// Every witness key asked at, with what it was answered and who asked: what a unit in scope that moved may answer otherwise.
-    pub(crate) fn keys(&self) -> impl Iterator<Item = (&(Global, WitnessKey), &Keyed)> {
+    pub fn keys(&self) -> impl Iterator<Item = (&(Global, WitnessKey), &Keyed)> {
         self.keys.iter()
     }
 }
@@ -606,7 +602,7 @@ pub struct TraceTable {
 
 /// One declaration's record as a [`TraceTable`] holds it: the place of the name it is written as, its questions holding places, and what a filing completed it with.
 #[curios_archive::archived]
-pub struct TabledTrace {
+struct TabledTrace {
     name: u32,
     asked: Trace<Question<u32, u32>, Answered<u32>>,
     made: Option<TabledMade>,
@@ -614,7 +610,7 @@ pub struct TabledTrace {
 
 /// What a filing completed a record with ([`Made`]), as a [`TraceTable`] holds it: the names of its binders holding places.
 #[curios_archive::archived]
-pub struct TabledMade {
+struct TabledMade {
     input: [u8; 32],
     reads: Vec<Read>,
     outputs: Vec<[u8; 32]>,

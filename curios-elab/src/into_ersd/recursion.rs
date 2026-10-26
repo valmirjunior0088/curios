@@ -15,7 +15,7 @@ enum Member {
 
 impl Lowering<'_> {
     /// Erase a local `rec` block, then continue with its tail.
-    pub(super) fn erase_rec(
+    pub fn erase_rec(
         &mut self,
         context: &mut Retyping,
         rec: &Rec,
@@ -55,11 +55,7 @@ impl Lowering<'_> {
     }
 
     /// Erase a top-level recursive item as the fragment's item. Its members are defined in the Core context already, as every item's names are.
-    pub(super) fn erase_rec_item(
-        &mut self,
-        context: &mut Retyping,
-        rec: &RecItem,
-    ) -> Result<(), Error> {
+    pub fn erase_rec_item(&mut self, context: &mut Retyping, rec: &RecItem) -> Result<(), Error> {
         let definitions = rec.definitions();
         let names = definitions
             .iter()

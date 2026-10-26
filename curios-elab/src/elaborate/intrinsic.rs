@@ -87,7 +87,7 @@ fn synth_intrinsic(
 }
 
 /// Elaborate one operand against what its operation demands of it, and hand back the rebuilt operand. Shared by the intrinsics and by foreign calls, whose demands `curios_core::foreign_signature` states in the same vocabulary, so a type operand or an operand at a wire type is elaborated one way whichever operation holds it. `operation` renders the node for a bound that fails to terminate.
-pub(super) fn elaborate_demand(
+pub fn elaborate_demand(
     context: &mut Context,
     operand: &Term,
     demand: &Operand,
@@ -126,7 +126,7 @@ pub(super) fn elaborate_demand(
     })
 }
 
-pub(crate) fn elaborate_intrinsic(
+pub fn elaborate_intrinsic(
     context: &mut Context,
     term: &Term,
     intrinsic: &Intrinsic,

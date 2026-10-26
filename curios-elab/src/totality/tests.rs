@@ -3,7 +3,26 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{DefinitionKind, Free, Intrinsic, UniverseContext},
     curios_utilities::Qualifier,
+    std::collections::BTreeMap,
 };
+
+/// The totality `stamp_totality` stamped onto every definition in `module`.
+fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
+    let mut recorded = BTreeMap::new();
+    for item in &module.items {
+        match item {
+            Item::Let(definition) => {
+                recorded.insert(definition.name, definition.totality);
+            }
+            Item::Rec(rec) => {
+                for member in &rec.definitions {
+                    recorded.insert(member.name, member.totality);
+                }
+            }
+        }
+    }
+    recorded
+}
 
 /// A qualified top-level name, from the path a test writes. Fixture-only.
 fn name(path: &str) -> Global {

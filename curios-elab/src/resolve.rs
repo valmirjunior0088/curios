@@ -28,7 +28,7 @@ use {
 };
 
 /// The outcome of one resolution attempt.
-pub(crate) enum Resolution {
+pub enum Resolution {
     /// A witness term for the goal; solutions its unification committed stay.
     Solved(Term),
     /// The goal's key is still flexible — park, watching its metavariables.
@@ -40,7 +40,7 @@ pub(crate) enum Resolution {
 }
 
 /// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_utilities::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
-pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
+pub fn callee(context: &Context, func: &CalleeId) -> Callee {
     match func {
         CalleeId::Operator(op) => {
             let method = context.syntax().operator.concept_field(*op);
@@ -72,7 +72,7 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
 }
 
 /// The report that no witness answers `goal`, the goal of the slot `provenance` names, inserted at `site`: what the witness was needed for and what its shape missed are read off the goal where the report is made.
-pub(crate) fn no_witness_error(
+pub fn no_witness_error(
     context: &mut Context,
     goal: &Term,
     provenance: &WitnessOrigin,
@@ -268,7 +268,7 @@ fn diagnose_embedding(
 }
 
 /// `F(c̄, v)` as the monad it names, `F(c̄)`: an application of a name — at a universe instance or not — without its value slot, its explicit arguments alone, which is what a report shows of a monad. `None` unless `type_` applies a name.
-pub(crate) fn written_monad(type_: &Term) -> Option<Term> {
+pub fn written_monad(type_: &Term) -> Option<Term> {
     let Subterm::Apply(apply) = &**type_ else {
         return None;
     };
@@ -386,18 +386,14 @@ fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(Global, Univer
         .map(|_| (*name, universes.clone(), params.clone()))
 }
 
-pub(crate) enum Probe {
+pub enum Probe {
     Yes,
     No,
     Undecided,
 }
 
 /// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match.
-pub(crate) fn probe_match(
-    context: &mut Context,
-    candidate: &Term,
-    goal: &Term,
-) -> Result<Probe, Error> {
+fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
     // Hand-paired rather than bracketed by a closure: this sits on the witness-resolution recursion, where a closure body costs a stack frame per nested premise.
     let mark = context.solution_mark();
     let outcome = match convert_outcome(context, &Term::type_ground(), candidate, goal) {
@@ -450,7 +446,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
 }
 
 /// Run the resolution algorithm for `goal`. `origin` anchors extents and parked premise goals. Solutions committed by a successful match stay in force.
-pub(crate) fn resolve_witness(
+pub fn resolve_witness(
     context: &mut Context,
     goal: &Term,
     origin: &Term,
@@ -859,7 +855,7 @@ fn instantiate(
 }
 
 /// Pose a freshly minted witness goal. Where a term awaits its slot, the goal parks for that term: what resolution finds is the slot's own answer, taken where the term has read its parts and nothing solved the slot ([`answer_witness`]), so an argument whose type holds a dictionary names it whichever of the two the walk reaches first. Where no term awaits the slot, and inside an oracle, where nothing may park, the goal is resolved where it stands ([`resolve_witness_goal`]). It is posed here only for a slot a later part of its term can name: one nothing can has resolution as its one source, and its caller resolves it where it stands. A slot unification has already solved is left as it stands.
-pub(crate) fn attempt_witness_goal(
+pub fn attempt_witness_goal(
     context: &mut Context,
     slot: MetavarId,
     goal: &Term,
@@ -885,7 +881,7 @@ pub(crate) fn attempt_witness_goal(
 }
 
 /// Resolve a freshly minted witness goal where it stands: solved, or parked on a flex key. It is what a slot nothing after it names asks — a call's whose binder no later parameter's type and no result type mentions, an operator's, a scheme's premise — since resolution is the one source such a slot has, and what a dictionary's superclass field asks, whatever term awaits it: a superclass is the table's entry at its key, and no other field's type names another (`documentation/design/surface/concepts-resolve-with-global-coherence.md`), so the goal waits for nothing the literal has yet to read. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
-pub(crate) fn resolve_witness_goal(
+pub fn resolve_witness_goal(
     context: &mut Context,
     slot: MetavarId,
     goal: &Term,
@@ -903,7 +899,7 @@ pub(crate) fn resolve_witness_goal(
 }
 
 /// [`resolve_witness_goal`] for a form that states its own refusal: a definite miss where the goal stands is the error `missing` makes, at `origin`'s extent, rather than the missing witness. A goal that parks and misses later is reported as a parked goal is.
-pub(crate) fn resolve_witness_goal_or(
+pub fn resolve_witness_goal_or(
     context: &mut Context,
     slot: MetavarId,
     goal: &Term,
@@ -937,7 +933,7 @@ pub(crate) fn resolve_witness_goal_or(
 }
 
 /// Retry a parked witness goal, from `retry_parked`'s wake path. A wake resolves nothing: a goal whose slot was solved while it waited, by the unification that named a dictionary for it, is dropped, and any other waits on, for the completion of the term that awaits its slot or for the item's drain ([`answer_witness`]). Resolved here, a key an earlier argument gave would take the registered witness before a later argument's type could name another.
-pub(crate) fn retry_witness(
+pub fn retry_witness(
     context: &mut Context,
     slot: MetavarId,
     goal: Term,
@@ -961,7 +957,7 @@ pub(crate) fn retry_witness(
 }
 
 /// Answer a parked witness goal standing on the frames it holds, where the term that awaited its slot completes or the item drains: the witness resolution finds solves the slot, a key still flex leaves the goal parked, and a definite miss is the error [`attempt_witness_goal`] raises. A goal whose slot was solved while it waited is dropped.
-pub(crate) fn answer_witness(
+pub fn answer_witness(
     context: &mut Context,
     slot: MetavarId,
     goal: Term,
@@ -1004,19 +1000,19 @@ pub(crate) fn answer_witness(
 }
 
 /// What a witness declaration's type says: its telescope with every binder opened, the concept it witnesses with that application's parameters, and the key it registers under — the tuple of rigid heads of those parameters.
-pub(crate) struct WitnessSignature {
+struct WitnessSignature {
     /// Each binder as plicity, opened free variable and declared type, in written order.
-    pub(crate) binders: Vec<(Plicity, Free, Term)>,
-    pub(crate) concept: Global,
+    pub binders: Vec<(Plicity, Free, Term)>,
+    pub concept: Global,
     /// The concept application's parameters, under the opened binders.
-    pub(crate) params: Vec<Term>,
-    pub(crate) key: WitnessKey,
+    pub params: Vec<Term>,
+    pub key: WitnessKey,
 }
 
 /// Read `signature` as a witness declaration's type; see [`WitnessSignature`]. What a key *is* is defined here and nowhere else, which is what lets a second caller holding a witness's signature answer the question without restating the answer — `recovery::withhold`, which poisons the key of a witness its item never got to register.
 ///
 /// `signature` is *elaborated*, and must be: reduction leaves a lowered concept application as the `Apply` it was written as, since a concept's name is rigid and unfolds to no `StructType` — building the node the heads are read off is elaboration's, not reduction's. Every refusal below is one `register_witness` raises, and a caller that only wants the key discards them.
-pub(crate) fn read_witness_signature(
+fn read_witness_signature(
     context: &mut Context,
     signature: &Term,
 ) -> Result<WitnessSignature, Error> {
@@ -1075,7 +1071,7 @@ pub(crate) fn read_witness_signature(
 }
 
 /// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type, and `module` its declaring `Definition`'s own island, which the orphan-rule check below resolves to a mount. Registration ignores `pub`: visibility governs the name, never table membership.
-pub(crate) fn register_witness(
+pub fn register_witness(
     context: &mut Context,
     name: &Global,
     signature: &Term,
@@ -1221,7 +1217,7 @@ fn measure(args: &[Term], binders: &BTreeSet<&Free>) -> (usize, BTreeMap<Free, u
 /// What each superclass edge of the concept `name` reaches: the concept its `use` field's type reduces to an application of. Read under the frame the fields were checked in, since an edge's type may name the concept's parameters.
 ///
 /// Where an edge stands is its field's mark; this is the other half, and it is read off the elaborated type rather than the written head, so an alias of a concept application is an edge, as it is a premise.
-pub(crate) fn superclass_targets(
+pub fn superclass_targets(
     context: &mut Context,
     name: &Global,
     edges: &[Term],
@@ -1241,7 +1237,7 @@ pub(crate) fn superclass_targets(
 }
 
 /// Record what the superclass edges of the concept `name` reach, and hold the superclass graph to its rule with them in it.
-pub(crate) fn record_superclasses(
+pub fn record_superclasses(
     context: &mut Context,
     name: &Global,
     supers: Vec<Global>,
@@ -1255,7 +1251,7 @@ pub(crate) fn record_superclasses(
 }
 
 /// Validate the concept registry as it stands: every superclass edge recorded reaches a registered concept, and the graph they form is acyclic. A concept whose fields are not elaborated yet has no edge recorded, and is held when its own are ([`record_superclasses`]) — so a cycle is refused where its last edge arrives.
-pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
+pub fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 
     // A superclass is the unit's own or a unit's in scope, so each edge is followed through the registry as the context holds it, the scope beneath the unit's own table, and by the lookup that records no read: validating the registry is no declaration's need of another.

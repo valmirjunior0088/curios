@@ -25,13 +25,13 @@ use curios_core::Consumption;
 
 /// A context that reads finished terms, made by its reader and handed to no one.
 #[derive(Debug)]
-pub(crate) struct Retyping<'s> {
+pub struct Retyping<'s> {
     context: Context<'s>,
 }
 
 impl<'s> Retyping<'s> {
     /// A reader over `scope`, in which each item read may spend `budget` units, naming what `syntax` registers. What it reads of a declaration it reads through to `scope`, and its own stores start empty.
-    pub(crate) fn over(budget: u64, syntax: SyntaxRegistry, scope: &'s dyn InScope) -> Self {
+    pub fn over(budget: u64, syntax: SyntaxRegistry, scope: &'s dyn InScope) -> Self {
         let mut context = Context::new(budget, syntax);
         context.read_through(scope);
 
@@ -40,19 +40,19 @@ impl<'s> Retyping<'s> {
 
     /// A reader with nothing in scope, for a test that reads terms naming no declaration.
     #[cfg(test)]
-    pub(crate) fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
+    pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             context: Context::new(budget, syntax),
         }
     }
 
     /// Begin the trace of what erasing the item declaring `own` asks of the declarations around it: the next question is its first.
-    pub(crate) fn begin_trace(&mut self, own: &[&Global]) {
+    pub fn begin_trace(&mut self, own: &[&Global]) {
         self.context.typing.traced.begin(own);
     }
 
     /// Note that the erasure under way read the erased form of the item declaring `name`.
-    pub(crate) fn asks_erased(&self, name: &Global) {
+    pub fn asks_erased(&self, name: &Global) {
         self.context
             .typing
             .traced
@@ -60,7 +60,7 @@ impl<'s> Retyping<'s> {
     }
 
     /// Note that the erasure under way evaluated its item after the erased form of the item declaring `name`, whole.
-    pub(crate) fn asks_ran(&self, name: &Global) {
+    pub fn asks_ran(&self, name: &Global) {
         self.context
             .typing
             .traced
@@ -68,38 +68,38 @@ impl<'s> Retyping<'s> {
     }
 
     /// What the erasure under way asked, taken ([`Context::take_trace`]).
-    pub(crate) fn take_trace(&mut self) -> Trace<Question, Answered> {
+    pub fn take_trace(&mut self) -> Trace<Question, Answered> {
         self.context.take_trace()
     }
 
     /// [`Context::syntax`].
-    pub(crate) fn syntax(&self) -> SyntaxRegistry {
+    pub fn syntax(&self) -> SyntaxRegistry {
         self.context.syntax()
     }
 
     /// [`Context::fresh`].
-    pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
+    pub fn fresh(&mut self, hint: Option<&str>) -> Free {
         self.context.fresh(hint)
     }
 
     /// [`Context::spend`].
-    pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
+    pub fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
         self.context.spend(cost)
     }
 
     /// [`Context::restore_budget`]: an item is read on a budget restored for it.
-    pub(crate) fn restore_budget(&mut self) {
+    pub fn restore_budget(&mut self) {
         self.context.restore_budget();
     }
 
     /// [`Context::consumed`], which this crate's measurements of what a reading spends take.
     #[cfg(test)]
-    pub(crate) fn consumed(&self) -> Consumption {
+    pub fn consumed(&self) -> Consumption {
         self.context.consumed()
     }
 
     /// [`Context::with_frame`], the closure handed the reader.
-    pub(crate) fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.context.enter_frame();
         let result = f(self);
         self.context.leave_frame();
@@ -108,17 +108,17 @@ impl<'s> Retyping<'s> {
     }
 
     /// [`Context::assume`].
-    pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
+    pub fn assume(&mut self, name: &Free, type_: &Term) {
         self.context.assume(name, type_);
     }
 
     /// [`Context::advance_assumed`].
-    pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
+    pub fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
         self.context.advance_assumed(walk, domain)
     }
 
     /// [`Context::set_assumption_universe_context`].
-    pub(crate) fn set_assumption_universe_context(
+    pub fn set_assumption_universe_context(
         &mut self,
         name: &Free,
         universe_context: UniverseContext,
@@ -128,12 +128,12 @@ impl<'s> Retyping<'s> {
     }
 
     /// [`Context::define`].
-    pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
+    pub fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
         self.context.define(name, term, kind);
     }
 
     /// [`Context::define_assuming`].
-    pub(crate) fn define_assuming(
+    pub fn define_assuming(
         &mut self,
         name: &Free,
         type_: &Term,
@@ -144,22 +144,22 @@ impl<'s> Retyping<'s> {
     }
 
     /// [`Context::definition_kind`].
-    pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
+    pub fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
         self.context.definition_kind(name)
     }
 
     /// [`Context::definition_body`].
-    pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
+    pub fn definition_body(&self, name: &Free) -> Option<&Term> {
         self.context.definition_body(name)
     }
 
     /// [`Context::induct_decl`].
-    pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+    pub fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.context.induct_decl(name)
     }
 
     /// [`Context::induct_facet`].
-    pub(crate) fn induct_facet<T>(
+    pub fn induct_facet<T>(
         &mut self,
         name: &Global,
         universes: &Universes,
@@ -169,12 +169,12 @@ impl<'s> Retyping<'s> {
     }
 
     /// [`Context::struct_decl`].
-    pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+    pub fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.context.struct_decl(name)
     }
 
     /// [`Context::struct_facet`].
-    pub(crate) fn struct_facet<T>(
+    pub fn struct_facet<T>(
         &mut self,
         name: &Global,
         universes: &Universes,
@@ -184,7 +184,7 @@ impl<'s> Retyping<'s> {
     }
 
     /// [`Context::instantiate_struct_decl_at`].
-    pub(crate) fn instantiate_struct_decl_at(
+    pub fn instantiate_struct_decl_at(
         &mut self,
         struct_decl: &StructDecl,
         universes: &Universes,
@@ -194,26 +194,22 @@ impl<'s> Retyping<'s> {
     }
 
     /// `term` reduced to its head ([`reduce_with`]).
-    pub(crate) fn reduce_with(&mut self, term: &Term) -> Result<Term, Error> {
+    pub fn reduce_with(&mut self, term: &Term) -> Result<Term, Error> {
         reduce_with(&mut self.context, term)
     }
 
     /// The sort of `type_`, as a term ([`sort_term`]).
-    pub(crate) fn sort_term(&mut self, type_: &Term) -> Result<Term, Error> {
+    pub fn sort_term(&mut self, type_: &Term) -> Result<Term, Error> {
         sort_term(&mut self.context, type_)
     }
 
     /// Whether a value of `type_` carries nothing at run time, under the binders `opened` ([`is_erasable_in`]).
-    pub(crate) fn is_erasable_in(
-        &mut self,
-        opened: &mut Opened,
-        type_: &Term,
-    ) -> Result<bool, Error> {
+    pub fn is_erasable_in(&mut self, opened: &mut Opened, type_: &Term) -> Result<bool, Error> {
         is_erasable_in(&mut self.context, opened, type_)
     }
 
     /// The type of the neutral `term`, read with no binder a conversion opened ([`synth_neutral`]): a walk over finished terms assumes the binders it stands under.
-    pub(crate) fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, ReduceError> {
+    pub fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, ReduceError> {
         synth_neutral(
             &mut self.context,
             &Binders::default(),
@@ -223,12 +219,12 @@ impl<'s> Retyping<'s> {
     }
 
     /// Install the equation an arm stands under: `head` is `value` there ([`refine_head`]).
-    pub(crate) fn refine_head(&mut self, head: &Term, value: &Term) -> Result<(), Error> {
+    pub fn refine_head(&mut self, head: &Term, value: &Term) -> Result<(), Error> {
         refine_head(&mut self.context, head, value)
     }
 
     /// Enter an inductive arm as it was elaborated ([`enter_induct_case`]), the one place a reader puts a question to conversion: solving the arm's index equations compares two forcings of one binder by `Judge::convert_at`.
-    pub(crate) fn enter_induct_case(
+    pub fn enter_induct_case(
         &mut self,
         head: &Term,
         family: InductCase<'_>,

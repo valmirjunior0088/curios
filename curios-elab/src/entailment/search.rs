@@ -15,10 +15,10 @@ use {
 };
 
 /// The rows one search may derive before it refuses: a count in the theory's units, never the host's.
-pub(super) const DERIVED_ROWS: usize = 4096;
+pub const DERIVED_ROWS: usize = 4096;
 
 /// What one search over `<= 0` rows concluded.
-pub(super) enum Search {
+pub enum Search {
     /// Multipliers, one per row, whose combination is a positive constant `<= 0`.
     Refuted(Vec<Natural>),
     /// A value for every unknown satisfying every row: an integer wherever one lies in the unknown's interval, a rational otherwise.
@@ -28,16 +28,16 @@ pub(super) enum Search {
 }
 
 /// The two arms of a case split the search may open: the forms each adds to the ones it holds.
-pub(super) struct Arms {
+pub struct Arms {
     /// Where the split's decision holds.
-    pub(super) holds: Vec<LinearForm>,
+    pub holds: Vec<LinearForm>,
     /// Where it fails.
-    pub(super) fails: Vec<LinearForm>,
+    pub fails: Vec<LinearForm>,
 }
 
 /// A refutation, per case of the splits it opened.
 #[derive(Debug, PartialEq)]
-pub(super) enum Certificate {
+pub enum Certificate {
     /// One combination: a multiplier per form of its case — the forms, then each opened case's own in the order they were opened, then the negated goal's.
     Leaf(Vec<Natural>),
     /// One combination over the forms and what every case of the splits states, with no case opened: a multiplier per form, then per form every case states, then per form of the negated goal.
@@ -50,7 +50,7 @@ pub(super) enum Certificate {
 }
 
 /// What a search over the facts and their case splits concluded.
-pub(super) enum Plan {
+pub enum Plan {
     Certified(Certificate),
     /// An assignment satisfying every form of a case no split refutes.
     Satisfied(Vec<(Monomial, Rational)>),
@@ -60,7 +60,7 @@ pub(super) enum Plan {
 /// Search `forms` with the negated goal's last for a refutation, opening the splits in `splits` in order, each only where the search without it found an assignment: an assignment that leaves a truncated subtraction free may be one its definition excludes. One budget runs across every case.
 ///
 /// **What every case states is asked first.** `common` holds what both cases of each split state, and where the forms alone leave an assignment they are searched with it before a case is opened: a sum of `n` operations that turns on no case is one combination, where its cases are `2ⁿ`. Asked after the forms alone, so a bound they refute is refuted as it was, and not inside a case, whose own forms state it.
-pub(super) fn plan(
+pub fn plan(
     forms: &[LinearForm],
     negated: &[LinearForm],
     common: &[LinearForm],
@@ -125,7 +125,7 @@ struct Level {
 }
 
 /// Search `forms`, each read `form <= 0`, spending at most `budget` derived rows and leaving what is left of it.
-pub(super) fn refute(forms: &[LinearForm], budget: &mut usize) -> Search {
+pub fn refute(forms: &[LinearForm], budget: &mut usize) -> Search {
     curios_profile::profile!("entailment::refute");
     let width = forms.len();
     let mut rows = forms
@@ -351,7 +351,7 @@ fn assign(levels: &[Level]) -> Vec<(Monomial, Rational)> {
 
 /// An exact rational, for an assignment: `numerator / denominator` in lowest terms, the denominator positive. A counterexample the search finds is over the rationals, and one that is not an integer is reported as the fraction it is.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct Rational {
+pub struct Rational {
     numerator: Integer,
     denominator: Integer,
 }
@@ -373,12 +373,12 @@ impl From<Integer> for Rational {
 
 impl Rational {
     /// This value where it is an integer.
-    pub(super) fn integer(&self) -> Option<&Integer> {
+    pub fn integer(&self) -> Option<&Integer> {
         (self.denominator == Integer::from(1)).then_some(&self.numerator)
     }
 
     /// `numerator / denominator`, reduced; the denominator nonzero.
-    pub(super) fn of(numerator: impl Into<Integer>, denominator: impl Into<Integer>) -> Self {
+    pub fn of(numerator: impl Into<Integer>, denominator: impl Into<Integer>) -> Self {
         let (numerator, denominator) = (numerator.into(), denominator.into());
         let (numerator, denominator) = match denominator < Integer::from(0) {
             true => (-numerator, -denominator),
@@ -397,7 +397,7 @@ impl Rational {
         }
     }
 
-    pub(super) fn plus(&self, other: &Rational) -> Rational {
+    pub fn plus(&self, other: &Rational) -> Rational {
         Rational::of(
             self.numerator.clone() * other.denominator.clone()
                 + other.numerator.clone() * self.denominator.clone(),
@@ -405,7 +405,7 @@ impl Rational {
         )
     }
 
-    pub(super) fn times(&self, factor: &Integer) -> Rational {
+    pub fn times(&self, factor: &Integer) -> Rational {
         Rational::of(
             self.numerator.clone() * factor.clone(),
             self.denominator.clone(),
@@ -425,7 +425,7 @@ impl Rational {
     }
 
     /// The greatest integer not above it: truncating division, one less where a negative value had a remainder.
-    pub(super) fn floor(&self) -> Integer {
+    pub fn floor(&self) -> Integer {
         let quotient = self
             .numerator
             .div(&self.denominator)
@@ -438,12 +438,12 @@ impl Rational {
     }
 
     /// The least integer not below it.
-    pub(super) fn ceil(&self) -> Integer {
+    pub fn ceil(&self) -> Integer {
         -self.negated().floor()
     }
 
     /// A value for an unknown bounded by `lower` and `upper`, either absent: zero where it lies between them, else the integer nearest it — `ceil(lower)` where that does not pass `upper`, `floor(upper)` where there is no lower bound — and `lower` itself where no integer fits, which is the rational counterexample the report states as a fraction.
-    pub(super) fn choose(lower: Option<Rational>, upper: Option<Rational>) -> Rational {
+    pub fn choose(lower: Option<Rational>, upper: Option<Rational>) -> Rational {
         let zero = Rational::default();
         let above = |value: &Rational| lower.as_ref().is_none_or(|lower| lower <= value);
         let below = |value: &Rational| upper.as_ref().is_none_or(|upper| value <= upper);

@@ -22,7 +22,7 @@ use {
 
 /// One metavariable's record. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`).
 #[derive(Debug)]
-pub(crate) struct MetaEntry {
+pub struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
     pub telescope: BirthTelescope,
     /// How the telescope stands to `frames`: taken with them, so they bind it, or stated for the metavariable.
@@ -34,7 +34,7 @@ pub(crate) struct MetaEntry {
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
     pub solution: Option<Term>,
     /// Ordinary inference holes may be solved by conversion. A recursive elaboration slot is filled only by the owning `rec` elaborator and a placeholder only by the problem parked behind it; conversion treats either, unfilled, as a blocking dependency ([`Solutions::owner_fills`]).
-    pub kind: MetaKind,
+    kind: MetaKind,
     /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Holds(i < n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
     pub proposition: bool,
     /// What `result` reduced to when the mint — or a later attempt at a parked discharge — asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
@@ -50,8 +50,12 @@ pub(crate) struct MetaEntry {
 }
 
 impl MetaEntry {
+    pub(super) fn kind(&self) -> MetaKind {
+        self.kind
+    }
+
     /// Whether unification is what fills this metavariable, read at an occurrence of `origin`: an inference metavariable that is no proposition, minted for a hole, an implicit or a domain. A written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge, a parked check's placeholder by that check and a recursive group's slot by its group, and none of those is restricted to a narrower context ([`Context::metavar_restriction`](super::Context::metavar_restriction), [`Context::block_restriction`](super::Context::block_restriction)).
-    pub(crate) fn unification_fills(&self, origin: &MetavarOrigin) -> bool {
+    pub fn unification_fills(&self, origin: &MetavarOrigin) -> bool {
         self.kind == MetaKind::Inference
             && !self.proposition
             && matches!(
@@ -75,7 +79,7 @@ enum Held {
 
 /// A term that awaits: one that reads its parts against types holding metavariables and takes the choices left among them once it has read them all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct AwaitId(usize);
+pub struct AwaitId(usize);
 
 /// One awaiting term's record.
 #[derive(Debug)]
@@ -88,7 +92,7 @@ struct Awaiting {
 
 /// How a metavariable's telescope stands to the frames it holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Scoped {
+pub enum Scoped {
     /// Taken with the frames where the metavariable was born: they bind every binder of it, each at its type, and a judgment standing on them reads it without assuming it again.
     Held,
     /// Stated for the metavariable — a restriction's stand-in over a narrower context's binders, which the frames both births held may not bind, or a fixture's: a judgment of it assumes the telescope again.
@@ -96,7 +100,7 @@ pub(crate) enum Scoped {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MetaKind {
+pub enum MetaKind {
     Inference,
     RecSlot,
     /// A parked problem's stand-in for the term it will rebuild: a check's ([`ParkedWork::Checking`]). Only that problem fills it, with the term it rebuilt, so what stands in the tree is what the program wrote: conversion waits on a placeholder, and nothing re-expresses one in another context.
@@ -105,7 +109,7 @@ pub(crate) enum MetaKind {
 
 /// The work a parked problem will retry.
 #[derive(Debug)]
-pub(crate) enum ParkedWork {
+pub enum ParkedWork {
     /// A conversion constraint that quiesced blocked on unsolved metavariables.
     Conversion(Problem),
     /// A whole checking problem: a form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled. The term is elaborated once: whatever runs the check — a wake's retry, a term's completion, the drain — holds the problem out of the store while it does.
@@ -130,7 +134,7 @@ pub(crate) enum ParkedWork {
 
 /// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. It holds the local frames it was parked under, and its retry stands on them ([`Context::standing_on`](super::Context::standing_on)).
 #[derive(Debug)]
-pub(crate) struct ParkedProblem {
+pub struct ParkedProblem {
     pub work: ParkedWork,
     /// The term being checked at park time; its extent anchors the eventual error if the problem never resolves.
     pub origin: Term,
@@ -235,7 +239,7 @@ fn unindex(index: &mut HashMap<MetavarId, BTreeSet<u64>>, key: &MetavarId, seria
 
 /// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): the serial it stands at in the store, the problem, the term it was parked for and the frames it holds.
 #[derive(Debug)]
-pub(crate) struct ParkedConversion {
+pub struct ParkedConversion {
     pub at: u64,
     pub problem: Problem,
     pub origin: Term,
@@ -244,7 +248,7 @@ pub(crate) struct ParkedConversion {
 
 /// What a completing term may do for a parked problem nothing else answers: the problem's own answer, one among those it admits ([`ParkedWork::choice`]). Their order is the order they are taken in, each committing less than the next and able to decide it, with one exception the store cannot tell by a problem's shape: a lambda with a domain left open is read after the spines are held, which may be what gives the domain ([`Context::complete`](crate::Context::complete)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Choice {
+pub enum Choice {
     /// A `use` slot nothing solved takes the witness resolution finds for its goal, where the goal's key has come to a head resolution reads.
     Witness,
     /// A tuple literal gives the metavariable it waits on its shape: a non-dependent product of one open type a field.
@@ -259,7 +263,7 @@ pub(crate) enum Choice {
 
 impl ParkedWork {
     /// The choice a completing term may take for this problem, or `None` where only a solution answers it. Stated here once, so no consumer of the store recognizes a problem by its shape.
-    pub(crate) fn choice(&self) -> Option<Choice> {
+    pub fn choice(&self) -> Option<Choice> {
         match self {
             ParkedWork::Checking { term, .. } => match &**term {
                 Subterm::Tuple(tuple) if !tuple.fields.is_empty() => Some(Choice::Shape),
@@ -277,7 +281,7 @@ impl ParkedWork {
 
 /// A parked check with a choice a completing term may take for it ([`ParkedWork::choice`]): the term as written, the type it waits at, the placeholder that stands for it and the frames it holds.
 #[derive(Debug, Clone)]
-pub(crate) struct ParkedChoice {
+pub struct ParkedChoice {
     pub choice: Choice,
     pub written: Term,
     pub expected: Term,
@@ -310,14 +314,14 @@ impl ParkedProblem {
 
 /// A prefix of the journal of solutions, as a later moment can ask whether it still stands ([`Solutions::holds`]): how many solutions it holds, and the serial of the last. A rollback past it removes that entry, and a restamp at or before it gives that entry another serial, so the prefix stands while the entry at its end holds its serial.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct SolutionPrefix {
+pub struct SolutionPrefix {
     len: usize,
     last: u64,
 }
 
 /// The flat, frame-independent unification stores. `Context` holds exactly one of these; see the module documentation for the frame-independence contract.
 #[derive(Debug)]
-pub(crate) struct Solutions {
+pub struct Solutions {
     /// Metavariable records indexed by `Metavar::id` — monotonic facts about the program being elaborated, not lexically-scoped bindings.
     entries: Vec<Option<MetaEntry>>,
     /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with the lowering's count, so core-minted ids sit strictly above `into_core`'s.
@@ -349,7 +353,7 @@ pub(crate) struct Solutions {
 }
 
 impl Solutions {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             entries: Vec::new(),
             next_metavar: Entropy::<MetavarId>::new(),
@@ -368,7 +372,7 @@ impl Solutions {
     }
 
     /// Begin reading a term that awaits, inside the one being read. Answers the term and the one to return to, for [`Solutions::leave_awaiting`].
-    pub(crate) fn enter_awaiting(&mut self) -> (AwaitId, Option<AwaitId>) {
+    pub fn enter_awaiting(&mut self) -> (AwaitId, Option<AwaitId>) {
         let enclosing = self.reading;
         let depth = enclosing.map_or(0, |term| self.awaiting[term.0].depth + 1);
         let term = AwaitId(self.awaiting.len());
@@ -382,13 +386,13 @@ impl Solutions {
     }
 
     /// End a term that awaits, returning to the one it was read inside. What it still awaited is awaited by none from here on.
-    pub(crate) fn leave_awaiting(&mut self, term: AwaitId, enclosing: Option<AwaitId>) {
+    pub fn leave_awaiting(&mut self, term: AwaitId, enclosing: Option<AwaitId>) {
         self.awaiting[term.0].standing = false;
         self.reading = enclosing;
     }
 
     /// Read what follows as awaited by `term`, answering what was being read: how a retried problem runs under the term that awaits it, and how the retry returns.
-    pub(crate) fn read_under(&mut self, term: Option<AwaitId>) -> Option<AwaitId> {
+    pub fn read_under(&mut self, term: Option<AwaitId>) -> Option<AwaitId> {
         mem::replace(&mut self.reading, term)
     }
 
@@ -404,14 +408,14 @@ impl Solutions {
     }
 
     /// The standing term that awaits `id`, if one does: the one that awaits the class `id` is held in.
-    pub(crate) fn awaited(&self, id: MetavarId) -> Option<AwaitId> {
+    pub fn awaited(&self, id: MetavarId) -> Option<AwaitId> {
         let (_, awaited, _) = self.class(id)?;
 
         awaited.filter(|term| self.awaiting[term.0].standing)
     }
 
     /// The outermost standing term among those that await `ids`.
-    pub(crate) fn outermost(&self, ids: impl IntoIterator<Item = MetavarId>) -> Option<AwaitId> {
+    pub fn outermost(&self, ids: impl IntoIterator<Item = MetavarId>) -> Option<AwaitId> {
         ids.into_iter()
             .filter_map(|id| self.awaited(id))
             .min_by_key(|term| self.awaiting[term.0].depth)
@@ -451,7 +455,7 @@ impl Solutions {
     }
 
     /// Have the term being read await each class of `ids` that no standing term awaits: the holes a call's head leaves open are the call's, as the implicits it inserts are.
-    pub(crate) fn adopt(&mut self, ids: impl IntoIterator<Item = MetavarId>) {
+    pub fn adopt(&mut self, ids: impl IntoIterator<Item = MetavarId>) {
         let Some(reading) = self.reading else {
             return;
         };
@@ -466,7 +470,7 @@ impl Solutions {
     }
 
     /// The parked checks `term` awaits that have a choice of their own, in the order they were parked, and beside them what each conversion `term` awaits watches: the links by which two of those checks wait on one type. `None` asks for what no standing term awaits, which is the item's.
-    pub(crate) fn choices_awaited_by(
+    pub fn choices_awaited_by(
         &self,
         term: Option<AwaitId>,
     ) -> (Vec<ParkedChoice>, Vec<BTreeSet<MetavarId>>) {
@@ -496,7 +500,7 @@ impl Solutions {
     }
 
     /// The conversions `term` awaits, in the order they were parked: what a completing term may hold to spines that agree ([`Choice::Spines`]). `None` asks for what no standing term awaits, which is the item's.
-    pub(crate) fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
+    pub fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
         self.parked
             .serials()
             .filter(|(_, parked)| {
@@ -520,7 +524,7 @@ impl Solutions {
     }
 
     /// Drop the conversions that stand at `at`, each one a completing term has decided by holding its spines. The serials are those [`Solutions::conversions_awaited_by`] answered.
-    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
+    pub fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
         for serial in at {
             if self
                 .parked
@@ -533,7 +537,7 @@ impl Solutions {
     }
 
     /// The `use` slots nothing has solved whose goals `term` awaits, in the order the goals were parked. `None` asks for what no standing term awaits, which is the item's.
-    pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
+    pub fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
         self.parked
             .problems()
             .filter_map(|parked| match &parked.work {
@@ -551,7 +555,7 @@ impl Solutions {
     }
 
     /// Take the goal parked for the `use` slot `slot`, where it still waits: what a completing term answers itself.
-    pub(crate) fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
+    pub fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
         let (serial, _) = self.parked.serials().find(|(_, parked)| {
             matches!(&parked.work, ParkedWork::Witness { slot: held, .. } if *held == slot)
         })?;
@@ -560,7 +564,7 @@ impl Solutions {
     }
 
     /// The check with a choice of its own parked on the bare metavariable `id`, where one is: the field a part of a shape holds while the shape is being given.
-    pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
+    pub fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
         self.parked
             .problems()
             .filter_map(ParkedProblem::as_choice)
@@ -570,27 +574,27 @@ impl Solutions {
     }
 
     /// Record that the literal of `choice` shaped the metavariable it waited on: what the item's drain holds to the sort that metavariable was declared at ([`Solutions::take_shaped`]).
-    pub(crate) fn note_shaped(&mut self, choice: ParkedChoice) {
+    pub fn note_shaped(&mut self, choice: ParkedChoice) {
         self.shaped.push(choice);
     }
 
     /// Take the literals that shaped a metavariable since the last drain.
-    pub(crate) fn take_shaped(&mut self) -> Vec<ParkedChoice> {
+    pub fn take_shaped(&mut self) -> Vec<ParkedChoice> {
         mem::take(&mut self.shaped)
     }
 
     /// Mint the next metavariable id.
-    pub(crate) fn mint(&mut self) -> MetavarId {
+    pub fn mint(&mut self) -> MetavarId {
         self.next_metavar.fresh()
     }
 
     /// Raise the minting floor: every id [`Solutions::mint`] hands out will be `>= floor`.
-    pub(crate) fn seed_floor(&mut self, floor: u64) {
+    pub fn seed_floor(&mut self, floor: u64) {
         self.next_metavar.seed(floor);
     }
 
     /// [`Solutions::birth`] for a recursive-elaboration slot, which only `fill_rec_slot` may solve.
-    pub(crate) fn birth_rec_slot(
+    pub fn birth_rec_slot(
         &mut self,
         id: MetavarId,
         telescope: BirthTelescope,
@@ -608,7 +612,7 @@ impl Solutions {
     }
 
     /// Materialize a metavariable's birth record, of the kind `kind`. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
-    pub(crate) fn birth(
+    pub fn birth(
         &mut self,
         id: MetavarId,
         telescope: BirthTelescope,
@@ -642,55 +646,55 @@ impl Solutions {
     }
 
     /// Record where the term `id` was minted for is written, at its birth.
-    pub(crate) fn note_written(&mut self, id: MetavarId, extent: Extent) {
+    pub fn note_written(&mut self, id: MetavarId, extent: Extent) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.written = Some(extent);
         }
     }
 
     /// Record that `id`'s `result` is a proposition. Separate from birth because only the implicit-insertion path knows, and it knows after the sort is asked, not at the mint.
-    pub(crate) fn mark_proposition(&mut self, id: MetavarId) {
+    pub fn mark_proposition(&mut self, id: MetavarId) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.proposition = true;
         }
     }
 
     /// Record what `id`'s `result` reduced to, for the report an unsolved one becomes.
-    pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
+    pub fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.reduct = Some(reduct);
         }
     }
 
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
-    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
+    pub fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.refusal = Some(Rc::new(refusal));
         }
     }
 
     /// Record why the arm `id` was born in is never taken, for the report the hole becomes.
-    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
+    pub fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.dead_arm = Some(Rc::new(dead));
         }
     }
 
-    pub(crate) fn entry(&self, id: MetavarId) -> Option<&MetaEntry> {
+    pub fn entry(&self, id: MetavarId) -> Option<&MetaEntry> {
         self.entries.get(id.0).and_then(Option::as_ref)
     }
 
-    pub(crate) fn solution(&self, id: MetavarId) -> Option<&Term> {
+    pub fn solution(&self, id: MetavarId) -> Option<&Term> {
         self.entry(id).and_then(|entry| entry.solution.as_ref())
     }
 
-    pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
+    pub fn is_rec_slot(&self, id: MetavarId) -> bool {
         self.entry(id)
             .is_some_and(|entry| entry.kind == MetaKind::RecSlot)
     }
 
     /// Whether something other than conversion fills `id`: a recursive group its slot, a parked problem its placeholder. Conversion waits on such a hole rather than solve it.
-    pub(crate) fn owner_fills(&self, id: MetavarId) -> bool {
+    pub fn owner_fills(&self, id: MetavarId) -> bool {
         self.entry(id)
             .is_some_and(|entry| matches!(entry.kind, MetaKind::RecSlot | MetaKind::Placeholder))
     }
@@ -698,7 +702,7 @@ impl Solutions {
     /// Commit a solution: sets the entry, records the wake signal, and journals for rollback. The façade stamps the write.
     ///
     /// An unborn id is the caller's broken contract, not a program error: every minting path births immediately, and the conversion solver's no-birth-record arm refuses before committing. A silent no-op here would surface as an unsolved metavariable far from the violation.
-    pub(crate) fn solve(&mut self, id: MetavarId, term: Term) {
+    pub fn solve(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .entries
             .get_mut(id.0)
@@ -717,7 +721,7 @@ impl Solutions {
     }
 
     /// If `term` is a witness-resolution hole, its provenance and the concept goal it stands for (e.g. `Add(Nat)`). A conversion left stuck between two such holes is really an unresolved witness — reported as one rather than as a bare metavariable mismatch between two anonymous placeholders.
-    pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
+    pub fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
         let Subterm::Metavar(metavar) = &**term else {
             return None;
         };
@@ -729,7 +733,7 @@ impl Solutions {
     }
 
     /// Resolve a solved metavariable *at its occurrence*: the stored solution is spelled with the birth telescope's names, and the occurrence's spine records what each of those binders corresponds to here — so resolution is the solution with birth names rewritten through the spine. An empty spine (a never-rebuilt `into_core` hole) resolves as the identity. `None` while unsolved.
-    pub(crate) fn resolve(&self, metavar: &Metavar) -> Option<Term> {
+    pub fn resolve(&self, metavar: &Metavar) -> Option<Term> {
         let entry = self.entry(metavar.id)?;
         let solution = entry.solution.as_ref()?;
 
@@ -737,7 +741,7 @@ impl Solutions {
     }
 
     /// The type of a metavariable *at its occurrence*: the type it was born at, read through the occurrence's spine as [`Solutions::resolve`] reads its solution. `None` for an id with no birth record.
-    pub(crate) fn type_at(&self, metavar: &Metavar) -> Option<Term> {
+    pub fn type_at(&self, metavar: &Metavar) -> Option<Term> {
         let entry = self.entry(metavar.id)?;
 
         Some(Self::at_occurrence(entry, metavar, &entry.result))
@@ -765,17 +769,17 @@ impl Solutions {
     }
 
     /// How many solutions have been committed so far — the term half of `Context::solution_mark`'s watermark.
-    pub(crate) fn solved_len(&self) -> usize {
+    pub fn solved_len(&self) -> usize {
         self.solved_log.len()
     }
 
     /// How many times a metavariable's place in its class has been written so far: the watermark [`Solutions::unwind_to`] restores the classes to. A count of solutions would not serve, a parked problem linking with none committed.
-    pub(crate) fn held_len(&self) -> usize {
+    pub fn held_len(&self) -> usize {
         self.held_log.len()
     }
 
     /// The solutions committed since `solved_len` that still stand, each with its id.
-    pub(crate) fn solved_since(&self, solved_len: usize) -> Vec<(MetavarId, Term)> {
+    pub fn solved_since(&self, solved_len: usize) -> Vec<(MetavarId, Term)> {
         self.solved_log[solved_len.min(self.solved_log.len())..]
             .iter()
             .filter_map(|(id, _)| self.solution(*id).map(|solution| (*id, solution.clone())))
@@ -783,7 +787,7 @@ impl Solutions {
     }
 
     /// Replace a standing solution with `term`, a term it already denotes, logging no solve: nothing parked on it wakes, and a rollback past its first commitment unwinds it as before. Its entry in the journal, and every one after it, takes a serial of its own again: a prefix that held the solution as it was spelled is not one that stands.
-    pub(crate) fn restamp(&mut self, id: MetavarId, term: Term) {
+    pub fn restamp(&mut self, id: MetavarId, term: Term) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0)
             && entry.solution.is_some()
         {
@@ -802,7 +806,7 @@ impl Solutions {
     }
 
     /// The journal as it stands, for [`Solutions::holds`] to be asked about later.
-    pub(crate) fn prefix(&self) -> SolutionPrefix {
+    pub fn prefix(&self) -> SolutionPrefix {
         SolutionPrefix {
             len: self.solved_log.len(),
             last: self.solved_log.last().map_or(0, |(_, serial)| *serial),
@@ -810,7 +814,7 @@ impl Solutions {
     }
 
     /// Whether every solution `prefix` held is still committed as it was, and where `exact`, whether none has been committed since.
-    pub(crate) fn holds(&self, prefix: SolutionPrefix, exact: bool) -> bool {
+    pub fn holds(&self, prefix: SolutionPrefix, exact: bool) -> bool {
         let end = match prefix.len.checked_sub(1) {
             None => true,
             Some(at) => self
@@ -823,7 +827,7 @@ impl Solutions {
     }
 
     /// Unwind every solution committed since the watermark and every link made since, removing the unwound ids from the wake signals. The façade clears the caches.
-    pub(crate) fn unwind_to(&mut self, solved_len: usize, held_len: usize) {
+    pub fn unwind_to(&mut self, solved_len: usize, held_len: usize) {
         let unwound = self
             .solved_log
             .split_off(solved_len.min(self.solved_log.len()));
@@ -847,7 +851,7 @@ impl Solutions {
     }
 
     /// Park work with the frames it holds, recomputing the watch set from the work's currently unsolved metavariables.
-    pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
+    pub fn park(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
         let watching = match &work {
             // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
             ParkedWork::Conversion(goal) => self.unsolved_in([&goal.this, &goal.that, &goal.type_]),
@@ -898,7 +902,7 @@ impl Solutions {
     }
 
     /// The numerals parked on each bare metavariable, by the metavariable they wait on now: what a report made before their term completes shows that metavariable as ([`numeral_default`](crate::numeral_default)).
-    pub(crate) fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
+    pub fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
         let mut waiting = BTreeMap::<MetavarId, Vec<NumLit>>::new();
         for parked in self.parked.problems() {
             if let ParkedWork::Checking { term, expected, .. } = &parked.work
@@ -914,7 +918,7 @@ impl Solutions {
     }
 
     /// Take the parked goals woken by solutions landed since the last sweep. Consumes the wake signals; empty when nothing new has been solved.
-    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
+    pub fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         if self.newly_solved.is_empty() || self.parked.is_empty() {
             self.newly_solved.clear();
 
@@ -927,49 +931,49 @@ impl Solutions {
     }
 
     /// Take every parked goal — the drain's final sweep.
-    pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
+    pub fn take_parked(&mut self) -> Vec<ParkedProblem> {
         self.parked.take_all()
     }
 
     /// Take the checking problem parked behind `placeholder`, where it still waits: what a completing term runs itself, out of reach of the wakes its own check sets off.
-    pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
+    pub fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
         self.parked.take_checking(placeholder)
     }
 
-    pub(crate) fn parked_len(&self) -> usize {
+    pub fn parked_len(&self) -> usize {
         self.parked.len()
     }
 
-    pub(crate) fn has_newly_solved(&self) -> bool {
+    pub fn has_newly_solved(&self) -> bool {
         !self.newly_solved.is_empty()
     }
 
-    pub(crate) fn parking_suppressed(&self) -> bool {
+    pub fn parking_suppressed(&self) -> bool {
         self.oracle.is_some()
     }
 
     /// Whether conversion may take what two spines would solve: a completing term is holding them, and no oracle has been entered since, whose question is no part of that term's.
-    pub(crate) fn holds_spines(&self) -> bool {
+    pub fn holds_spines(&self) -> bool {
         self.holding && self.oracle.is_none()
     }
 
     /// Whether conversion may imitate an application of an unsolved metavariable against a type former's node: a completing term is holding spines, the imitation being one more answer they give, or a `!` is reading its region's monad, which is all the region has to say.
-    pub(crate) fn imitates(&self) -> bool {
+    pub fn imitates(&self) -> bool {
         self.imitating || self.holds_spines()
     }
 
     /// Begin or end reading a region's monad, answering what stood before: [`Context::imitating`](crate::Context::imitating)'s bracket.
-    pub(crate) fn set_imitating(&mut self, imitating: bool) -> bool {
+    pub fn set_imitating(&mut self, imitating: bool) -> bool {
         mem::replace(&mut self.imitating, imitating)
     }
 
     /// Begin or end holding spines, answering what stood before: [`Context::holding_spines`](crate::Context::holding_spines)'s bracket.
-    pub(crate) fn set_holding(&mut self, holding: bool) -> bool {
+    pub fn set_holding(&mut self, holding: bool) -> bool {
         mem::replace(&mut self.holding, holding)
     }
 
     /// A site wants to park. Answers whether it may, and inside an oracle, where it may not, records that it wanted to.
-    pub(crate) fn may_park(&mut self) -> bool {
+    pub fn may_park(&mut self) -> bool {
         match &mut self.oracle {
             Some(declined) => {
                 *declined = true;
@@ -980,17 +984,17 @@ impl Solutions {
     }
 
     /// Whether a site inside the oracle in progress wanted to park.
-    pub(crate) fn declined_to_park(&self) -> bool {
+    pub fn declined_to_park(&self) -> bool {
         self.oracle == Some(true)
     }
 
     /// Enter an oracle with nothing declined yet, returning the enclosing state for [`Solutions::leave_oracle`] — `Context::with_suppressed_parking`'s bracket intrinsic.
-    pub(crate) fn enter_oracle(&mut self) -> Option<bool> {
+    pub fn enter_oracle(&mut self) -> Option<bool> {
         self.oracle.replace(false)
     }
 
     /// Leave an oracle for the state it was entered from. What the inner one declined is its own reader's to act on, and is not the enclosing oracle's record.
-    pub(crate) fn leave_oracle(&mut self, enclosing: Option<bool>) {
+    pub fn leave_oracle(&mut self, enclosing: Option<bool>) {
         self.oracle = enclosing;
     }
 }

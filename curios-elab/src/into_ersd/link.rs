@@ -19,24 +19,24 @@ use {
 
 /// A program under construction: the module, and where each name and each schema linked so far landed.
 #[derive(Default)]
-pub(super) struct Linking {
-    pub(super) module: curios_ersd::Module,
+pub struct Linking {
+    pub module: curios_ersd::Module,
     bound: BTreeMap<Global, curios_ersd::Atom>,
     /// The name each value and each function a linked item bound is declared under: the first to bind it, which is the item that defines it, since an item that hands another's name on is linked after it.
-    pub(super) values: BTreeMap<curios_ersd::ValueId, Global>,
-    pub(super) functions: BTreeMap<curios_ersd::FunctionId, Global>,
+    pub values: BTreeMap<curios_ersd::ValueId, Global>,
+    pub functions: BTreeMap<curios_ersd::FunctionId, Global>,
     /// The functions a linked item bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
     computed: BTreeSet<curios_ersd::FunctionId>,
-    pub(super) structs: BTreeMap<Global, curios_ersd::ProductId>,
-    pub(super) families: BTreeMap<Global, curios_ersd::FamilyId>,
-    pub(super) tuples: BTreeMap<usize, curios_ersd::ProductId>,
+    pub structs: BTreeMap<Global, curios_ersd::ProductId>,
+    pub families: BTreeMap<Global, curios_ersd::FamilyId>,
+    pub tuples: BTreeMap<usize, curios_ersd::ProductId>,
     /// Whether a row a fragment imports and no linked item declares is the module's import, where a program links every row it names from its declaration: an evaluation's.
     imports_rows: bool,
 }
 
 impl Linking {
     /// A linking whose module holds each row a fragment imports and no linked item declares as an import: an evaluation's, which reads no row.
-    pub(super) fn importing_rows() -> Self {
+    pub fn importing_rows() -> Self {
         Self {
             imports_rows: true,
             ..Self::default()
@@ -44,7 +44,7 @@ impl Linking {
     }
 
     /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows. A declaration reached for its rows alone is linked only where the module does not import them.
-    pub(super) fn add_reached(&mut self, units: &[&ErasedUnit], reached: &Reached) {
+    pub fn add_reached(&mut self, units: &[&ErasedUnit], reached: &Reached) {
         for (unit, (items, rows)) in units.iter().zip(reached.items.iter().zip(&reached.rows)) {
             for &place in items.union(rows) {
                 let erased = unit.item(place);
@@ -60,7 +60,7 @@ impl Linking {
     }
 
     /// Append one item's fragment, its imports standing for where the items that bind them landed, and hand back where its identities landed.
-    pub(super) fn add(&mut self, erased: &ErasedItem) -> curios_ersd::Linked {
+    pub fn add(&mut self, erased: &ErasedItem) -> curios_ersd::Linked {
         let bound = |name: &Global| {
             *self.bound.get(name).unwrap_or_else(|| {
                 panic!(
@@ -173,9 +173,9 @@ impl Linking {
 }
 
 /// What a program takes of each unit it is linked from, as the places of its items, ascending.
-pub(super) struct Reached {
+pub struct Reached {
     /// The items it links.
-    pub(super) items: Vec<BTreeSet<usize>>,
+    pub items: Vec<BTreeSet<usize>>,
     /// The items whose rows it links: the declarations of the rows a linked item imports, with theirs.
     rows: Vec<BTreeSet<usize>>,
 }
@@ -196,7 +196,7 @@ fn places<'n>(
 }
 
 /// What `roots` take of each of `units`: the items they import, transitively, and, where `computing`, every item that computes at initialization with what it imports; and, of the declarations whose rows any of those import, the rows.
-pub(super) fn reached<'a>(
+pub fn reached<'a>(
     units: &[&ErasedUnit],
     roots: impl Iterator<Item = &'a ErasedItem>,
     computing: bool,
@@ -239,7 +239,7 @@ pub(super) fn reached<'a>(
 }
 
 /// Link a program: `own`, its module's erased items, and `entry`, its entry's, with what they reach of `scope` — verified whole, as the module the back half lowers.
-pub(super) fn link(
+pub fn link(
     scope: Erasures<'_>,
     own: &ErasedUnit,
     entry: &ErasedItem,

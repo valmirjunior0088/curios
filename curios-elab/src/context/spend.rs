@@ -9,7 +9,7 @@ use {
 
 /// One context's budget and what its judgments have drawn from it.
 #[derive(Debug)]
-pub(crate) struct Spend {
+pub struct Spend {
     /// Units of reduction work each declaration may spend, restored by [`Spend::restore`] at every declaration boundary. A transition costs one; a construction costs what it builds, per [`Cost`].
     budget: u64,
     /// Work left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
@@ -23,7 +23,7 @@ pub(crate) struct Spend {
 
 impl Spend {
     /// A budget under which each declaration may spend `budget` units.
-    pub(crate) fn new(budget: u64) -> Self {
+    pub fn new(budget: u64) -> Self {
         Self {
             budget,
             remaining: Cell::new(budget),
@@ -38,7 +38,7 @@ impl Spend {
     /// [`Cost::STEP`] at the three loops that drive reduction and conversion is what makes the budget bound every route into unbounded computation; a construction charge at every allocating fold is what makes it bound the *memory* those routes reach, which a transition count could not see.
     ///
     /// A saturated cost is refused without being compared, so a size that overflowed while being computed can never look affordable. That is the one case where the budget is not consulted at all, and [`Cost`]'s module documentation carries why.
-    pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
+    pub fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
         if cost.is_refused() {
             return Err(ReduceError::exhausted(self.remaining.get(), cost));
         }
@@ -61,7 +61,7 @@ impl Spend {
     /// Enter one guarded reduction level, charging [`Cost::FRAME`] when it is deeper than any level this declaration has reached before.
     ///
     /// Per new peak rather than per call, for the reason `curios-cert`'s `Spend::enter_level` states in full: a level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call would price a stack the reduction is not holding. The kernel charges the same row the same way, which is what lets the two checkers' depth limits be compared.
-    pub(crate) fn enter_level(&self) -> Result<(), ReduceError> {
+    pub fn enter_level(&self) -> Result<(), ReduceError> {
         let depth = self.depth.get() + 1;
         self.depth.set(depth);
 
@@ -74,7 +74,7 @@ impl Spend {
     }
 
     /// Leave a guarded reduction level. The peak stands; only the live count falls.
-    pub(crate) fn leave_level(&self) {
+    pub fn leave_level(&self) {
         self.depth.set(self.depth.get() - 1);
     }
 
@@ -83,7 +83,7 @@ impl Spend {
     /// The live count is reset for the reason `curios-cert`'s `Spend::restore_budget` states in full: [`Spend::enter_level`] increments before it charges and propagates the refusal, so an exhausted level is never left, and elaboration continues to the next declaration. A leaked level costs every later declaration [`Cost::FRAME`] for a frame nothing holds.
     ///
     /// **What the declaration it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it — with `term::looks` beside it, the nodes its walks looked at, as `curios-cert`'s `Spend::restore_budget` samples the pair.
-    pub(crate) fn restore(&self) {
+    pub fn restore(&self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
         curios_profile::sample!("term::looks", curios_core::take_looks());
         self.heaviest
@@ -95,14 +95,14 @@ impl Spend {
     }
 
     /// What the declaration being elaborated has consumed so far.
-    pub(crate) fn consumed(&self) -> Consumption {
+    pub fn consumed(&self) -> Consumption {
         Consumption::new(self.budget - self.remaining.get(), self.peak_depth.get())
     }
 
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it.
     ///
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
-    pub(crate) fn heaviest(&self) -> Consumption {
+    pub fn heaviest(&self) -> Consumption {
         self.heaviest.get().heavier_of(self.consumed())
     }
 }

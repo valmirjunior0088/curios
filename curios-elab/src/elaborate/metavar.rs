@@ -8,7 +8,7 @@ use {
     curios_utilities::Plicity,
 };
 
-pub(super) fn elaborate_metavar(
+pub fn elaborate_metavar(
     context: &mut Context,
     metavar: &Metavar,
     term: &Term,
@@ -87,7 +87,7 @@ pub(super) fn elaborate_metavar(
 }
 
 /// Whether a reduced term is headed by an unsolved metavariable — including a stuck application of one — and so may yet be solved to any rigid shape. An expectation of that kind may be solved to the reference's own hidden-headed function type, so insertion must not fire on it.
-pub(super) fn flexible(context: &Context, term: &Term) -> bool {
+pub fn flexible(context: &Context, term: &Term) -> bool {
     match &**term {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::Apply(apply) => flexible(context, &apply.head),
@@ -96,7 +96,7 @@ pub(super) fn flexible(context: &Context, term: &Term) -> bool {
 }
 
 /// Whether `term`, a bare variable whose type leads with a hidden binder, waits at `expected`: an expectation stuck on an unsolved metavariable under an elimination — a match on one, a projection of one, a recursive call on one — has not decided whether that binder is inserted, so the check parks until a solution decides it, as a lambda, a tuple or a numeral waits on the same reading ([`stuck_on_metavar`]). A flexible expectation is not one: the turnaround solves it to the reference's own type.
-pub(crate) fn waits_as_reference(
+pub fn waits_as_reference(
     context: &mut Context,
     term: &Term,
     expected: &Term,
@@ -125,7 +125,7 @@ pub(crate) fn waits_as_reference(
 /// Implicit-eta on the check turnaround. A reference whose type leads with an implicit binder, checked against a concrete *explicit* function type, has its leading implicits inserted as metavariables and is eta-expanded over the remaining explicit binders — so a bare `cat : (@T, List T, List T) -> List T` is accepted where `(List B, List B) -> List B` is expected, instead of demanding `(l, r) => cat(l, r)`. Implicit insertion is otherwise an application-site mechanism (`elaborate_apply`); this is the one extension into value position. Producing a full lambda (rather than a partial application) keeps erase/CPS untouched: the output is an ordinary closure over a saturated call.
 ///
 /// Fires only for `Var`/`Proj` heads, and only where a hidden-headed function type could never convert anyway: against a ground explicit-arrow expectation, and against a *rigid non-arrow* expectation — plicity is part of function identity, so both configurations are guaranteed plicity mismatches, and inserting can only rescue programs that were errors. An expectation stuck on a metavariable must not fire, since it may still come to the reference's own polymorphic type: a flexible one is solved to it by the turnaround, and a bare variable at one stuck under an elimination has parked before reaching here ([`waits_as_reference`]); the expected-not-hidden gate likewise preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, the check proceeds as it would without it.
-pub(super) fn insert_implicits_on_check(
+pub fn insert_implicits_on_check(
     context: &mut Context,
     term: &Term,
     rebuilt: Term,
@@ -219,7 +219,7 @@ pub(super) fn insert_implicits_on_check(
 /// Answers the reduct beside the inhabitant, since the caller that mints a hole for an undischarged bound records what the bound came to — `False` — for the report that hole becomes.
 ///
 /// **A search beside it, not in it.** Where this answers nothing, [`crate::entail`] may still prove the bound from the facts in scope — a separate, fallible step with its own contract, after which this remains a unique answer or none.
-pub(crate) fn trivially_inhabited(
+pub fn trivially_inhabited(
     context: &mut Context,
     type_: &Term,
 ) -> Result<(Term, Option<Term>), Error> {

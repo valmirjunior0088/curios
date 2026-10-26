@@ -7,11 +7,11 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, CycleMember, DeadArm, Declined, Erased, ErasedName, ErasedSite, Error,
+        BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedName, ErasedSite, Error,
         GoalReport, Need, RegionOwner, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
-    curios_analysis::{DeclaredPart, MemberLabel},
+    curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_core::{
         Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, ReduceError, Spelling,
         Subterm, Term, UniverseMetaId, WitnessKey,
@@ -36,7 +36,7 @@ fn spent(f: &mut fmt::Formatter<'_>, refusal: &ReduceError) -> fmt::Result {
 }
 
 /// What a report on a dead arm adds: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
-pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
+pub fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
     match dead {
         DeadArm::Guard { guard, case } => format!(
             "  this arm is never taken: its guard {} is always {}",
@@ -57,7 +57,7 @@ pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> S
 }
 
 /// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_utilities::Report), and what the batch's `Display` writes before each snippet.
-pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
+pub fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
     // A report's terms render within the width a line is written within — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
 
     let spelling = Rc::new(
@@ -256,7 +256,7 @@ impl ErasedName {
 
 impl ErasedSite {
     /// This site as a refusal's sentence names it, each declaration spelled for the reader.
-    pub(crate) fn phrase(&self, spelling: &Rc<Spelling>) -> String {
+    pub fn phrase(&self, spelling: &Rc<Spelling>) -> String {
         let quoted = |name: &Global| format!("'{}'", spelling.symbol(name));
         match self {
             ErasedSite::TypeOf(name) => format!("the type of {}", quoted(name)),
@@ -304,7 +304,7 @@ impl ErasedSite {
 }
 
 /// The declaration a report arose in, by the names it declares, each as resolution reaches it from where the reader stands. A witness has no name and is described: by its concept and key, or by its module where its signature spells neither.
-pub(super) fn declared(names: &[Global], spelling: &Spelling) -> String {
+pub fn declared(names: &[Global], spelling: &Spelling) -> String {
     names
         .iter()
         .map(|name| match name {
@@ -331,7 +331,7 @@ fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
 
 impl Callee {
     /// This callee as a report's sentence names it: a function quoted as written, an operator and a witness described, since neither has a name a program writes.
-    pub(crate) fn phrase(&self, spelling: &Spelling) -> String {
+    pub fn phrase(&self, spelling: &Spelling) -> String {
         match self {
             Callee::Function(name) => format!("'{}'", spelled_free(name, spelling)),
             Callee::Constructor { owner, tag } => {
@@ -350,7 +350,7 @@ impl Callee {
     }
 
     /// One of this callee's slots as a report names it, `the bound 'ok' of '/f'`, and `the bound of '/f'` where the slot has no name. An operator's slot is named by the operator alone: its binder is minted, and names nothing a reader can find.
-    pub(crate) fn slot(&self, noun: &str, binder: Option<&str>, spelling: &Spelling) -> String {
+    pub fn slot(&self, noun: &str, binder: Option<&str>, spelling: &Spelling) -> String {
         match (self, binder) {
             (Callee::Operator { .. }, _) | (_, None) => {
                 format!("the {noun} of {}", self.phrase(spelling))
@@ -370,11 +370,7 @@ impl Callee {
 /// An error paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take, and the reason every arm below rebinds its term fields before interpolating them. A field left unrebound would silently render core's own spelling, which is why the rebinding is per-arm and mechanical rather than left to each `write!`.
 ///
 /// The third is where the declarations a position lies in were written, for the three messages that state one in their own text: a goal batch rendered whole, a written goal a postponed conversion watched, and the other of two terms that decide one `Sort` apart. Empty where nobody knows, and the position is then left out.
-pub(super) struct Displayed<'a>(
-    pub(super) &'a Error,
-    pub(super) Rc<Spelling>,
-    pub(super) &'a [&'a Anchors],
-);
+pub struct Displayed<'a>(pub &'a Error, pub Rc<Spelling>, pub &'a [&'a Anchors]);
 
 impl fmt::Display for Displayed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -53,7 +53,7 @@ impl ElaborationKey {
 }
 
 /// Outcome of `Context::probe_elaborated` — the read half of the elaboration cache, torn out of `Context::get_or_init_elaborated`'s bracket so the iterative `elaborate` driver can probe at a frame push and record at the matching pop (the reduction cache's `cached_reduced`/`reduce` split, one level up). `Hit` carries the memoized, unplaced `(rebuilt, type)`; `Miss` carries the state snapshot the caller threads back into `Context::record_elaborated` as its purity witness; `Uncacheable` marks a term the groundness gate excludes — the caller elaborates it but records nothing.
-pub(crate) enum ElabProbe {
+pub enum ElabProbe {
     Hit((Term, Term)),
     Miss(ElaborationStamp),
     Uncacheable,
@@ -61,13 +61,13 @@ pub(crate) enum ElabProbe {
 
 /// What a settled spelling or a settlement's kept window rests on beyond the frames it was read under, filed with it and asked later whether it all still stands (`Context::stands`). Each part is filed only where what it was taken of read what the part names, so a write reaches an answer only where the answer read what the write moves; under [`Caches::wholesale`] every part is filed.
 #[derive(Debug, Clone)]
-pub(crate) struct Footing {
+pub struct Footing {
     /// The solutions committed when it was taken: it stands while they all still are.
-    pub(crate) solutions: SolutionPrefix,
+    pub solutions: SolutionPrefix,
     /// Whether a solution committed since moves it: what it was taken of held an unsolved metavariable, or a question was declined on the way.
-    pub(crate) exact: bool,
+    pub exact: bool,
     /// The universe solver's state, where a question put to conversion on the way was declined for a commit: it stands while that state does.
-    pub(crate) levels: Option<UniverseStateToken>,
+    pub levels: Option<UniverseStateToken>,
     /// How many times levels had been rewritten in place, where what it holds names a universe metavariable: reduction reads no level, so a rewrite moves only an answer holding one it rewrites.
     rewrites: Option<usize>,
     /// How many times answers had been withdrawn, where a question was put to conversion on the way.
@@ -77,14 +77,14 @@ pub(crate) struct Footing {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(crate) struct ElaborationStamp {
+pub struct ElaborationStamp {
     terms: Entropy,
     universes: Entropy,
 }
 
 /// The reduction and elaboration caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
-pub(crate) struct Caches {
+pub struct Caches {
     /// Reducts that may read the scope, for as long as it stands as it did: every boundary of the scope clears them. [`Caches::begin_declaration`] clears every table where the budget is restored, so every node one holds was built under that budget, a hit on it is free, and nothing charges an insertion; a table that outlived the declaration would carry across an item boundary what the work after finalization reduced — the witness goals retried and the parked ones drained — and whether a declaration could afford its reductions would depend on that.
     ///
     /// **One table for each of the two reductions**, as the kernel's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold, at a missed equation and at a stuck elimination's atoms, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
@@ -150,7 +150,7 @@ pub(crate) struct Caches {
 
 /// A bracket of the scope: a span in which the frames in view are not the ones around it, after which they are again.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Bracket {
+pub enum Bracket {
     /// A settlement, made by plain reduction where `plain`: the frames from its entry inwards are withheld and restored, and nothing but its reduction runs between.
     Settlement { plain: bool },
     /// A judgment standing on held frames: the live frames are set aside and the held ones stand in their place.
@@ -174,7 +174,7 @@ impl Bracket {
 
 /// What a window of the scope remembered, of the reductions a bracket reaches: the live window's, set aside while the bracket runs, or a settlement's own, which the frame of the entry it settles keeps for the next settlement made there ([`Caches::leave_window`]).
 #[derive(Debug)]
-pub(crate) struct Window {
+pub struct Window {
     bracket: Bracket,
     scoped: [Scoped; 2],
     kernel_spellings: HashMap<Term, Term>,
@@ -186,7 +186,7 @@ pub(crate) struct Window {
 
 impl Window {
     /// What [`Caches::retain_reductions_without`] keeps of the live window, kept of this one.
-    pub(crate) fn retain_without(&mut self, name: &Free) {
+    pub fn retain_without(&mut self, name: &Free) {
         for scoped in &mut self.scoped {
             scoped.retain_without(name);
         }
@@ -229,12 +229,12 @@ impl Scoped {
 }
 
 impl Caches {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     /// Caches under which every boundary clears every table: the protocol an answer kept for as long as what it read stands is held to, by comparing what a library elaborates to under each (`curios-pipeline`'s `std_memo_census`). An answer kept past a boundary that moves an elaborated term rests on something its life does not state.
-    pub(crate) fn wholesale() -> Self {
+    pub fn wholesale() -> Self {
         Self {
             wholesale: true,
             ..Self::default()
@@ -242,12 +242,12 @@ impl Caches {
     }
 
     /// The definitions in view changed at once: what a settled spelling or a kept window read of them may have, and nothing names what.
-    pub(crate) fn note_redefinition(&mut self) {
+    pub fn note_redefinition(&mut self) {
         self.redefinitions += 1;
     }
 
     /// The footing of an answer taken now, under the journal of solutions as `solutions` names it ([`Footing`]): `exact` where a solution committed since moves it, `levels` the universe solver's state where a question was declined on the way, `universes` where it holds a universe metavariable, `asked` where a question was put to conversion on the way.
-    pub(crate) fn footing(
+    pub fn footing(
         &self,
         solutions: SolutionPrefix,
         exact: bool,
@@ -266,7 +266,7 @@ impl Caches {
     }
 
     /// Whether no rewrite, withdrawal or redefinition `footing` reads has landed since it was taken.
-    pub(crate) fn counts_stand(&self, footing: &Footing) -> bool {
+    pub fn counts_stand(&self, footing: &Footing) -> bool {
         footing
             .rewrites
             .is_none_or(|rewrites| rewrites == self.rewrites)
@@ -277,22 +277,22 @@ impl Caches {
     }
 
     /// Record a write to a kernel store, poisoning any elaboration-cache insert whose computation spans it.
-    pub(crate) fn note_write(&mut self) {
+    pub fn note_write(&mut self) {
         self.mutation_stamp.fresh();
     }
 
     /// Record a universe-solver write the guard could not see (seeding); `universe_stamp` covers the guarded path.
-    pub(crate) fn note_universe_write(&mut self) {
+    pub fn note_universe_write(&mut self) {
         self.universe_mutation_stamp.fresh();
     }
 
     /// The universe stamp itself, for `UniverseMutation`'s drop guard: solver mutations bump it only when solver state actually changed, so read-equivalent solver calls stay cache-pure.
-    pub(crate) fn universe_stamp(&self) -> &Entropy {
+    pub fn universe_stamp(&self) -> &Entropy {
         &self.universe_mutation_stamp
     }
 
     /// Snapshot both stamps — a `Miss`'s purity witness.
-    pub(crate) fn stamps(&self) -> ElaborationStamp {
+    pub fn stamps(&self) -> ElaborationStamp {
         ElaborationStamp {
             terms: self.mutation_stamp.clone(),
             universes: self.universe_mutation_stamp.clone(),
@@ -300,7 +300,7 @@ impl Caches {
     }
 
     /// Whether nothing has been written since `stamps` was taken — the purity half of the elaboration cache's insert gate.
-    pub(crate) fn stamps_unchanged(&self, stamp: &ElaborationStamp) -> bool {
+    pub fn stamps_unchanged(&self, stamp: &ElaborationStamp) -> bool {
         self.mutation_stamp == stamp.terms && self.universe_mutation_stamp == stamp.universes
     }
 
@@ -309,7 +309,7 @@ impl Caches {
     /// A reduct served through the second door holds the instances reduction opened for the stored spelling, each carried to the asking spelling's levels. They are the instances reduction would have opened for the asking one, and are opened as those ([`Caches::opened_instance`]): a term that names a group's members again knows an instance by that record alone, so one served unrecorded would stand in a solution as a copy of its group. A hit whose instances do not open is declined, as one whose levels do not map is.
     ///
     /// A spelling holding a term metavariable, and one whose stored reduct holds one, is answered by the exact table alone: a solution can hold a universe metavariable the key holds too, which carrying would move in the key and not in the solution ([`AcrossUniverses`]).
-    pub(crate) fn reduction_get(&mut self, term: &Term, plain: bool) -> Option<Term> {
+    pub fn reduction_get(&mut self, term: &Term, plain: bool) -> Option<Term> {
         let plain = usize::from(plain);
         let key = self.key(term);
         if let Some(reduct) = self.lasting[plain]
@@ -383,11 +383,11 @@ impl Caches {
     }
 
     /// The closed machine's memo for the reduction `plain` names.
-    pub(crate) fn closed_memo(&mut self, plain: bool) -> &mut ClosedMemo {
+    pub fn closed_memo(&mut self, plain: bool) -> &mut ClosedMemo {
         &mut self.closed[usize::from(plain)]
     }
 
-    pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term, plain: bool) {
+    pub fn reduction_insert(&mut self, term: Term, reduct: Term, plain: bool) {
         let plain = usize::from(plain);
         let term = self.key(&term);
         let (table, door) = match lasting(&term) && lasting(&reduct) {
@@ -405,7 +405,7 @@ impl Caches {
     }
 
     /// What `term` was forced to, as plain reduction forced it where `plain` and as a judgment's did otherwise ([`Caches::forced`]).
-    pub(crate) fn forced_get(&self, term: &Term, plain: bool) -> Option<Term> {
+    pub fn forced_get(&self, term: &Term, plain: bool) -> Option<Term> {
         let plain = usize::from(plain);
         let key = self.key(term);
 
@@ -415,7 +415,7 @@ impl Caches {
             .cloned()
     }
 
-    pub(crate) fn forced_insert(&mut self, term: Term, value: Term, plain: bool) {
+    pub fn forced_insert(&mut self, term: Term, value: Term, plain: bool) {
         let plain = usize::from(plain);
         let term = self.key(&term);
         let table = match lasting(&term) && lasting(&value) {
@@ -426,7 +426,7 @@ impl Caches {
     }
 
     /// What classifying the stuck operation `term` found, where it is remembered.
-    pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+    pub fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
         self.classifications
             .get(term)
             .or_else(|| self.classified.get(term))
@@ -434,7 +434,7 @@ impl Caches {
     }
 
     /// Remember what classifying the stuck operation `term` found, for as long as what it read stands: stored for nothing, as a reduct is.
-    pub(crate) fn classification_insert(&mut self, term: Term, classification: Classification) {
+    pub fn classification_insert(&mut self, term: Term, classification: Classification) {
         let table = match classification.classed() {
             true => &mut self.classified,
             false => &mut self.classifications,
@@ -497,12 +497,12 @@ impl Caches {
     }
 
     /// What [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, as plain reduction read it where `plain` and as a judgment's did otherwise ([`Caches::erasable`]).
-    pub(crate) fn erasable_get(&mut self, type_: &Term, plain: bool) -> Option<bool> {
+    pub fn erasable_get(&mut self, type_: &Term, plain: bool) -> Option<bool> {
         self.settle_erasable();
         self.erasable[usize::from(plain)].get(type_).copied()
     }
 
-    pub(crate) fn erasable_insert(&mut self, type_: Term, plain: bool, erasable: bool) {
+    pub fn erasable_insert(&mut self, type_: Term, plain: bool, erasable: bool) {
         self.settle_erasable();
         self.erasable[usize::from(plain)].insert(type_, erasable);
     }
@@ -516,7 +516,7 @@ impl Caches {
     }
 
     /// A lookup found no definition for `name`: a reduct remembered from here on may be stuck on its absence.
-    pub(crate) fn note_absent(&self, name: &Free) {
+    pub fn note_absent(&self, name: &Free) {
         self.absent.borrow_mut().insert(*name);
     }
 
@@ -531,7 +531,7 @@ impl Caches {
     }
 
     /// The remembered sort of `type_`, where nothing was written since it was filed: as plain reduction read it where `plain`, and as a judgment's did otherwise.
-    pub(crate) fn sort_get(&mut self, type_: &Term, plain: bool) -> Option<Sort> {
+    pub fn sort_get(&mut self, type_: &Term, plain: bool) -> Option<Sort> {
         self.settle_sorts();
 
         self.sorts[usize::from(plain)]
@@ -539,7 +539,7 @@ impl Caches {
             .cloned()
     }
 
-    pub(crate) fn sort_insert(&mut self, type_: Term, plain: bool, sort: Sort) {
+    pub fn sort_insert(&mut self, type_: Term, plain: bool, sort: Sort) {
         self.settle_sorts();
         let type_ = self.key(&type_);
         self.sorts[usize::from(plain)].insert(type_, sort);
@@ -556,7 +556,7 @@ impl Caches {
     }
 
     /// What `this` and `that` were answered to be, in either order, where nothing was written since: as plain reduction asked where `plain`, and as a judgment's did otherwise.
-    pub(crate) fn same_get(&mut self, this: &Term, that: &Term, plain: bool) -> Option<bool> {
+    pub fn same_get(&mut self, this: &Term, that: &Term, plain: bool) -> Option<bool> {
         self.settle_sorts();
 
         let same = &self.same[usize::from(plain)];
@@ -568,7 +568,7 @@ impl Caches {
             .copied()
     }
 
-    pub(crate) fn same_insert(&mut self, this: Term, that: Term, plain: bool, same: bool) {
+    pub fn same_insert(&mut self, this: Term, that: Term, plain: bool, same: bool) {
         self.settle_sorts();
         self.same[usize::from(plain)].insert((this, that), same);
     }
@@ -582,25 +582,25 @@ impl Caches {
     }
 
     /// `term` as the kernel spells it, where that has been remembered.
-    pub(crate) fn kernel_spelling_get(&self, term: &Term) -> Option<Term> {
+    pub fn kernel_spelling_get(&self, term: &Term) -> Option<Term> {
         self.kernel_spellings.borrow().get(term).cloned()
     }
 
-    pub(crate) fn kernel_spelling_insert(&self, term: Term, spelled: Term) {
+    pub fn kernel_spelling_insert(&self, term: Term, spelled: Term) {
         self.kernel_spellings.borrow_mut().insert(term, spelled);
     }
 
     /// Whether the binder `name` is a proof, where that has been asked.
-    pub(crate) fn proof_get(&self, name: &Free) -> Option<bool> {
+    pub fn proof_get(&self, name: &Free) -> Option<bool> {
         self.proofs.get(name).copied()
     }
 
-    pub(crate) fn proof_insert(&mut self, name: Free, proof: bool) {
+    pub fn proof_insert(&mut self, name: Free, proof: bool) {
         self.proofs.insert(name, proof);
     }
 
     /// A new declaration: every table is discarded — the reducts and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
-    pub(crate) fn begin_declaration(&mut self) {
+    pub fn begin_declaration(&mut self) {
         self.keys = Sharing::new();
         self.note_redefinition();
         self.proofs.clear();
@@ -619,7 +619,7 @@ impl Caches {
     }
 
     /// `group` at `universes`, remembered as that instance of it: the one way an instance is opened, so that every one a term comes to hold is known for the instance it is.
-    pub(crate) fn opened_instance(
+    pub fn opened_instance(
         &mut self,
         group: &RecGroup,
         universes: &Universes,
@@ -634,7 +634,7 @@ impl Caches {
     }
 
     /// `group` opened by unfolding `name`, kept where no name opened it before in the declaration in progress.
-    pub(crate) fn note_opened(&self, group: &RecGroup, name: Global) {
+    pub fn note_opened(&self, group: &RecGroup, name: Global) {
         self.opened
             .borrow_mut()
             .entry(Keyed::new(group.clone()))
@@ -642,7 +642,7 @@ impl Caches {
     }
 
     /// The name reduction first opened `group` from in the declaration in progress.
-    pub(crate) fn opened_from(&self, group: &RecGroup) -> Option<Global> {
+    pub fn opened_from(&self, group: &RecGroup) -> Option<Global> {
         self.opened
             .borrow()
             .get(&Keyed::new(group.clone()))
@@ -650,11 +650,11 @@ impl Caches {
     }
 
     /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.
-    pub(crate) fn instance_get(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
+    pub fn instance_get(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
         self.instances.get(&Keyed::new(instance.clone()))
     }
 
-    pub(crate) fn elaboration_get(
+    pub fn elaboration_get(
         &self,
         term: &Term,
         expected: Option<&Term>,
@@ -666,7 +666,7 @@ impl Caches {
             .cloned()
     }
 
-    pub(crate) fn elaboration_insert(
+    pub fn elaboration_insert(
         &mut self,
         term: &Term,
         expected: Option<&Term>,
@@ -681,21 +681,21 @@ impl Caches {
     }
 
     /// Open a table for an oracle bracket being entered.
-    pub(crate) fn begin_oracle(&mut self) {
+    pub fn begin_oracle(&mut self) {
         self.oracle.push(HashMap::new());
     }
 
     /// Discard the table of the oracle bracket being left.
-    pub(crate) fn end_oracle(&mut self) {
+    pub fn end_oracle(&mut self) {
         self.oracle.pop();
     }
 
     /// Whether an oracle bracket is live, so an elaboration the table above refuses may be remembered for it.
-    pub(crate) fn in_oracle(&self) -> bool {
+    pub fn in_oracle(&self) -> bool {
         !self.oracle.is_empty()
     }
 
-    pub(crate) fn oracle_get(
+    pub fn oracle_get(
         &self,
         term: &Term,
         expected: Option<&Term>,
@@ -708,7 +708,7 @@ impl Caches {
             .cloned()
     }
 
-    pub(crate) fn oracle_insert(
+    pub fn oracle_insert(
         &mut self,
         term: &Term,
         expected: Option<&Term>,
@@ -733,14 +733,14 @@ impl Caches {
     }
 
     /// A counterfactual refinement was registered: a refinement key can be a `#`-free stuck application of globals, so it can have influenced any entry that may read the scope — the scoped reducts and the elaborations clear wholesale, and the write is stamped. A lasting reduct stays: no equation answers a term that names no local.
-    pub(crate) fn invalidate_for_refinement(&mut self) {
+    pub fn invalidate_for_refinement(&mut self) {
         self.note_write();
         self.clear_scoped_reductions();
         self.clear_elaborations();
     }
 
     /// A name was *re*defined (or an assumption's universe scheme rewritten in place): the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the name, leaving nothing for a selective retain to key on — both caches clear wholesale, and the write is stamped.
-    pub(crate) fn invalidate_for_redefinition(&mut self) {
+    pub fn invalidate_for_redefinition(&mut self) {
         self.note_redefinition();
         self.note_write();
         self.clear_reductions();
@@ -748,7 +748,7 @@ impl Caches {
     }
 
     /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. A name no lookup found absent unstuck nothing, and no reduct is read for it ([`Caches::note_absent`]): the definitions a declaration mints cost what they define, not what was remembered before them. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
-    pub(crate) fn retain_reductions_without(&mut self, name: &Free) {
+    pub fn retain_reductions_without(&mut self, name: &Free) {
         if self.absent.get_mut().remove(name) {
             let lives = self
                 .reduction
@@ -780,17 +780,13 @@ impl Caches {
     }
 
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
-    pub(crate) fn invalidate_for_reassumption(&mut self) {
+    pub fn invalidate_for_reassumption(&mut self) {
         self.note_write();
         self.clear_elaborations();
     }
 
     /// A local frame was dropped. A dropped refinement can have influenced any entry that may read the scope, so the scoped reducts and the elaborations clear; a dropped frame *definition* clears only the scoped reducts — `reduce_let` defines under written binder labels a reduct can fold in, while elaboration-position terms name only `/`-qualified globals and `#`-minted locals, so no elaboration entry can reference a written frame label. A lasting reduct names no local, so neither reaches it. No stamp: the frame's own writes were stamped when they landed.
-    pub(crate) fn invalidate_frame_exit(
-        &mut self,
-        dropped_refinements: bool,
-        dropped_definitions: bool,
-    ) {
+    pub fn invalidate_frame_exit(&mut self, dropped_refinements: bool, dropped_definitions: bool) {
         // The frame's binders go with it, and a sort is read off a binder's type: the write that opened one was stamped, and nothing stamps its closing.
         self.clear_sorts();
         if dropped_refinements {
@@ -802,7 +798,7 @@ impl Caches {
     }
 
     /// A bracket of the scope begins: the live window's scoped answers, of the reductions `bracket` reaches, are set aside, and the bracket starts from `kept`, what the last settlement under its window remembered — its sorts and verdicts only where nothing has been written since they were judged — or from none, as a boundary would leave it. What the live window remembered is what asking again gives once the bracket closes — a settlement commits nothing and files a stuck form only once every entry it could match has been settled, and a stand writes nothing to the frames it sets aside — so [`Caches::leave_window`] hands it back. What a bracket clears inside it is its own: a rollback there unwinds what it committed, a rewrite of levels pins the levels it minted, and a redefinition rebinds a label of its frame. Under [`Caches::wholesale`] each side of a bracket is a boundary that clears, and nothing is kept.
-    pub(crate) fn enter_window(&mut self, bracket: Bracket, kept: Option<Window>) {
+    pub fn enter_window(&mut self, bracket: Bracket, kept: Option<Window>) {
         if self.wholesale {
             self.clear_reductions();
             return;
@@ -824,7 +820,7 @@ impl Caches {
     }
 
     /// The bracket [`Caches::enter_window`] began closes, and the window it set aside is handed back. What a settlement remembered is handed to its caller, to keep under the refinements it read for as long as what it read stands (`Frames::keep_settled_window`). A stand's goes. A settlement's sorts and verdicts come back with its reducts and answer under the stamps as they stand, since reduction alone ran in between; a stand's go.
-    pub(crate) fn leave_window(&mut self) -> Option<Window> {
+    pub fn leave_window(&mut self) -> Option<Window> {
         if self.wholesale {
             self.clear_reductions();
             return None;
@@ -889,19 +885,19 @@ impl Caches {
     }
 
     /// A judgment stands on held frames, or leaves them, across a refinement in either set of frames or a definition they state otherwise: an elaboration taken on one side must not answer on the other, so the elaborations clear. The reducts go into the window the stand sets aside ([`Caches::enter_window`]).
-    pub(crate) fn invalidate_for_stand(&mut self) {
+    pub fn invalidate_for_stand(&mut self) {
         self.clear_elaborations();
     }
 
     /// Universe levels were rewritten in place (defaulting, finalization, instance closure): cached reducts and elaborations may embed the pre-rewrite levels, so the scoped reducts and the elaborations clear. A lasting reduct names no universe metavariable, so no rewrite reaches it. The solver write itself is stamped by the `UniverseMutation` guard.
-    pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
+    pub fn invalidate_for_universe_rewrite(&mut self) {
         self.rewrites += 1;
         self.clear_scoped_reductions();
         self.clear_elaborations();
     }
 
     /// Solutions were rolled back — the one *un*-monotonic store transition. Reducts may have been cached through the unwound solutions, a lasting one through a definition still being elaborated among them, so both caches clear whole and both stamps tick.
-    pub(crate) fn invalidate_for_rollback(&mut self) {
+    pub fn invalidate_for_rollback(&mut self) {
         // How many reducts the clear throws away.
         curios_profile::sample!(
             "caches::rollback_dropped",
@@ -919,17 +915,17 @@ impl Caches {
     }
 
     /// The elaboration island changed (a new top-level item): representation-privacy checks are island-relative, so an entry elaborated under one item's island must not answer for another's. Reducts are island-independent and survive.
-    pub(crate) fn invalidate_for_island_change(&mut self) {
+    pub fn invalidate_for_island_change(&mut self) {
         self.clear_elaborations();
     }
 
     /// Universe constraints were discarded at a transaction boundary with actual solver-state change: elaboration entries may have certified purity against constraints that no longer exist.
-    pub(crate) fn invalidate_for_universe_transaction(&mut self) {
+    pub fn invalidate_for_universe_transaction(&mut self) {
         self.clear_elaborations();
     }
 
     /// Level constraints were withdrawn from a scope in which a judgment's reduction put a question to conversion: a reduct taken there may rest on an answer those constraints gave, so the scoped reducts go. A lasting one asked nothing: reduction puts no question to conversion about a term that names no local. No stamp: the withdrawal itself was stamped.
-    pub(crate) fn invalidate_for_withdrawn_answers(&mut self) {
+    pub fn invalidate_for_withdrawn_answers(&mut self) {
         self.withdrawals += 1;
         // How many reducts the clear throws away.
         curios_profile::sample!(

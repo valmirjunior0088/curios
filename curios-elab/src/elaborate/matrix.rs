@@ -29,7 +29,7 @@ use {
 };
 
 /// Compile `matrix`, which `term` holds, into the tree of matches it comes to, each elaborated as it is built.
-pub(super) fn elaborate_matrix(
+pub fn elaborate_matrix(
     context: &mut Context,
     matrix: &Matrix,
     term: &Term,

@@ -18,7 +18,7 @@ use {
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the kernel's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
-pub(crate) fn convert_intrinsic(
+pub fn convert_intrinsic(
     cmp: &mut Convert,
     context: &mut Context,
     this: Intrinsic,
@@ -101,7 +101,7 @@ fn unsettled(
 }
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
-pub(super) fn connectives_convert(
+pub fn connectives_convert(
     context: &mut Context,
     pairs: &Pairs,
     this: &Term,

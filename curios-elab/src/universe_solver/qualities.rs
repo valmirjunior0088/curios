@@ -15,13 +15,13 @@ use {
 
 /// One quality metavariable: what it was solved to and where, where it was minted, and whether its declaration wrote it.
 #[derive(Debug, Clone)]
-pub(super) struct QualityMeta {
-    pub(super) solution: Option<Quality>,
+pub struct QualityMeta {
+    pub solution: Option<Quality>,
     /// The term whose check solved it, where conversion was asked about one.
-    pub(super) solved_at: Option<Extent>,
-    pub(super) origin: Option<UniverseConstraintOrigin>,
+    pub solved_at: Option<Extent>,
+    pub origin: Option<UniverseConstraintOrigin>,
     /// Whether the declaration wrote it, as a `Sort`: one that closes as a parameter where nothing of the declaration decides it.
-    pub(super) written: bool,
+    pub written: bool,
 }
 
 /// A `Sort` its declaration wrote and then decided: no caller's to state.
@@ -99,6 +99,7 @@ impl UniverseSolver {
     }
 
     /// Whether `quality` is, as far as it is solved, a `Sort` the declaration wrote that nothing decided: the metavariable one is while its declaration is checked, or the parameter it closes as.
+    #[cfg(feature = "profile")]
     pub fn left_to_caller(&self, quality: Quality) -> bool {
         match self.quality(quality) {
             Quality::Param(_) => true,
@@ -243,12 +244,5 @@ impl UniverseSolver {
     /// Whether any quality was minted: none is where no sort was left to inference, which is most declarations.
     pub fn has_qualities(&self) -> bool {
         !self.qualities.is_empty()
-    }
-
-    /// Where the quality metavariable `meta` was minted.
-    pub fn quality_origin(&self, meta: QualityMetaId) -> Option<&UniverseConstraintOrigin> {
-        self.qualities
-            .get(meta.0)
-            .and_then(|entry| entry.origin.as_ref())
     }
 }

@@ -14,7 +14,7 @@ use {
 
 impl ErasedOver<'_> {
     /// Whether every question of `asked`, the erasure of the item declaring `names` where `made` was filed, is a part asked, and every part and binding it read digests now as it did: `unit` holding the erased forms of the items before it.
-    pub(super) fn stands(
+    pub fn stands(
         &self,
         names: &[&Global],
         made: &Made,

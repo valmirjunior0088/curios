@@ -11,7 +11,7 @@ use {
 
 /// Which of a unit's declarations have not finished, and what the attempt under way needed of them.
 #[derive(Debug, Default)]
-pub(crate) struct Needs {
+pub struct Needs {
     /// The names of the unit's declarations that have not finished elaborating: a declaration a recompile keeps without its walk holding it is finished from the start.
     unfinished: BTreeSet<Global>,
     /// The names the attempt under way declares, which it reads as its own.
@@ -22,28 +22,28 @@ pub(crate) struct Needs {
 
 impl Needs {
     /// Begin a unit's items: the names of the declarations its walk is to decide, none finished yet.
-    pub(crate) fn begin(&mut self, unfinished: BTreeSet<Global>) {
+    pub fn begin(&mut self, unfinished: BTreeSet<Global>) {
         self.unfinished = unfinished;
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet.
-    pub(crate) fn attempt(&mut self, names: &[&Global]) {
+    pub fn attempt(&mut self, names: &[&Global]) {
         self.attempting = names.iter().map(|name| **name).collect();
         self.needed.get_mut().clear();
     }
 
     /// A name the attempt under way declares, where it declares one: the entry's attempt declares none.
-    pub(crate) fn attempted(&self) -> Option<&Global> {
+    pub fn attempted(&self) -> Option<&Global> {
         self.attempting.iter().next()
     }
 
     /// Whether the attempt under way declares `name`, and so reads it as its own.
-    pub(crate) fn attempts(&self, name: &Global) -> bool {
+    pub fn attempts(&self, name: &Global) -> bool {
         self.attempting.contains(name)
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more.
-    pub(crate) fn finish(&mut self, names: &[&Global]) {
+    pub fn finish(&mut self, names: &[&Global]) {
         for name in names {
             self.unfinished.remove(name);
         }
@@ -51,34 +51,34 @@ impl Needs {
     }
 
     /// Record that the attempt under way read the declaration declaring `name` before it finished. The attempt is void whatever it goes on to conclude, and is made again once that declaration has elaborated.
-    pub(crate) fn need(&self, name: Global) {
+    pub fn need(&self, name: Global) {
         self.needed.borrow_mut().insert(name);
     }
 
     /// What the attempt under way needed, taken: empty for an attempt that read nothing unfinished, the one whose outcome stands.
-    pub(crate) fn take(&mut self) -> BTreeSet<Global> {
+    pub fn take(&mut self) -> BTreeSet<Global> {
         mem::take(self.needed.get_mut())
     }
 
     /// Put back what the attempt under way had needed, `needed` as [`Needs::take`] took it, dropping what was needed since: a judgment run beside the attempt reads nothing on its behalf.
-    pub(crate) fn put_back(&mut self, needed: BTreeSet<Global>) {
+    pub fn put_back(&mut self, needed: BTreeSet<Global>) {
         *self.needed.get_mut() = needed;
     }
 
     /// Whether the attempt under way has read nothing unfinished so far.
-    pub(crate) fn nothing(&self) -> bool {
+    pub fn nothing(&self) -> bool {
         self.needed.borrow().is_empty()
     }
 
     /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty, for its type or for its body: the answer is then not that the name means nothing or reduces no further, only that its declaration has not elaborated.
-    pub(crate) fn missed(&self, name: &Free) {
+    pub fn missed(&self, name: &Free) {
         if let Free::Global(global) = name {
             self.reads(global);
         }
     }
 
     /// Record a need where `name` keys a registry entry of a declaration of the unit that has not finished, other than the one being attempted. Every entry of a unit is registered as lowered before its first item, so one read before its declaration has elaborated is not the entry the declaration publishes: the read is answered, and the attempt that made it is void, as one that missed a name is.
-    pub(crate) fn reads(&self, name: &Global) {
+    pub fn reads(&self, name: &Global) {
         if self.unfinished.contains(name) && !self.attempting.contains(name) {
             self.need(*name);
         }

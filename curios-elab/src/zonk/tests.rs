@@ -1,4 +1,5 @@
 use {
+    super::validate_bound_universes,
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{

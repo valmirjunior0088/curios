@@ -9,7 +9,7 @@ use {
 
 impl Lowering<'_> {
     /// Erase one top-level definition as the fragment's item, and bind its name.
-    pub(super) fn erase_definition(
+    pub fn erase_definition(
         &mut self,
         context: &mut Retyping,
         definition: &Definition,

@@ -1,7 +1,7 @@
 //! Metavariable solving: flex-rigid, occurs and scope checks, pattern inversion and pruning, flex-flex, and revalidation.
 
 use {
-    super::test_support::*,
+    super::{convert_under, test_support::*},
     crate::*,
     curios_core::{
         Atom, CalleeId, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,

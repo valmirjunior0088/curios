@@ -33,9 +33,9 @@ const CANDIDATES: usize = 3;
 const ATTEMPTS: usize = 128;
 
 /// What a goal's report offers: the candidates that fit it, and — where the goal is a bound the procedure proves nothing about — why.
-pub(crate) struct Suggestions {
-    pub(crate) candidates: Vec<Term>,
-    pub(crate) refusal: Option<Refusal>,
+pub struct Suggestions {
+    pub candidates: Vec<Term>,
+    pub refusal: Option<Refusal>,
 }
 
 /// A found fit: the display term, its residual hole count, and its pool rank (scope values, constructors, scope functions, module definitions, referenced globals, imported bindings — in that order).
@@ -48,7 +48,7 @@ struct Candidate {
 /// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope`, the `refinements` of the arms it was written in, and the expected `goal_type`), the unit's items as they elaborated and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
 ///
 /// The refinements are reinstalled beside the telescope, so a fit that holds only under the arm's guard — `Eq/refl()` at `Eq()(b, true)` in the `true` arm of `match b` — is found and verified as a paste at the goal would be checked.
-pub(crate) fn suggest_candidates(
+pub fn suggest_candidates(
     context: &mut Context,
     telescope: &[(Free, Term)],
     born: &HeldFrames,

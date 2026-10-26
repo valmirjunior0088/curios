@@ -10,19 +10,15 @@ use reach::*;
 #[cfg(test)]
 mod tests;
 
-/// Which half of erasure an obligation guards — `curios-analysis`'s type, the one `curios-cert` names too, re-exported rather than restated.
-///
-/// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it would be two vocabularies that could drift while describing one thing.
-pub use curios_analysis::Erased;
 use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position},
-    curios_analysis::{group_totality, yields_a_sort},
+    curios_analysis::{Erased, group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Entrypoint, Extent, Free, Global, Item, Module, Rec, RecGroup, RecItem,
         Sharing, Subterm, Term, Totality,
     },
     std::{
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeSet, HashMap, HashSet},
         ops::ControlFlow,
         rc::Rc,
     },
@@ -79,7 +75,7 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
 }
 
 /// The first global `term` names by spelling whose recorded totality is not total, first as written ([`Term::first_free`]) — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
-pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
+fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
     term.first_free(|free| {
         free.as_global().is_some_and(|name| {
             context
@@ -91,7 +87,7 @@ pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global>
 }
 
 /// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate would otherwise spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
-pub(crate) fn exhausted_bound(
+pub fn exhausted_bound(
     context: &Context,
     error: Error,
     proposition: &Term,
@@ -135,7 +131,7 @@ pub fn check_written_type_totality(
 /// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable summary across declarations and across units: "this definition is partial" means something partial is in its closure, so a proof mentioning it inherits the same.
 ///
 /// Runs as the item is published, where its terms are final and meta-free, so no metavariable can be solved to a partial term after the fact. Everything the item mentions outside itself has finished, a declaration elaborating after what it reads, so its verdict is recorded and is a closure already, and the walk stops there: at a predecessor unit's definition, which is why the standard library is not analyzed again on every compilation, and at an earlier declaration's of this unit alike. Among the members of one group the closure is iterated, since each may mention the others. A name with no verdict is treated as total: every `Global` a published item mentions is defined by a finished declaration or by the item itself, so that case is unreachable rather than an approximation.
-pub(crate) fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(), Error> {
+pub fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(), Error> {
     curios_profile::profile!("record_totality");
     // A group that does not descend makes every member partial, whatever each body looks like on its own.
     let rejected = match &*item {
@@ -198,26 +194,6 @@ pub(crate) fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(
     Ok(())
 }
 
-/// The totality `stamp_totality` stamped onto every definition in `module`.
-///
-/// This is how the replay path inherits the prelude's verdicts: the archive stores the stamped module, so a user compilation reads the flags instead of re-analyzing the standard library.
-pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
-    let mut recorded = BTreeMap::new();
-    for item in &module.items {
-        match item {
-            Item::Let(definition) => {
-                recorded.insert(definition.name, definition.totality);
-            }
-            Item::Rec(rec) => {
-                for member in &rec.definitions {
-                    recorded.insert(member.name, member.totality);
-                }
-            }
-        }
-    }
-    recorded
-}
-
 /// Every way the given positions fail to be total, with the site of each and where it was written, for a position that kept one.
 ///
 /// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`stamp_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
@@ -273,7 +249,7 @@ fn faults(
 ///
 /// It holds one zonk pass besides, so a node the recorded terms share is zonked once across them all: a type nested in another is a recorded type of its own, and zonked apart each would walk the ones inside it again.
 #[derive(Default)]
-pub(crate) struct Zonked {
+pub struct Zonked {
     done: HashMap<Term, Term>,
     pass: ZonkPass,
 }
@@ -292,7 +268,7 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
 /// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`stamp_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
-pub(crate) fn check_type_totality(
+pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
     entry: Option<&Entrypoint>,
@@ -348,7 +324,7 @@ fn checked_type_positions(
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
 ///
 /// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other. Decided where that one is, over the terms recorded since `mark`, which it takes.
-pub(crate) fn check_proof_totality(
+pub fn check_proof_totality(
     context: &mut Context,
     mark: usize,
     cache: &mut Zonked,

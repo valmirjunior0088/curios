@@ -4,7 +4,7 @@
 
 /// Where a context stands in the protocol by which reduction asks conversion.
 #[derive(Debug, Default)]
-pub(crate) struct Asking {
+pub struct Asking {
     /// Whether reduction is plain: it asks the elaborator's conversion nothing.
     plain: bool,
     /// How many questions a judgment's reduction has put to conversion.
@@ -19,57 +19,57 @@ pub(crate) struct Asking {
 
 impl Asking {
     /// Whether reduction is plain.
-    pub(crate) fn plain(&self) -> bool {
+    pub fn plain(&self) -> bool {
         self.plain
     }
 
     /// Make reduction plain or asking, answering what it was: the two halves of the bracket that reads a term plainly.
-    pub(crate) fn set_plain(&mut self, plain: bool) -> bool {
+    pub fn set_plain(&mut self, plain: bool) -> bool {
         std::mem::replace(&mut self.plain, plain)
     }
 
     /// A judgment's reduction is putting a question to conversion. Its answer rests on the level constraints that stand, so a scope that is rolled back with constraints withdrawn after one was asked inside it clears what was reduced meanwhile.
-    pub(crate) fn note_question(&mut self) {
+    pub fn note_question(&mut self) {
         self.questions += 1;
     }
 
     /// How many questions reduction has put to conversion.
-    pub(crate) fn questions(&self) -> u64 {
+    pub fn questions(&self) -> u64 {
         self.questions
     }
 
     /// A question asked with nothing committed was answered no because answering yes would have committed a solution or a level constraint. The answer can change once the solver moves, so no reduct taken across it is remembered.
-    pub(crate) fn note_declined(&mut self) {
+    pub fn note_declined(&mut self) {
         self.declined += 1;
     }
 
     /// How many questions have been declined for a commit.
-    pub(crate) fn declined(&self) -> u64 {
+    pub fn declined(&self) -> u64 {
         self.declined
     }
 
     /// A pair of heads was met inside its own unfolding and left apart.
-    pub(crate) fn note_apart(&mut self) {
+    pub fn note_apart(&mut self) {
         self.apart += 1;
     }
 
     /// How many pairs have been left apart inside their own unfolding.
-    pub(crate) fn apart(&self) -> u64 {
+    pub fn apart(&self) -> u64 {
         self.apart
     }
 
     /// Enter or leave a question asked with nothing committed, answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.
-    pub(crate) fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
+    pub fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
         std::mem::replace(&mut self.withheld, withheld)
     }
 
     /// Whether conversion is answering a question asked with nothing committed, where it joins no two levels.
-    pub(crate) fn withholding(&self) -> bool {
+    pub fn withholding(&self) -> bool {
         self.withheld.is_some()
     }
 
     /// A level equation was withheld inside the question conversion is answering.
-    pub(crate) fn note_withheld(&mut self) {
+    pub fn note_withheld(&mut self) {
         if let Some(withheld) = &mut self.withheld {
             *withheld = true;
         }

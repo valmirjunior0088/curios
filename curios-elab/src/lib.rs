@@ -15,13 +15,13 @@
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
 mod universe_solver;
-pub use universe_solver::*;
+use universe_solver::*;
 
 mod concept;
-pub(crate) use concept::*;
+use concept::*;
 
 mod derive;
-pub(crate) use derive::*;
+use derive::*;
 
 mod positivity;
 use positivity::*;
@@ -30,70 +30,84 @@ mod variance;
 use variance::*;
 
 mod totality;
-pub use totality::*;
+use totality::*;
 
 mod reduce;
-pub(crate) use reduce::*;
+use reduce::*;
 
 mod context;
-pub use context::*;
+use context::*;
+pub use context::{Context, DEFAULT_BUDGET};
 
 mod convert;
-pub(crate) use convert::*;
+use convert::*;
 
 mod denoise;
-pub(crate) use denoise::*;
+use denoise::*;
 
 mod error;
-pub use error::*;
+use error::*;
+pub use error::{Error, Reading};
 
 mod report;
-pub use report::*;
+use report::*;
 
 mod typing;
-pub(crate) use typing::*;
+use typing::*;
 
 mod resolve;
-pub(crate) use resolve::*;
+use resolve::*;
 
 mod suggest;
-pub(crate) use suggest::*;
+use suggest::*;
 
 mod written;
-pub(crate) use written::*;
+use written::*;
 
 mod entailment;
-pub use entailment::*;
+use entailment::*;
 
 mod established;
-pub use established::*;
+pub use established::Established;
 
 mod traces;
-pub use traces::*;
+use traces::*;
+pub use traces::{HeldTrace, Readers, TraceRecord, TraceTable, TracedEntry, Traces};
 
 mod same;
-pub(crate) use same::*;
+use same::*;
 
 mod candidate;
-pub use candidate::*;
+use candidate::*;
+pub use candidate::{Candidating, declaration_input, lowered_digest};
 
 mod elaborate;
-pub use elaborate::*;
+use elaborate::*;
+pub use elaborate::{
+    FinalizedProgram, Recompile, Recompiled, Tail, elaborate_and_zonk_entry,
+    elaborate_and_zonk_entry_over, elaborate_and_zonk_module, elaborate_and_zonk_program,
+    elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, elaborate_and_zonk_unit_over,
+};
 
 #[cfg(test)]
 mod walk_tests;
 
 mod into_ersd;
-pub use into_ersd::*;
+use into_ersd::*;
+pub use into_ersd::{
+    ErasedBaseline, ErasedUnit, Erasures, Projection, erase_program, erase_unit, erase_unit_over,
+};
 
 mod zonk;
-pub use zonk::*;
+use zonk::*;
+pub use zonk::{validate_entry_universes, validate_lowered_universe_seeds, validate_universes};
 
 mod proof_binders;
-pub(crate) use proof_binders::*;
+use proof_binders::*;
 
 mod test_tail;
-pub use test_tail::*;
+pub use test_tail::ScheduledTest;
+use test_tail::*;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_elab::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(feature = "test-support")]

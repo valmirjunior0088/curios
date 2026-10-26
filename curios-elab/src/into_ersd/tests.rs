@@ -1,5 +1,5 @@
 use {
-    super::Projected,
+    super::{ErasedProgram, Projected},
     crate::{reduce::test_support::qed, *},
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,

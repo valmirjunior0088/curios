@@ -15,7 +15,7 @@ use {
 };
 
 impl Lowering<'_> {
-    pub(super) fn erase_func(
+    pub fn erase_func(
         &mut self,
         context: &mut Retyping,
         func: &Func,
@@ -39,7 +39,7 @@ impl Lowering<'_> {
     }
 
     /// Erase a lambda into a previously reserved function identity — shared by the expression form above (which reserves and binds it) and recursive groups (which reserve every member first for mutual visibility).
-    pub(super) fn define_lambda(
+    pub fn define_lambda(
         &mut self,
         context: &mut Retyping,
         function: curios_ersd::FunctionId,
@@ -92,7 +92,7 @@ impl Lowering<'_> {
         Ok(())
     }
 
-    pub(super) fn erase_apply(
+    pub fn erase_apply(
         &mut self,
         context: &mut Retyping,
         apply: &Apply,
@@ -148,7 +148,7 @@ impl Lowering<'_> {
     /// Erase a value held in a slot. A slot is there whatever it holds, but this instantiation can make what it holds a proof or a type, which carries no runtime content: proof irrelevance fills the slot with a content-free stand-in — the unit constant, or, for a *function* a callee may apply, a function of that type's arity returning it — rather than materializing a witness no runtime code reads.
     ///
     /// A `let` binding is a kept slot too: the name stays bound for the tail, and a proof or a type bound to it is not computed. Nothing is lost by that. No term outside `Io` performs an effect, so the value performed nothing; the totality obligations make every proof and every type total, so it would have returned; and what it could still have done is refuse on a run-time carrier, which is a behaviour no proof should be able to give a program.
-    pub(super) fn kept_operand(
+    pub fn kept_operand(
         &mut self,
         context: &mut Retyping,
         value: &Term,

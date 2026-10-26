@@ -21,14 +21,14 @@ use {
 };
 
 /// A match's scrutinee, elaborated once before any arm is: rebuilt, beside its type reduced — what every eliminator reads its carrier off.
-pub(super) struct Scrutinee {
+pub struct Scrutinee {
     term: Term,
     type_: Term,
 }
 
 impl Scrutinee {
     /// `head` elaborated as a scrutinee.
-    pub(super) fn read(context: &mut Context, head: &Term) -> Result<Self, Error> {
+    pub fn read(context: &mut Context, head: &Term) -> Result<Self, Error> {
         let (head, head_type) = elaborate(context, head, Mode::Infer)?;
 
         // The scrutinee is read with its solved metavariables substituted, and so is the goal an arm is checked at: an arm's goal takes the case where the scrutinee occurs in it (`MatchResult::at`), found by identity, and an operator reaches its concept through a witness metavariable of its own, solved and not yet spliced, so two spellings of one comparison are two terms until both are substituted.
@@ -63,7 +63,7 @@ impl Scrutinee {
 
 /// Which eliminator a split is, by what it refuses a scrutinee as.
 #[derive(Debug, Clone, Copy)]
-pub(super) enum Eliminator {
+pub enum Eliminator {
     Bool,
     /// The fold over a natural and the dispatch on one alike.
     Nat,
@@ -153,7 +153,7 @@ fn resolve_fold_result(
 }
 
 /// Whether `term` holds a written goal.
-pub(super) fn holds_goal(term: &Term) -> bool {
+pub fn holds_goal(term: &Term) -> bool {
     matches!(&**term, Subterm::Metavar(metavar) if metavar.origin == MetavarOrigin::Goal)
         || term.any_child_term(&mut |child| holds_goal(child))
 }
@@ -202,7 +202,7 @@ fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> E
 }
 
 /// A `Nat` fold with its scrutinee and its result resolved: `0` and `predecessor + 1`, the second with a hypothesis about the predecessor where its arm reads one.
-pub(super) struct NatSplit {
+pub struct NatSplit {
     head: Term,
     result: MatchResult,
     reads_hypothesis: bool,
@@ -210,7 +210,7 @@ pub(super) struct NatSplit {
 
 impl NatSplit {
     /// `reads_hypothesis` says the successor arm may read its hypothesis ([`may_read_hypothesis`]), which is what keeps the result a family ([`resolve_fold_result`]).
-    pub(super) fn resolve(
+    pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
@@ -237,7 +237,7 @@ impl NatSplit {
     /// The case `0`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
     ///
     /// A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it ([`fold_arm`]).
-    pub(super) fn zero(
+    pub fn zero(
         &self,
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
@@ -257,7 +257,7 @@ impl NatSplit {
     }
 
     /// The case `predecessor + 1`, under the two binders it opens: the hypothesis is assumed exactly where the arm reads it.
-    pub(super) fn successor(
+    pub fn successor(
         &self,
         context: &mut Context,
         predecessor: &Free,
@@ -288,12 +288,12 @@ impl NatSplit {
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
-    pub(super) fn result_type(&self) -> Term {
+    pub fn result_type(&self) -> Term {
         self.result.of(&self.head, &[])
     }
 
     /// The match over the two arms, the second closed over the binders it was entered under.
-    pub(super) fn rebuild(
+    pub fn rebuild(
         &self,
         zero: Term,
         predecessor: &Free,
@@ -346,7 +346,7 @@ fn elaborate_nat_match(
 
 /// The sequences a fold splits into the empty one and an atom ahead of a tail.
 #[derive(Debug, Clone, Copy)]
-pub(super) enum Sequence {
+pub enum Sequence {
     List,
     Bytes,
 }
@@ -358,7 +358,7 @@ enum Atoms {
 }
 
 /// A fold over a list or a packed sequence with its scrutinee and its result resolved: the empty case, and an atom ahead of a tail with a hypothesis about the tail where its arm reads one.
-pub(super) struct SequenceSplit {
+pub struct SequenceSplit {
     head: Term,
     head_type: Term,
     atoms: Atoms,
@@ -368,7 +368,7 @@ pub(super) struct SequenceSplit {
 
 impl SequenceSplit {
     /// `reads_hypothesis` says the nonempty arm may read its hypothesis ([`may_read_hypothesis`]), which is what keeps the result a family ([`resolve_fold_result`]).
-    pub(super) fn resolve(
+    pub fn resolve(
         context: &mut Context,
         sequence: Sequence,
         scrutinee: Scrutinee,
@@ -415,7 +415,7 @@ impl SequenceSplit {
     /// The empty case: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
     ///
     /// A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it ([`fold_arm`]).
-    pub(super) fn empty(
+    pub fn empty(
         &self,
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
@@ -442,7 +442,7 @@ impl SequenceSplit {
     }
 
     /// The case of an atom ahead of a tail, under the three binders it opens — the atom, the tail and the hypothesis about the tail, which is assumed exactly where the arm reads it.
-    pub(super) fn cons(
+    pub fn cons(
         &self,
         context: &mut Context,
         [atom, tail, hypothesis]: &[Free; 3],
@@ -500,12 +500,12 @@ impl SequenceSplit {
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
-    pub(super) fn result_type(&self) -> Term {
+    pub fn result_type(&self) -> Term {
         self.result.of(&self.head, &[])
     }
 
     /// The match over the two arms, the second closed over the binders it was entered under.
-    pub(super) fn rebuild(
+    pub fn rebuild(
         &self,
         empty: Term,
         [atom, tail, hypothesis]: &[Free; 3],
@@ -634,13 +634,13 @@ fn resolve_intrinsic_result(
 }
 
 /// A `Nat` dispatch with its scrutinee and its result resolved: a case for each literal written, and the default any other value takes.
-pub(super) struct SwitchSplit {
+pub struct SwitchSplit {
     head: Term,
     result: MatchResult,
 }
 
 impl SwitchSplit {
-    pub(super) fn resolve(
+    pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
@@ -665,7 +665,7 @@ impl SwitchSplit {
     }
 
     /// The case at the literal `value`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
-    pub(super) fn arm(
+    pub fn arm(
         &self,
         context: &mut Context,
         value: &Natural,
@@ -683,7 +683,7 @@ impl SwitchSplit {
     }
 
     /// What any other value takes. It refines nothing, so it is typed at the result at the scrutinee itself.
-    pub(super) fn default(
+    pub fn default(
         &self,
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
@@ -692,12 +692,12 @@ impl SwitchSplit {
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
-    pub(super) fn result_type(&self) -> Term {
+    pub fn result_type(&self) -> Term {
         self.result.of(&self.head, &[])
     }
 
     /// The match over `cases`, which arrive strictly ascending as `Cases::Switch` states them, and the default.
-    pub(super) fn rebuild(&self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
+    pub fn rebuild(&self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
@@ -745,7 +745,7 @@ fn kept_goal(context: &mut Context, goal: &Term, expected: &Term) -> Result<bool
     })
 }
 
-pub(crate) fn elaborate_match(
+pub fn elaborate_match(
     context: &mut Context,
     m: &Match,
     term: &Term,
@@ -853,13 +853,13 @@ struct InductMatchInput<'a> {
 }
 
 /// A `Bool` elimination with its scrutinee and its result resolved: the two cases.
-pub(super) struct BoolSplit {
+pub struct BoolSplit {
     head: Term,
     result: MatchResult,
 }
 
 impl BoolSplit {
-    pub(super) fn resolve(
+    pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
@@ -884,7 +884,7 @@ impl BoolSplit {
     }
 
     /// The case at `value`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
-    pub(super) fn arm(
+    pub fn arm(
         &self,
         context: &mut Context,
         value: bool,
@@ -902,12 +902,12 @@ impl BoolSplit {
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
-    pub(super) fn result_type(&self) -> Term {
+    pub fn result_type(&self) -> Term {
         self.result.of(&self.head, &[])
     }
 
     /// The match over the two arms.
-    pub(super) fn rebuild(&self, false_case: Term, true_case: Term) -> (Term, Term) {
+    pub fn rebuild(&self, false_case: Term, true_case: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
@@ -977,7 +977,7 @@ fn singleton_eliminable(
 /// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's written binders are aligned to that telescope's marks, a hidden payload left out bound all the same.
 ///
 /// The motive binds the scrutinee's indices and then the scrutinee, whatever its body does with them: each arm checks against the motive at *that case's* target indices, the whole match types at the scrutinee's *actual* indices, and a catch-all default — which binds nothing and refines no index — checks at the actual indices too.
-pub(super) struct NominalSplit {
+pub struct NominalSplit {
     head: Term,
     head_type: Term,
     name: Global,
@@ -996,7 +996,7 @@ pub(super) struct NominalSplit {
 
 impl NominalSplit {
     /// `vacuous` says the match writes no arm and no default, which is how a scrutinee of no nominal type is refused.
-    pub(super) fn resolve(
+    pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
@@ -1090,14 +1090,14 @@ impl NominalSplit {
     }
 
     /// The match's own type: the result at the scrutinee's actual indices and the scrutinee itself.
-    pub(super) fn result_type(&self) -> Term {
+    pub fn result_type(&self) -> Term {
         self.result_type.clone()
     }
 
     /// The large-elimination guard, asked before an arm is read: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no arm, every constructor ruled out) or by the elimination of a family with one constructor whose every payload its indices pin. `armless` says the match writes no arm and `defaulted` that it writes a catch-all.
     ///
     /// Answers whether the result's sort is still undecided, which [`NominalSplit::rebuild`] holds to `Prop` once the arms have decided it.
-    pub(super) fn admit(
+    pub fn admit(
         &self,
         context: &mut Context,
         armless: bool,
@@ -1123,7 +1123,7 @@ impl NominalSplit {
     }
 
     /// Every written arm must name a constructor: the refusal of the first of `tags` that names none. Coverage is decided per constructor — a missing arm is legal iff inversion proves it impossible ([`NominalSplit::ruled_out`]).
-    pub(super) fn declared<'t>(
+    pub fn declared<'t>(
         &self,
         context: &Context,
         tags: impl IntoIterator<Item = &'t Atom>,
@@ -1164,7 +1164,7 @@ impl NominalSplit {
     }
 
     /// The constructors a match's arms are elaborated at, in the order the family declares them, which is the order its arms are stored in however they are written: two matches differing only in how their arms were written produce the same term. Where a catch-all stands, the ones `written` names, each once, the default taking the rest, so nothing else is read of the family; otherwise every one, each a written arm or a missing one to rule out. A tag the family does not declare is none of them ([`NominalSplit::declared`] refuses it).
-    pub(super) fn cases<'t>(
+    pub fn cases<'t>(
         &self,
         context: &Context,
         written: impl IntoIterator<Item = &'t Atom>,
@@ -1186,7 +1186,7 @@ impl NominalSplit {
     }
 
     /// Whether a constructor no arm names is left possible, past the ones the arms `named`: what a row that writes a binder is the arm of. An unindexed family leaves one where it declares more than the arms name, which is read off the names alone; an indexed one where inversion rules out not every one of the rest.
-    pub(super) fn leaves_unnamed<'t>(
+    pub fn leaves_unnamed<'t>(
         &self,
         context: &mut Context,
         named: impl IntoIterator<Item = &'t Atom>,
@@ -1216,7 +1216,7 @@ impl NominalSplit {
     /// Whether the arm for `tag` may be left out.
     ///
     /// Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the kernel would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
-    pub(super) fn ruled_out(&self, context: &mut Context, tag: &Atom) -> Result<bool, Error> {
+    pub fn ruled_out(&self, context: &mut Context, tag: &Atom) -> Result<bool, Error> {
         // An unindexed inductive has nothing to invert: every arm is reachable and a missing one is plainly missing.
         if self.actual_indices.is_empty() {
             return Ok(false);
@@ -1237,12 +1237,12 @@ impl NominalSplit {
     }
 
     /// Whether the family is indexed, which is where inversion may excuse an arm left out.
-    pub(super) fn indexed(&self) -> bool {
+    pub fn indexed(&self) -> bool {
         !self.actual_indices.is_empty()
     }
 
     /// The refusal of a match that leaves out the arm for `tag` where nothing rules the case out.
-    pub(super) fn missing(&self, tag: &Atom) -> Error {
+    pub fn missing(&self, tag: &Atom) -> Error {
         match self.actual_indices.is_empty() {
             true => Error::match_case_missing(self.name, tag.to_string()),
             false => Error::missing_arm_not_impossible(tag.clone()),
@@ -1250,11 +1250,7 @@ impl NominalSplit {
     }
 
     /// The payload of `tag`'s case, at the scrutinee's parameters and universes: that one constructor of the family instantiated.
-    pub(super) fn payload(
-        &self,
-        context: &Context,
-        tag: &Atom,
-    ) -> Result<Telescope<Vec<Term>>, Error> {
+    pub fn payload(&self, context: &Context, tag: &Atom) -> Result<Telescope<Vec<Term>>, Error> {
         self.family(context)
             .at(&self.universes)
             .payload(tag, &self.params)
@@ -1263,7 +1259,7 @@ impl NominalSplit {
     }
 
     /// The case of `tag`, whose `payload` is opened under `labels`, one for each of its binders, each assumed at its declared (dependent) type: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm, which is closed over every payload.
-    pub(super) fn arm(
+    pub fn arm(
         &self,
         context: &mut Context,
         tag: &Atom,
@@ -1354,7 +1350,7 @@ impl NominalSplit {
     }
 
     /// The catch-all: `body` is handed the type it is typed at and answers it. It binds nothing and refines no index, so it is typed at the unrefined head — the result at the actual scrutinee, exactly as [`SwitchSplit::default`] types its default.
-    pub(super) fn default(
+    pub fn default(
         &self,
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
@@ -1363,7 +1359,7 @@ impl NominalSplit {
     }
 
     /// The match over `cases`, in the order [`NominalSplit::cases`] gives, and the catch-all where one is written. `undecided` is what [`NominalSplit::admit`] answered, and `term` the match a sort decided here is reported with.
-    pub(super) fn rebuild(
+    pub fn rebuild(
         &self,
         context: &mut Context,
         cases: Vec<(Atom, InductArm)>,
@@ -1396,7 +1392,7 @@ impl NominalSplit {
 /// For each payload of `tag`'s case, the binder among `written` that names it, or `None` where none does.
 ///
 /// An arm's written binders meet the payload's slots as a lambda's meet a function type's ([`align()`]): the plain binders are the plain payloads, in order, and between two of them the hidden binders written are the first of their run. A hidden payload no binder was written for is bound all the same, hintless, so nothing in the arm names it and it is in scope as its mark makes it.
-pub(super) fn payload_fills(
+pub fn payload_fills(
     tag: &Atom,
     payload: &Telescope<Vec<Term>>,
     written: &[Plicity],

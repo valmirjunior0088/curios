@@ -10,7 +10,7 @@ use {
 /// `body`, the zonked body of the witness `name`, with every read of one of its own methods that does not itself mention `name` replaced by that method's term.
 ///
 /// Rewritten to a fixed point, since a method cleared of the name is one the others may then read. A body that is no concept literal under its parameters, and one that reads no such method, is returned as it stands.
-pub(super) fn own_methods_read(context: &mut Context, name: &Free, body: &Term) -> Term {
+pub fn own_methods_read(context: &mut Context, name: &Free, body: &Term) -> Term {
     if !body.mentions_free(name) {
         return body.clone();
     }

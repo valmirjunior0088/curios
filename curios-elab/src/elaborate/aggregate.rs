@@ -13,7 +13,7 @@ use {
     std::collections::BTreeSet,
 };
 
-pub(super) fn elaborate_tuple_type(
+pub fn elaborate_tuple_type(
     context: &mut Context,
     tt: &TupleType,
     extent: Option<Extent>,
@@ -73,7 +73,7 @@ pub(super) fn elaborate_tuple_type(
     Ok((rebuilt, sort.term()))
 }
 
-pub(super) fn elaborate_tuple(
+pub fn elaborate_tuple(
     context: &mut Context,
     tuple: &Tuple,
     term: &Term,
@@ -147,7 +147,7 @@ pub(super) fn elaborate_tuple(
     Ok((Term::tuple(elaborated), expected))
 }
 
-pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
+pub fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
     let Proj { head, field } = proj;
 
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
@@ -273,7 +273,7 @@ fn slot(telescope: &Telescope<()>, field: &Field) -> Result<usize, Error> {
 }
 
 /// Check `args` pointwise against the dependent telescope `signature` — each arg under the earlier ones — collecting the rebuilt args and returning the telescope's terminal, opened at those args. The caller checks arity first; the arity error differs by site. The given-args counterpart to `check_telescope_entries`.
-pub(super) fn check_args_against<B: Bound>(
+pub fn check_args_against<B: Bound>(
     context: &mut Context,
     signature: Telescope<B>,
     args: &[Term],
@@ -287,7 +287,7 @@ pub(super) fn check_args_against<B: Bound>(
 }
 
 /// Type an intrinsic inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`. `extent` is where the node is written, which a fresh instance of the family's scheme is an occurrence at.
-pub(super) fn elaborate_induct_type(
+pub fn elaborate_induct_type(
     context: &mut Context,
     ut: &InductType,
     extent: Option<Extent>,
@@ -351,7 +351,7 @@ pub(super) fn elaborate_induct_type(
 }
 
 /// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`. `extent` is where the node is written, as [`elaborate_induct_type`] takes it.
-pub(super) fn elaborate_variant(
+pub fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
     extent: Option<Extent>,

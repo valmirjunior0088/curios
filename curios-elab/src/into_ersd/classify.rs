@@ -14,12 +14,12 @@ use {
 /// Whether a value of type `type_` carries nothing at run time, by the engine's rule read through erasure's reader ([`crate::is_erasable_in`]): a type, a proof, or a function that ultimately answers one. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
 ///
 /// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
-pub(crate) fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
+pub fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
     context.is_erasable_in(&mut Opened::default(), type_)
 }
 
 /// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`crate::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
-pub(crate) fn constructor_entries<B: Bound>(
+pub fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     telescope: Telescope<B>,
@@ -44,7 +44,7 @@ pub(crate) fn constructor_entries<B: Bound>(
 /// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-field collapses (a structure with one relevant field, a tuple of one field) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed `Bytes` (a `Handle` token is its bytes, the ABI's encoding), a list rope, a closure at its telescope's arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
-pub(crate) fn field_shape(
+fn field_shape(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     visited: &mut BTreeSet<Global>,
@@ -54,7 +54,7 @@ pub(crate) fn field_shape(
 }
 
 /// The register carrier a value of `type_` is held in where a register holds it ([`curios_ersd::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than naming their rows — a value is held as a reference whatever row it holds.
-pub(crate) fn register_shape(
+pub fn register_shape(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     type_: &Term,
@@ -85,14 +85,14 @@ enum Rows {
 ///
 /// A mask is the declaration's, so the answer holds at every instantiation: one reading that erases a field the declaration keeps, a parameter instantiated at a proposition, holds the value as the declaration lays it out all the same.
 #[derive(Clone, Copy)]
-pub(super) enum Relevance {
+pub enum Relevance {
     None,
     One(usize),
     Many,
 }
 
 impl Relevance {
-    pub(super) fn of(mask: &[bool]) -> Self {
+    pub fn of(mask: &[bool]) -> Self {
         let mut relevant = mask
             .iter()
             .enumerate()

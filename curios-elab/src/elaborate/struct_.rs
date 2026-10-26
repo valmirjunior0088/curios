@@ -55,7 +55,7 @@ fn instantiate_struct_decl(
 /// Type a struct type against its registry entry: the parameters are checked pointwise (dependently) through the parameter telescope, and the whole node is a `Type`. The struct analogue of `elaborate_induct_type`, with no indices.
 ///
 /// An *empty* parameter list on a parameterized struct is the inferred-head form (the type struct destructuring gives its temp): mint one fresh metavariable per declared parameter, exactly as the bare-name struct literal does (`elaborate_struct`), so the head can be solved by unification against the scrutinee's type.
-pub(super) fn elaborate_struct_type(
+pub fn elaborate_struct_type(
     context: &mut Context,
     st: &StructType,
     term: &Term,
@@ -139,7 +139,7 @@ pub(super) fn elaborate_struct_type(
 }
 
 /// Where one field position's value comes from: a written term to check, or — for a hidden field with no written fill — what a call's omitted argument of that mark is filled with, at the position's instantiated type: a witness goal for a concept's `use`-marked field, an inferred value or a discharged bound for an `@` field.
-pub(super) enum FieldSource<'a> {
+pub enum FieldSource<'a> {
     Written(&'a Term),
     /// An unfilled `@` position, filled as a call's omitted `@` argument is ([`insert_auto_argument`]): by unification, by reduction to truth, or from the facts in scope, and reported as that argument is where nothing fills it. `label` is the field's, empty where it has none.
     Infer {
@@ -154,7 +154,7 @@ pub(super) enum FieldSource<'a> {
 }
 
 /// Check each positional field against its type in a dependent field telescope, pushing the elaborated fields onto `elaborated`. Shared by struct and tuple literal elaboration. The rest of the telescope is opened with the *elaborated* field, not the raw surface term: the elaborated form carries label projections rebuilt positionally (and implicits inserted), whereas a raw `Field::Label` substituted into a later field type would panic once that type is reduced (e.g. `Io(b.A)` arising from a field typed `Io(A)` in `{ A : Type, t : Io(A) }`). A `Resolve` source, a dictionary's superclass, mints a witness metavariable and resolves its goal where it stands ([`resolve_witness_goal`]), anchored at `origin`, and the metavariable threads the telescope like any elaborated field.
-pub(super) fn check_dependent_fields(
+pub fn check_dependent_fields(
     context: &mut Context,
     tele: Telescope<()>,
     sources: &[FieldSource],
@@ -191,7 +191,7 @@ pub(super) fn check_dependent_fields(
 }
 
 /// Type a struct literal against its registry entry. The struct's `name` makes it self-describing, so this synthesizes (like `elaborate_variant`, not the purely-checked `elaborate_tuple`): the parameters come from the written head — a bare-name head mints one fresh metavariable per parameter, solved by the field checks (and, in `Check` mode, the `expect` turnaround unifying the result `StructType` against the expected type) — and the fields are checked in declaration order through the (dependent) field telescope.
-pub(super) fn elaborate_struct(
+pub fn elaborate_struct(
     context: &mut Context,
     s: &Struct,
     term: &Term,
@@ -461,7 +461,7 @@ fn written_fields(labels: &[&str], slots: &[Plicity]) -> Vec<String> {
 /// Resolve a struct literal's head parameters, threading the (dependent) parameter telescope so each minted metavariable is born at its binder's instantiated type: written arguments are checked, omitted ones minted fresh.
 ///
 /// An omitted `use` parameter is a witness slot, as it is where the type former is applied without it: resolution finds the dictionary once the parameters it is keyed on are known, and an expected type that already names one settles the slot by unification first.
-pub(super) fn resolve_struct_params(
+pub fn resolve_struct_params(
     context: &mut Context,
     name: &Global,
     struct_decl: &StructDecl,
@@ -509,7 +509,7 @@ pub(super) fn resolve_struct_params(
 }
 
 /// Seed omitted parameters from the checking expectation *before* the fields elaborate: a field checked against a type carrying an unsolved parameter metavariable can strand flex-flex constraints (e.g. a `match` tail's inferred motive against `Result(Str, {Nat, ?P})`) that nothing wakes. Only a same-named struct expectation seeds — anything else falls through to the dispatch-level `expect`, preserving implicit insertion and the ordinary mismatch diagnostics.
-pub(super) fn seed_struct_expectation(
+pub fn seed_struct_expectation(
     context: &mut Context,
     name: &Global,
     universes: &Universes,
@@ -533,7 +533,7 @@ pub(super) fn seed_struct_expectation(
 /// The `..base` spread path of a struct literal: the base is elaborated once and let-bound in a fresh frame, written overrides claim their declared positions by label — an order-preserving subsequence of the field telescope, so written order stays check order — a hidden entry claims the next hidden field after the entries before it, and every remaining plain field and superclass edge copies from the base by positional projection (a superclass field is *copied*, not re-resolved, and `use _` says so in writing). An `@` field left out is never copied: what it states is stated of the fields the new value has, so it is inferred anew as it is in any literal, and the author who means the base's writes `@label = base.label`.
 ///
 /// The parameters are minted *inside* the frame: an omitted parameter's metavariable may need to solve to a projection of the bound base (e.g. `?A := b.A`), which is only in scope there. The result type is reduced before the frame closes — the `elaborate_let` discipline — so occurrences of the binder unfold to the base before escaping the rebuilt `let b = base; Name { … }`, which downstream stages see as existing nodes.
-pub(super) fn elaborate_struct_spread(
+pub fn elaborate_struct_spread(
     context: &mut Context,
     struct_decl: &StructDecl,
     universes: &Universes,

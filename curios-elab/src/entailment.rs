@@ -18,13 +18,15 @@
 //! **What it is not.** The fill stays what its documentation says it is, a unique answer and no search. This procedure is a separate, fallible step after it.
 
 mod facts;
+pub use facts::Origin;
 use facts::*;
 
 mod proof;
 use proof::*;
 
 mod report;
-pub use report::*;
+use report::*;
+pub use report::{Conclusion, Refusal};
 
 mod search;
 use search::*;
@@ -43,10 +45,8 @@ use {
     curios_utilities::SyntaxName,
 };
 
-pub use facts::Origin;
-
 /// What the procedure concluded about a bound.
-pub(crate) enum Entailed {
+pub enum Entailed {
     /// A proof of the bound, elaborated against it.
     Proved(Term),
     /// No proof, and why: what the report the hole becomes says beside the bound.
@@ -96,11 +96,7 @@ fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Er
 /// A proof of `bound`, whose reduct `reduced` the fill found no inhabitant in, from the facts in scope — under whatever refinements are live, which the caller has made the ones a solution for the bound's slot is judged under.
 ///
 /// An exhausted budget propagates: running out is not evidence the bound is false, and collapsing it into a refusal would report the author's fault at the argument for what is the resource limit.
-pub(crate) fn entail(
-    context: &mut Context,
-    bound: &Term,
-    reduced: &Term,
-) -> Result<Entailed, Error> {
+pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Entailed, Error> {
     curios_profile::profile!("entailment::entail");
     if context.entailing() {
         return Ok(Entailed::Refused(Refusal::default()));

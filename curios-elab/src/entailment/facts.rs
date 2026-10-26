@@ -68,7 +68,7 @@ impl Origin {
     }
 
     /// [`Origin::named`], to be written over.
-    pub(crate) fn named_mut(&mut self) -> Option<&mut Term> {
+    pub fn named_mut(&mut self) -> Option<&mut Term> {
         match self {
             Origin::Hypothesis(name) | Origin::Field(name, _) | Origin::Guard(name, _) => {
                 Some(name)
@@ -97,22 +97,22 @@ impl Origin {
 
 /// One fact: `left <= right` at `carrier`, proved by `proof`.
 #[derive(Clone)]
-pub(super) struct Fact {
-    pub(super) origin: Origin,
+pub struct Fact {
+    pub origin: Origin,
     /// The comparison as it was stated, a strict one still strict, for the report.
-    pub(super) stated: Term,
-    pub(super) carrier: Carrier,
-    pub(super) left: Term,
-    pub(super) right: Term,
+    pub stated: Term,
+    pub carrier: Carrier,
+    pub left: Term,
+    pub right: Term,
     /// `left - right`, aligned to `<=`.
-    pub(super) form: LinearForm,
+    pub form: LinearForm,
     /// A term whose type conversion aligns with `left <= right`.
-    pub(super) proof: Term,
+    pub proof: Term,
 }
 
 impl Fact {
     /// Its sides at `carrier`: widened where the fact is at `Nat` and `carrier` is `Int`, the proposition conversion aligns it with.
-    pub(super) fn sides_at(&self, carrier: Carrier) -> (Term, Term) {
+    pub fn sides_at(&self, carrier: Carrier) -> (Term, Term) {
         let widen = |side: &Term| match (self.carrier, carrier) {
             (Carrier::Natural, Carrier::Integer) => {
                 Term::intrinsic(Intrinsic::NatToInt(side.clone()))
@@ -124,25 +124,25 @@ impl Fact {
 }
 
 /// The goal a decision states: `left ⋈ right` at `carrier`, `⋈` any of `<`, `<=`, `==` and `!=`, as its reduct spells it.
-pub(super) struct Target {
-    pub(super) carrier: Carrier,
-    pub(super) relation: Operation,
-    pub(super) left: Term,
-    pub(super) right: Term,
+pub struct Target {
+    pub carrier: Carrier,
+    pub relation: Operation,
+    pub left: Term,
+    pub right: Term,
     /// `left - right`, aligned to `<=`: the goal's view where it is an order, and the view of `left <= right` where it is an equality or a disequality, which names the goal's atoms and holds whatever remainder is lifted out of them.
-    pub(super) form: LinearForm,
+    pub form: LinearForm,
     /// The decision as the bound's reduct spells it: what the refuting form splits on, so the refinement its arms install is keyed where the bound reads it.
-    pub(super) decision: Term,
+    pub decision: Term,
 }
 
 /// What the scope states: the facts read, the case splits their operations define, the remainders lifted out of them, the comparisons kept for the last reading, and the propositions stating a decision the view does not read.
-pub(super) struct Facts {
-    pub(super) facts: Vec<Fact>,
-    pub(super) splits: Vec<Split>,
+pub struct Facts {
+    pub facts: Vec<Fact>,
+    pub splits: Vec<Split>,
     /// What both cases of a split state, where conversion decides it: asked only where the facts alone leave an assignment and before any case is opened (`plan`), so a bound the facts prove is proved as it was, and one that turns on no case opens none.
-    pub(super) common: Vec<Fact>,
-    pub(super) lifts: Vec<Lift>,
-    pub(super) unread: Vec<(Origin, Term)>,
+    pub common: Vec<Fact>,
+    pub lifts: Vec<Lift>,
+    pub unread: Vec<(Origin, Term)>,
     /// What the scope states that is read last ([`disequalities`]).
     kept: Vec<Kept>,
     /// Each reduct an operand was read through, beside the operand as stated.
@@ -167,12 +167,12 @@ struct Kept {
 
 impl Facts {
     /// `term` with every reduct an operand was read through written as the operand was stated: what the facts invent over atoms — a natural's sign, a quotient's bounds, a subtraction's cases — is built from the atoms' reducts, and is written over the spellings in scope. An outer reduct is replaced before one inside it.
-    pub(super) fn respell(&self, term: &Term) -> Term {
+    pub fn respell(&self, term: &Term) -> Term {
         respelled(&self.spelled, term)
     }
 
     /// The operands written beneath the operands as stated, each beside its reduct ([`name`]): what a report names an atom by where no operand as stated spells it. Asked once the search is over and only for a report, since what it reduces changes how a search reads what it has yet to: the head of a recursive call, opened, leaves the call read as its unfolding from then on.
-    pub(super) fn beneath(&self, context: &mut Context) -> Result<Vec<(Term, Term)>, Error> {
+    pub fn beneath(&self, context: &mut Context) -> Result<Vec<(Term, Term)>, Error> {
         let mut named = Vec::new();
         for (_, stated) in &self.spelled {
             name(context, stated, &mut named)?;
@@ -181,7 +181,7 @@ impl Facts {
     }
 
     /// Every spelling a report writes a counterexample's atoms through, a spelling before any that would stand for the same reduct after it: the operands as stated, then those `inferred` holds — a bound a metavariable elaboration solved states its operands through the solution, and the names beneath them — then the names beneath the operands as stated ([`Facts::beneath`]), where a reading of them runs out leaving them out.
-    pub(super) fn report_spellings(
+    pub fn report_spellings(
         &self,
         context: &mut Context,
         inferred: Vec<(Term, Term)>,
@@ -193,7 +193,7 @@ impl Facts {
     }
 
     /// Whether `form` holds a remainder the facts were lifted over: a goal that does is not met by their sum, which is over the dividend, and is proved by refuting its negation, lifted as they were.
-    pub(super) fn lifted_over(&self, form: &LinearForm) -> bool {
+    pub fn lifted_over(&self, form: &LinearForm) -> bool {
         self.lifts
             .iter()
             .any(|lift| lift.coefficient(form).is_some())
@@ -201,7 +201,7 @@ impl Facts {
 }
 
 /// `term` with each reduct of `spelled` written as the operand stated beside it, an outer reduct before one inside it. A reduct spelled twice takes its first spelling: two equal reducts would each hold the other, and every reduct inside them, unreplaced.
-pub(super) fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
+pub fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
     let mut pending: Vec<&(Term, Term)> = Vec::new();
     for spelling in spelled {
         if !pending.iter().any(|(known, _)| *known == spelling.0) {
@@ -223,19 +223,19 @@ pub(super) fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
 }
 
 /// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`. Operations whose guards are one comparison to conversion share one split ([`Reader::open`]).
-pub(super) struct Split {
+pub struct Split {
     /// The comparison the proof splits on.
-    pub(super) guard: Term,
+    pub guard: Term,
     /// The guard as reduction leaves it, by which a second guard is told to be this one or its negation ([`Reader::open`]); `None` where it is no operation left standing.
     asked: Option<Term>,
     /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
-    pub(super) holds: Vec<Fact>,
+    pub holds: Vec<Fact>,
     /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
-    pub(super) fails: Vec<Fact>,
+    pub fails: Vec<Fact>,
 }
 
 /// One reading of a scope: the reader every fact and the goal share, which of the atoms it has read are one, what it has read so far, and the operations whose definitions it has read.
-pub(super) struct Reader<'a> {
+pub struct Reader<'a> {
     views: &'a mut LinearViews,
     classes: &'a mut Classes,
     read: Facts,
@@ -248,7 +248,7 @@ pub(super) struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     /// A reader over `views`, classing its atoms among `classes`: every reader of one bound is handed the same two, so the goal, the facts, the negated goal and the facts' products are read over one table of atoms and one partition of them.
-    pub(super) fn new(views: &'a mut LinearViews, classes: &'a mut Classes) -> Self {
+    pub fn new(views: &'a mut LinearViews, classes: &'a mut Classes) -> Self {
         Reader {
             views,
             classes,
@@ -272,7 +272,7 @@ impl<'a> Reader<'a> {
     /// The goal `decision` states, or `None` where it is no `Nat` or `Int` comparison: an order, an equality, or a disequality, `Bool/not` of an equality among them. An equality or a disequality conversion holds to be an order — `n != 0` is `0 < n` at `Nat` — is that order's goal ([`Reader::ordered`]). Read first, so its atoms are handed out before any fact's.
     ///
     /// `stated` is the decision as the bound spells it, where opening the bound reaches one: its comparison's operands are the goal's sides and it is what the refuting form splits on, so the refinement the split installs is keyed as the bound reads it. `decision` is its reduct, read where the stated spelling opens to no comparison.
-    pub(super) fn target(
+    pub fn target(
         &mut self,
         context: &mut Context,
         stated: Option<&Term>,
@@ -326,7 +326,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Every fact the scope states: the hypotheses, their proof fields and the guards live now, what the operations they are read over define, and every natural monomial's non-negativity, the goal's included.
-    pub(super) fn collect(
+    pub fn collect(
         mut self,
         context: &mut Context,
         target: Option<&Target>,
@@ -1657,10 +1657,7 @@ fn beneath(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> 
 }
 
 /// The spellings of the comparison `bound` states, opened as a stated bound is: each operand's reduct beside the operand. What a report writes a counterexample's atoms by where the search read the bound by its reduct alone.
-pub(super) fn stated_spellings(
-    context: &mut Context,
-    bound: &Term,
-) -> Result<Vec<(Term, Term)>, Error> {
+pub fn stated_spellings(context: &mut Context, bound: &Term) -> Result<Vec<(Term, Term)>, Error> {
     let mut spelled = Vec::new();
     let Some(decision) = held(context, bound)? else {
         return Ok(spelled);
@@ -1685,7 +1682,7 @@ fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
 
 /// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
 /// The hole's own binders, in scope order: the frames past the base, since a global of every mounted unit is an assumption in the base frame and none is a fact about this scope.
-pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
+pub fn binders(context: &Context) -> Vec<(Free, Term)> {
     context
         .local_binders()
         .filter(|(name, _)| name.as_global().is_none())
@@ -1696,7 +1693,7 @@ pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
 /// What a hypothesis states, each statement beside the proof that inhabits it and where it came from: the hypothesis itself, or the fields of a tuple or a structure, one level down and in their order.
 ///
 /// A local nobody named that stands for a term, as a structure update's base does, states its facts through that term: a statement and where it came from are read by a report, and the term is the one spelling its author has for the local.
-pub(super) fn statements(
+pub fn statements(
     context: &mut Context,
     name: &Free,
     type_: &Term,
@@ -1769,7 +1766,7 @@ fn subject_of(context: &Context, name: &Free) -> Term {
 }
 
 /// What the comparisons the scope kept add to `facts`, read where a search over `facts` and their products left an assignment — by a reader of its own over the same atoms and classes, as [`products`] are, and lifted as every fact is. Whether there was one to read.
-pub(super) fn disequalities(
+pub fn disequalities(
     context: &mut Context,
     views: &mut LinearViews,
     classes: &mut Classes,
@@ -1805,7 +1802,7 @@ pub(super) fn disequalities(
 /// - `left == right`, where conversion holds it to be no order: the disequality, read as every disequality is ([`Reader::distinct`]): the strict bound reduction orders it to, or no fact at all and the split on `left <= right`, put before every other in `facts`.
 ///
 /// Nothing where the lemma a negation is proved by is not in scope.
-pub(super) fn negated(
+pub fn negated(
     context: &mut Context,
     views: &mut LinearViews,
     classes: &mut Classes,
@@ -1862,7 +1859,7 @@ pub(super) fn negated(
 /// The product of each pair of `facts` and the negated goal, through `le/mul`: `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`, read as every fact is — the products Mathlib's `nlinarith` adds before its linear search, each a fact whose monomials that search reads as unknowns.
 ///
 /// A natural's sign is a factor only over one atom, and never beside another natural's, whose product conversion decides; a pair at two carriers is taken at `Int`, the `Nat` factor's sides widened as a sum's are. A pair whose `le/mul` is not in scope is left out.
-pub(super) fn products(
+pub fn products(
     context: &mut Context,
     views: &mut LinearViews,
     classes: &mut Classes,
@@ -1880,7 +1877,7 @@ pub(super) fn products(
 }
 
 /// The products of each case's own facts with the factors [`products`] multiplies and with one another, added to that case: a fact a split opens — the disequality an equality goal is refuted through among them — is multiplied where it holds, as the negated goal of an order is. Whether any case gained one.
-pub(super) fn case_products(
+pub fn case_products(
     context: &mut Context,
     views: &mut LinearViews,
     classes: &mut Classes,
@@ -2027,7 +2024,7 @@ impl Division {
 }
 
 /// A remainder lifted out of the facts: a fact over it is raised by a multiple of its quotient's multiple on both sides, which conversion reads as a fact over the dividend, and its form has the remainder replaced by what it denotes.
-pub(super) struct Lift {
+pub struct Lift {
     remainder: Monomial,
     /// `x - d * (x / d)`.
     denotes: LinearForm,
@@ -2147,7 +2144,7 @@ fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error>
 }
 
 /// The decision `stated` holds, opened by its heads to `Holds(decision)` — a named proposition standing for one, to the `i < n` it was written as — or `None` where opening reaches no `Holds`.
-pub(super) fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
+pub fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
     let holds = global(context.syntax().proof.holds);
     open_until(context, stated, |term| match &**term {
         Subterm::Apply(Apply { head, arguments }) if *head == holds => match arguments.as_slice() {
@@ -2178,13 +2175,13 @@ fn open_until<T>(
 }
 
 /// `match head | true => true_case | false => false_case end`, its motive elided as a written one is, so elaboration checks each arm against the expected type with `head` refined.
-pub(super) fn split(context: &mut Context, head: &Term, false_case: Term, true_case: Term) -> Term {
+pub fn split(context: &mut Context, head: &Term, false_case: Term, true_case: Term) -> Term {
     let motive = Term::match_motive_written(Term::hole(context.mint_metavar()));
     Term::bool_match_scoped(head.clone(), motive, false_case, true_case)
 }
 
 /// `match refuted end`: a proof whose type reduces to an empty proposition, eliminated in the place of whatever is expected.
-pub(super) fn eliminate(context: &mut Context, refuted: Term) -> Term {
+pub fn eliminate(context: &mut Context, refuted: Term) -> Term {
     let motive = Term::match_motive_written(Term::hole(context.mint_metavar()));
     let cases = Vec::<(curios_core::Atom, Vec<(Plicity, Free)>, Term)>::new();
     Term::induct_match_scoped_marked(refuted, motive, cases, None)
@@ -2251,7 +2248,7 @@ fn successor(carrier: Carrier, term: Term) -> Term {
 }
 
 /// `left + right` at `carrier`.
-pub(super) fn add(carrier: Carrier, left: Term, right: Term) -> Term {
+pub fn add(carrier: Carrier, left: Term, right: Term) -> Term {
     Term::intrinsic(match carrier {
         Carrier::Natural => Intrinsic::NatAdd(left, right),
         _ => Intrinsic::IntAdd(left, right),
@@ -2259,7 +2256,7 @@ pub(super) fn add(carrier: Carrier, left: Term, right: Term) -> Term {
 }
 
 /// `left * right` at `carrier`.
-pub(super) fn multiply(carrier: Carrier, left: Term, right: Term) -> Term {
+pub fn multiply(carrier: Carrier, left: Term, right: Term) -> Term {
     Term::intrinsic(match carrier {
         Carrier::Natural => Intrinsic::NatMul(left, right),
         _ => Intrinsic::IntMul(left, right),
@@ -2267,7 +2264,7 @@ pub(super) fn multiply(carrier: Carrier, left: Term, right: Term) -> Term {
 }
 
 /// The literal `value` at `carrier`.
-pub(super) fn literal(carrier: Carrier, value: impl Into<Natural>) -> Term {
+pub fn literal(carrier: Carrier, value: impl Into<Natural>) -> Term {
     let value = value.into();
     Term::intrinsic(match carrier {
         Carrier::Natural => Intrinsic::Nat(Nat::new(value)),
@@ -2291,7 +2288,7 @@ fn carrier_of(type_: &Term) -> Option<Carrier> {
 }
 
 /// The order vocabulary at `carrier`.
-pub(super) fn order(context: &Context, carrier: Carrier) -> OrderSyntax {
+pub fn order(context: &Context, carrier: Carrier) -> OrderSyntax {
     let entailment = context.syntax().entailment;
     match carrier {
         Carrier::Natural => entailment.nat,
@@ -2300,6 +2297,6 @@ pub(super) fn order(context: &Context, carrier: Carrier) -> OrderSyntax {
 }
 
 /// `True/qed()`.
-pub(super) fn qed(context: &Context) -> Term {
+pub fn qed(context: &Context) -> Term {
     Term::apply(global(context.syntax().proof.true_qed), Vec::<Term>::new())
 }

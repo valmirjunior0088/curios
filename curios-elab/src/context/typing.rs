@@ -9,28 +9,28 @@ use {
 
 /// The half of a context every judgment reads.
 #[derive(Debug)]
-pub(crate) struct Typing<'s> {
+pub struct Typing<'s> {
     // The binder supply: a binder a judgment opens is minted here, above what the declaration's lowering minted. Exchanged with the attempt it mints for (`Context::exchange`), so the identities a declaration mints are the ones it would mint elaborated alone.
-    pub(super) fresh_names: Entropy,
+    pub fresh_names: Entropy,
     // What a judgment may spend, restored at every declaration boundary, and what has been drawn from it; see [`Spend`].
-    pub(super) spend: Spend,
+    pub spend: Spend,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
-    pub(super) caches: Caches,
+    pub caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
-    pub(super) frames: Frames<'s>,
+    pub frames: Frames<'s>,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
-    pub(super) program: Program<'s>,
+    pub program: Program<'s>,
     // The protocol by which a judgment's reduction asks conversion; see [`Asking`].
-    pub(super) asking: Asking,
+    pub asking: Asking,
     // What the judgment under way asked of the declarations around it; see [`Traced`].
-    pub(super) traced: Traced,
+    pub traced: Traced,
     // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See `Context::syntax`.
-    pub(super) syntax: SyntaxRegistry,
+    pub syntax: SyntaxRegistry,
 }
 
 impl Typing<'_> {
     /// A machine with nothing in scope, in which each declaration may spend `budget` units, synthesizing the names `syntax` registers.
-    pub(super) fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
+    pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             fresh_names: Entropy::new(),
             spend: Spend::new(budget),

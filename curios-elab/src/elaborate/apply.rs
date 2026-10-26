@@ -14,16 +14,13 @@ use {
     std::collections::BTreeSet,
 };
 
-pub(super) fn elaborate_func_type(
-    context: &mut Context,
-    ft: &FuncType,
-) -> Result<(Term, Term), Error> {
+pub fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Term), Error> {
     let (rebuilt, sort, _) = elaborate_func_type_sized(context, ft)?;
     Ok((rebuilt, sort.term()))
 }
 
 /// [`elaborate_func_type`], with the level typing read each domain at handed back beside the type and its sort, in order: what a struct's parameters are sized by, its former's type being a function type over them.
-pub(super) fn elaborate_func_type_sized(
+pub fn elaborate_func_type_sized(
     context: &mut Context,
     ft: &FuncType,
 ) -> Result<(Term, Sort, Vec<Level>), Error> {
@@ -89,7 +86,7 @@ pub(super) fn elaborate_func_type_sized(
 /// Refuse a written `use` binder whose type is not a concept application.
 ///
 /// Resolution answers a `use` slot with a concept's witness and nothing else, so a binder at any other type could only ever be filled by writing its argument out, and every call that omitted it failed at resolution — far from the declaration, naming whatever the type happened to reduce to. A type still stuck on an unsolved metavariable — headed by one, or an elimination waiting on one — is let through, since it may yet come to a concept application.
-pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Result<(), Error> {
+pub fn check_witness_domain(context: &mut Context, domain: &Term) -> Result<(), Error> {
     let reduced = reduce_with(context, domain)?;
     let admitted = match &*reduced {
         Subterm::StructType(struct_type) => context.concept(&struct_type.name).is_some(),
@@ -106,7 +103,7 @@ pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Resu
 }
 
 /// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.
-pub(crate) fn ordinal(index: usize) -> String {
+pub fn ordinal(index: usize) -> String {
     let position = index + 1;
     let suffix = match (position % 10, position % 100) {
         (_, 11..=13) => "th",
@@ -121,13 +118,13 @@ pub(crate) fn ordinal(index: usize) -> String {
 /// How a witness goal names the slot it fills: its position among the head's `use` slots.
 ///
 /// A position rather than a name, because a `use` parameter *has* no name — `let`, `rec` and `satisfy` sugar all declare one anonymously, so a name would read `_` for every premise of user-written code. Only the generated method wrappers write `use w`, and `w` is an implementation detail appearing in no program.
-pub(crate) fn premise_label(index: usize) -> String {
+pub fn premise_label(index: usize) -> String {
     format!("its {} 'use' premise", ordinal(index))
 }
 
 /// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled: "its 2nd 'use' premise". Every slot a walk visits passes through [`SlotPositions::next`] in telescope order.
 #[derive(Default)]
-pub(crate) struct SlotPositions {
+pub struct SlotPositions {
     explicit: usize,
     implicit: usize,
     witness: usize,
@@ -135,7 +132,7 @@ pub(crate) struct SlotPositions {
 
 impl SlotPositions {
     /// The 0-based position of the next slot of `plicity` among the slots of its kind, advancing past it.
-    pub(crate) fn next(&mut self, plicity: Plicity) -> usize {
+    pub fn next(&mut self, plicity: Plicity) -> usize {
         let counter = match plicity {
             Plicity::Explicit => &mut self.explicit,
             Plicity::Implicit => &mut self.implicit,
@@ -148,7 +145,7 @@ impl SlotPositions {
 }
 
 /// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the extent anchor for the goal. `position` is the slot's place among the head's slots of its kind, which names a witness goal's premise.
-pub(super) fn insert_auto_argument(
+pub fn insert_auto_argument(
     context: &mut Context,
     plicity: Plicity,
     type_: &Term,
@@ -218,7 +215,7 @@ pub(super) fn insert_auto_argument(
 }
 
 /// Fill an omitted `use` slot: a fresh metavariable and its resolution goal. `named` says whether what follows the slot in its telescope mentions its binder — a later parameter's type or the result type — and so whether unification can give the slot a dictionary. One it can waits for its term ([`attempt_witness_goal`]), so that a part read later names the dictionary whichever of the two the walk reaches first; one it cannot has resolution as its one source, and is resolved where it stands ([`resolve_witness_goal`]).
-pub(super) fn insert_witness_argument(
+pub fn insert_witness_argument(
     context: &mut Context,
     type_: &Term,
     func: &CalleeId,
@@ -243,7 +240,7 @@ pub(super) fn insert_witness_argument(
 /// Try a bound standing as the hole `slot` once more: fill the hole if the bound has come to truth, record what it reduced to if it came to anything else, and answer whether it still waits on a metavariable.
 ///
 /// The fill is a metavariable solution, so the bound is reduced as re-validation judges one: where the slot was born, under its guards and no others ([`Context::at_birth`]). A bound true under the guard of the arm the call sits in is filled on retry as it would have been at insertion, and the fill cannot leave that arm: a solution for a metavariable born outside it that mentions the unfilled slot is not contained in that metavariable's birth context and waits, and once the slot is filled it is re-validated without the guard. A bound true only under a guard the slot was not born under stays unfilled and is reported. A bound that follows from the facts in scope under those refinements is proved there as well ([`crate::entail`]).
-pub(crate) fn attempt_discharge(
+pub fn attempt_discharge(
     context: &mut Context,
     slot: MetavarId,
     bound: &Term,
@@ -306,7 +303,7 @@ fn note_dead_guard(context: &mut Context, slot: MetavarId) {
 }
 
 /// Retry a parked discharge standing on the frames it was parked under ([`attempt_discharge`]), parking it again while it still waits.
-pub(crate) fn retry_discharge(
+pub fn retry_discharge(
     context: &mut Context,
     slot: MetavarId,
     bound: Term,
@@ -363,7 +360,7 @@ fn bound_exhausted(
     exhausted_bound(context, error, bound, site)
 }
 
-pub(super) fn elaborate_apply(
+pub fn elaborate_apply(
     context: &mut Context,
     apply: &Apply,
     term: &Term,
@@ -516,7 +513,7 @@ pub(super) fn elaborate_apply(
 }
 
 /// Whether a written hidden member is the placeholder `_`: a silent hole nothing has birthed, which is what lowering writes for it. A birthed one is a term the compiler supplies — the monad a bind is built at, a parked argument's stand-in — and is an argument like any other; a written `?` is a goal.
-pub(super) fn is_placeholder(context: &Context, term: &Term) -> bool {
+pub fn is_placeholder(context: &Context, term: &Term) -> bool {
     matches!(&**term, Subterm::Metavar(metavar) if metavar.is_hole() && context.metavar_entry(metavar.id).is_none())
 }
 

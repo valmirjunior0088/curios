@@ -29,7 +29,7 @@ type Polynomial = Vec<(Integer, Vec<Atom>)>;
 const QUOTIENT_TERMS: usize = 64;
 
 /// Whether `this ≡ that`, two intrinsics of one carrier the chain settled nothing of, was linear in its one unsolved metavariable and that metavariable is now solved to the equation's solution. `false` leaves everything as it was.
-pub(super) fn solved_linearly(
+pub fn solved_linearly(
     context: &mut Context,
     this: &Intrinsic,
     that: &Intrinsic,
@@ -126,7 +126,7 @@ fn normalized(
 }
 
 /// `term`, a number of `carrier`, with every product of two sums distributed, or as it stands where that has no value at the type level. The fold leaves such a product standing until a comparison asks, and the linear view distributes none and reads a standing product as one atom, so each reader of the view asks by name.
-pub(crate) fn distributed(
+pub fn distributed(
     context: &mut Context,
     carrier: Carrier,
     term: Term,

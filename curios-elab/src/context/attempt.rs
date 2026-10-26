@@ -12,7 +12,7 @@ use {
 
 /// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
 #[derive(Debug, Clone)]
-pub(crate) struct GoalObligation {
+pub struct GoalObligation {
     pub goals: BTreeSet<MetavarId>,
     pub this: Term,
     pub that: Term,
@@ -20,10 +20,10 @@ pub(crate) struct GoalObligation {
 
 /// The metavariables one attempt at a declaration mints with their solutions, its universe levels with the solver that settles them, and what it noted of the goals it wrote.
 #[derive(Debug)]
-pub(crate) struct Attempt {
+pub struct Attempt {
     // The unification state — metavariable records, the solve journal, and parked work; flat and frame-independent. See [`Solutions`]. Open to the context with the solver beside it, since a write to either stamps or clears a cache and the context is where the two are named together.
-    pub(super) solutions: Solutions,
-    pub(super) universe_solver: UniverseSolver,
+    pub solutions: Solutions,
+    pub universe_solver: UniverseSolver,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See [`Attempt::note_goal_obligation`].
     goal_obligations: Vec<GoalObligation>,
     // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this extent, since an occurrence of the goal inside a type may carry the extent of the binder it was substituted for — a declaration's, not the `?`'s.
@@ -65,7 +65,7 @@ impl Attempt {
     }
 
     /// Record what blocked `id`'s solve, replacing any earlier record: only the last attempt's reason is worth reporting, since an earlier one may since have been solved away.
-    pub(crate) fn note_solve_blockers(
+    pub fn note_solve_blockers(
         &mut self,
         id: MetavarId,
         blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
@@ -74,53 +74,45 @@ impl Attempt {
     }
 
     /// What blocked `id`'s solve when it was last tried; nothing where it was never blocked.
-    pub(crate) fn solve_blockers(
-        &self,
-        id: MetavarId,
-    ) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
+    pub fn solve_blockers(&self, id: MetavarId) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
         self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
     }
 
     /// Record where the written goal `id` was written, at its birth.
-    pub(crate) fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
+    pub fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
         self.goal_spans.entry(id).or_insert(extent);
     }
 
     /// Where the written goal `id` was written, if elaboration reached it.
-    pub(crate) fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
+    pub fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
         self.goal_spans.get(&id)
     }
 
     /// Whether the attempt wrote a goal.
-    pub(crate) fn holds_goals(&self) -> bool {
+    pub fn holds_goals(&self) -> bool {
         !self.goal_spans.is_empty()
     }
 
     /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.
-    pub(crate) fn note_goal_obligation(
-        &mut self,
-        goals: BTreeSet<MetavarId>,
-        this: Term,
-        that: Term,
-    ) {
+    pub fn note_goal_obligation(&mut self, goals: BTreeSet<MetavarId>, this: Term, that: Term) {
         self.goal_obligations
             .push(GoalObligation { goals, this, that });
     }
 
     /// Every obligation [`Attempt::note_goal_obligation`] recorded, in drain order.
-    pub(crate) fn goal_obligations(&self) -> &[GoalObligation] {
+    pub fn goal_obligations(&self) -> &[GoalObligation] {
         &self.goal_obligations
     }
 
     /// Record that the recursive slot `id` stands for the member `name`.
-    pub(crate) fn name_rec_slot(&mut self, id: MetavarId, name: Free) {
+    pub fn name_rec_slot(&mut self, id: MetavarId, name: Free) {
         self.rec_slot_names.insert(id, name);
     }
 
     /// The member name a *filled* recursive slot stands for, which is what substitution must put in its place.
     ///
     /// Only once filled. While a slot is unsolved it is deliberately a blocking dependency — `elaborate_rec` records that a dependency on a later member parks on the unsolved slot — and spelling it as a name would let a conversion commit where it must still wait. Nothing is lost by waiting: the cycle needs substitution to expand a slot into a body, so refusing to do that at all is enough however early the slot leaked.
-    pub(crate) fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
+    pub fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
         match self.solutions.solution(id).is_some() {
             true => self.rec_slot_names.get(&id),
             false => None,
@@ -130,12 +122,23 @@ impl Attempt {
 
 /// An [`Attempt`] set aside, with the binder identities it minted: what `Context::exchange` takes and hands back.
 #[derive(Debug)]
-pub(crate) struct Attempted {
-    pub(super) fresh_names: Entropy,
-    pub(super) attempt: Attempt,
+pub struct Attempted {
+    fresh_names: Entropy,
+    attempt: Attempt,
 }
 
 impl Attempted {
+    pub(super) fn new(fresh_names: Entropy, attempt: Attempt) -> Self {
+        Self {
+            fresh_names,
+            attempt,
+        }
+    }
+
+    pub(super) fn into_parts(self) -> (Entropy, Attempt) {
+        (self.fresh_names, self.attempt)
+    }
+
     /// A state that has minted nothing, each of its counters above what `mints` says a lowering minted.
     pub(super) fn above(mints: &Mints) -> Self {
         let fresh_names = Entropy::new();

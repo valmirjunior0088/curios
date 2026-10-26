@@ -41,10 +41,10 @@ pub struct ErasedBaseline<'a> {
 }
 
 /// An erased form the unit keeps of its baseline, with what erasing it asked.
-pub(super) type Kept = (Held, HeldTrace);
+pub type Kept = (Held, HeldTrace);
 
 /// What an erasure over a baseline has decided, as it walks the unit's items in the order they are stored in.
-pub(super) struct ErasedOver<'a> {
+pub struct ErasedOver<'a> {
     baseline: ErasedBaseline<'a>,
     module: &'a Module,
     /// What the module changed of the baseline's items, where it is a version of the baseline's module, so the two hold an unchanged item at one place.
@@ -64,11 +64,7 @@ pub(super) struct ErasedOver<'a> {
 }
 
 impl<'a> ErasedOver<'a> {
-    pub(super) fn new(
-        baseline: ErasedBaseline<'a>,
-        module: &'a Module,
-        scope: Erasures<'a>,
-    ) -> Self {
+    pub fn new(baseline: ErasedBaseline<'a>, module: &'a Module, scope: Erasures<'a>) -> Self {
         let mut over = Self {
             baseline,
             module,
@@ -168,27 +164,27 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// The places of the items the walk visits, in the order the module stores them.
-    pub(super) fn visited(&self) -> impl Iterator<Item = usize> + '_ {
+    pub fn visited(&self) -> impl Iterator<Item = usize> + '_ {
         self.visited.iter().copied()
     }
 
     /// What the module changed of the baseline's items, where it is a version of the baseline's module.
-    pub(super) fn changes(&self) -> Option<&Changes> {
+    pub fn changes(&self) -> Option<&Changes> {
         self.changes.as_ref()
     }
 
     /// The first names of the baseline's items the unit no longer declares.
-    pub(super) fn lost(&self) -> &[Global] {
+    pub fn lost(&self) -> &[Global] {
         &self.lost
     }
 
     /// The baseline being erased over.
-    pub(super) fn baseline(&self) -> ErasedBaseline<'a> {
+    pub fn baseline(&self) -> ErasedBaseline<'a> {
         self.baseline
     }
 
     /// What the baseline's erasure read of declarations its unit did not hold.
-    pub(super) fn earlier(&self) -> &'a ErasedUnit {
+    pub fn earlier(&self) -> &'a ErasedUnit {
         self.baseline.erased
     }
 
@@ -222,7 +218,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// The baseline's erased form of `item`, at `place`, with what erasing it asked, where the unit keeps them: `unit` holds the erased forms of the items before it. What is answered is noted for the items after it.
-    pub(super) fn keep(&mut self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<Kept> {
+    pub fn keep(&mut self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<Kept> {
         let kept = self.standing(place, item, unit);
         self.kept.insert(place, kept.is_some());
 
@@ -251,12 +247,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// The erased form of `item`, at `place`, taken from a record a store holds of an erasure of the item, where one stands ([`ErasedUnit::complete`]), with the record: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
-    pub(super) fn taken(
-        &self,
-        place: usize,
-        item: &Item,
-        unit: &ErasedUnit,
-    ) -> Option<(Held, HeldTrace)> {
+    pub fn taken(&self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<(Held, HeldTrace)> {
         let candidates = self.baseline.candidates?;
         let names = item.declared_names();
         let first = names.first()?;
@@ -284,7 +275,7 @@ impl<'a> ErasedOver<'a> {
     /// What the part or binding `question` asks reads now, as a completed record of the erasure of the item declaring `names` holds it ([`Read`]): `unit` holding the erased forms of the items before the one asking. `None` where it cannot be told: a binding of an item the walk has not come to, or a part or a binding that will not digest.
     ///
     /// A binding of an item of the unit is read off the form `unit` holds, and a part off the module being erased, which is final; one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise; and a fixed unit's is recorded nowhere.
-    pub(super) fn read_now(
+    pub fn read_now(
         &self,
         names: &[&Global],
         question: &Question,

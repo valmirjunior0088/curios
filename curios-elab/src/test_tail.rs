@@ -17,7 +17,7 @@ pub struct ScheduledTest {
 /// **There is nothing to decide here, and that is the point.** A test takes no parameters, so it makes no claim about instantiations it has not been given and there is no discharge to choose: the tail pairs each declaration with its path and stops.
 ///
 /// Built by the elaborator after the unit's items have been defined and before the entry is checked ([`Tail::Tests`](crate::Tail)), which is where the elaborated definitions it schedules are in reach.
-pub(crate) fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) -> Term {
+pub fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) -> Term {
     let syntax = context.syntax();
     let element_hole = context.mint_metavar();
     let items = tests

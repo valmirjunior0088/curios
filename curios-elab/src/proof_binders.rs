@@ -108,10 +108,7 @@ fn value_sort(context: &mut Context, definition: &Definition) -> Result<Option<T
 /// **Before the item is published**, so no declaration reads a binder that has not said. A recursive item's members are walked under the names they are published as, their bodies closed throughout, as [`curios_core::RecGroup::map_members`] rewrites them.
 ///
 /// The questions spend a budget restored for them, as every judgment of an item's final terms does.
-pub(crate) fn state_proof_binders(
-    context: &mut Context,
-    published: &mut Published,
-) -> Result<(), Error> {
+pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> Result<(), Error> {
     context.restore_budget();
 
     match &mut published.item {

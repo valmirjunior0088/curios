@@ -10,7 +10,7 @@ use {
 /// One registered witness: the qualified name of its backing definition and that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution instantiates the telescope fresh at every use.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
-pub(crate) struct Witness {
+pub struct Witness {
     pub name: Global,
     /// The module this witness was declared in, carried from its definition's `island`. Witnesses are anonymous, so this — not `name` — is the coordinate a coherence diagnostic reports; recovering it by splitting the compiler-minted `name` would re-derive what the declaration already knew.
     pub module: Qualifier,

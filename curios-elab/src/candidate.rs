@@ -190,12 +190,12 @@ impl<'a> Candidating<'a> {
 }
 
 /// The thirty-two bytes a part's digest spells.
-pub(crate) fn bytes_of(digest: &str) -> Option<[u8; 32]> {
+pub fn bytes_of(digest: &str) -> Option<[u8; 32]> {
     Digest::from_hex(digest).map(|digest| *digest.as_bytes())
 }
 
 /// The completed records of the declaration written as `name` that `facet` made from `input`, as `candidates` holds them, each with the digest it is stored under: what a walk looks among before it makes the declaration.
-pub(crate) fn found(
+pub fn found(
     candidates: &dyn Candidates,
     facet: Facet,
     input: &Digest,
@@ -220,10 +220,7 @@ pub(crate) fn found(
 }
 
 /// The items `made` names, read out of the objects `object` finds by their identities, each run checked once: `None` where one is not found.
-pub(crate) fn items_of(
-    made: &Made,
-    object: impl Fn(&Digest) -> Option<Object>,
-) -> Option<Vec<Item>> {
+pub fn items_of(made: &Made, object: impl Fn(&Digest) -> Option<Object>) -> Option<Vec<Item>> {
     let mut runs = Vec::<(Object, Vec<(usize, u32)>)>::new();
     for (at, identity) in made.outputs.iter().enumerate() {
         let found = object(identity)?;

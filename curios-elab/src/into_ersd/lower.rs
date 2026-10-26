@@ -27,18 +27,18 @@ use {
 
 /// What one expression erased to. See the module documentation.
 #[derive(Debug)]
-pub(super) enum Outcome {
+pub enum Outcome {
     Emitted(curios_ersd::Atom),
     Diverged(curios_ersd::Terminator),
 }
 
 /// How one item's erasure reads the erased form of another: by a name the other declares.
-pub(super) type Externals<'s> = &'s dyn Fn(&Global) -> Option<&'s ErasedItem>;
+pub type Externals<'s> = &'s dyn Fn(&Global) -> Option<&'s ErasedItem>;
 
 /// One item's erasure state: the checked builder constructing its fragment and the environment mapping Core names to their operands there.
-pub(super) struct Lowering<'s> {
-    pub(super) builder: curios_ersd::ErsdBuilder,
-    pub(super) environment: Environment,
+pub struct Lowering<'s> {
+    pub builder: curios_ersd::ErsdBuilder,
+    pub environment: Environment,
     /// The erased forms of the items this one may name.
     externals: Externals<'s>,
     /// The name each value the fragment imports stands for, in the order the builder minted them.
@@ -48,22 +48,22 @@ pub(super) struct Lowering<'s> {
     /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
     owners: Vec<(String, usize)>,
     /// The family identity of each inductive whose row is being registered right now. An inductive is legitimately recursive, so classifying its fields reaches itself; the identity is minted before that walk begins, so the recursive lookup answers from here rather than re-entering the registration.
-    pub(super) pending_families: BTreeMap<Global, curios_ersd::FamilyId>,
+    pub pending_families: BTreeMap<Global, curios_ersd::FamilyId>,
     /// The structures whose row is being registered right now. A self-referential structure is uninhabited but elaborates, and unlike an inductive its schema is only decided *after* its fields are classified — so the cycle is cut by declining to name a schema rather than by naming one early.
-    pub(super) in_flight: BTreeSet<Global>,
+    pub in_flight: BTreeSet<Global>,
     /// The type each term was read at ([`Lowering::type_of`]), for the item being erased. Dropped at every top-level item and before the entry, which is what bounds it.
-    pub(super) types: HashMap<Term, Term>,
+    pub types: HashMap<Term, Term>,
     /// The extent of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no extents.
-    pub(super) extents: BTreeMap<curios_ersd::ValueId, Extent>,
+    pub extents: BTreeMap<curios_ersd::ValueId, Extent>,
     /// The name each member of a group and each import was minted for, for the same refusal: it knows identities alone.
-    pub(super) names: ErasedNames,
+    pub names: ErasedNames,
 }
 
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.
 #[derive(Debug, Default)]
-pub(crate) struct ErasedNames {
-    pub(crate) values: BTreeMap<curios_ersd::ValueId, Free>,
-    pub(crate) functions: BTreeMap<curios_ersd::FunctionId, Free>,
+pub struct ErasedNames {
+    pub values: BTreeMap<curios_ersd::ValueId, Free>,
+    pub functions: BTreeMap<curios_ersd::FunctionId, Free>,
 }
 
 /// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
@@ -118,7 +118,7 @@ fn force_entry(
 
 impl<'s> Lowering<'s> {
     /// A fresh erasure, of one item, reading other items' erased forms through `externals`.
-    pub(super) fn over(externals: Externals<'s>) -> Self {
+    pub fn over(externals: Externals<'s>) -> Self {
         Self {
             builder: curios_ersd::ErsdBuilder::new(),
             environment: Environment::default(),
@@ -135,7 +135,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Close the fragment and hand the item's erased form over: the fragment verified with no entry, its recursion rules included, and of the environment the bindings of `declared`, the names the item declares.
-    pub(super) fn into_erased(self, declared: &[&Global]) -> Result<ErasedItem, Error> {
+    pub fn into_erased(self, declared: &[&Global]) -> Result<ErasedItem, Error> {
         let Self {
             builder,
             environment,
@@ -158,7 +158,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// The erased form of the item declaring `name`, where another item does.
-    pub(super) fn declaring(&self, name: &Global) -> Option<&'s ErasedItem> {
+    pub fn declaring(&self, name: &Global) -> Option<&'s ErasedItem> {
         (self.externals)(name)
     }
 
@@ -205,7 +205,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Erase `body` with `name` standing as the definition every function minted inside it descends from.
-    pub(super) fn with_owner<R>(&mut self, name: String, body: impl FnOnce(&mut Self) -> R) -> R {
+    pub fn with_owner<R>(&mut self, name: String, body: impl FnOnce(&mut Self) -> R) -> R {
         self.owners.push((name, 0));
         let result = body(self);
         self.owners.pop();
@@ -215,13 +215,13 @@ impl<'s> Lowering<'s> {
     /// A name for a function nothing else names.
     ///
     /// A lambda in argument position binds no statement, so `walk` has no hint to pass and the function it lifts to would print as a bare `~fN` — and its closure as a bare `$clsr/N`. The shared naming scheme (`documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`) spells an emitted name `kind/{uniquifier}$hint`, so an absent hint is a hole in it, and one a reader of a module dump or a profile pays for. The owner's own name qualified by which anonymous function this is fills it: `/sys/Handle/write/1`, and `/sys/Handle/write/1/1` one level in. The separator is `/` because `$` is reserved for the hint boundary itself.
-    pub(super) fn derived_hint(&mut self) -> Option<String> {
+    pub fn derived_hint(&mut self) -> Option<String> {
         let (owner, minted) = self.owners.last_mut()?;
         *minted += 1;
         Some(format!("{owner}/{minted}"))
     }
     /// Seal the innermost open block: a computed value returns, a divergence keeps its own terminator.
-    pub(super) fn seal(&mut self, outcome: Outcome) -> curios_ersd::BlockId {
+    pub fn seal(&mut self, outcome: Outcome) -> curios_ersd::BlockId {
         match outcome {
             Outcome::Emitted(atom) => self
                 .builder
@@ -231,13 +231,13 @@ impl<'s> Lowering<'s> {
     }
 
     /// Bind a compound right-hand side in the innermost open block (or as a top-level item) and hand back its result operand.
-    pub(super) fn bind(&mut self, hint: Option<&str>, rhs: curios_ersd::Rhs) -> Outcome {
+    pub fn bind(&mut self, hint: Option<&str>, rhs: curios_ersd::Rhs) -> Outcome {
         let result = self.builder.let_value(hint.map(str::to_string), rhs);
         Outcome::Emitted(curios_ersd::Atom::Value(result))
     }
 
     /// [`bind`](Self::bind) a right-hand side whose producer names no carrier, stating on the result the register carrier its type `type_` names.
-    pub(super) fn bind_stated(
+    pub fn bind_stated(
         &mut self,
         context: &mut Retyping,
         hint: Option<&str>,
@@ -254,7 +254,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// State on `value`, a binder whose producer names no carrier, the register carrier its type `type_` names, where it names one.
-    pub(super) fn state(
+    pub fn state(
         &mut self,
         context: &mut Retyping,
         value: curios_ersd::ValueId,
@@ -267,14 +267,14 @@ impl<'s> Lowering<'s> {
     }
 
     /// The unit constant — the value of a retained-but-erased slot.
-    pub(super) fn unit(&mut self) -> curios_ersd::Atom {
+    pub fn unit(&mut self) -> curios_ersd::Atom {
         curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
     }
 
     /// Erase each value against its telescope domain under `mask`, opening the telescope with the un-erased value so later dependent domains stay correct. Erasable slots are dropped entirely; kept slots erase through [`kept_operand`](Self::kept_operand).
     ///
     /// The one walk that consumes a mask, which only a nominal declaration has: a structure's fields and a constructor's payload, dropped by the declaration's own signature, read once where its row is registered. A structural type has no declaration to read and drops nothing ([`Lowering::slots`]).
-    pub(super) fn masked_fields<B: Bound>(
+    pub fn masked_fields<B: Bound>(
         &mut self,
         context: &mut Retyping,
         mask: &[bool],
@@ -298,7 +298,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Erase each value into a slot of its own, against its telescope domain: the arguments of an application and the fields of an anonymous tuple, whose runtime shape is the telescope's length whatever its domains are read as.
-    pub(super) fn slots<B: Bound>(
+    pub fn slots<B: Bound>(
         &mut self,
         context: &mut Retyping,
         telescope: Telescope<B>,
@@ -308,7 +308,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Erase one expression to an operand. `expected` is the type the expression was checked against, consumed where a runtime shape must be read off it; `hint` names the statement when this expression binds one.
-    pub(super) fn walk(
+    pub fn walk(
         &mut self,
         context: &mut Retyping,
         term: &Term,
@@ -609,10 +609,7 @@ pub fn erase_program(
 }
 
 /// `module` and its scope as erasure reads them, out of their universes, with `module`'s universes held to its schemes first: what the projection erases is validated before it goes. The scope's were validated where its units were stored, which is where untrusted bytes become a module.
-pub(super) fn projected<'a>(
-    scope: Erasures<'a>,
-    module: &'a Module,
-) -> Result<Projected<'a>, Error> {
+pub fn projected<'a>(scope: Erasures<'a>, module: &'a Module) -> Result<Projected<'a>, Error> {
     validate_universes(module)?;
 
     Ok(Projected::over(scope, module))
@@ -621,7 +618,7 @@ pub(super) fn projected<'a>(
 /// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `over` keeps the baseline's erased form of, which are never projected. What erasing each item asked is kept with the unit: of the declarations around it, through the reader's doors, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
 ///
 /// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure asked, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
-pub(super) fn erase_items<'s>(
+pub fn erase_items<'s>(
     context: &mut Retyping<'s>,
     view: &'s Projected<'_>,
     scope: Erasures<'_>,
