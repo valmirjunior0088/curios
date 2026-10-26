@@ -3,7 +3,10 @@
 use {
     super::{test_support::*, unfold_rec},
     crate::Kernel,
-    curios_core::{Free, Global, Intrinsic, Level, Many, Reducer, Scope, Subterm, Term},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Reducer, Scope,
+        Subterm, Telescope, Term, UniverseContext,
+    },
     curios_num::Binary,
     curios_utilities::{Plicity, Qualifier},
 };
@@ -440,3 +443,64 @@ fn the_closed_machine_agrees_with_the_strategy() {
         );
     }
 }
+
+/// A closed one-arm match on a proof of a proposition whose index pins its payload fires on the *stated* instance with the proof unevaluated — `ClosedHost::stated_payload` — and the machine and the strategy bind the same payload and reach the same value. The arm reads its payload, so the rule's second clause runs rather than the `unread` one: `match mk(5) at P(5) : (i, q) => Nat | mk(x) => x end` is `5` under both. A machine that read the payload off the scrutinee while the strategy read it off the stated instance (or the reverse) would answer a closed computation in a type with a value reduction of the same term would not.
+#[test]
+fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
+    let family = Global::Authored(Qualifier::from(["P"]));
+    let index = binder(70, "i");
+    let payload = binder(71, "x");
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build([(index, nat_type())], ())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build([(payload, nat_type())], vec![Term::free_var(&payload)]),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let scrutinee = Term::variant(family, Vec::<Term>::new(), "mk", [nat(5)]);
+    let stated = Term::induct_type(family, Vec::<Term>::new(), [nat(5)]);
+    let arm_payload = binder(72, "x");
+    let term = Term::induct_match_scoped_marked(
+        scrutinee,
+        Scope::constant(Many(2), nat_type()),
+        [(
+            "mk",
+            vec![(Plicity::Explicit, arm_payload)],
+            Term::free_var(&arm_payload),
+        )],
+        None,
+    )
+    .stating(stated);
+
+    let mut machined = kernel();
+    machined
+        .declare_induct(&family, &declaration)
+        .expect("declared once");
+    let mut strategy = strategy_kernel();
+    strategy
+        .declare_induct(&family, &declaration)
+        .expect("declared once");
+
+    assert_eq!(
+        machined.reduce_forced(term.clone()),
+        Ok(nat(5)),
+        "the stated payload is read off the pinned index",
+    );
+    assert_eq!(
+        machined.reduce_forced(term.clone()),
+        strategy.reduce_forced(term.clone()),
+        "the machine and the strategy read one payload for {term}",
+    );
+}
+
