@@ -1,10 +1,10 @@
 use {
-    super::{Misaligned, align, flexible, park_checking, trivially_inhabited},
+    super::{Misaligned, align, park_checking, trivially_inhabited},
     crate::{
         ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork, Sort,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
         elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
-        transitively_ground, zonk_solved_term_metas,
+        stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Level,
@@ -88,12 +88,12 @@ pub(super) fn elaborate_func_type_sized(
 
 /// Refuse a written `use` binder whose type is not a concept application.
 ///
-/// Resolution answers a `use` slot with a concept's witness and nothing else, so a binder at any other type could only ever be filled by writing its argument out, and every call that omitted it failed at resolution — far from the declaration, naming whatever the type happened to reduce to. A type still headed by an unsolved metavariable is let through, since it may yet be solved to a concept application.
+/// Resolution answers a `use` slot with a concept's witness and nothing else, so a binder at any other type could only ever be filled by writing its argument out, and every call that omitted it failed at resolution — far from the declaration, naming whatever the type happened to reduce to. A type still stuck on an unsolved metavariable — headed by one, or an elimination waiting on one — is let through, since it may yet come to a concept application.
 pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Result<(), Error> {
     let reduced = reduce_with(context, domain)?;
     let admitted = match &*reduced {
         Subterm::StructType(struct_type) => context.concept(&struct_type.name).is_some(),
-        _ => flexible(context, &reduced),
+        _ => stuck_on_metavar(context, &reduced),
     };
     if admitted {
         return Ok(());

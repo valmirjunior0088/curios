@@ -2,7 +2,10 @@
 //!
 //! Scoping is that a later binder's annotation sees the earlier binders, exactly as a Π type's later domains do. Plicity is which of those binders a call site must supply, which elaboration inserts, and which a constructor pattern may mark. Irrefutable pattern shapes are `aggregates.rs`.
 
-use super::{error, run};
+use {
+    super::{error, run},
+    curios_utilities::fill,
+};
 
 // === Scoping: a later annotation names the binders before it. ====================
 
@@ -393,6 +396,51 @@ fn bare_reference_keeps_its_type_at_a_hidden_expectation() {
         /std/print(Nat/to_str(keep(9)))
         "#;
     assert_eq!(run(source), b"9");
+}
+
+/// A call handing `ident` where `F(b)` is expected, before and after the argument that solves `b`, with `F(true)` coming to `arrow`.
+fn waiting_at(arrow: &str) -> String {
+    fill!(
+        r#"
+        use /std/{Nat, Bool, Eq, print};
+        let F(b: Bool) -> Type = match b: (_) => Type
+            | true => ${arrow}
+            | false => Nat
+            end;
+        let ident(@A: Type, a: A) -> A = a;
+        let take(@b: Bool, f: F(b), e: Eq()(b, true)) -> Nat = 1;
+        let early(@b: Bool, e: Eq()(b, true), f: F(b)) -> Nat = 1;
+        print(Nat/to_str(take(ident, Eq/refl()) + early(Eq/refl(), ident)))
+        "#,
+        arrow,
+    )
+}
+
+// `F(b)` at a `b` still to be solved is stuck on a metavariable, and so has not decided whether `ident`'s hidden binder is inserted: the reference waits until the implicit is solved and is read at the type `F(true)` comes to, so the call is admitted in either order of its arguments whether that type is hidden-headed or an explicit arrow.
+#[test]
+fn bare_reference_waits_at_an_expectation_stuck_on_a_metavariable() {
+    assert_eq!(run(&waiting_at("(@A: Type, x: A) -> A")), b"2");
+    assert_eq!(run(&waiting_at("(x: Nat) -> Nat")), b"2");
+}
+
+// A reference waiting at an expectation nothing decides is refused naming the implicit never solved, as the conversion it would otherwise have parked is.
+#[test]
+fn bare_reference_at_an_expectation_never_decided_names_what_was_never_solved() {
+    let source = r#"
+        use /std/{Nat, Bool, print};
+        let F(b: Bool) -> Type = match b: (_) => Type
+            | true => (x: Nat) -> Nat
+            | false => Nat
+            end;
+        let ident(@A: Type, a: A) -> A = a;
+        let take(@b: Bool, _: F(b)) -> Nat = 1;
+        print(Nat/to_str(take(ident)))
+        "#;
+    let error = error(source);
+    assert!(
+        error.contains("never solved: the implicit argument 'b' of 'take'"),
+        "{error}"
+    );
 }
 
 // A bound a definition's body never names is written `@_: T`. It is the implicit argument a named one would be: the call discharges it, and the body has it as a fact in scope, so the bound the body's own call needs follows from it.

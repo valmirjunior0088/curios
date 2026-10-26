@@ -16,8 +16,8 @@ use binding::*;
 pub(crate) use binding::{embeds, is_monad, monad_shape, numeral_default, region_flex};
 
 mod metavar;
-pub(crate) use metavar::trivially_inhabited;
 use metavar::*;
+pub(crate) use metavar::{trivially_inhabited, waits_as_reference};
 
 mod intrinsic;
 use intrinsic::*;
@@ -136,6 +136,14 @@ fn elaborate_subterm(
         && let Some(lifted) = lift_on_check(context, term, expected)?
     {
         return elaborate(context, &lifted, mode);
+    }
+
+    // A bare variable whose type leads with a hidden binder waits where its expectation has not decided whether that binder is inserted.
+    if let Mode::Check(expected) = &mode
+        && waits_as_reference(context, term, expected)?
+        && context.may_park()
+    {
+        return park_checking(context, term, expected);
     }
 
     // An intrinsic former written by its name and applied in full is elaborated as its node.

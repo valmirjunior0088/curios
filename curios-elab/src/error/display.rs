@@ -1139,12 +1139,17 @@ impl fmt::Display for Displayed<'_> {
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")
             }
-            Error::PostponedCheck { expected } => {
+            Error::PostponedCheck { expected, watching } => {
                 let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "cannot check expression: its expected type never gained structure: {expected}"
-                )
+                )?;
+                if !watching.is_empty() {
+                    let watching = watching.iter().map(named).collect::<Vec<_>>();
+                    write!(f, "\n  never solved: {}", watching.join(", "))?;
+                }
+                Ok(())
             }
             Error::PostponedConversion {
                 this,

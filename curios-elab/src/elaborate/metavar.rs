@@ -1,6 +1,9 @@
 use {
     super::insert_auto_argument,
-    crate::{Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with},
+    crate::{
+        Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with,
+        stuck_on_metavar,
+    },
     curios_core::{CalleeId, Free, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term},
     curios_utilities::Plicity,
 };
@@ -92,9 +95,36 @@ pub(super) fn flexible(context: &Context, term: &Term) -> bool {
     }
 }
 
+/// Whether `term`, a bare variable whose type leads with a hidden binder, waits at `expected`: an expectation stuck on an unsolved metavariable under an elimination — a match on one, a projection of one, a recursive call on one — has not decided whether that binder is inserted, so the check parks until a solution decides it, as a lambda, a tuple or a numeral waits on the same reading ([`stuck_on_metavar`]). A flexible expectation is not one: the turnaround solves it to the reference's own type.
+pub(crate) fn waits_as_reference(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<bool, Error> {
+    let Subterm::Var(var) = &**term else {
+        return Ok(false);
+    };
+    let Some(type_) = context.assumption(var.unwrap()).cloned() else {
+        return Ok(false);
+    };
+    let hidden = match &*reduce_with(context, &type_)? {
+        Subterm::FuncType(ft) => matches!(
+            ft.plicities().first(),
+            Some(Plicity::Implicit | Plicity::Witness)
+        ),
+        _ => false,
+    };
+    if !hidden {
+        return Ok(false);
+    }
+    let reduced = reduce_with(context, expected)?;
+
+    Ok(stuck_on_metavar(context, &reduced) && !flexible(context, &reduced))
+}
+
 /// Implicit-eta on the check turnaround. A reference whose type leads with an implicit binder, checked against a concrete *explicit* function type, has its leading implicits inserted as metavariables and is eta-expanded over the remaining explicit binders — so a bare `cat : (@T, List T, List T) -> List T` is accepted where `(List B, List B) -> List B` is expected, instead of demanding `(l, r) => cat(l, r)`. Implicit insertion is otherwise an application-site mechanism (`elaborate_apply`); this is the one extension into value position. Producing a full lambda (rather than a partial application) keeps erase/CPS untouched: the output is an ordinary closure over a saturated call.
 ///
-/// Fires only for `Var`/`Proj` heads, and only where a hidden-headed function type could never convert anyway: against a ground explicit-arrow expectation, and against a *rigid non-arrow* expectation — plicity is part of function identity, so both configurations are guaranteed plicity mismatches, and inserting can only rescue programs that were errors. A flexible (metavar-headed) expectation must not fire, since it may still be solved to the reference's own polymorphic type; the expected-not-hidden gate likewise preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, the check proceeds as it would without it.
+/// Fires only for `Var`/`Proj` heads, and only where a hidden-headed function type could never convert anyway: against a ground explicit-arrow expectation, and against a *rigid non-arrow* expectation — plicity is part of function identity, so both configurations are guaranteed plicity mismatches, and inserting can only rescue programs that were errors. An expectation stuck on a metavariable must not fire, since it may still come to the reference's own polymorphic type: a flexible one is solved to it by the turnaround, and a bare variable at one stuck under an elimination has parked before reaching here ([`waits_as_reference`]); the expected-not-hidden gate likewise preserves polymorphic-value assignment (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when it does not fire, or the inserted shape does not convert, the check proceeds as it would without it.
 pub(super) fn insert_implicits_on_check(
     context: &mut Context,
     term: &Term,
@@ -120,7 +150,7 @@ pub(super) fn insert_implicits_on_check(
             eft.plicities().first(),
             Some(Plicity::Implicit) | Some(Plicity::Witness)
         ),
-        _ => !flexible(context, &expected_reduced),
+        _ => !stuck_on_metavar(context, &expected_reduced),
     };
     if !fires {
         return Ok((rebuilt, type_));

@@ -9,7 +9,7 @@ use {
         elaborate_func_settle, hold_spines, mismatch, no_witness_error, numeral_default,
         obligation_shown, pending, probe_open_sort, problem_outcome, reduce_forced, region_flex,
         resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
-        synth_neutral, terms_differ, zonk_solved_term_metas,
+        synth_neutral, terms_differ, waits_as_reference, zonk_solved_term_metas,
     },
     curios_analysis::{
         Invert, RESOLVED_SPELLING_LAYERS, another_case, records_case_equation, scrutinee_solution,
@@ -373,7 +373,7 @@ fn annotated(context: &mut Context, func: &Func) -> bool {
     true
 }
 
-/// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one, or a `!` whose region is headed by one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
+/// Whether `arg` is a form that cannot be elaborated yet because the type structure it needs is an unsolved metavariable: a tuple literal or a numeral whose whole expected type, or a lambda one of whose expected *domains*, reduces to one, or a `!` whose region is headed by one, or a bare variable whose type leads with a hidden binder at an expected type stuck on one under an elimination. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavariable.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification. A list literal is one of them: it is a list whatever it holds, and each element waits by itself.
 ///
 /// Every form that parks itself as a checking problem is answered here by the predicate it parked under, since a retry asks this before it elaborates ([`retry_checking`]): a form this did not know would be elaborated, park itself again under a fresh placeholder and fill the one it had, which a drain reads as a solution landed, without end.
 pub(crate) fn blocked_on_metavar(
@@ -389,6 +389,10 @@ pub(crate) fn blocked_on_metavar(
     let is_numeral = matches!(&**arg, Subterm::Transient(Transient::NumLit(_)));
     // A `!` waits on its region's head alone, which names the monad it sequences in.
     let is_bang = matches!(&**arg, Subterm::Transient(Transient::Bang(_)));
+    // A bare variable waits on the reading that parked it ([`waits_as_reference`]).
+    if matches!(&**arg, Subterm::Var(_)) {
+        return waits_as_reference(context, arg, ty);
+    }
     if !is_lambda && !is_tuple && !is_numeral && !is_bang {
         return Ok(false);
     }
@@ -970,10 +974,17 @@ impl Context<'_> {
                             Subterm::Transient(Transient::Bang(_)) => {
                                 Error::bang_region_undetermined().at_opt(parked_origin.extent())
                             }
-                            _ => pending(self, [&expected], |reporting, [expected]| {
-                                Error::postponed_check(resolved_for_display(reporting, &expected))
-                            })
-                            .at_opt(parked_origin.extent()),
+                            _ => {
+                                let blockers =
+                                    watched_blockers(self, &watching, &expected, &expected);
+                                pending(self, [&expected], move |reporting, [expected]| {
+                                    Error::postponed_check(
+                                        resolved_for_display(reporting, &expected),
+                                        blockers,
+                                    )
+                                })
+                                .at_opt(parked_origin.extent())
+                            }
                         },
                         ParkedWork::Witness {
                             goal, provenance, ..

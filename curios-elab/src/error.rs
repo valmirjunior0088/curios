@@ -315,7 +315,7 @@ macro_rules! shown_terms {
             | Self::NotAInductType { head_type, .. } => $visit(head_type),
             Self::NotAFunctionType { expected, .. }
             | Self::NotATupleType { expected, .. }
-            | Self::PostponedCheck { expected } => $visit(expected),
+            | Self::PostponedCheck { expected, .. } => $visit(expected),
             Self::NotAStructType { found }
             | Self::SpreadBaseTypeMismatch { found, .. }
             | Self::WitnessNotAConcept { found, .. }
@@ -784,9 +784,11 @@ pub enum Error {
         why: Option<Box<Unresolved>>,
     },
     CannotInfer,
-    /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own extent by the item drain.
+    /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own extent by the item drain, naming the still-unsolved blockers it watched.
     PostponedCheck {
         expected: Box<Term>,
+        /// The still-unsolved watched metavariables, each by what it is.
+        watching: Vec<Watched>,
     },
     /// A parked conversion goal that survived every retry, distinguished from `TypeMismatch`: a rigid mismatch means the program is wrong, a postponed conversion means the program may be right and inference never gained the structure to decide. Reported at the goal's origin extent by the item drain, naming the still-unsolved blockers it watched.
     PostponedConversion {
@@ -1124,9 +1126,10 @@ impl Error {
         }
     }
 
-    pub(crate) fn postponed_check<U: Into<Term>>(expected: U) -> Self {
+    pub(crate) fn postponed_check<U: Into<Term>>(expected: U, watching: Vec<Watched>) -> Self {
         Self::PostponedCheck {
             expected: Box::new(expected.into()),
+            watching,
         }
     }
 
@@ -2129,18 +2132,20 @@ impl Error {
                     .into_iter()
                     .collect()
             }
-            Self::PostponedConversion { watching, .. } => watching
-                .iter()
-                .filter_map(|watched| match watched {
-                    Watched::Goal(extent) => note(
-                        written(extent),
-                        "this goal `?` was never solved".to_string(),
-                    ),
-                    Watched::Implicit { .. } | Watched::Witness { .. } | Watched::Described(_) => {
-                        None
-                    }
-                })
-                .collect(),
+            Self::PostponedConversion { watching, .. } | Self::PostponedCheck { watching, .. } => {
+                watching
+                    .iter()
+                    .filter_map(|watched| match watched {
+                        Watched::Goal(extent) => note(
+                            written(extent),
+                            "this goal `?` was never solved".to_string(),
+                        ),
+                        Watched::Implicit { .. }
+                        | Watched::Witness { .. }
+                        | Watched::Described(_) => None,
+                    })
+                    .collect()
+            }
             // Each use whose scheme's bound is on the cycle, past the place the report itself stands at, which is the first the path knows.
             Self::UniverseInconsistency { path, .. } => {
                 let here = path.iter().find_map(|origin| origin.extent);
