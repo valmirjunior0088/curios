@@ -2371,6 +2371,20 @@ pub(super) const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
         /std/print("FORGED")
         "#;
 
+pub(super) const TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK: &str = r#"
+        use /std/{Nat, Eq};
+
+        let stated: Eq()((n: Nat) => n, (n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
+        /std/print("ok")
+        "#;
+
+pub(super) const TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK: &str = r#"
+        use /std/{Nat, Eq};
+
+        let stated: Eq()((n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
+        /std/print("FORGED")
+        "#;
+
 pub(super) const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
         use /std/{Nat};
         use /std/Bool/{True, Holds};
@@ -2398,5 +2412,33 @@ pub(super) const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
         let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
         let s: Sized = Sized { a = 1, @len = 2, items = 3 };
         let lie: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 6) = True/qed();
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_SUM_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+        use /std/{Nat, Eq};
+
+        let swapped(a: Nat, b: Nat) -> Eq()(a + b, b + a) = Eq/refl();
+        /std/print("ok")
+        "#;
+
+pub(super) const A_DIFFERENCE_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+        use /std/{Nat, Eq};
+
+        let swapped(a: Nat, b: Nat) -> Eq()(a - b, b - a) = Eq/refl();
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_CONJUNCTION_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+        use /std/{Bool, Eq};
+
+        let swapped(a: Bool, b: Bool) -> Eq()(a && b, b && a) = Eq/refl();
+        /std/print("ok")
+        "#;
+
+pub(super) const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str = r#"
+        use /std/{Bool, Eq};
+
+        let confused(a: Bool, b: Bool) -> Eq()(a && b, a || b) = Eq/refl();
         /std/print("FORGED")
         "#;

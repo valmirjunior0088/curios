@@ -7,6 +7,7 @@
 //! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A board test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked, as a probe refused with `unbound variable` passes having never reached the check at all.
 
 mod arm_tests;
+mod chain_tests;
 mod coverage_tests;
 mod effect_tests;
 mod eta_tests;

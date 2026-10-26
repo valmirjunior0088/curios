@@ -728,6 +728,37 @@ fn two_stuck_operations_on_different_operands_do_not_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(false));
 }
 
+/// A truncated difference does not commute where a sum does: a chain that paired `-`'s operands as it pairs a sum's would hold `a - b` one with `b - a`, which part at `a := 5`, `b := 3`. The control is the sum, whose operands the chain pairs. `tests::board`'s twin shares the name.
+#[test]
+fn a_difference_does_not_convert_with_its_operands_swapped() {
+    let mut kernel = kernel();
+    let (a, b) = (
+        Term::free_var(&binder(0, "a")),
+        Term::free_var(&binder(1, "b")),
+    );
+
+    let sum = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
+    };
+    let difference = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::NatSub(left.clone(), right.clone()))
+    };
+
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &sum(&a, &b), &sum(&b, &a)),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &difference(&a, &b),
+            &difference(&b, &a)
+        ),
+        Ok(false)
+    );
+}
+
 /// The free-monoid peel is what decides `n + 2 ≡ m + 2` by comparing `n` with `m` rather than comparing two opaque symbolic sums.
 #[test]
 fn a_shared_successor_floor_is_peeled_before_comparing() {
@@ -851,6 +882,32 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
     assert_eq!(convert(&mut kernel, &bool_type, &b, &absorbed), Ok(true));
     assert_eq!(
         convert(&mut kernel, &bool_type, &or(b.clone(), c), &b),
+        Ok(false)
+    );
+}
+
+/// Two connectives are one only where they agree at every assignment of their atoms: `a && b` and `a || b` part at `a := true`, `b := false`. The control is a conjunction against its operands swapped, which agree everywhere. `tests::board`'s twin shares the name.
+#[test]
+fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
+    let mut kernel = kernel();
+    let (a, b) = (
+        Term::free_var(&binder(0, "a")),
+        Term::free_var(&binder(1, "b")),
+    );
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let and = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::BoolAnd(left.clone(), right.clone()))
+    };
+    let or = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::BoolOr(left.clone(), right.clone()))
+    };
+
+    assert_eq!(
+        convert(&mut kernel, &bool_type, &and(&a, &b), &and(&b, &a)),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(&mut kernel, &bool_type, &and(&a, &b), &or(&a, &b)),
         Ok(false)
     );
 }

@@ -14,6 +14,16 @@ fn a_function_type_is_not_aliased_across_a_mark() {
     );
 }
 
+// The firewall that keeps the soundness findings' "The η-rule contracts a function across a mark" short of `False`: the equation its mark-blind contraction lets `ground` hold, `(n) => n` against `(@n) => ((x) => x)(n)`, cannot be stated, since `Eq`'s two sides share one type and no function type bears both marks. The control is the second lambda under the first's mark, where the contraction keeps the mark and the two are one.
+#[test]
+fn an_equation_between_two_functions_apart_in_a_mark_is_not_stated() {
+    assert_eq!(run(TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK), b"ok");
+    rejected_by(
+        TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK,
+        "is an explicit parameter (written with no mark), but was written with `@`",
+    );
+}
+
 // A hidden member stands at its own position in what a call, an arm and a projection reduce to: `f(1, @2, 3)` is `3`, `tag(x, z)` binds `z` to the last payload and `.1` over `Sized` reads `items`, so the sum is `9`. Read by mark or counted among the written positions, each reads the hidden `2` instead and the sum is `6`, which `Holds` would then make `True`.
 #[test]
 fn a_hidden_member_reduces_at_its_own_position() {
