@@ -28,7 +28,7 @@ use {
         InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe,
         Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, Universes, Var, Variant, Visit, accelerable,
+        UniverseConstraintOrigin, Universes, Var, Variant, Visit, accelerable, eta_head,
         instantiate_universes_scoped, probe_spellings, project_erased_universes, project_literal,
         reduce_closed, reduce_intrinsic, weak_head_value,
     },
@@ -522,21 +522,9 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
 
-    let ys = freshs.iter().map(Term::free_var).collect::<Vec<_>>();
-
-    let y_refs = ys.iter().collect::<Vec<_>>();
-
-    match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
-        Subterm::Apply(Apply { head, arguments })
-            if arguments.len() == n
-                && arguments.iter().enumerate().all(
-                    |(i, a)| matches!(a.term.as_ref(), Subterm::Var(v) if v.unwrap() == &freshs[i]),
-                )
-                && freshs.iter().all(|f| !head.mentions_free(f)) =>
-        {
-            Ok(Reduce::Continue(head))
-        }
-        _ => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
+    match eta_head(&func, &freshs) {
+        Some(head) => Ok(Reduce::Continue(head)),
+        None => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
     }
 }
 

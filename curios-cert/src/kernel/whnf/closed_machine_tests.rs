@@ -407,9 +407,33 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
+    // Two closed forwardings under a hidden mark, which the machine contracts through `eta_head` and the strategy through its own statement of the rule: one whose argument stands under its binder's mark contracts, `(@n) => ((@m) => m)(@n)` to `(@m) => m`, and one whose argument does not stays as written.
+    let forwarded_under_its_mark = {
+        let (n, m) = (binder(0, "n"), binder(1, "m"));
+        Term::func_marked(
+            [(Plicity::Implicit, n, nat_type())],
+            Term::apply_marked(
+                Term::func_marked([(Plicity::Implicit, m, nat_type())], Term::free_var(&m)),
+                [(Plicity::Implicit, Term::free_var(&n))],
+            ),
+        )
+    };
+    let forwarded_across_a_mark = {
+        let (n, x) = (binder(0, "n"), binder(1, "x"));
+        Term::func_marked(
+            [(Plicity::Implicit, n, nat_type())],
+            Term::apply(
+                Term::func([(x, nat_type())], Term::free_var(&x)),
+                [Term::free_var(&n)],
+            ),
+        )
+    };
+
     for term in [
         chain(64),
         dissolved_group,
+        forwarded_under_its_mark,
+        forwarded_across_a_mark,
         past_parameters,
         plain_then_forced,
         ih_fold,

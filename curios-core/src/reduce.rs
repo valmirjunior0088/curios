@@ -2,7 +2,7 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Category, Cost, Extent, Field, Free, Subterm, Term, UniverseError},
+    super::{Apply, Category, Cost, Extent, Field, Free, Func, Subterm, Term, UniverseError},
     curios_num::{Integer, Natural},
 };
 
@@ -172,6 +172,32 @@ pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
     match component.cloned() {
         Some(component) => Ok(component),
         None => Err(value),
+    }
+}
+
+/// What `func` contracts to under η: `f`, where its body opened at `binders` is `f` applied to them in order, each argument under its binder's mark, and `f` mentions none of them. A forwarding across a mark is none: `(@x) => f(x)` is a function at `(@x: A) -> B` and `f` one at `(x: A) -> B`, two types plicity holds apart. `binders` are fresh identities, one per binder, which the caller mints and charges for.
+///
+/// The closed machine and the elaborator contract a function through here. The kernel states the rule for itself where it reduces an open term, as it does a projection's ([`project_literal`]).
+pub fn eta_head(func: &Func, binders: &[Free]) -> Option<Term> {
+    let occurrences = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+    let refs = occurrences.iter().collect::<Vec<_>>();
+
+    match Term::unwrap_or_clone(func.telescope.open(&refs)) {
+        Subterm::Apply(Apply { head, arguments })
+            if arguments.len() == binders.len()
+                && arguments
+                    .iter()
+                    .zip(binders)
+                    .zip(func.telescope.members())
+                    .all(|((argument, binder), (mark, _))| {
+                        argument.plicity == mark
+                            && matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == binder)
+                    })
+                && binders.iter().all(|binder| !head.mentions_free(binder)) =>
+        {
+            Some(head)
+        }
+        _ => None,
     }
 }
 

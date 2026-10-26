@@ -4,7 +4,7 @@ use {
     super::{test_support::*, unfold_rec, unfold_rec_apply},
     crate::whnf,
     curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
-    curios_utilities::Qualifier,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 #[test]
@@ -248,6 +248,23 @@ fn eta_contracts_a_function_that_only_forwards() {
     );
 
     assert_eq!(whnf(&mut kernel, term), Ok(Term::free_var(&f)));
+
+    // Under the binder's own mark a forwarding contracts, and across one it stays as written: `(@x) => f(x)` is a function at `(@x: Nat) -> …`, and `f` one at another type. `f` is assumed, so no binder a later probe mints is `f` again.
+    kernel.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+    let hidden = Term::func_marked(
+        [(Plicity::Implicit, x, nat_type())],
+        Term::apply_marked(
+            Term::free_var(&f),
+            [(Plicity::Implicit, Term::free_var(&x))],
+        ),
+    );
+    assert_eq!(whnf(&mut kernel, hidden), Ok(Term::free_var(&f)));
+
+    let across = Term::func_marked(
+        [(Plicity::Implicit, x, nat_type())],
+        Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
+    );
+    assert_eq!(whnf(&mut kernel, across.clone()), Ok(across));
 }
 
 /// The side condition is load-bearing: contracting `(x) => x(x)` would move an occurrence of `x` out from under the binder that gives it meaning.

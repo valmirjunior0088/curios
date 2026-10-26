@@ -2378,6 +2378,13 @@ pub(super) const TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK: &str = r#"
         /std/print("ok")
         "#;
 
+pub(super) const TWO_FUNCTIONS_EQUATED_UNDER_A_HIDDEN_MARK: &str = r#"
+        use /std/{Nat, Eq};
+
+        let stated: Eq()((@n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
+        /std/print("ok")
+        "#;
+
 pub(super) const TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK: &str = r#"
         use /std/{Nat, Eq};
 

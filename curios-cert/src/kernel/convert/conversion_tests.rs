@@ -834,6 +834,32 @@ fn plicity_distinguishes_two_function_types() {
     );
 }
 
+/// Plicity is part of a function's identity, a literal's as a type's: two literals under one mark whose bodies differ by a β-step are one function, and two apart in a mark are two. Asked where no type directs the comparison, as a stuck match's arms are compared, where η contracting the second literal across its mark would hold the first pair apart. The elaborator's twin keeps the name.
+#[test]
+fn plicity_distinguishes_two_function_literals() {
+    let mut kernel = kernel();
+    let (n, x) = (binder(0, "n"), binder(1, "x"));
+
+    let identity = Term::func_marked([(Plicity::Implicit, n, nat_type())], Term::free_var(&n));
+    let forwarded = Term::func_marked(
+        [(Plicity::Implicit, n, nat_type())],
+        Term::apply(
+            Term::func([(x, nat_type())], Term::free_var(&x)),
+            [Term::free_var(&n)],
+        ),
+    );
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &identity, &forwarded),
+        Ok(true),
+    );
+
+    let shown = Term::func([(n, nat_type())], Term::free_var(&n));
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &identity, &shown),
+        Ok(false),
+    );
+}
+
 /// Two universes convert only at the same level. Cumulativity is a *subtyping* rule and belongs to checking, not here: conversion is symmetric and levels are not.
 #[test]
 fn universes_convert_only_at_the_same_level() {

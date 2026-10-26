@@ -20,7 +20,7 @@
 //!
 //! **A match that reads nothing of its scrutinee does not evaluate it.** One arm, no catch-all and no payload named ([`Cases::unread`]): the match is its arm's body, since a closed scrutinee can be no other case. A cast along a proof is written in that form, and the elaborator writes a payload as the index that pins it wherever the arm's equations hold the two one, so such a match runs none of its proof. An arm that still names a payload is bound to what the instance the match states says of it ([`Cases::stated`]), which the host reads the payload off ([`ClosedHost::stated_payload`]). The hosts take the same steps on a closed term, and on an open one fire by that instance's indices, which state the payload.
 //!
-//! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Option` under `(A) => Option(A)`.
+//! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, each argument under its binder's mark ([`eta_head`]), through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Option` under `(A) => Option(A)`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
 //!
@@ -37,7 +37,7 @@ use {
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
         MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm,
-        Telescope, Term, Universes, instantiate_universes_scoped, project_literal,
+        Telescope, Term, Universes, eta_head, instantiate_universes_scoped, project_literal,
         reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
@@ -682,7 +682,7 @@ impl Machine {
                 }
             }
 
-            // Eta for functions, exactly the hosts' probe: `(x) => f(x)` is `f` provided `f` mentions none of the binders. This is not a normalization nicety — the elaborator's witness keying reads rigid heads off weak-head forms, so `(A) => Option(A)` must contract to `Option` here as it does under the strategy.
+            // Eta for functions, exactly the hosts' probe ([`eta_head`]): `(x) => f(x)` is `f` provided each argument stands under its binder's mark and `f` mentions none of the binders. This is not a normalization nicety — the elaborator's witness keying reads rigid heads off weak-head forms, so `(A) => Option(A)` must contract to `Option` here as it does under the strategy.
             Subterm::Func(func) => {
                 let arity = func.telescope.len();
                 host.spend(
@@ -694,22 +694,10 @@ impl Machine {
                 let binders = (0..arity)
                     .map(|_| host.fresh_binder(None))
                     .collect::<Vec<_>>();
-                let occurrences = binders.iter().map(Term::free_var).collect::<Vec<_>>();
-                let refs = occurrences.iter().collect::<Vec<_>>();
 
-                match Term::unwrap_or_clone(func.telescope.open(&refs)) {
-                    Subterm::Apply(Apply { head, arguments })
-                        if arguments.len() == arity
-                            && arguments.iter().enumerate().all(|(index, argument)| {
-                                matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[index])
-                            })
-                            && binders
-                                .iter()
-                                .all(|binder| !head.mentions_free(binder)) =>
-                    {
-                        Ok(Step::Eval(head, demand))
-                    }
-                    _ => {
+                match eta_head(&func, &binders) {
+                    Some(head) => Ok(Step::Eval(head, demand)),
+                    None => {
                         // Remember the probe's negative outcome under the function itself, so a body reached again — a plain definition's, unfolded at every call — pays the eta probe once.
                         let value = Term::from(Subterm::Func(func));
                         host.spend(Cost::buffer(2))?;

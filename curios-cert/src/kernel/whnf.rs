@@ -541,7 +541,7 @@ fn step_proj(kernel: &mut Kernel, proj: Proj) -> Result<Step, ReduceError> {
     })
 }
 
-/// Eta for functions: `(x) => f(x)` is `f`, provided `f` does not itself mention `x`.
+/// Eta for functions: `(x) => f(x)` is `f`, provided each argument stands under its binder's mark and `f` does not itself mention `x`. Across a mark the two are functions at two types plicity holds apart, so `(@x) => f(x)` stays as written. The closed machine and the elaborator contract through `curios_core::eta_head`, and this is the kernel's own statement of the rule, so a mistake in either shows where the two checkers reduce one term.
 ///
 /// Contracting here rather than only at conversion means the two spellings have one normal form, so every consumer of a weak-head normal form sees them as the same term without having to know the rule.
 fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
@@ -561,9 +561,14 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
     Ok(match Term::unwrap_or_clone(func.telescope.open(&refs)) {
         Subterm::Apply(Apply { head, arguments })
             if arguments.len() == arity
-                && arguments.iter().enumerate().all(|(i, argument)| {
-                    matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[i])
-                })
+                && arguments
+                    .iter()
+                    .zip(&binders)
+                    .zip(func.telescope.members())
+                    .all(|((argument, binder), (mark, _))| {
+                        argument.plicity == mark
+                            && matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == binder)
+                    })
                 && binders.iter().all(|binder| !head.mentions_free(binder)) =>
         {
             Step::Continue(head)

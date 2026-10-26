@@ -175,6 +175,31 @@ fn func_is_alpha_equivalent() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
+/// Plicity is part of a function's identity, a literal's as a type's: two literals under one mark whose bodies differ by a β-step are one function, and two apart in a mark are two. The kernel's twin keeps the name.
+#[test]
+fn plicity_distinguishes_two_function_literals() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+
+    let identity = Term::func_marked(
+        [(Plicity::Implicit, n, nat_type.clone())],
+        Term::free_var(&n),
+    );
+    let forwarded = Term::func_marked(
+        [(Plicity::Implicit, n, nat_type.clone())],
+        Term::apply(
+            Term::func([(x, nat_type.clone())], Term::free_var(&x)),
+            [Term::free_var(&n)],
+        ),
+    );
+    assert_eq!(conv(&mut context, &identity, &forwarded), Ok(true));
+
+    let shown = Term::func([(n, nat_type)], Term::free_var(&n));
+    assert_eq!(conv(&mut context, &identity, &shown), Ok(false));
+}
+
 #[test]
 fn plicity_distinguishes_two_function_types() {
     let mut context = context();

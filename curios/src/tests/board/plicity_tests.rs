@@ -14,10 +14,11 @@ fn a_function_type_is_not_aliased_across_a_mark() {
     );
 }
 
-// The firewall that keeps the soundness findings' "The η-rule contracts a function across a mark" short of `False`: the equation its mark-blind contraction lets `ground` hold, `(n) => n` against `(@n) => ((x) => x)(n)`, cannot be stated, since `Eq`'s two sides share one type and no function type bears both marks. The control is the second lambda under the first's mark, where the contraction keeps the mark and the two are one.
+// An equation between two functions apart in a mark cannot be stated, since `Eq`'s two sides share one type and no function type bears both marks: `(n) => n` against `(@n) => ((x) => x)(n)`, which a mark-blind η contraction would let `ground` hold. Under one mark, either one, the two are one function: η contracts the second only where its argument stands under its binder's mark, so under `@` it stays a function at its own type and its body reduces to the first's.
 #[test]
 fn an_equation_between_two_functions_apart_in_a_mark_is_not_stated() {
     assert_eq!(run(TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK), b"ok");
+    assert_eq!(run(TWO_FUNCTIONS_EQUATED_UNDER_A_HIDDEN_MARK), b"ok");
     rejected_by(
         TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK,
         "is an explicit parameter (written with no mark), but was written with `@`",
