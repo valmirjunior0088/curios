@@ -328,58 +328,50 @@ let subject : /std/Nat = double(2) + spin(0);
     assert!(!entry("/spin"), "the entry's partial definition is marked");
 }
 
-/// What the declarations below open with: `Code`'s one constructor fixes its index at `Type`, so an arm matching on `Code(X)` solves `X` to a type standing above `X`'s own, and the elaborator, which refines `X`, admits `id(@X, x)` there where the kernel, which substitutes, refuses it (the theory findings' entry on an arm's solution for an index variable).
-const ONLY_THE_KERNEL_REFUSES: &str = "let id(@A: Type, a: A) -> A = a;
-
-induct Code: (Type) -> Type
-| big(): (Type)
+/// What the declarations below open with: `Code`'s one constructor fixes its index at `Bool`, so an arm matching on `Code(X)` reads `x` as a `Bool`, which `x + 0` adds to nothing.
+const CODE: &str = "induct Code: (Type) -> Type
+| big(): (/std/Bool)
 end
 
 ";
 
-/// A declaration only the kernel refuses stops the compile the browser and every embedder run, though nothing the program runs reaches it, and so does a witness only the kernel refuses that a declaration resolves: the unit is judged whole, and the refusal is the kernel's.
+/// A refused declaration stops the compile the browser and every embedder run, though nothing the program runs reaches it, and so does a refused witness a declaration resolves: the unit is judged whole.
 #[test]
-fn a_declaration_only_the_kernel_refuses_stops_the_compile_with_the_prelude() {
-    for (declarations, refused) in [
-        (
-            "pub let f(X: Type, c: Code(X), x: X) -> X =
+fn a_refused_declaration_stops_the_compile_with_the_prelude() {
+    for declarations in [
+        "pub let f(X: Type, c: Code(X), x: X) -> X =
     match c
-    | big() => id(@X, x)
+    | big() => x + 0
     end;",
-            "/f",
-        ),
-        (
-            "concept Pick(A: Type): Type {
+        "concept Pick(A: Type): Type {
     pick(X: Type, c: Code(X), x: X) -> X,
 }
 
 satisfy Pick(/std/Nat) {
-    pick(X, c, x) = match c | big() => id(@X, x) end,
+    pick(X, c, x) = match c | big() => x + 0 end,
 }
 
 pub let chosen(c: Code(/std/Nat)) -> /std/Nat = Pick/pick(@/std/Nat, /std/Nat, c, 1);",
-            "/witness@/Pick(Nat)",
-        ),
     ] {
-        let source = format!("{ONLY_THE_KERNEL_REFUSES}{declarations}\n\n/std/print(\"\")\n");
+        let source = format!("{CODE}{declarations}\n\n/std/print(\"\")\n");
 
-        let refusal = compile(&source).expect_err("only the kernel refuses it");
+        let refusal = compile(&source).expect_err("the declaration is refused");
 
         assert!(
-            refusal.contains(&format!("the kernel refused {refused}:")),
+            refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
             "{refusal}"
         );
     }
 }
 
-/// A test only the kernel refuses stops the test program of its unit whether or not the selection schedules it: the unit compiled tested holds every test it declares, so each is judged with the unit, and the refusal is the kernel's.
+/// A refused test stops the test program of its unit whether or not the selection schedules it: the unit compiled tested holds every test it declares, so each is judged with the unit.
 #[test]
-fn a_test_only_the_kernel_refuses_stops_its_test_program_whatever_is_selected() {
+fn a_refused_test_stops_its_test_program_whatever_is_selected() {
     let source = format!(
-        "{ONLY_THE_KERNEL_REFUSES}test refused =
+        "{CODE}test refused =
     let _g = (X: Type, c: Code(X), x: X) =>
         match c
-        | big() => id(@X, x)
+        | big() => x + 0
         end;
     /std/Test/assert(true);
 
@@ -399,12 +391,15 @@ test held = /std/Test/assert(true);
                 |_| {},
             )
             .map(|_| ())
-            .expect_err("only the kernel refuses `refused`")
+            .expect_err("`refused` is refused")
             .to_string()
     };
 
     for under in [Qualifier::empty(), Qualifier::from(["held"])] {
         let refusal = tested(under);
-        assert!(refusal.contains("the kernel refused /refused"), "{refusal}");
+        assert!(
+            refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
+            "{refusal}"
+        );
     }
 }

@@ -396,3 +396,21 @@ fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
 
     assert_eq!(run(source), b"classified");
 }
+
+// An arm's solution for an outer variable has the variable's own type: `X` is checked at `Code`'s index `Type` by subsumption, so it sits at a level of its own, and the case target `Type` it is solved to inhabits the level above that target's. The solution needs that level below `X`'s, which the declaration's levels are inferred to state, so `f`'s arm reads `x` at the target and `f2`'s reads it as a type, and the kernel, deciding under the stated scheme, takes the same solution. Solved with no such relation, the kernel's substitution was ill-typed and it refused `f` where the elaborator admitted it.
+#[test]
+fn an_arms_solution_has_its_variables_own_type() {
+    let source = r#"
+        induct Code: (Type) -> Type
+        | big(): (Type)
+        end
+
+        let id(@A: Type, a: A) -> A = a;
+        pub let f(X: Type, c: Code(X), x: X) -> X = match c | big() => id(@X, x) end;
+        pub let f2(X: Type, c: Code(X), x: X) -> Type = match c | big() => {x} end;
+
+        /std/print("solved")
+        "#;
+
+    assert_eq!(run(source), b"solved");
+}

@@ -579,6 +579,32 @@ impl Judge for Kernel<'_> {
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
         convert::convert(self, type_, this, that)
     }
+
+    fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error> {
+        let unread = |error: &Error| {
+            matches!(
+                error,
+                Error::Unclassified(_) | Error::NotASort(_) | Error::OpenSort(_)
+            )
+        };
+        let below = match Sort::of(self, type_) {
+            Ok(sort) => sort,
+            Err(error) if unread(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        let above = match sort::as_sort(self, universe) {
+            Ok(sort) => sort,
+            Err(error) if unread(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+
+        Ok(match (below, above) {
+            (Sort::Type(lower), Sort::Type(upper)) | (Sort::Prop(lower), Sort::Prop(upper)) => {
+                self.level_leq(&lower, &upper)
+            }
+            _ => false,
+        })
+    }
 }
 
 /// The kernel's context: what is in scope, what may unfold, and how much work a judgment may spend.

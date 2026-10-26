@@ -101,4 +101,7 @@ pub trait Env {
 pub trait Judge: Env {
     /// Whether `this` and `that` are convertible *at* `type_`, so that proof irrelevance and eta fire at the terms' real sort.
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error>;
+
+    /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The kernel decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
+    fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error>;
 }

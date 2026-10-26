@@ -796,18 +796,16 @@ fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
     assert_eq!(asked(&held), ["recompiling"]);
 }
 
-/// A program's declarations under `index`, the type `Code`'s one constructor fixes its index at, and `f`, which matches on `Code(X)`: at `Nat` both checkers admit `f`, and at `Type` the arm solves `X` to a type standing above `X`'s own, which the elaborator, refining `X`, admits and the kernel, substituting, refuses (the theory findings' entry on an arm's solution for an index variable).
+/// A program's declarations under `index`, the type `Code`'s one constructor fixes its index at, and `f`, which matches on `Code(X)` and adds to `x`: checked at `Nat`, and refused at `Bool`, which adds to nothing.
 fn coded(index: &str) -> String {
     format!(
-        "let id(@A: Type, a: A) -> A = a;
-
-induct Code: (Type) -> Type
+        "induct Code: (Type) -> Type
 | big(): ({index})
 end
 
 let f(X: Type, c: Code(X), x: X) -> X =
     match c
-    | big() => id(@X, x)
+    | big() => x + 0
     end;
 
 /std/print(\"\")
@@ -815,12 +813,12 @@ let f(X: Type, c: Code(X), x: X) -> X =
     )
 }
 
-/// Two programs no package declares are one unit to a session where they stand in one directory — the prefix every entry claims, read from one place — so the second is compiled over what the first kept, and judged as its own text says: `b.crs` declares the `f` of `a.crs` over another `Code`, which the kernel alone refuses `f` under, and the check of `b.crs` reports the kernel's refusal.
+/// Two programs no package declares are one unit to a session where they stand in one directory — the prefix every entry claims, read from one place — so the second is compiled over what the first kept, and judged as its own text says: `b.crs` declares the `f` of `a.crs` over another `Code`, which refuses `f`, and the check of `b.crs` reports the refusal.
 #[test]
 fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
     let root = Temporary::new("wonder", "neighbours");
     write(&root, "a.crs", &coded("/std/Nat"));
-    write(&root, "b.crs", &coded("Type"));
+    write(&root, "b.crs", &coded("/std/Bool"));
     let session = Session::default();
     let overlay = Overlay::default();
     let asked = |file: &str| {
@@ -849,6 +847,9 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
         ["recompiling"],
         "the unit of `a.crs` was not offered"
     );
-    let refusal = verdict.expect_err("only the kernel refuses `f` in `b.crs`");
-    assert!(refusal.contains("the kernel refused /f"), "{refusal}");
+    let refusal = verdict.expect_err("`f` in `b.crs` is refused");
+    assert!(
+        refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
+        "{refusal}"
+    );
 }

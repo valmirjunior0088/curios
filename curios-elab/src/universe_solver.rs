@@ -1129,6 +1129,23 @@ impl UniverseSolver {
         widest
     }
 
+    /// Record `lower ≤ upper` where the store stays consistent with it, and answer whether it did. A relation a use needs and nothing has settled is one the declaration comes to require, as every level settles by where it stands; one the store refuses is taken back, and the use is answered no. A speculative judgment around the use takes the relation back with everything else it recorded.
+    pub(crate) fn settle_leq(
+        &mut self,
+        lower: Level,
+        upper: Level,
+        origin: UniverseConstraintOrigin,
+    ) -> bool {
+        let mark = self.mark();
+        let held = self.add_leq(lower, upper, origin).is_ok() && self.check_consistent().is_ok();
+        if !held {
+            self.rollback(mark);
+        }
+        self.release(mark);
+
+        held
+    }
+
     /// Whether the store entails `lower ≤ upper`: its negation, `upper + 1 ≤ lower`, is one the store refuses. Asked of what the store was last decided from where that can say ([`Self::refused_as_decided`]), and of the store with the negation added and taken back where it cannot.
     fn entails(&mut self, lower: &Level, upper: &Level) -> bool {
         let Ok(above) = upper.succ() else {

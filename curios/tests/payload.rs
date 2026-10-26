@@ -276,14 +276,12 @@ fn code(index: &str) -> String {
     format!("pub induct Code: (Type) -> pub Type\n| big(): ({index})\nend\n")
 }
 
-/// `app`'s library: `f` matches on `dep`'s `Code(X)`, which both checkers admit while `big` fixes the index at `/std/Nat`, and which the kernel alone refuses once it fixes it at `Type`, the arm solving `X` to a type standing above `X`'s own (the theory findings' entry on an arm's solution for an index variable). A test beside it, so a test run has one to run.
+/// `app`'s library: `f` matches on `dep`'s `Code(X)` and adds to `x`, which checks while `big` fixes the index at `/std/Nat` and is refused once it fixes it at `/std/Bool`, which adds to nothing. A test beside it, so a test run has one to run.
 const ON_CODE: &str = "use /dep/{Code};
-
-let id(@A: Type, a: A) -> A = a;
 
 pub let f(X: Type, c: Code(X), x: X) -> X =
     match c
-    | big() => id(@X, x)
+    | big() => x + 0
     end;
 
 test f_is_declared = /std/Test/assert(true);
@@ -303,17 +301,17 @@ const COMMANDS: &[(&[&str], bool)] = &[
     (&["wonder", "stage", "wasm"], false),
 ];
 
-/// A store holds what every command filed of a package while its dependency left `f` to both checkers, and the dependency's edit leaves `f`'s text as it was and the kernel alone refusing it: every command is refused by the kernel, none answered from what the store holds for the text it was filed for.
+/// A store holds what every command filed of a package while its dependency let `f` check, and the dependency's edit leaves `f`'s text as it was and refuses it: every command is refused, none answered from what the store holds for the text it was filed for.
 #[test]
-fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_store() {
-    let dep = temporary("kernel-refused-dep");
+fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_store() {
+    let dep = temporary("refused-dep");
     write(
         &dep,
         "curios.toml",
         "compiler = \"0.0.0\"\nname = \"dep\"\n",
     );
     write(&dep, "lib.crs", &code("/std/Nat"));
-    let root = temporary("kernel-refused");
+    let root = temporary("refused");
     write(
         &root,
         "curios.toml",
@@ -339,7 +337,7 @@ fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_sto
         "the run's payload is filed"
     );
 
-    write(&dep, "lib.crs", &code("Type"));
+    write(&dep, "lib.crs", &code("/std/Bool"));
     for (command, answers) in COMMANDS {
         let refused = curios(&root, command);
         let said = format!(
@@ -350,7 +348,8 @@ fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_sto
         assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
         // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are.
         assert!(
-            said.contains("the kernel refused /app/f") && !said.contains("app; reused"),
+            said.contains("no witness of /std/ops/Add(/std/Bool) found")
+                && !said.contains("app; reused"),
             "{command:?}: {said}"
         );
     }

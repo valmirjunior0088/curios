@@ -259,23 +259,20 @@ fn a_program_whose_unit_a_cache_hands_back_is_the_program_compiled_whole() {
     );
 }
 
-/// A program whose declarations both checkers admit, closing with a term only the kernel refuses: an arm's solution of an index variable stands at the index's type, above the variable's, so the elaborator, which refines, admits `g` and the kernel, which substitutes, refuses it (the theory findings' entry on an arm's solution for an index variable).
-const CLOSED_BY_A_REFUSAL: &str = "let id(@A: Type, a: A) -> A = a;
+/// A program's declarations, closed with a term that checks.
+const CLOSED: &str = "let id(@A: Type, a: A) -> A = a;
 
-induct Code: (Type) -> Type
-| big(): (Type)
-end
-
-let g = (X: Type, c: Code(X), x: X) =>
-    match c
-    | big() => id(@X, x)
-    end;
-
-/std/print(\"\")
+/std/print(id(@/std/Str, \"\"))
 ";
 
-/// `source` compiled as a program against the prelude through `cache`, to what stopped it.
-fn refused_through(source: &str, cache: &dyn Cache) -> String {
+/// The same declarations, closed with a term that does not: `id(@Nat, 1)` printed where a `Str` is wanted.
+const CLOSED_BY_A_REFUSAL: &str = "let id(@A: Type, a: A) -> A = a;
+
+/std/print(id(@/std/Nat, 1))
+";
+
+/// `source` compiled as a program against the prelude through `cache`, to whether it was admitted.
+fn compiled_through(source: &str, cache: &dyn Cache) -> Result<(), String> {
     let entrypoint = entrypoint_of(source);
 
     with_prelude(|prelude| {
@@ -289,21 +286,14 @@ fn refused_through(source: &str, cache: &dyn Cache) -> String {
         )
     })
     .map(|_| ())
-    .expect_err("the term that closes the program is refused")
-    .to_string()
+    .map_err(|error| error.to_string())
 }
 
-/// A unit a cache hands back answers for the program's declarations and for nothing else: the term that closes the program is judged over it on every compile. The declarations are judged and handed over though the kernel refuses the term, and the compile that takes them back is refused by the kernel as the first was.
-///
-/// Mutation-checked: with the term elaborated over a unit handed back and put to no kernel, the second compile is admitted.
+/// A unit a cache hands back answers for the program's declarations and for nothing else: the term that closes the program is judged over it on every compile. The declarations are judged and kept under a term that checks, and the same declarations closed with a term that does not are refused over the kept unit, which is not compiled again.
 #[test]
 fn a_program_whose_unit_a_cache_hands_back_is_judged_at_the_term_that_closes_it() {
     let kept = Keeping::default();
-    let first = refused_through(CLOSED_BY_A_REFUSAL, &kept);
-    assert!(
-        first.contains("the kernel refused the entrypoint"),
-        "{first}"
-    );
+    compiled_through(CLOSED, &kept).expect("the program checks");
     let cache = Stub {
         hit: kept.kept.borrow().clone(),
         baseline: None,
@@ -314,9 +304,10 @@ fn a_program_whose_unit_a_cache_hands_back_is_judged_at_the_term_that_closes_it(
         "the declarations were judged and handed over"
     );
 
-    let second = refused_through(CLOSED_BY_A_REFUSAL, &cache);
+    let refused = compiled_through(CLOSED_BY_A_REFUSAL, &cache)
+        .expect_err("the term that closes the program is refused");
 
-    assert_eq!(second, first);
+    assert!(refused.contains("type mismatch"), "{refused}");
     assert_eq!(
         cache.put.get(),
         0,
