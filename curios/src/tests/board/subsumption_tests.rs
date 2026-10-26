@@ -129,6 +129,48 @@ fn the_head_rules_still_decide_a_bare_sort() {
     );
 }
 
+// A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `kernel::infer::sort_tests` puts the same propositions to the kernel under this name.
+#[test]
+fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() {
+    let declarations = r#"
+        use /std/{Bool, Nat, print};
+        use /std/Bool/{Holds};
+
+        let S(b: Bool) -> Type = match b | true => Type | false => Nat end;
+        let H(b: Bool) -> Type = match b | true => (Nat) -> Type | false => Nat end;
+        "#;
+
+    let admitted = r#"
+        let small(_: Nat) -> Type = Bool;
+        let sort(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: S(k(0)) = Bool; 0 | false => 0 end;
+        let family(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: H(k(0)) = small; 0 | false => 0 end;
+
+        let _ = sort((_) => true) + family((_) => true);
+        print("ok")
+        "#;
+    assert_eq!(run(&format!("{declarations}{admitted}")), b"ok");
+
+    for (refused, inferred, expected) in [
+        (
+            "let _sort(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: S(k(0)) = Holds(true); 0 | false => 0 end;",
+            "inferred: Prop",
+            "expected: Type",
+        ),
+        (
+            "let is(_: Nat) -> Prop = Holds(true);
+            let _family(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: H(k(0)) = is; 0 | false => 0 end;",
+            "inferred: (Nat) -> Prop",
+            "expected: (Nat) -> Type",
+        ),
+    ] {
+        let report = error(&format!("{declarations}\n{refused}\nprint(\"\")"));
+        assert!(
+            report.contains("type mismatch") && report.contains(inferred) && report.contains(expected),
+            "{refused}: {report}"
+        );
+    }
+}
+
 // A level entailment rather than a conversion. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes; the kernel's entailment reaches the hypotheses before it decides a level's *constant* part structurally, since a parameter ranges over every natural when nothing is assumed and a hypothesis is what puts a floor under it.
 #[test]
 fn a_group_member_is_used_a_level_up_by_its_sibling() {

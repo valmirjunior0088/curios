@@ -1,4 +1,4 @@
-//! What the hierarchy admits and what it refuses: cumulativity, one declaration at two levels, the shapes Girard's, Hurkens' and Russell's paradoxes take, and the two honest programs that meet the refusal with their remedies.
+//! What the hierarchy admits and what it refuses: cumulativity, two sorts no inversion sets apart, one declaration at two levels, the shapes Girard's, Hurkens' and Russell's paradoxes take, and the two honest programs that meet the refusal with their remedies.
 
 use {
     super::test_support::universe_parameters,
@@ -21,6 +21,26 @@ fn cumulativity_admits_a_lower_universe_where_a_higher_is_required() {
         "#;
 
     assert_eq!(run(source), b"stored");
+}
+
+// Two sorts at two levels a declaration generalizes are one sort at every instance that states one level for both, so no inversion sets them apart. `apart` holds `Type.{u}` and `Type.{v}` under one equation; read as a clash of two constructors, its arm-less elimination would be admitted at every instance, and the one at `u = v` applied to `Eq/refl()` would be a closed inhabitant of `False`. The unifier both checkers share reads a sort as no constructor form and refuses the position, so the arm stays mandatory.
+#[test]
+fn two_sorts_apart_in_a_level_are_not_set_apart_by_inversion() {
+    let source = r#"
+        use /std/{Eq};
+        use /std/Bool/{False};
+
+        let apart(p: Eq()(Type, Type)) -> False = match p end;
+
+        /std/print("FORGED")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("no arm matches `refl()`")
+            && report.contains("is not provably impossible at the scrutinee's indices"),
+        "{report}"
+    );
 }
 
 // One polymorphic declaration instantiated at two distinct levels in a single program: `pick(42)` chooses `A := Nat` (level 0), while `pick(Nat)` chooses `A := Type` (level 1). A declaration monomorphized to either level cannot serve both, so this is the direct guard on minimizing result-only levels — that change must not reach a level a use site genuinely chooses.

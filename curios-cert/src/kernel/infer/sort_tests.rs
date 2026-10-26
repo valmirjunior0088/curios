@@ -1,9 +1,9 @@
-//! Variance and cumulativity of a function type, the bare-sort head rules, and the sigma and pi rules at an argument position.
+//! Variance and cumulativity of a function type, the bare-sort head rules, the relation through a definition and under an arm's case, and the sigma and pi rules at an argument position.
 
 use {
     super::{subsumes, test_support::*},
-    crate::infer,
-    curios_core::Term,
+    crate::{Error, infer},
+    curios_core::{Free, Term, UniverseContext},
     curios_utilities::Plicity,
 };
 
@@ -96,6 +96,145 @@ fn the_head_rules_still_decide_a_bare_sort() {
         subsumes(&mut kernel, &Term::type_ground(), &Term::prop()),
         Ok(false),
     );
+}
+
+/// A definition that names a sort or a function type is subsumed as what it names: `subsumes` reads both sides forced, so an alias of `(x: Nat) -> Type 0` stands where `(x: Nat) -> Type 1` is wanted and an alias of `Prop` where `Prop 1` is, while an alias of a predicate, or of `Prop`, stands for no type on either side. Read as written, the aliases' cumulative halves would go on as the equations they are not, which conversion refuses once it has unfolded them.
+///
+/// Mutation-checked: with `subsumes` matching on its two sides unreduced, the alias of a function type is refused where `(x: Nat) -> Type 1` is wanted, and no other fixture of this module moves.
+#[test]
+fn a_definition_naming_a_sort_or_a_function_type_is_subsumed_as_what_it_names() {
+    let mut kernel = kernel();
+    let x = binder(903, "x");
+    let pi = |codomain: Term| Term::func_type([(x, nat_type())], codomain);
+    let family = binder(904, "Family");
+    let predicate = binder(905, "Predicate");
+    let small = binder(906, "Small");
+    for (name, value) in [
+        (family, pi(Term::type_ground())),
+        (predicate, pi(Term::prop())),
+        (small, Term::prop()),
+    ] {
+        kernel
+            .define(&name, &Term::type_at(one()), &value, &UniverseContext::empty())
+            .expect("a name is declared once");
+    }
+    let named = |name: &Free| Term::free_var(name);
+
+    assert_eq!(
+        subsumes(&mut kernel, &named(&family), &pi(Term::type_at(one()))),
+        Ok(true),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &named(&predicate), &pi(Term::type_at(one()))),
+        Ok(false),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &named(&small), &Term::prop_at(one())),
+        Ok(true),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &named(&small), &Term::type_at(one())),
+        Ok(false),
+    );
+    assert_eq!(
+        subsumes(&mut kernel, &pi(Term::prop()), &named(&family)),
+        Ok(false),
+    );
+}
+
+/// The locals a type is read under where a split has put `k(0)` at `true`: `k: (Nat) -> Bool`, a proposition `P`, a family of small types `f: (Nat) -> Type 0` and a predicate `g: (Nat) -> Prop`.
+struct UnderTheCase {
+    k: Free,
+    p: Free,
+    f: Free,
+    g: Free,
+}
+
+impl UnderTheCase {
+    fn new() -> Self {
+        Self {
+            k: binder(910, "k"),
+            p: binder(911, "P"),
+            f: binder(912, "f"),
+            g: binder(913, "g"),
+        }
+    }
+
+    fn decided_at(&self) -> Term {
+        Term::apply(Term::free_var(&self.k), [nat(0)])
+    }
+
+    /// `match k(0) : (_) => Type 2 | false => Nat | true => upper end`: `upper` where the split's equation is in force, and neither a sort nor a function type while `k(0)` is open.
+    fn decided(&self, upper: Term) -> Term {
+        let two = one().succ().expect("level one has a successor");
+        Term::bool_match(
+            self.decided_at(),
+            None,
+            Term::type_at(two),
+            nat_type(),
+            upper,
+        )
+    }
+
+    /// `(k, P, f, g) => match k(0) : (_) => Nat | false => 0 | true => let u: decided(upper) = held; 0 end`.
+    fn holding(&self, upper: Term, held: Term) -> Term {
+        let over_nat = |hint: u32, codomain: Term| {
+            Term::func_type([(binder(hint, "n"), nat_type())], codomain)
+        };
+        Term::func(
+            [
+                (self.k, over_nat(915, bool_type())),
+                (self.p, Term::prop()),
+                (self.f, over_nat(916, Term::type_ground())),
+                (self.g, over_nat(917, Term::prop())),
+            ],
+            Term::bool_match(
+                self.decided_at(),
+                None,
+                nat_type(),
+                nat(0),
+                Term::let_(&binder(914, "u"), self.decided(upper), held, nat(0)),
+            ),
+        )
+    }
+}
+
+/// A type that is a sort or a function type only where an arm's case equation is in force is subsumed there as the one the case makes it, cumulatively and holding no proposition: under `k(0) = true`, `decided(Type 1)` takes `Nat` and refuses `P`, and `decided((n: Nat) -> Type 1)` takes the family of small types `f` and refuses the predicate `g`. `curios`'s `tests::board::subsumption_tests` puts the same propositions to the elaborator under this name.
+///
+/// Mutation-checked: with `subsumes` matching on its two sides unreduced, `Nat` is refused at the sort the case reaches.
+#[test]
+fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() {
+    let case = UnderTheCase::new();
+    let small_family = || {
+        Term::func_type(
+            [(binder(918, "n"), nat_type())],
+            Term::type_at(one()),
+        )
+    };
+    let refused = |verdict: Result<Term, Error>| matches!(verdict, Err(Error::Mismatch { .. }));
+
+    assert!(
+        infer(
+            &mut kernel(),
+            &case.holding(Term::type_at(one()), nat_type())
+        )
+        .is_ok()
+    );
+    assert!(refused(infer(
+        &mut kernel(),
+        &case.holding(Term::type_at(one()), Term::free_var(&case.p)),
+    )));
+    assert!(
+        infer(
+            &mut kernel(),
+            &case.holding(small_family(), Term::free_var(&case.f))
+        )
+        .is_ok()
+    );
+    assert!(refused(infer(
+        &mut kernel(),
+        &case.holding(small_family(), Term::free_var(&case.g)),
+    )));
 }
 
 /// An argument reaches the *checked* rules, not merely inference and subsumption.

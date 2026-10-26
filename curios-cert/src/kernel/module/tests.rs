@@ -634,6 +634,40 @@ fn a_definition_stating_its_value_at_a_sort_it_does_not_inhabit_is_refused() {
     assert_eq!(at(Term::type_ground()), Ok(()));
 }
 
+/// The sort a definition states its value inhabits is held to its level as well as to its quality: the value `Type 0` inhabits `Type 1`, and stated at `Type 0` it is refused. The level is read with nothing run: a list's sort is its element's as a lookup classifies it, the lookup reads the stated sort, and stated a level low `List(lemma)` would sit at `Type 0` over elements that are the small types themselves, a universe holding a code for itself. Stated at `Type 1`, the list sits there.
+///
+/// Mutation-checked: with `hold_value_sort` comparing the two sorts' qualities alone, `Type 0` stated is admitted.
+#[test]
+fn a_definition_stating_its_value_a_level_below_the_one_it_inhabits_is_refused() {
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let at = |kernel: &mut Kernel, stated: Term| {
+        check_definition(
+            kernel,
+            &lemma(),
+            &Term::type_at(one.clone()),
+            &Term::type_ground(),
+            false,
+            Some(&stated),
+            &UniverseContext::empty(),
+        )
+    };
+
+    assert!(matches!(
+        at(&mut kernel(), Term::type_ground()),
+        Err(Error::ValueSort { .. })
+    ));
+
+    let mut kernel = kernel();
+    assert_eq!(at(&mut kernel, Term::type_at(one.clone())), Ok(()));
+    assert_eq!(
+        infer(
+            &mut kernel,
+            &Term::intrinsic(Intrinsic::list_type(Term::free_var(&lemma())))
+        ),
+        Ok(Term::type_at(one)),
+    );
+}
+
 /// A statement that reduces to a proposition is typed at `Prop` as written, and its proof is one: the mark is read off the sort the statement is typed at, with the statement unreduced. `((T: Prop) => T)(Fam)` is typed at `Prop` and is `Fam`. The same redex over `Type` is no statement of a proposition at all: no proposition stands where a type is wanted.
 #[test]
 fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_admitted() {
