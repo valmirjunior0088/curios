@@ -375,7 +375,7 @@ fn elaborate_struct(
             let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
             let (fields, field_levels, ()) = check_telescope_entries(context, inner)?;
 
-            // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
+            // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when every field is a proof, so that every projection lands in a `Prop`, the side irrelevance governs; it is checked here at declaration time rather than per projection, so `elaborate_proj` needs no guard.
             if declared_prop {
                 for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
                     if !hold_prop(context, ty, ty.extent())? {
