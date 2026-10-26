@@ -5,7 +5,7 @@
 //! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value, and one whose value is a field of one of its binders is marked so ([`parameter_field`]), since applied in full it is that field of its argument. Those vectors are the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
 
 use {
-    super::{Context, Error, Published, zonk_solved_term_metas},
+    crate::{Context, Error, Published, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
         Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,

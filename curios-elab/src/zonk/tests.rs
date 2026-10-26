@@ -1,11 +1,10 @@
 use {
-    super::validate_bound_universes,
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Anchor, Anchored, Cost, Definition, DefinitionKind, Extent, Free, Global, Intrinsic, Item,
-        Level, MetavarId, Minted, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
-        UniverseMetaId, UniverseParam, test_support::declaring,
+        MetavarId, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
+        test_support::declaring,
     },
     curios_utilities::Qualifier,
 };
@@ -49,16 +48,6 @@ fn lowered_module(body: Term) -> Module {
         [],
         [],
     )
-}
-
-#[test]
-fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
-    let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))));
-
-    assert!(matches!(
-        validate_lowered_universe_seeds(&module, &Minted::default()),
-        Err(Error::UniverseInvariant(message)) if message.contains("?u0")
-    ));
 }
 
 #[test]
@@ -234,17 +223,6 @@ fn goals_are_gathered_once_per_node() {
 }
 
 /// A value's universes are validated once per node of its graph, not once per path: a level at the base of sixty levels that each sum the one below with itself is checked in the graph's size.
-#[test]
-fn universes_are_validated_once_per_node() {
-    let mut value = Term::type_at(Level::param(UniverseParam(0)));
-    for _ in 0..60 {
-        value = Term::intrinsic(Intrinsic::nat_add(value.clone(), value));
-    }
-
-    assert!(validate_bound_universes(&value, 1, "doubled").is_ok());
-    assert!(validate_bound_universes(&value, 0, "doubled").is_err());
-}
-
 /// The strict zonk splices a solution once per node of a graph, not once per path: a solved hole at the base of sixty levels that each sum the one below with itself is zonked in the graph's size, and the result stays a graph.
 #[test]
 fn a_shared_graph_is_zonked_once_per_node() {

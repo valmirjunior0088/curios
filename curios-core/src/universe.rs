@@ -1,4 +1,4 @@
-//! Algebraic universe levels and declaration-local schemes: the data a universe judgment is stated over. Solving it is `curios-elab`'s `universe_solver`, and deciding whether a constraint set is satisfiable is each checker's own.
+//! Algebraic universe levels and declaration-local schemes: the data a universe judgment is stated over. Solving it is `curios-elab`'s `universes`, and deciding whether a constraint set is satisfiable is each checker's own.
 //!
 //! Surface Curios has no level syntax. `curios-text` assigns a fresh [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type` and every written `Prop`; Core normalizes levels to finite maxima of a constant and checked-offset parameter/meta atoms. `Type u : Type (u + 1)` and `Prop u : Type (u + 1)`, and checking `Type u` or `Prop u` against `Type v`, or `Prop u` against `Prop v`, records `u ≤ v`.
 //!

@@ -14,8 +14,11 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
-mod universe_solver;
-use universe_solver::*;
+mod universes;
+use universes::*;
+pub use universes::{
+    validate_entry_universes, validate_lowered_universe_seeds, validate_universes,
+};
 
 mod concept;
 use concept::*;
@@ -25,9 +28,6 @@ use derive::*;
 
 mod positivity;
 use positivity::*;
-
-mod variance;
-use variance::*;
 
 mod totality;
 use totality::*;
@@ -100,7 +100,6 @@ pub use into_ersd::{
 
 mod zonk;
 use zonk::*;
-pub use zonk::{validate_entry_universes, validate_lowered_universe_seeds, validate_universes};
 
 mod proof_binders;
 use proof_binders::*;
