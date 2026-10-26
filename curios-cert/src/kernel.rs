@@ -1134,7 +1134,9 @@ impl<'s> Kernel<'s> {
     ///
     /// A refusal ordinarily ends the item it is reached in, and what the walk recorded on the way — the calls it graded, the positions it classified, the groups it counted as not descending — is drained with the item. A rule that accepts another way after a refusal has no such end to rely on: what it accepts must be accepted as though the refused way had never been tried, which is what `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` asks of a rule that does not apply.
     ///
-    /// **What is not taken back is nothing a later judgment reads as the walk's.** A memo holds an answer that is true of its terms however the walk around them ended, and is cleared where the scope it read moves. The budget spent is spent, which only ever refuses. What was read of the environment is filed for a walk that judged more than it had to, and adoption re-judges on more reads, never fewer.
+    /// **The remembered typings go with the positions**, since a hit answers for its term without the positions inside it ([`Memos::discard_typings`]).
+    ///
+    /// **What is not taken back is nothing a later judgment reads as the walk's.** Every other memo holds an answer that is true of its terms however the walk around them ended, records nothing, and is cleared where the scope it read moves. The budget spent is spent, which only ever refuses. What was read of the environment is filed for a walk that judged more than it had to, and adoption re-judges on more reads, never fewer.
     pub(crate) fn tried<T>(
         &mut self,
         walk: impl FnOnce(&mut Self) -> Result<T, Error>,
@@ -1145,6 +1147,7 @@ impl<'s> Kernel<'s> {
         if outcome.is_err() {
             self.calls.take_back(calls);
             self.positions.take_back(positions);
+            self.memos.discard_typings();
         }
 
         outcome

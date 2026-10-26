@@ -492,6 +492,33 @@ fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
     assert_eq!(attempt(1_000_000_000), Ok(nat_type()));
 }
 
+/// A term typed in an arm no reduction takes is recorded where it is typed again, as fully as a term typed once: the arm's refusal is withdrawn, and what its walk recorded is taken back with the typings remembered beside it. The `true` arm under `not(true)` applies `fun (x : Nat) => x` to a `Bool`, refused once the lambda is typed; its scrutinee names no local, so no equation is in force and the lambda's typing is one of the declaration's. Typed again after the elimination, the lambda records its domain, a type position, as it does typed alone.
+///
+/// Mutation-checked: with the typings kept past a refusal, the lambda typed again records no position.
+#[test]
+fn a_term_typed_in_an_arm_no_reduction_takes_is_recorded_when_typed_again() {
+    let x = binder(97, "x");
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
+    let judged = |kernel: &mut Kernel| {
+        infer(kernel, &identity).expect("the lambda types");
+        let (positions, failure) = kernel.take_checked();
+        assert!(failure.is_none());
+
+        positions.len()
+    };
+
+    let mut withdrawn = kernel();
+    let scrutinee = Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(true))]);
+    let in_true = Term::apply(identity.clone(), [wrong()]);
+    assert_eq!(
+        infer(&mut withdrawn, &nat_by(scrutinee, in_true)),
+        Ok(nat_type())
+    );
+    withdrawn.take_checked();
+
+    assert_eq!(judged(&mut withdrawn), judged(&mut kernel()));
+}
+
 /// A fold is no case split: its reduct holds the fold at the tail, so over the literal `3` it takes its identity arm in the end, and that arm is typed though `3` is another case. Here it holds a `Bool` where the motive is `Nat`.
 ///
 /// Mutation-checked: with a fold's arms asked as a case split's are, the fold is accepted.

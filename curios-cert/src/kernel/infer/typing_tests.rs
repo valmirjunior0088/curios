@@ -432,6 +432,39 @@ fn a_refused_walk_takes_back_the_positions_it_recorded() {
     assert!(judged(&mut scoped) > alone);
 }
 
+/// A term first typed inside a refused [`Kernel::tried`] walk is recorded where it is typed again, as fully as a term typed once. A remembered typing records the term's own position and none inside it, which its first typing recorded; the refusal takes those back, and the typing with them. The control types the term twice in an ordinary bracket, where nothing is taken back and the two typings record what one does.
+///
+/// Mutation-checked: with the typings kept past a refusal, the lambda typed again records no position.
+#[test]
+fn a_term_typed_in_a_refused_walk_is_recorded_when_typed_again() {
+    let x = binder(0, "x");
+    let term = Term::func([(x, nat_type())], Term::free_var(&x));
+    let judged = |kernel: &mut Kernel| {
+        infer(kernel, &term).expect("the lambda types");
+        let (positions, failure) = kernel.take_checked();
+        assert!(failure.is_none());
+
+        positions.len()
+    };
+
+    let alone = judged(&mut kernel());
+    assert!(alone > 0, "the lambda's domain is a type position");
+
+    let mut tried = kernel();
+    let refused = tried.tried(|kernel| {
+        infer(kernel, &term)?;
+        check(kernel, &nat(0), &bool_type())
+    });
+    assert!(refused.is_err());
+    assert_eq!(judged(&mut tried), alone);
+
+    let mut scoped = kernel();
+    scoped
+        .scoped(|kernel| infer(kernel, &term))
+        .expect("the lambda types");
+    assert_eq!(judged(&mut scoped), alone);
+}
+
 /// A lambda is checked against a function type under that type's marks: one whose binder is `@` where the slot is plain takes no Π-introduction there, and inferred instead it inhabits a function type of other marks, which the expectation refuses. The control is the same lambda under the slot's own mark.
 #[test]
 fn a_lambda_of_other_marks_does_not_check_against_a_function_type() {

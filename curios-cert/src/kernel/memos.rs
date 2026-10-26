@@ -8,7 +8,7 @@
 //!
 //! **A judgment that reads the scope lives as long as what it read.** A sort rests on what a reduct does: on the equations in force, which decide what a type reduces to, and on the type each local stands at, since a neutral's sort is read off its binder. So the scoped sorts are cleared where the local-bearing reducts are; and each is filed besides with the binders in scope when it was read — a [`Prefix`] — and answers only while they stand: a name handed in from outside can be assumed again, at another type, once its first binder is closed. A local-free type's sort is the declaration's only where no case equation is in force. Classifying one opens binders and reduces what stands beneath them, and an equation answers a term the kernel's conversion holds equal to its scrutinee, which a term naming only a proof the classification opened can be: `g(x)` under the equation of `g(p)`, two proofs of one proposition. So a sort read under an equation is filed with the scope's answers, whatever its type names.
 //!
-//! An inferred type and a check read the same things and are filed the same way: a term naming a local is typed off the binders in scope, under the equations in force. A local-free term typed while a case equation is in force is filed with the scope's answers and not the declaration's, as its sort is — the table declined such a term outright before it kept anything read off the scope, and the stricter filing costs one typing per arm. And one refusal is theirs alone: a term naming a member of a group whose body is being checked is neither filed nor answered, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives. A comparison's verdict is filed as a typing is, by its type and its two sides, and only where it was reached with no goal in progress assumed.
+//! An inferred type and a check read the same things and are filed the same way: a term naming a local is typed off the binders in scope, under the equations in force. A local-free term typed while a case equation is in force is filed with the scope's answers and not the declaration's, as its sort is — the table declined such a term outright before it kept anything read off the scope, and the stricter filing costs one typing per arm. And one refusal is theirs alone: a term naming a member of a group whose body is being checked is neither filed nor answered, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives. And both go where a refused walk takes back the positions it recorded, since a hit records none inside its term ([`Memos::discard_typings`]). A comparison's verdict is filed as a typing is, by its type and its two sides, and only where it was reached with no goal in progress assumed.
 //!
 //! **Each of the two reductions keeps its own answers.** A judgment's reduction may ask the kernel's conversion which terms are one, and plain reduction asks it nothing (`Kernel::plainly`). A term that names a local therefore has a reduct under each, and whatever is read through a reduct — the sort of a type, the verdict of a comparison — is filed by the reduction that read it: each of those tables is a pair, and which of the two answers is chosen here, on the lookup as on the store. A sort and a verdict over local-free terms are filed the same way, since classifying or comparing them opens binders and what is reduced beneath names them. A local-free term's reduct is one table: nothing is asked of a term that names no local, so it is one function of the definition store under both. The typing tables and the erased halves are a judgment's alone, nothing being typed under plain reduction.
 //!
@@ -476,6 +476,14 @@ impl Memos {
     pub(super) fn begin_sizes(&mut self) {
         self.types.begin_equations();
         self.checked.begin_equations();
+    }
+
+    /// Discard every remembered type and check, the declaration's and the scope's, and nothing else. Called where a refused walk takes back the positions it recorded (`Kernel::tried`): a hit records the position it answers and none inside its term, which the typing it stands for recorded, so a typing remembered in the walk would answer for positions no longer recorded. A reduct, a sort, an erased half and a verdict record nothing.
+    ///
+    /// The typings remembered before the walk go too, though their positions stand. A refused walk outlives its refusal only at an arm no reduction takes, any other ending its item, so each typing lost costs one typing again there and nowhere else; keeping them would take a journal of what every walk remembers, kept for that one rare path.
+    pub(super) fn discard_typings(&mut self) {
+        self.types.begin_declaration();
+        self.checked.begin_declaration();
     }
 }
 
