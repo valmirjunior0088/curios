@@ -639,6 +639,41 @@ fn every_guard_under_a_match_on_its_variable_is_on_the_side_stated() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
 }
 
+/// A comparison guard's case equation answers the order-dual of its scrutinee only where the carrier is totally ordered. In the `false` arm of `match a + b < c`, the equation `(a + b < c) = false` answers `c <= b + a` as `true` — the reader that takes a guard's dual (`curios_analysis::answers`, through the negation `!(x < y)`) reading it off the carrier. At `Nat` that dual holds, so the arm proves `Holds(c <= b + a)`; at `Flt` it must not, since `+nan.0 < 10.0` and `10.0 <= +nan.0` are both `false`, so reading the dual there would admit `Holds(10.0 <= e + d)` from a guard that says nothing of it, and `True/qed()` at `Holds(false)` is a step from `False`.
+#[test]
+fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
+    let guarded = |imports: &str, binders: &str, dual: &str, less: &str| {
+        fill!(
+            r#"
+            use /std/{${imports}, Io};
+            use /std/Bool/{True, Holds};
+            let cell(${binders}) -> {} =
+                match ${less} | true => () | false => let _: Holds(${dual}) = True/qed(); () end;
+            Io/pure(())
+            "#,
+            imports,
+            binders,
+            less,
+            dual,
+        )
+    };
+
+    // Nat is totally ordered: the dual of `<` is `<=` reversed, so the equation answers it and the arm holds.
+    let nat = guarded("Nat", "a: Nat, b: Nat, c: Nat", "c <= b + a", "a + b < c");
+    assert!(
+        typecheck(&nat).is_ok(),
+        "the dual of a `Nat` comparison guard is answered in its false arm",
+    );
+
+    // Flt is not: `!(x < y)` is not `y <= x` at a NaN, so the equation answers nothing of the dual and the arm is refused.
+    let flt = guarded("Flt", "d: Flt, e: Flt", "10.0 <= e + d", "d + e < 10.0");
+    let refusal = typecheck(&flt).expect_err("the dual of a `Flt` comparison guard is not answered");
+    assert!(
+        refusal.contains("type mismatch") && !refusal.contains("the kernel refused"),
+        "the elaborator refuses the Flt dual as a type mismatch, not the kernel: {refusal}",
+    );
+}
+
 #[test]
 fn every_held_cell_holds_at_every_order_of_its_binders() {
     // The admitting direction at the whole sweep: one program per order holding every cell stated held, and on its failure one per cell, so the report names the cells an order moved.
