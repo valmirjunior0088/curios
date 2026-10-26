@@ -3,11 +3,11 @@
 //! An eliminator *resolves* its scrutinee and its result, *enters* a case, which is the frame an arm is typed in and the type it is typed at, and *rebuilds* the match from its arms ([`NominalSplit`], [`BoolSplit`], [`SwitchSplit`], [`NatSplit`], [`SequenceSplit`]). What an arm's body is comes from whoever asked: a match written one level deep hands its lowered arm to be checked ([`elaborate_match`]), and the matrix compiler hands the rows of the case over the columns left (`matrix`). So what an arm assumes is stated once and read by both.
 
 use {
-    super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
+    super::{Misaligned, Mode, align, elaborate, stands_at},
     crate::{
-        BinderSite, MotiveShape, check_motive, dead_guard, decided_sort_of, hold_prop, is_prop,
-        pending, probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
-        same_uncommitted, zonk_solved_term_metas,
+        BinderSite, Context, Error, MotiveShape, check, check_motive, dead_guard, decided_sort_of,
+        expect, hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
+        resolved_for_display, same_uncommitted, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{

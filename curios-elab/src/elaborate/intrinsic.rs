@@ -1,7 +1,8 @@
 use {
-    super::{Context, Error, Mode, elaborate, expect, park_checking},
+    super::{Mode, elaborate, park_checking},
     crate::{
-        ErasedSite, blocked_on_metavar, check_is_sort, exhausted_bound, reduce_with, sort_term,
+        Context, ErasedSite, Error, blocked_on_metavar, check_is_sort, exhausted_bound, expect,
+        reduce_with, sort_term,
     },
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
     std::collections::BTreeSet,

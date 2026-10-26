@@ -11,8 +11,7 @@
 //! Change detection therefore cannot read the journal's length, which does not count every rewrite. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
 use {
-    super::UniverseError,
-    curios_core::{Level, LevelHead, UniverseConstraint},
+    curios_core::{Level, LevelHead, UniverseConstraint, UniverseError},
     curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };

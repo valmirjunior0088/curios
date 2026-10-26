@@ -13,9 +13,11 @@
 use {
     super::{
         BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
-        check, elaborate, expect, holds_goal, payload_fills,
+        elaborate, holds_goal, payload_fills,
     },
-    crate::{Context, Error, HeldFrames, pending, reduce_with, resolved_for_display},
+    crate::{
+        Context, Error, HeldFrames, check, expect, pending, reduce_with, resolved_for_display,
+    },
     curios_core::{
         Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, StructType, Subterm,
         Telescope, Term, Tuple,

@@ -11,17 +11,18 @@ use recovery::*;
 mod tests;
 
 use {
-    super::{Context, Error, Mode, check, elaborate, elaborate_func_type_sized},
+    super::{Mode, elaborate, elaborate_func_type_sized},
     crate::{
-        Declared, ErasedSite, Established, GoalReport, GoalSite, Published, Readers, ScheduledTest,
-        Traces, Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
-        check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
-        decide_polarities, definition_variances, field_variances, finalize_definition, goal_sites,
-        hold_prop, hold_variances, parameter_field, record_definition_totality,
-        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
-        result_sort_only_metas, sort_family_levels, stamp_totality, state_proof_binders,
-        superclass_targets, test_program_tail, validate_entry_universes, validate_universes, zonk,
-        zonk_arity, zonk_entry, zonk_published, zonk_solved_term_metas,
+        Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
+        Readers, ScheduledTest, Traces, Zonked, body_levels, check, check_concept_registry,
+        check_is_sort, check_proof_totality, check_rec_item_totality, check_type_totality,
+        check_written_type_totality, compared_levels, decide_polarities, definition_variances,
+        field_variances, finalize_definition, goal_sites, hold_prop, hold_variances,
+        parameter_field, record_definition_totality, record_superclasses, record_variances,
+        reduce_with, register_witness, report_goals, result_sort_only_metas, sort_family_levels,
+        stamp_totality, state_proof_binders, superclass_targets, test_program_tail,
+        validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
+        zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{

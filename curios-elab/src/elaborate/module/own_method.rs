@@ -3,7 +3,7 @@
 //! A goal inside a witness's body that resolves to the witness being declared arrives as a projection of the witness's own name, applied to the parameters the body binds. Where the method projected mentions that name nowhere, the projection is that method's term — the witness unfolded once and projected — so the read is no recursion and is replaced by the term. A method that reaches itself, alone or through another, keeps the name, and only then is the witness the recursive group [`elaborate_module_let`](super::elaborate_module_let) makes of a body that names itself: a group is a knot at run time, forced at every use, which a body that states one method by another must not pay.
 
 use {
-    super::Context,
+    crate::Context,
     curios_core::{Advance, Free, Func, Struct, Subterm, Term},
 };
 
