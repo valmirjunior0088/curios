@@ -135,6 +135,57 @@ fn a_window_across_runs_past_the_fusion_cap_is_the_window_over_their_bytes() {
     );
 }
 
+/// **A pointwise operation over runs too large to fuse is the operation over their bytes.** [`FUSION_CAP`] leaves a concatenation of such runs standing, and it is the same closed value as the run it would have fused to, so the fold reads it as that run whether the other operand is one literal or a concatenation grouped otherwise; one holding a symbolic run keeps its node.
+#[test]
+fn a_pointwise_operation_over_runs_past_the_fusion_cap_is_the_operation_over_their_bytes() {
+    let length = FUSION_CAP + 6;
+    let left = (0..2 * length)
+        .map(|index| index as u8)
+        .collect::<Vec<u8>>();
+    let right = (0..2 * length)
+        .map(|index| (index as u8).wrapping_mul(7))
+        .collect::<Vec<u8>>();
+    let spine = |values: &[u8], at: usize| {
+        Term::intrinsic(Intrinsic::BytesConcat {
+            operands: vec![run_bytes(&values[..at]), run_bytes(&values[at..])],
+        })
+    };
+    let xor = left
+        .iter()
+        .zip(&right)
+        .map(|(left, right)| left ^ right)
+        .collect::<Vec<u8>>();
+
+    for (spelled, other) in [
+        (spine(&left, length), run_bytes(&right)),
+        (spine(&left, length), spine(&right, length + 1)),
+    ] {
+        let combined = reduce_intrinsic(&mut Folding, &Intrinsic::bytes_xor(spelled, other, qed()))
+            .expect("a pointwise operation reduces");
+
+        assert_eq!(
+            Term::from(combined),
+            run_bytes(&xor),
+            "the operation over the runs' bytes, however each operand is grouped",
+        );
+    }
+
+    let symbolic = Term::intrinsic(Intrinsic::BytesConcat {
+        operands: vec![run_bytes(&left[..length]), symbol(1, "tail")],
+    });
+    let kept = reduce_intrinsic(
+        &mut Folding,
+        &Intrinsic::bytes_xor(symbolic.clone(), run_bytes(&right), qed()),
+    )
+    .expect("a pointwise operation reduces");
+
+    assert_eq!(
+        kept,
+        Subterm::Intrinsic(Intrinsic::bytes_xor(symbolic, run_bytes(&right), qed())),
+        "a symbolic run leaves nothing to combine",
+    );
+}
+
 #[test]
 fn a_list_length_window_and_index_do_not_depend_on_grouping() {
     let whole: &[u32] = &[1, 2, 3, 4, 5];

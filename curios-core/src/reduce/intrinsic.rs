@@ -303,7 +303,9 @@ pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     Some(spelling)
 }
 
-/// The three pointwise rows fold by one rule: two literal runs of one length combine in the packed representation, and anything else keeps the node it was written as.
+/// The three pointwise rows fold by one rule: two wholly literal operands of one length combine in the packed representation, and anything else keeps the node it was written as.
+///
+/// **A concatenation of runs is wholly literal.** [`FUSION_CAP`] keeps the node of one whose runs are long rather than recopying them, and that node is the same closed value as the run it would have fused to; every other fold a closed concatenation reaches reads its spine, and this one reads its bytes, fused here (`bytes_runs`), where a lone literal is all it read before. Both operands are read before either is fused, so a fold that declines spends nothing on the operand it could read.
 ///
 /// **Two literals of different lengths decline to fold rather than trapping.** The bound in the type is what forbids the pair, and the checker is what enforces it; a reducer that answered here would be deciding a proposition it may not construct — the defect `Intrinsic::signature`'s module documentation records the bound fields as existing to remove — and one that panicked would turn an ill-typed term into a crash instead of a report. Declining costs reductions and never an answer, which is `FreeMonoid::single_generator`'s trade at a different seam.
 fn reduce_bytes_pointwise(
@@ -317,17 +319,23 @@ fn reduce_bytes_pointwise(
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    if let (
-        Subterm::Intrinsic(Intrinsic::Bytes(run_left)),
-        Subterm::Intrinsic(Intrinsic::Bytes(run_right)),
-    ) = (&*left, &*right)
-        && run_left.len() == run_right.len()
+    let length = |runs: &[Binary]| runs.iter().map(Binary::len).sum::<usize>();
+    if let (Some(runs_left), Some(runs_right)) = (bytes_runs(&left), bytes_runs(&right))
+        && length(&runs_left) == length(&runs_right)
     {
+        // A lone run is read as it stands; only a concatenation is fused, and pays for it.
+        let mut run = |runs: Vec<Binary>| match runs.as_slice() {
+            [run] => Ok(run.clone()),
+            runs => bytes_fused(reducer, &runs.iter().collect::<Vec<_>>()),
+        };
+        let run_left = run(runs_left)?;
+        let run_right = run(runs_right)?;
+
         // Three payloads: each operand normalizes into a buffer of its own, and the combined run collects into a third.
         reducer.spend(Cost::packed_bytes(run_left.len() as u64).saturating_mul(3))?;
 
         return Ok(Subterm::Intrinsic(Intrinsic::Bytes(combine(
-            run_left, run_right,
+            &run_left, &run_right,
         ))));
     }
 
@@ -1495,14 +1503,9 @@ pub fn reduce_intrinsic(
                     _ => None,
                 },
                 |runs| {
-                    // Twice the fused payload, per the price list's last paragraph: `Binary::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
-                    let bytes = runs
-                        .iter()
-                        .map(|run| run.len() as u64)
-                        .fold(0u64, u64::saturating_add);
-                    reducer.spend(Cost::packed_bytes(bytes).saturating_mul(2))?;
-
-                    Ok(Subterm::Intrinsic(Intrinsic::Bytes(Binary::concat(runs))))
+                    Ok(Subterm::Intrinsic(Intrinsic::Bytes(bytes_fused(
+                        reducer, &runs,
+                    )?)))
                 },
                 |kept| Subterm::Intrinsic(Intrinsic::BytesConcat { operands: kept }),
             )

@@ -160,6 +160,41 @@ pub(super) fn bytes_piece(piece: Piece<'_>) -> Term {
     }
 }
 
+/// The literal runs a reduced `Bytes` value spells, left to right: the value itself where it is one run, and each operand of a concatenation of runs, which [`crate::FUSION_CAP`] leaves standing rather than recopying. `None` where any operand is not a literal run.
+pub(super) fn bytes_runs(value: &Term) -> Option<Vec<Binary>> {
+    // Answered before the window, which locates no piece in an empty run.
+    if let Subterm::Intrinsic(Intrinsic::Bytes(run)) = &**value {
+        return Some(vec![run.clone()]);
+    }
+
+    let measure = FreeMonoid::Bytes.measure(value)?;
+    let pieces = FreeMonoid::Bytes.measured_window(value, 0, measure)?.ok()?;
+
+    Some(
+        pieces
+            .into_iter()
+            .map(|piece| match &*bytes_piece(piece) {
+                Subterm::Intrinsic(Intrinsic::Bytes(run)) => run.clone(),
+                _ => unreachable!("a located window's segments are literal runs"),
+            })
+            .collect(),
+    )
+}
+
+/// One run holding `runs` in order, charged before it is built: twice the fused payload, per the price list's last paragraph, because `Binary::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
+pub(super) fn bytes_fused(
+    reducer: &mut impl Reducer,
+    runs: &[&Binary],
+) -> Result<Binary, ReduceError> {
+    let bytes = runs
+        .iter()
+        .map(|run| run.len() as u64)
+        .fold(0u64, u64::saturating_add);
+    reducer.spend(Cost::packed_bytes(bytes).saturating_mul(2))?;
+
+    Ok(Binary::concat(runs.iter().copied()))
+}
+
 /// The generator a located index names, read straight out of the literal run holding it: a `Byte`, read here and nowhere else.
 pub(super) fn element_of_run(run: &Binary, local: usize) -> Option<Subterm> {
     run.byte(local)

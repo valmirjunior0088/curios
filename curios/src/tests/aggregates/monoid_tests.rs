@@ -211,6 +211,23 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
 }
 
 #[test]
+fn a_pointwise_operation_over_runs_past_the_fusion_cap_is_the_operation_over_their_bytes() {
+    // Runs past the fusion cap concatenate to a node rather than one literal, and the pointwise folds read that node's bytes, so the claim over two such runs is decided as the claim over the one run they spell, by both checkers.
+    let source = r#"
+        use /std/{Str, Bool, Bytes, Io};
+        use /std/Bool/{True, Holds};
+        let run : Bytes = Bytes/replicate(65, 0);
+        let flipped : Holds(Bytes/eql(Bytes/not(x[..run, ..run]), Bytes/replicate(130, 0xFF))) =
+            True/qed();
+        let entry() -> /std/Io({}) =
+            let _ = /std/print("ok")!;
+            /std/Io/pure(());
+        entry()
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn bytes_slice_is_a_monoid_citizen() {
     // `Bytes/slice` rides the free-monoid spine (`curios-core`'s `words`) as a measured `Window` — a chunk carrying its own length, whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-length window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     //
