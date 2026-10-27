@@ -42,7 +42,7 @@ curios-cert = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
 curios-erase = { workspace = true, optional = true }
 
-# The prelude's one build: `/sys` and `/std` lowered, elaborated, erased and certified, each root imaged as the certified unit the crate restores.
+# The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased, each root imaged as the certified unit the crate restores.
 [build-dependencies]
 curios-archive = { workspace = true }
 curios-cert = { workspace = true }

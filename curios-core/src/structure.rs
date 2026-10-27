@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Field, Polarity, Telescope, Term, UniverseContext, UniverseError, Universes, Variance,
-        instantiate_universes_scoped, open_field,
+        Field, Polarity, Quality, Telescope, Term, UniverseContext, UniverseError, Universes,
+        Variance, instantiate_qualities, instantiate_universes_scoped, open_field,
     },
     crate::Sharing,
     curios_utilities::Qualifier,
@@ -37,6 +37,16 @@ impl StructDecl {
     /// How many of this declaration's binders are uniform parameters.
     pub fn param_count(&self) -> usize {
         self.arity.len()
+    }
+
+    /// [`InductDecl::at_qualities`](super::InductDecl::at_qualities) for a `struct` registry entry.
+    pub fn at_qualities(&self, qualities: &[Quality]) -> Self {
+        let mut at = self.clone();
+        at.arity = instantiate_qualities(&at.arity, qualities);
+        at.result_sort = instantiate_qualities(&at.result_sort, qualities);
+        at.universe_context.quality_count = 0;
+
+        at
     }
 
     /// This structure's field telescope, still under its parameter binders. Use [`StructDecl::fields_at`] to read it at known parameters.

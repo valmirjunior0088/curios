@@ -2,12 +2,15 @@
 //!
 //! Erasure is directed by types. The walk carries the type each expression was checked against, and an elimination's head has none to carry: a call's callee, a projection's record, a match's scrutinee. Its type is read here — from what a name was assumed at, by opening a head's telescope at the arguments an application supplies, from the field a projection selects, from what a constructor or a literal states of itself.
 //!
-//! Nothing is checked. The term is elaborated and certified, and judging it again would run the rules that decide what an author may write — which marks a binder may carry, which module may open a representation — over a term no author wrote, in a context holding no concept and no witness. Every rule here is the type half of the kernel's, with the checks left where they were made.
+//! Nothing is checked. The term is certified, and judging it again would run the kernel's rules over what they already accepted. Every rule here is the type half of the kernel's, with the checks left where they were made, and what it asks of a name, a neutral or a type's head it asks of the kernel that certified the term ([`inferred`], [`reduced`]).
 //!
-//! **A term's type is read once per item.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Lowering::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands.
+//! **A term's type is read once per item, and once per arm.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Lowering::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands, but in an arm: there the kernel binds a variable the case solves to its value and reads every type by value, so an arm is read with nothing kept from outside it and keeps nothing past it (`Lowering::in_arm`). A type kept across two arms would read one arm's family in the other, which shares its tags and widths and is not the row its value was built at (`curios`'s `tests::codegen::specialize`).
 
 use {
-    super::Lowering, crate::Error, curios_core::Bound, curios_elab::Retyping,
+    super::Lowering,
+    crate::{Error, advance_assumed, inferred, reduced},
+    curios_cert::Reader,
+    curios_core::Bound,
     curios_utilities::recurse,
 };
 
@@ -15,7 +18,7 @@ impl Lowering<'_> {
     /// The type `term` has, read at most once for the item being erased.
     pub fn type_of(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         term: &curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
         if let Some(known) = self.types.get(term) {
@@ -31,12 +34,12 @@ impl Lowering<'_> {
     /// One reading. A step is charged for each, as the kernel charges its typing walk, so the budget bounds this one too.
     fn read_type(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         term: &curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
         context
             .spend(curios_core::Cost::STEP)
-            .map_err(|error| exhausted(error, term))?;
+            .map_err(|refusal| Error::reducing(term, refusal))?;
 
         // A member selected from its group carries its type, which is read off the group rather than by entering it.
         if let Some((group, index)) = term.as_rec_proj() {
@@ -46,7 +49,7 @@ impl Lowering<'_> {
         match &**term {
             curios_core::Subterm::Apply(apply) => {
                 let head_type = self.type_of(context, &apply.head)?;
-                let reduced = context.reduce_with(&head_type)?;
+                let reduced = reduced(context, &head_type)?;
                 let curios_core::Subterm::FuncType(curios_core::FuncType { telescope, .. }) =
                     &*reduced
                 else {
@@ -64,7 +67,7 @@ impl Lowering<'_> {
             // Erasure runs on an elaborated term, whose every projection is a slot: the field says how the fields before it are read.
             curios_core::Subterm::Proj(curios_core::Proj { head, field }) => {
                 let head_type = self.type_of(context, head)?;
-                let field_type = match &*context.reduce_with(&head_type)? {
+                let field_type = match &*reduced(context, &head_type)? {
                     curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => {
                         telescope.field_type_from(head, field)
                     }
@@ -73,8 +76,10 @@ impl Lowering<'_> {
                         universes,
                         params,
                     }) => context
-                        .struct_facet(name, universes, |at| at.field_type(params, head, field))
-                        .expect("erase: a registered struct")?,
+                        .struct_decl(name)
+                        .expect("erase: a registered struct")
+                        .at(universes)
+                        .field_type(params, head, field)?,
                     _ => unreachable!("erase: projected a non-tuple/struct"),
                 };
 
@@ -108,11 +113,11 @@ impl Lowering<'_> {
                 payload,
             }) => {
                 let indices = context
-                    .induct_facet(name, universes, |at| {
-                        at.constructor(tag)
-                            .expect("erase: constructor instantiates at its inductive's parameters")
-                    })
-                    .expect("erase: a registered inductive")?
+                    .induct_decl(name)
+                    .expect("erase: a registered inductive")
+                    .at(universes)
+                    .constructor(tag)
+                    .expect("erase: constructor instantiates at its inductive's parameters")?
                     .telescope
                     .open_params(params)
                     .open(&payload.iter().collect::<Vec<_>>());
@@ -134,7 +139,7 @@ impl Lowering<'_> {
                 let indices = match cases {
                     curios_core::Cases::Induct { .. } => {
                         let head_type = self.type_of(context, head)?;
-                        match &*context.reduce_with(&head_type)? {
+                        match &*reduced(context, &head_type)? {
                             curios_core::Subterm::InductType(curios_core::InductType {
                                 indices,
                                 ..
@@ -165,7 +170,7 @@ impl Lowering<'_> {
             curios_core::Subterm::Intrinsic(intrinsic) => {
                 match intrinsic.signature(&context.syntax()).produced {
                     curios_core::Produced::Fixed(type_) => Ok(type_),
-                    curios_core::Produced::Sort => Ok(context.sort_term(term)?),
+                    curios_core::Produced::Sort => inferred(context, term),
                 }
             }
             curios_core::Subterm::Foreign(function, _, arguments) => {
@@ -184,12 +189,11 @@ impl Lowering<'_> {
             | curios_core::Subterm::FuncType(_)
             | curios_core::Subterm::TupleType(_)
             | curios_core::Subterm::InductType(_)
-            | curios_core::Subterm::StructType(_) => Ok(context.sort_term(term)?),
-            // A name, or a member of a group read off the group it carries.
-            curios_core::Subterm::Var(_) | curios_core::Subterm::Instance(_) => Ok(context
-                .synth_neutral(term)
-                .map_err(|error| exhausted(error, term))?
-                .expect("erase: a name in scope")),
+            | curios_core::Subterm::StructType(_) => inferred(context, term),
+            // A name, or a declaration at an instance: what it was assumed or defined at, as the kernel reads it.
+            curios_core::Subterm::Var(_) | curios_core::Subterm::Instance(_) => {
+                inferred(context, term)
+            }
             curios_core::Subterm::Metavar(_) => {
                 unreachable!("metavariable survived zonking into erasure")
             }
@@ -201,14 +205,14 @@ impl Lowering<'_> {
 
     fn lambda_type(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         func: &curios_core::Func,
     ) -> Result<curios_core::Term, Error> {
-        context.with_frame(|context| {
+        context.scoped(|context| {
             let mut domains = Vec::with_capacity(func.telescope.len());
             let mut cursor = func.telescope.cursor();
             while let Some((_, domain)) = cursor.entry() {
-                let name = context.advance_assumed(&mut cursor, &domain);
+                let name = advance_assumed(context, &mut cursor, &domain);
                 domains.push((name, domain));
             }
             let body = cursor.body().expect("a cursor past every entry");
@@ -227,7 +231,7 @@ impl Lowering<'_> {
     /// The type of a local group's tail, with each member it names folded back to the group's own projection, so what leaves names nothing the group's scope bound.
     fn group_tail_type(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         rec: &curios_core::Rec,
     ) -> Result<curios_core::Term, Error> {
         let curios_core::Rec { group, tail } = rec;
@@ -241,16 +245,13 @@ impl Lowering<'_> {
             .collect::<Vec<_>>();
         let member_refs = members.iter().collect::<Vec<_>>();
 
-        let type_ = context.with_frame(|context| {
-            for (name, member) in names.iter().zip(group.iter()) {
-                context.assume(name, &member.type_.open(&member_refs));
-                context.set_assumption_universe_context(name, group.universe_context().clone());
-            }
-            for (index, name) in names.iter().enumerate() {
-                context.define(
+        // Each member bound at its type to its selection, as the kernel's own group tail binds it.
+        let type_ = context.scoped(|context| {
+            for (index, (name, member)) in names.iter().zip(group.iter()).enumerate() {
+                context.bind(
                     name,
+                    &member.type_.open(&member_refs),
                     &curios_core::Term::rec_proj(group.clone(), index),
-                    None,
                 );
             }
 
@@ -265,12 +266,4 @@ impl Lowering<'_> {
                 .open(&folded.iter().collect::<Vec<_>>()),
         )
     }
-}
-
-/// A budget this reading exhausted, reported against the term it was reading.
-fn exhausted(error: curios_core::ReduceError, term: &curios_core::Term) -> Error {
-    curios_elab::Error::from_reduce(error, |refusal| {
-        curios_elab::Error::reduce_exhausted(term.clone(), refusal)
-    })
-    .into()
 }

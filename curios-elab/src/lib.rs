@@ -18,7 +18,6 @@ mod universes;
 use universes::*;
 pub use universes::{
     validate_entry_universes, validate_lowered_universe_seeds, validate_universes,
-    validate_universes_in,
 };
 
 mod concept;
@@ -38,10 +37,9 @@ use reduce::*;
 
 mod context;
 use context::*;
-pub use context::{Answered, Context, DEFAULT_BUDGET, Defined, InScope, Question, Retyping};
+pub use context::{Answered, Context, DEFAULT_BUDGET, Question};
 
 mod convert;
-pub use convert::Opened;
 use convert::*;
 
 mod denoise;
@@ -56,7 +54,6 @@ use report::*;
 
 mod typing;
 use typing::*;
-pub use typing::{InductCase, is_erasable_in};
 
 mod resolve;
 use resolve::*;

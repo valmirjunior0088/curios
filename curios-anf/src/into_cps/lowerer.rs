@@ -673,11 +673,12 @@ impl Lowerer<'_> {
                     .collect();
                 if let CellOperation::Poll { some, none } = operation {
                     let (join, fresh) = self.open_join(site);
+                    let some = (*some, self.holds_value(*some));
                     return self.lower_outcome(
                         join,
                         fresh,
                         2,
-                        &[(*none, false), (*some, true)],
+                        &[(*none, false), some],
                         |return_to| curios_cps::Node::Cell {
                             op,
                             args,
@@ -717,7 +718,11 @@ impl Lowerer<'_> {
                         closed,
                     } => vec![(*taken, false), (*full, false), (*closed, false)],
                     ChannelOperation::Take { item, empty, ended } => {
-                        vec![(*item, true), (*empty, false), (*ended, false)]
+                        vec![
+                            (*item, self.holds_value(*item)),
+                            (*empty, false),
+                            (*ended, false),
+                        ]
                     }
                     _ => Vec::new(),
                 };
@@ -1938,6 +1943,13 @@ impl Lowerer<'_> {
     }
 
     /// Turn the guest operation's private status into an ordinary constructor before delivering its language result.
+    /// Whether the outcome `constructor` holds the value its operation answers: where its row keeps a field for it, and not where the row keeps none, the value being a proof there.
+    fn holds_value(&self, constructor: ConstructorId) -> bool {
+        self.source
+            .constructor(constructor)
+            .is_some_and(|constructor| constructor.width() == 1)
+    }
+
     fn lower_outcome(
         &mut self,
         join: curios_cps::ContinuationId,

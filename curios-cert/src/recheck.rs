@@ -164,38 +164,35 @@ pub fn recheck_module_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    certify_module(module, budget, globals, syntax).verdicts
+    certify_module(module, budget, globals, syntax).0.verdicts
 }
 
-/// [`recheck_module_verdicts`], with the record the walk leaves of what it concluded — see [`Rechecked`].
-pub fn certify_module(
+/// [`recheck_module_verdicts`], with the record the walk leaves of what it concluded — see [`Rechecked`] — and the walk's own kernel, which holds the unit's definitions as the walk defined them, the units in scope it mounted and the vectors it filed: what the unit's erasure reads through ([`Kernel::read`]), and what a measurement asks a finished walk ([`Kernel::heaviest_declaration`]).
+pub fn certify_module<'s>(
     module: &Zonked<Module>,
     budget: u64,
-    globals: &Globals,
+    globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
-) -> Rechecked {
-    verdicts_from(
-        Kernel::new(budget, syntax),
-        module.as_module(),
-        None,
-        globals,
-    )
+) -> (Rechecked, Kernel<'s>) {
+    let mut kernel = Kernel::new(budget, syntax);
+    let rechecked = verdicts_into(&mut kernel, module.as_module(), None, globals, None);
+
+    (rechecked, kernel)
 }
 
 /// [`certify_module`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Baseline`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
 ///
 /// **`candidates` is what a store at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
-pub fn certify_module_over(
+pub fn certify_module_over<'s>(
     module: &Zonked<Module>,
     budget: u64,
-    globals: &Globals,
-    baseline: Baseline<'_>,
-    (places, candidates): (&Places, Option<&dyn Candidates>),
+    globals: &'s Globals<'s>,
+    baseline: Baseline<'s>,
+    (places, candidates): (&'s Places, Option<&'s dyn Candidates>),
     syntax: SyntaxRegistry,
-) -> Rechecked {
+) -> (Rechecked, Kernel<'s>) {
     let mut kernel = Kernel::new(budget, syntax);
-
-    verdicts_into(
+    let rechecked = verdicts_into(
         &mut kernel,
         module.as_module(),
         None,
@@ -205,24 +202,29 @@ pub fn certify_module_over(
             places,
             candidates,
         }),
-    )
+    );
+
+    (rechecked, kernel)
 }
 
 /// [`certify_module`] for a program: its module walked as any unit's, and the term it closes with checked against the type it states.
-pub fn certify_program(
+pub fn certify_program<'s>(
     program: &Zonked<Program>,
     budget: u64,
-    globals: &Globals,
+    globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
-) -> Rechecked {
+) -> (Rechecked, Kernel<'s>) {
     let program = program.as_program();
-
-    verdicts_from(
-        Kernel::new(budget, syntax),
+    let mut kernel = Kernel::new(budget, syntax);
+    let rechecked = verdicts_into(
+        &mut kernel,
         &program.module,
         Some(&program.entry),
         globals,
-    )
+        None,
+    );
+
+    (rechecked, kernel)
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
@@ -241,43 +243,6 @@ pub fn recheck_module_verdicts_uncached(
         globals,
     )
     .verdicts
-}
-
-/// What a whole-module walk consumed, beside what it reached — the walk's own kernel, handed back for a measurement to read.
-///
-/// Exists for one purpose too: `DEFAULT_BUDGET` has to be set against what a real module actually costs, and nothing else can see that figure — the kernel a walk builds is otherwise its own. [`Kernel::heaviest_declaration`] is the heaviest single judgment it made. The record is there for a measurement walking several units in order, which mounts each with it as a compilation does, so the next walk reads the classification rather than deriving it at a cost no compilation pays.
-///
-/// It hands back the kernel rather than a tuple of figures so that asking a new question of a finished walk costs a reader rather than a signature. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
-pub fn recheck_module_measured<'s>(
-    module: &Zonked<Module>,
-    budget: u64,
-    globals: &'s Globals<'s>,
-    syntax: SyntaxRegistry,
-) -> (Rechecked, Kernel<'s>) {
-    let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(&mut kernel, module.as_module(), None, globals, None);
-
-    (rechecked, kernel)
-}
-
-/// [`recheck_module_measured`] for a program — [`certify_program`]'s walk, with its kernel handed back.
-pub fn recheck_program_measured<'s>(
-    program: &Zonked<Program>,
-    budget: u64,
-    globals: &'s Globals<'s>,
-    syntax: SyntaxRegistry,
-) -> (Rechecked, Kernel<'s>) {
-    let program = program.as_program();
-    let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(
-        &mut kernel,
-        &program.module,
-        Some(&program.entry),
-        globals,
-        None,
-    );
-
-    (rechecked, kernel)
 }
 
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.

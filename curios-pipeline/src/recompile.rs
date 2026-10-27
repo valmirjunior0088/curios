@@ -9,7 +9,7 @@ use {
         Closing, CompileError, erasure_refusal, globals_after, kernel_refusal, lowering_refusal,
         with_broken,
     },
-    curios_cert::{Baseline, Rechecked, certify_module_over},
+    curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_module_over},
     curios_core::{Entrypoint, Module, Places, Zonked},
     curios_elab::{
         Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
@@ -204,12 +204,13 @@ pub(crate) fn compile_lowered_over(
     let core = Zonked::revised(&core, made_items.iter().map(|item| &core.items[*item]))
         .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
-    // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
-    let rechecked = recheck_over(
+    // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped. The unit is erased through the kernel that judged it.
+    let globals = globals_after(predecessors, moved);
+    let (rechecked, mut kernel) = recheck_over(
         &core,
         &places,
         budget,
-        predecessors,
+        &globals,
         Over {
             baseline,
             moved,
@@ -224,13 +225,11 @@ pub(crate) fn compile_lowered_over(
     let certification = rechecked.certification;
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and what its erasure asked is answered as it was.
-    let views = predecessors.projected();
+    let scope_places = predecessors.places();
     let erased = predecessors.erased();
-    let (anf, projection) = erase_unit_over(
-        budget,
-        *syntax,
-        Erasures::of(&cores, &erased)
-            .keeping(&views)
+    let anf = erase_unit_over(
+        &mut kernel,
+        Erasures::of(&cores, &scope_places, &erased)
             .fixed(&fixed)
             .after(moved),
         &core,
@@ -238,7 +237,6 @@ pub(crate) fn compile_lowered_over(
             core: baseline.core(),
             places: baseline.places(),
             erased: baseline.erased(),
-            projection: baseline.projection(),
             made: &made,
             dropped: &dropped,
             now: &places,
@@ -261,31 +259,30 @@ pub(crate) fn compile_lowered_over(
     Ok((
         Unit::new(lowered, core.into_module(), anf, traces, certification)
             .reading(readers)
-            .placing(Some(places))
-            .projecting(projection),
+            .placing(Some(places)),
         entry,
     ))
 }
 
-/// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
+/// [`recheck`](crate::recheck) for a unit compiled over `baseline`, with the walk's own kernel: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
-pub(crate) fn recheck_over(
+pub(crate) fn recheck_over<'s>(
     module: &Zonked<Module>,
-    places: &Places,
+    places: &'s Places,
     budget: u64,
-    predecessors: Predecessors<'_>,
+    globals: &'s Globals<'s>,
     Over {
         baseline,
-        moved,
         candidates,
-    }: Over<'_>,
+        ..
+    }: Over<'s>,
     syntax: &SyntaxRegistry,
-) -> Rechecked {
+) -> (Rechecked, Kernel<'s>) {
     certify_module_over(
         module,
         budget,
-        &globals_after(predecessors, moved),
+        globals,
         Baseline {
             module: baseline.core(),
             places: baseline.places(),

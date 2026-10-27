@@ -1,18 +1,22 @@
 //! A reader of certified terms: the kernel's own judgments, for a walk that reads a term this kernel accepted — erasure — and decides nothing of it.
 //!
-//! **Every entry is a judgment the kernel already makes.** Reduction to a head ([`whnf()`]), a term's type ([`infer`]), which half a value of a type is in (the classification the erasure obligations are seeded by, [`erased_half`]), a case put in force as an arm is checked under it, the binders, the frame bracket, the lookups, the budget and what was read. No entry adds a rule, so a reader reads a type by the reduction that accepted the term, and what certification reduced, sorted and classified is remembered for it.
+//! **Every entry is a judgment the kernel already makes.** Reduction to a head, as a judgment that takes a value apart reads it ([`Reader::head`]), a term's type ([`infer`]), which half a value of a type is in (the classification the erasure obligations are seeded by, [`erased_half`]), a case put in force as an arm is checked under it, the binders, the frame bracket, the lookups, the budget and what was read. No entry adds a rule, so a reader reads a type by the reduction that accepted the term, in the environment the walk that certified it built.
 //!
 //! **A reader records nothing of the walk that certified.** Inside [`Kernel::read`] no erased position and no call is recorded, so what the obligations read stays the certification's own. What its lookups and reductions read is noted as any judgment's is, for the reader to take ([`Reader::take_reads`]).
 
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
-    super::{Kernel, enter_arm, enter_case, whnf},
+    super::{Kernel, enter_arm, enter_case},
     crate::{Error, erased_half, infer},
     curios_analysis::Erased,
     curios_core::{
-        Atom, Cost, Free, Global, InductDecl, InductType, Reads, ReduceError, StructDecl, Term,
+        Atom, Cost, Free, Global, InductDecl, InductType, Reads, ReduceError, Reducer, StructDecl,
+        Term, UniverseContext,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -61,6 +65,11 @@ impl<'s> Reader<'_, 's> {
         self.kernel.restore_budget();
     }
 
+    /// Assume the constraints `universes` states, as the kernel assumes a declaration's before it judges the declaration at each assignment of its sorts ([`Kernel::assume_universes`]).
+    pub fn assume_universes(&mut self, universes: &UniverseContext) {
+        self.kernel.assume_universes(universes);
+    }
+
     /// Run `read` in a frame of its own: every binder it opens and every case it puts in force is retracted when it returns, as the kernel's every judgment brackets its own (`Kernel::scoped`).
     pub fn scoped<T>(&mut self, read: impl FnOnce(&mut Reader<'_, 's>) -> T) -> T {
         self.kernel.scoped(|kernel| read(&mut Reader { kernel }))
@@ -76,9 +85,9 @@ impl<'s> Reader<'_, 's> {
         self.kernel.bind(name, type_, value, false);
     }
 
-    /// `term` reduced to its head, by the reduction a judgment of the kernel's runs.
-    pub fn whnf(&mut self, term: &Term) -> Result<Term, ReduceError> {
-        whnf(self.kernel, term.clone())
+    /// `term` reduced to its head as a judgment that takes it apart reads it ([`Reducer::reduce_forced`]): a recursive call unfolded where it is productive, as typing reads a scrutinee's type or a function's.
+    pub fn head(&mut self, term: &Term) -> Result<Term, ReduceError> {
+        self.kernel.reduce_forced(term.clone())
     }
 
     /// The type of `term` ([`infer`]), a type former's being its sort.
@@ -102,12 +111,13 @@ impl<'s> Reader<'_, 's> {
         Ok(erased)
     }
 
-    /// Put the case `value` of `scrutinee` in force, as an arm of a `Bool` or `Switch` elimination is checked under it.
+    /// Put the case `value` of `scrutinee` in force, as an arm of a `Bool` or `Switch` elimination is checked under it: the scrutinee read by value, as typing reads a match's ([`infer`]), so a case equation names no `let`-bound local.
     pub fn case(&mut self, scrutinee: &Term, value: &Term) -> Result<(), Error> {
-        enter_case(self.kernel, scrutinee, value)
+        let (scrutinee, value) = (self.kernel.by_value(scrutinee), self.kernel.by_value(value));
+        enter_case(self.kernel, &scrutinee, &value)
     }
 
-    /// Enter the arm of `tag` in an elimination of `scrutinee`, a value of `family`, with its payload under `binders`, as the arm is checked.
+    /// Enter the arm of `tag` in an elimination of `scrutinee`, a value of `family`, with its payload under `binders`, as the arm is checked: the scrutinee read by value, as [`Reader::case`] reads it.
     pub fn enter_arm(
         &mut self,
         family: &InductType,
@@ -115,7 +125,8 @@ impl<'s> Reader<'_, 's> {
         tag: &Atom,
         binders: &[Free],
     ) -> Result<EnteredArm, Error> {
-        enter_arm(self.kernel, family, scrutinee, tag, binders)
+        let scrutinee = self.kernel.by_value(scrutinee);
+        enter_arm(self.kernel, family, &scrutinee, tag, binders)
     }
 
     /// The `induct` declaration `name`, noted as read.

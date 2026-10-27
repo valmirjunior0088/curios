@@ -4,8 +4,8 @@
 
 use {
     super::{Lowering, Outcome},
-    crate::{Error, emitted},
-    curios_elab::Retyping,
+    crate::{Error, Sorts, emitted},
+    curios_cert::Reader,
     curios_num::Natural,
     curios_utilities::SyntaxName,
 };
@@ -27,7 +27,7 @@ pub type Demanded<'a> = (&'a curios_core::Term, curios_core::Operand);
 /// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`](curios_core::Intrinsic::signature) demands of it.
 ///
 /// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the kernel, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`](curios_core::Intrinsic::bound)) — erasure is where a proof stops existing, and nowhere else has to know.
-fn computed<'a>(context: &Retyping, intrinsic: &'a curios_core::Intrinsic) -> Vec<Demanded<'a>> {
+fn computed<'a>(context: &Reader, intrinsic: &'a curios_core::Intrinsic) -> Vec<Demanded<'a>> {
     let bound = intrinsic.bound();
 
     intrinsic
@@ -41,6 +41,13 @@ fn computed<'a>(context: &Retyping, intrinsic: &'a curios_core::Intrinsic) -> Ve
         .collect()
 }
 
+/// The sorts the family an operation's result names is read at: those of the instance elaboration retained on the operation ([`Intrinsic::result_universes`](curios_core::Intrinsic::result_universes)), and none for an operation whose result family leaves no sort open.
+fn result_sorts(intrinsic: &curios_core::Intrinsic) -> Sorts {
+    intrinsic
+        .result_universes()
+        .map_or(Sorts::NONE, |universes| Sorts::of(&universes.qualities))
+}
+
 /// The operands of an arm that reads each by its place.
 fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] {
     operands
@@ -49,7 +56,7 @@ fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] 
 }
 
 /// The type a demand states. A function's is assembled from its halves under binders minted here, the roster having no name source of its own.
-pub fn demanded_type(context: &mut Retyping, demand: &curios_core::Operand) -> curios_core::Term {
+pub fn demanded_type(context: &mut Reader, demand: &curios_core::Operand) -> curios_core::Term {
     match demand {
         curios_core::Operand::At(type_) => type_.clone(),
         curios_core::Operand::Function { domains, codomain } => {
@@ -66,11 +73,11 @@ pub fn demanded_type(context: &mut Retyping, demand: &curios_core::Operand) -> c
 }
 
 impl Lowering<'_> {
-    /// Resolve an outcome through the declaration's ordinary registered layout.
+    /// Resolve an outcome through the declaration's ordinary registered layout, at the sorts the operation's result states.
     pub fn outcome_constructor(
         &mut self,
-        context: &mut Retyping,
-        family: SyntaxName,
+        context: &mut Reader,
+        (family, sorts): (SyntaxName, Sorts),
         constructor: SyntaxName,
     ) -> Result<curios_anf::ConstructorId, Error> {
         let name = curios_core::Global::Authored(family.qualifier());
@@ -79,7 +86,8 @@ impl Lowering<'_> {
             .expect("erase: registered outcome family")
             .constructor_index(&constructor.last().into())
             .expect("erase: registered outcome constructor");
-        Ok(self.induct_constructor(context, &name, index)?.id)
+        let name = self.named(name, sorts);
+        Ok(self.induct_constructor(context, name, index)?.id)
     }
 
     /// Erase a constant to its interned atom, as the outcome of erasing a term.
@@ -90,7 +98,7 @@ impl Lowering<'_> {
     /// Erase one operand against what the roster demands of it.
     fn demanded(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         (term, demand): &Demanded<'_>,
     ) -> Result<Outcome, Error> {
         let type_ = demanded_type(context, demand);
@@ -100,7 +108,7 @@ impl Lowering<'_> {
     /// Erase a value put into a cell or a channel as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
     fn kept(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         (term, demand): &Demanded<'_>,
     ) -> Result<Outcome, Error> {
         let type_ = demanded_type(context, demand);
@@ -110,7 +118,7 @@ impl Lowering<'_> {
     /// Erase the operands (each against its demand, in order) and bind a scalar operation.
     fn operation(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         operation: curios_anf::Operation,
         operands: &[Demanded<'_>],
         hint: Option<&str>,
@@ -159,7 +167,7 @@ impl Lowering<'_> {
     /// The sequence-family counterpart of [`operation`](Self::operation).
     fn sequence(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         operation: curios_anf::SequenceOp,
         operands: &[Demanded<'_>],
         hint: Option<&str>,
@@ -180,7 +188,7 @@ impl Lowering<'_> {
     /// Transcribe one intrinsic. Every arm reads its operands, and the type each is erased at, off the roster ([`computed`]), and keeps the operation it binds.
     pub(super) fn erase_intrinsic(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         intrinsic: &curios_core::Intrinsic,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -429,8 +437,9 @@ impl Lowering<'_> {
                 let [cell] = places(computed(context, intrinsic));
                 let cell = emitted!(self.demanded(context, &cell)?);
                 let syntax = context.syntax().option;
-                let some = self.outcome_constructor(context, syntax.family, syntax.some)?;
-                let none = self.outcome_constructor(context, syntax.family, syntax.none)?;
+                let family = (syntax.family, result_sorts(intrinsic));
+                let some = self.outcome_constructor(context, family, syntax.some)?;
+                let none = self.outcome_constructor(context, family, syntax.none)?;
                 self.thunk(hint.or(Some("io/cell_poll")), move |lowering| {
                     Ok(lowering.bind(
                         None,
@@ -459,9 +468,10 @@ impl Lowering<'_> {
                 let channel = emitted!(self.demanded(context, &channel)?);
                 let value = emitted!(self.kept(context, &value)?);
                 let syntax = context.syntax().channel;
-                let taken = self.outcome_constructor(context, syntax.push, syntax.taken)?;
-                let full = self.outcome_constructor(context, syntax.push, syntax.full)?;
-                let closed = self.outcome_constructor(context, syntax.push, syntax.closed)?;
+                let push = (syntax.push, result_sorts(intrinsic));
+                let taken = self.outcome_constructor(context, push, syntax.taken)?;
+                let full = self.outcome_constructor(context, push, syntax.full)?;
+                let closed = self.outcome_constructor(context, push, syntax.closed)?;
                 self.thunk(hint.or(Some("io/channel_push")), move |lowering| {
                     Ok(lowering.bind(
                         None,
@@ -480,9 +490,10 @@ impl Lowering<'_> {
                 let [channel] = places(computed(context, intrinsic));
                 let channel = emitted!(self.demanded(context, &channel)?);
                 let syntax = context.syntax().channel;
-                let item = self.outcome_constructor(context, syntax.take, syntax.item)?;
-                let empty = self.outcome_constructor(context, syntax.take, syntax.empty)?;
-                let ended = self.outcome_constructor(context, syntax.take, syntax.ended)?;
+                let take = (syntax.take, result_sorts(intrinsic));
+                let item = self.outcome_constructor(context, take, syntax.item)?;
+                let empty = self.outcome_constructor(context, take, syntax.empty)?;
+                let ended = self.outcome_constructor(context, take, syntax.ended)?;
                 self.thunk(hint.or(Some("io/channel_take")), move |lowering| {
                     Ok(lowering.bind(
                         None,

@@ -6,9 +6,9 @@
 
 use {
     super::{Demanded, Lowering, Outcome, demanded_type, narrow_case_key},
-    crate::{Error, emitted, is_erasable},
+    crate::{Error, Sorts, emitted, is_erasable, reduced, refine},
     curios_analysis::{case_target_indices, pinned_by_targets},
-    curios_elab::{InductCase, Retyping},
+    curios_cert::Reader,
     curios_num::{Binary, Natural},
     std::collections::HashMap,
 };
@@ -103,29 +103,27 @@ struct Site<'a> {
 struct InductMatch<'a> {
     head: &'a curios_core::Term,
     result: &'a curios_core::MatchResult,
-    name: &'a curios_core::Global,
-    universes: &'a curios_core::Universes,
-    params: &'a [curios_core::Term],
-    actual_indices: &'a [curios_core::Term],
+    /// The scrutinee's type, the family at its universes, parameters and actual indices.
+    family: &'a curios_core::InductType,
 }
 
 impl InductMatch<'_> {
     /// The scrutinee's family as the registry holds it, read by reference.
-    fn family<'c>(&self, context: &'c Retyping) -> &'c curios_core::InductDecl {
+    fn family<'c>(&self, context: &'c Reader) -> &'c curios_core::InductDecl {
         context
-            .induct_decl(self.name)
+            .induct_decl(&self.family.name)
             .expect("erase: scrutinee type names a registered inductive")
     }
 
     /// The payload of `tag`'s case at the scrutinee's parameters and universes: that one constructor of the family instantiated.
     fn payload(
         &self,
-        context: &Retyping,
+        context: &Reader,
         tag: &curios_core::Atom,
     ) -> Result<curios_core::Telescope<Vec<curios_core::Term>>, Error> {
         self.family(context)
-            .at(self.universes)
-            .payload(tag, self.params)
+            .at(&self.family.universes)
+            .payload(tag, &self.family.params)
             .expect("erase: constructor instantiates at its inductive's parameters")
             .map_err(Error::from)
     }
@@ -135,7 +133,7 @@ impl Lowering<'_> {
     /// Erase a match by its elimination form.
     pub fn erase_match(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         m: &curios_core::Match,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -192,7 +190,7 @@ impl Lowering<'_> {
     /// Erase the scrutinee exactly once. A variable head passes through; a compound head is walked once, then aliased on the Core side — a fresh variable defined as the head, mapped to the erased operand — so every Core term later re-derived from the head resolves to the same operand.
     fn scrutinee_operand(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         head: &curios_core::Term,
         head_type: &curios_core::Term,
     ) -> Result<Result<(curios_core::Term, curios_anf::Atom), Outcome>, Error> {
@@ -204,7 +202,7 @@ impl Lowering<'_> {
             return Ok(Ok((head.clone(), atom)));
         }
         let name = context.fresh(None);
-        context.define_assuming(&name, head_type, head, None);
+        context.bind(&name, head_type, head);
         self.environment.bind(&name, atom);
         Ok(Ok((curios_core::Term::free_var(&name), atom)))
     }
@@ -212,7 +210,7 @@ impl Lowering<'_> {
     /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at the result at `value`, and seal it — the leaf-arm shape with no payload binders.
     fn refined_arm(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         head: &curios_core::Term,
         value: &curios_core::Term,
         result: &curios_core::MatchResult,
@@ -220,9 +218,9 @@ impl Lowering<'_> {
     ) -> Result<curios_anf::BlockId, Error> {
         let expected = result.at(head, &[], &[], value);
         self.builder.open_block();
-        let outcome = context.with_frame(|context| {
-            context.refine_head(head, value)?;
-            self.walk(context, body, &expected, None)
+        let outcome = self.in_arm(context, |lowering, context| {
+            refine(context, head, value)?;
+            lowering.walk(context, body, &expected, None)
         })?;
         Ok(self.seal(outcome))
     }
@@ -230,7 +228,7 @@ impl Lowering<'_> {
     /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, `List/fold`'s initial value, and a fold's identity arm, which a value of either case takes in the end.
     fn open_arm(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         expected: &curios_core::Term,
         body: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
@@ -242,7 +240,7 @@ impl Lowering<'_> {
     /// The identity arm of a free-monoid elimination, at the carrier's empty `value`: a case split's refined by `head = value`, a fold's under no refinement — each as it was elaborated (`check_fold_arm`).
     fn identity_arm(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         head: &curios_core::Term,
         value: &curios_core::Term,
         result: &curios_core::MatchResult,
@@ -258,7 +256,7 @@ impl Lowering<'_> {
     /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct from a `Nat` dispatch.
     fn erase_bool(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         site: Site<'_>,
         false_case: &curios_core::Term,
         true_case: &curios_core::Term,
@@ -296,7 +294,7 @@ impl Lowering<'_> {
     /// A sparse `Nat` dispatch — `SwitchNat`: each case refines the scrutinee to its key; the default sees the unrefined head.
     fn erase_switch(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         site: Site<'_>,
         cases: &[(Natural, curios_core::Term)],
         default: &curios_core::Term,
@@ -337,7 +335,7 @@ impl Lowering<'_> {
     /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, a single-key dispatch whose default computes the predecessor from the erased operand. A case split's successor arm is erased under `head = pred + 1`, the refinement it was elaborated under, and a fold's arms under none, as they were.
     fn erase_nat_fold(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         site: Site<'_>,
         empty_case: &curios_core::Term,
         cons_case: &curios_core::Scope<curios_core::Two>,
@@ -370,26 +368,27 @@ impl Lowering<'_> {
         // The hypothesis is dead: a case split, not a fold. The predecessor is computed from the operand, and only where the arm reads it — the walk resolves a name through the environment and never walks a reduct, so a predecessor the arm does not mention needs no value.
         if !cons_case.uses(1) {
             self.builder.open_block();
-            let outcome = context.with_frame(|context| {
+            let outcome = self.in_arm(context, |lowering, context| {
                 context.assume(
                     &pred_label,
                     &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
                 );
                 if cons_case.uses(0) {
                     let one = curios_anf::Atom::Constant(
-                        self.builder
+                        lowering
+                            .builder
                             .constant(curios_anf::Constant::Nat(Natural::one())),
                     );
-                    let predecessor = emitted!(self.bind(
+                    let predecessor = emitted!(lowering.bind(
                         pred_hint.as_deref(),
                         curios_anf::Rhs::Operation {
                             operation: curios_anf::Operation::NatSub,
                             operands: vec![scrutinee, one],
                         },
                     ));
-                    self.environment.bind(&pred_label, predecessor);
+                    lowering.environment.bind(&pred_label, predecessor);
                 }
-                context.refine_head(head, &successor)?;
+                refine(context, head, &successor)?;
 
                 // The hypothesis never appears, so any term serves its slot.
                 let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
@@ -397,7 +396,7 @@ impl Lowering<'_> {
                 ));
                 let peeled = cons_case.open(&[&pred_var, &dead_hypothesis]);
                 let expected = result.at(head, &[], &[], &successor);
-                self.walk(context, &peeled, &expected, None)
+                lowering.walk(context, &peeled, &expected, None)
             })?;
             let default = self.seal(outcome);
 
@@ -425,7 +424,7 @@ impl Lowering<'_> {
             .bind(&hypothesis_label, curios_anf::Atom::Value(hypothesis));
 
         self.builder.open_block();
-        let outcome = context.with_frame(|context| {
+        let outcome = context.scoped(|context| {
             context.assume(
                 &pred_label,
                 &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
@@ -458,7 +457,7 @@ impl Lowering<'_> {
     /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
     pub fn erase_list_fold(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         element: &curios_core::Term,
         result: &curios_core::Term,
         [
@@ -501,7 +500,7 @@ impl Lowering<'_> {
             .bind(&accumulator_label, curios_anf::Atom::Value(hypothesis));
 
         self.builder.open_block();
-        let outcome = context.with_frame(|context| {
+        let outcome = context.scoped(|context| {
             context.assume(&index_label, &nat_type);
             context.assume(&accumulator_label, result);
 
@@ -540,7 +539,7 @@ impl Lowering<'_> {
     /// A `List`/`Bytes` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-anf`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
     fn erase_seq_fold(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         site: Site<'_>,
         carrier: SeqCarrier<'_>,
         empty_case: &curios_core::Term,
@@ -580,16 +579,16 @@ impl Lowering<'_> {
                 .bind(&suffix_label, curios_anf::Atom::Value(suffix));
 
             self.builder.open_block();
-            let outcome = context.with_frame(|context| {
+            let outcome = self.in_arm(context, |lowering, context| {
                 let element_var = curios_core::Term::free_var(&element_label);
                 let suffix_var = curios_core::Term::free_var(&suffix_label);
                 context.assume(&element_label, &carrier.element_type());
                 // An element is a read no producer names the carrier of, so it states the register its element type names.
-                self.state(context, element, &carrier.element_type())?;
+                lowering.state(context, element, &carrier.element_type())?;
                 context.assume(&suffix_label, &head_type);
 
                 let cons_value = carrier.cons_value(&element_var, &suffix_var);
-                context.refine_head(head, &cons_value)?;
+                refine(context, head, &cons_value)?;
 
                 // The hypothesis never appears, so any term serves its slot.
                 let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
@@ -597,7 +596,7 @@ impl Lowering<'_> {
                 ));
                 let peeled = cons_case.open(&[&element_var, &suffix_var, &dead_hypothesis]);
                 let expected = result.at(head, &[], &[], &cons_value);
-                self.walk(context, &peeled, &expected, None)
+                lowering.walk(context, &peeled, &expected, None)
             })?;
             let cons_block = self.seal(outcome);
 
@@ -633,7 +632,7 @@ impl Lowering<'_> {
             .bind(&accumulator_label, curios_anf::Atom::Value(accumulator));
 
         self.builder.open_block();
-        let outcome = context.with_frame(|context| {
+        let outcome = context.scoped(|context| {
             let element_var = curios_core::Term::free_var(&element_label);
             let suffix_var = curios_core::Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
@@ -673,7 +672,7 @@ impl Lowering<'_> {
     /// A nominal inductive elimination — a schema-carrying `MatchVariant` whose arms bind the payload positionally. A constructor with no arm is covered by the default or, absent one, trapped by an `Unreachable` arm; an erasable (proof/type) scrutinee has no runtime tag and reduces to its single live arm. A vacuous elimination (no arms, no default) is unreachable code and diverges without erasing the head.
     fn erase_induct(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         site: Site<'_>,
         cases: &[(curios_core::Atom, curios_core::InductArm)],
         default: Option<&curios_core::Term>,
@@ -684,28 +683,16 @@ impl Lowering<'_> {
         }
 
         let head_type = self.type_of(context, head)?;
-        let head_type = context.reduce_with(&head_type)?;
-        let (name, universes, params, actual_indices) = match &*head_type {
-            curios_core::Subterm::InductType(curios_core::InductType {
-                name,
-                universes,
-                params,
-                indices,
-            }) => (*name, universes.clone(), params.clone(), indices.clone()),
-            _ => unreachable!("erase: inductive match scrutinee checked by elaborate"),
+        let head_type = reduced(context, &head_type)?;
+        let curios_core::Subterm::InductType(family) = &*head_type else {
+            unreachable!("erase: inductive match scrutinee checked by elaborate")
         };
-        // The family's constraints instantiated where the scrutinee stands, once: each arm then reads its one constructor at these universes ([`InductMatch::payload`]).
-        context
-            .induct_facet(&name, &universes, |_| Ok(()))
-            .expect("erase: scrutinee type names a registered inductive")?;
-
+        // Each arm reads its one constructor at the scrutinee's universes ([`InductMatch::payload`]), and the row is the family's at the sorts they state.
+        let name = self.named(family.name, Sorts::of(&family.universes.qualities));
         let m = InductMatch {
             head,
             result,
-            name: &name,
-            universes: &universes,
-            params: &params,
-            actual_indices: &actual_indices,
+            family,
         };
 
         // A proof/type scrutinee carries no runtime tag; its subsingleton elimination reduces to its single live arm, erased inline.
@@ -713,7 +700,7 @@ impl Lowering<'_> {
             return self.erase_erasable_scrutinee(context, &m, cases, default);
         }
 
-        let family = self.induct_family(context, &name)?;
+        let family = self.induct_family(context, name)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         // Each arm found by its tag once, rather than the arms searched again at every constructor: a match of many cases erases in its size.
@@ -741,20 +728,13 @@ impl Lowering<'_> {
         let mut arms = Vec::new();
         for (index, tag) in &walked {
             let arm = by_tag.get(tag).copied();
-            let row = self.induct_constructor(context, &name, *index)?;
+            let row = self.induct_constructor(context, name, *index)?;
             let (constructor, mask) = (row.id, row.mask);
             match arm {
                 Some(arm) => {
-                    let telescope = m.payload(context, tag)?;
                     // Erasure opens the arm positionally; plicity is irrelevant.
-                    let arm = self.variant_arm(
-                        context,
-                        &m,
-                        (tag, &arm.body),
-                        telescope,
-                        &mask,
-                        constructor,
-                    )?;
+                    let arm =
+                        self.variant_arm(context, &m, (tag, &arm.body), &mask, constructor)?;
                     arms.push(arm);
                 }
                 // A missing constructor without a default is provably impossible: an `Unreachable` arm, still declaring its payload binders to satisfy the constructor's arity.
@@ -793,10 +773,9 @@ impl Lowering<'_> {
     /// One constructor arm: bind its payload (a kept field to a fresh value in payload order, an erased field to the unit constant), refine the scrutinee and indices, and erase the body as a tail at the opened motive.
     fn variant_arm(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         m: &InductMatch<'_>,
         (tag, scope): (&curios_core::Atom, &curios_core::Scope<curios_core::Many>),
-        telescope: curios_core::Telescope<Vec<curios_core::Term>>,
         mask: &[bool],
         constructor: curios_anf::ConstructorId,
     ) -> Result<curios_anf::VariantArm, Error> {
@@ -828,15 +807,18 @@ impl Lowering<'_> {
         }
 
         self.builder.open_block();
-        let outcome = context.with_frame(|context| {
-            let expected = refine_arm(context, m, tag, &labels, &vars, telescope)?;
+        let outcome = self.in_arm(context, |lowering, context| {
+            // An arm whose case the indices rule out is one the kernel typed nothing of, and one no value reaches.
+            let Some(expected) = refine_arm(context, m, tag, &labels, &vars)? else {
+                return Ok(Outcome::Diverged(curios_anf::Terminator::Unreachable));
+            };
             // A payload is a read no producer names the carrier of — a polymorphic slot hands back a reference — so each binder states the register its type names at this instantiation, which the arm's frame now assumes.
             for (var, value) in &kept {
-                let type_ = self.type_of(context, var)?;
-                self.state(context, *value, &type_)?;
+                let type_ = lowering.type_of(context, var)?;
+                lowering.state(context, *value, &type_)?;
             }
             let body = scope.open(&vars.iter().collect::<Vec<_>>());
-            self.walk(context, &body, &expected, None)
+            lowering.walk(context, &body, &expected, None)
         })?;
         let block = self.seal(outcome);
 
@@ -850,18 +832,18 @@ impl Lowering<'_> {
     /// The catch-all default: binds nothing and sees the unrefined head, so the result is taken at the match's actual indices and head.
     fn default_arm(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         m: &InductMatch<'_>,
         default: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
-        let expected = m.result.of(m.head, m.actual_indices);
+        let expected = m.result.of(m.head, &m.family.indices);
         self.open_arm(context, &expected, default)
     }
 
     /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. The head is never erased (it is a dropped value), and neither is the constructor it stood for, so a payload binder the index targets pin resolves to the scrutinee's actual index at the position that pins it, which is every payload of a match into data. One no index pins is met only in a match into a proposition, whose value nothing reads, and is the unit constant.
     fn erase_erasable_scrutinee(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         m: &InductMatch<'_>,
         cases: &[(curios_core::Atom, curios_core::InductArm)],
         default: Option<&curios_core::Term>,
@@ -869,7 +851,7 @@ impl Lowering<'_> {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
             let default = default.expect("erase: erasable match with no arms has a default");
-            let expected = m.result.of(m.head, m.actual_indices);
+            let expected = m.result.of(m.head, &m.family.indices);
             return self.walk(context, default, &expected, None);
         };
 
@@ -888,7 +870,7 @@ impl Lowering<'_> {
         for (label, hint) in labels.iter().zip(scope.hint_iter()) {
             let atom = match pinned.position(label) {
                 Some(position) => {
-                    let index = &m.actual_indices[position];
+                    let index = &m.family.indices[position];
                     let index_type = self.type_of(context, index)?;
                     match is_erasable(context, &index_type)? {
                         true => self.unit(),
@@ -900,36 +882,53 @@ impl Lowering<'_> {
             self.environment.bind(label, atom);
         }
 
-        context.with_frame(|context| {
-            let expected = refine_arm(context, m, tag, &labels, &vars, telescope)?;
+        self.in_arm(context, |lowering, context| {
+            let Some(expected) = refine_arm(context, m, tag, &labels, &vars)? else {
+                return Ok(Outcome::Diverged(curios_anf::Terminator::Unreachable));
+            };
             let body = scope.open(&vars.iter().collect::<Vec<_>>());
-            self.walk(context, &body, &expected, None)
+            lowering.walk(context, &body, &expected, None)
         })
+    }
+
+    /// Run `arm` in a frame of its own, as an arm whose case it puts in force is checked, with none of the types kept for the item in hand ([`Lowering::types`]): there the kernel binds a variable the case solves to its value and reads every type by value, so a type read outside the arm is not the one the kernel reads in it, and one read under the case is not the walk's once the arm is left.
+    fn in_arm<T>(
+        &mut self,
+        context: &mut Reader,
+        arm: impl FnOnce(&mut Self, &mut Reader) -> T,
+    ) -> T {
+        let outer = std::mem::take(&mut self.types);
+        let outcome = context.scoped(|context| arm(self, context));
+        self.types = outer;
+
+        outcome
     }
 }
 
-/// Enter the arm of `tag` as it was elaborated ([`Retyping::enter_induct_case`]) and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
+/// Enter the arm of `tag`, its payload under `labels`, as the kernel checked it, and hand back the arm body's expected type: `None` where the scrutinee's indices rule the case out, which the kernel typed nothing of. Typing-only: it touches the reader's frame and emits nothing.
 fn refine_arm(
-    context: &mut Retyping,
+    context: &mut Reader,
     m: &InductMatch<'_>,
     tag: &curios_core::Atom,
     labels: &[curios_core::Free],
     vars: &[curios_core::Term],
-    telescope: curios_core::Telescope<Vec<curios_core::Term>>,
-) -> Result<curios_core::Term, Error> {
-    let family = InductCase {
-        name: m.name,
-        universes: m.universes,
-        params: m.params,
-        actual_indices: m.actual_indices,
-    };
-    let (target_indices, constructor_value) =
-        context.enter_induct_case(m.head, family, tag, (labels, vars), telescope)?;
+) -> Result<Option<curios_core::Term>, Error> {
+    debug_assert_eq!(
+        labels.len(),
+        vars.len(),
+        "a binder for each payload variable"
+    );
+    let entered = context
+        .enter_arm(m.family, m.head, tag, labels)
+        .map_err(|refusal| Error::reading(m.head, refusal))?;
+    if entered.ruled_out {
+        return Ok(None);
+    }
 
-    Ok(m.result.at(
+    Ok(Some(m.result.at(
         m.head,
-        m.actual_indices,
-        &target_indices,
-        &constructor_value,
-    ))
+        &m.family.indices,
+        &entered.targets,
+        &entered.value,
+    )))
 }

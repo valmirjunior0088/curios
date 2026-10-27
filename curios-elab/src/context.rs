@@ -41,9 +41,6 @@ mod traced;
 use traced::*;
 pub use traced::{Answered, Question};
 
-mod retyping;
-pub use retyping::*;
-
 mod solutions;
 use solutions::*;
 pub use solutions::{

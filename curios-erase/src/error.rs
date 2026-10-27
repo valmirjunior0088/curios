@@ -1,6 +1,8 @@
-//! What erasure refuses a program for, and what its reader refused it for.
+//! What erasure refuses a program for.
 //!
-//! **Erasure's own refusals are what only the erased program shows.** Two recursion rules `curios-anf`'s verifier holds a fragment to — values whose initializers evaluate one another, and an initializer that performs an effect — each named by the source names erasure minted the verifier's identities for, and a natural case key past what a branch table holds. Everything else erasure is refused for is its reader's, wrapped as the reader raised it and reported in the reader's words: a type the reader could not read, a budget it spent.
+//! **Erasure's refusals are what only erasing the program shows.** Two recursion rules `curios-anf`'s verifier holds a fragment to — values whose initializers evaluate one another, and an initializer that performs an effect — each named by the source names erasure minted the verifier's identities for; a natural case key past what a branch table holds; and the budget erasing an item spends, run out on a term it was reading. Each is worded as erasure's: the program was certified, and only erasing it stopped.
+//!
+//! **Anything else the kernel refuses of a term erasure reads is a fault of the compiler's**, since the kernel certified the term: reported as a term erasure could not read, with the kernel's refusal beneath it, and never as the kernel's verdict on the program.
 
 use {
     crate::ErasedNames,
@@ -31,8 +33,16 @@ impl ErasedName {
 /// Why erasure refused a program.
 #[derive(Debug)]
 pub enum Error {
-    /// What erasure's reader refused, as it raised it.
-    Reading(Box<curios_elab::Error>),
+    /// The budget erasing an item spends, run out on reading `term`: the refused charge, as the kernel's reduction states it.
+    Exhausted {
+        term: Box<curios_core::Term>,
+        refusal: curios_core::ReduceError,
+    },
+    /// A term the kernel certified and refused when erasure read it, with what it refused: a fault of the compiler's. `term` is absent where what was read is a declaration at an instance rather than a term.
+    Unreadable {
+        term: Option<Box<curios_core::Term>>,
+        refusal: Box<curios_cert::Error>,
+    },
     /// Computed recursive members whose initializers evaluate one another, so no order of forcing them by need can initialize them. Each step is a member by its source name and the call it reads the next member through, when the read goes through one; a single step is a member evaluating itself.
     EvaluationCycle {
         steps: Vec<(ErasedName, Option<ErasedName>)>,
@@ -53,17 +63,34 @@ pub enum Error {
 
 impl From<curios_core::UniverseError> for Error {
     fn from(error: curios_core::UniverseError) -> Self {
-        curios_elab::Error::from(error).into()
-    }
-}
-
-impl From<curios_elab::Error> for Error {
-    fn from(error: curios_elab::Error) -> Self {
-        Self::Reading(Box::new(error))
+        Self::Unreadable {
+            term: None,
+            refusal: Box::new(error.into()),
+        }
     }
 }
 
 impl Error {
+    /// What the kernel refused while erasure read `term`: the budget's exhaustion, erasure's own, and anything else a fault.
+    pub fn reading(term: &curios_core::Term, refusal: curios_cert::Error) -> Self {
+        use curios_core::Exhaustion;
+        match refusal.refusal() {
+            Some(exhausted) => Self::Exhausted {
+                term: Box::new(term.clone()),
+                refusal: exhausted.clone(),
+            },
+            None => Self::Unreadable {
+                term: Some(Box::new(term.clone())),
+                refusal: Box::new(refusal),
+            },
+        }
+    }
+
+    /// [`Error::reading`] for a refusal of the kernel's reduction.
+    pub fn reducing(term: &curios_core::Term, refusal: curios_core::ReduceError) -> Self {
+        Self::reading(term, refusal.into())
+    }
+
     pub fn nat_case_key_overflow(value: Natural) -> Self {
         Self::NatCaseKeyOverflow { value }
     }
@@ -117,10 +144,9 @@ impl Error {
         }
     }
 
-    /// Record where this error arose: the first extent stamped wins, as the elaborator's does, and a reader's error is stamped as the reader's own.
+    /// Record where this error arose: the first extent stamped wins, as the elaborator's does.
     pub fn at(self, extent: curios_core::Extent) -> Self {
         match self {
-            Self::Reading(error) => Self::Reading(Box::new(error.at(extent))),
             Self::Located { .. } => self,
             error => Self::Located {
                 extent,
@@ -141,17 +167,16 @@ impl Error {
         Report::render_all(&self.reports(reading))
     }
 
-    /// This error as its reports: a reader's error as the reader reports it, and one of erasure's own as one report at its extent, spelled for a reader standing outside every declaration.
+    /// This error as its reports: one at its extent, spelled for a reader standing outside every declaration.
     pub fn reports(&self, reading: &Reading<'_>) -> Vec<Report> {
         let (extent, refusal) = match self {
-            Self::Reading(error) => return error.reports(reading),
             Self::Located { extent, error } => (Some(extent), &**error),
             refusal => (None, refusal),
         };
-        let spelling = reading.spelling().for_reader(curios_core::ReaderPosition {
+        let spelling = Rc::new(reading.spelling().for_reader(curios_core::ReaderPosition {
             owner: None,
             witnesses: Rc::default(),
-        });
+        }));
 
         vec![Report {
             span: extent.and_then(|extent| extent.resolved(reading.anchors)),
@@ -161,8 +186,31 @@ impl Error {
     }
 
     /// The sentence one of erasure's own refusals says.
-    fn message(&self, spelling: &curios_core::Spelling) -> String {
+    fn message(&self, spelling: &Rc<curios_core::Spelling>) -> String {
         match self {
+            Self::Exhausted { term, refusal } => {
+                let spent = match refusal {
+                    curios_core::ReduceError::Exhausted {
+                        category,
+                        remaining,
+                        attempted,
+                    } => format!("\n  {category} needed {attempted} units with {remaining} left"),
+                    _ => String::new(),
+                };
+                format!(
+                    "erasure ran out of steps reading: {}{spent}",
+                    term.spelled(spelling)
+                )
+            }
+            Self::Unreadable { term, refusal } => match term {
+                Some(term) => format!(
+                    "compiler fault: erasure could not read {}, which the kernel certified\n  the kernel refused it: {refusal}",
+                    term.spelled(spelling)
+                ),
+                None => format!(
+                    "compiler fault: erasure could not read a declaration at its instance, which the kernel certified\n  the kernel refused it: {refusal}"
+                ),
+            },
             Self::NatCaseKeyOverflow { value } => {
                 format!("natural dispatch key {value} does not fit a branch table")
             }
@@ -208,8 +256,8 @@ impl Error {
                     member.spelled(spelling)
                 )
             }
-            Self::Reading(_) | Self::Located { .. } => {
-                unreachable!("a reader's error and a location are reported through what they hold")
+            Self::Located { .. } => {
+                unreachable!("a location is reported through what it holds")
             }
         }
     }
@@ -217,7 +265,7 @@ impl Error {
     /// The further places one of erasure's own refusals is about: a value read where it evaluates itself is written in its declaration.
     fn notes(
         &self,
-        spelling: &curios_core::Spelling,
+        spelling: &Rc<curios_core::Spelling>,
         anchors: &[&curios_core::Anchors],
     ) -> Vec<Note> {
         match self {

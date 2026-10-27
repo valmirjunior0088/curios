@@ -4,10 +4,7 @@ use {
     super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
-    curios_cert::{
-        Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
-        recheck_program_measured,
-    },
+    curios_cert::{Globals, Kernel, Verdict, certify_module, certify_program},
     curios_core::{
         Anchors, Consumption, Free, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program,
         Rec, Row, Subterm, Term, Transient, Zonked,
@@ -182,20 +179,12 @@ pub fn recheck(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> Vec<Verdict> {
-    certify_program(program, budget, &globals(predecessors), *syntax).verdicts
+    certify_program(program, budget, &globals(predecessors), *syntax)
+        .0
+        .verdicts
 }
 
-/// The kernel's walk over one unit, with the record it leaves of what it concluded — what a unit files beside its definitions for a later walk to read. See `curios_cert::certify_module`.
-pub(crate) fn certify(
-    module: &curios_core::Zonked<curios_core::Module>,
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-) -> Rechecked {
-    certify_module(module, budget, &globals(predecessors), *syntax)
-}
-
-/// [`recheck`], handing the walk's own kernel to `read` for a measurement to take what it wants of it rather than only its verdicts. See `curios_cert::recheck_program_measured`.
+/// [`recheck`], handing the walk's own kernel to `read` for a measurement to take what it wants of it rather than only its verdicts. See `curios_cert::certify_program`.
 ///
 /// A reader rather than the kernel handed back: the kernel reads its scope where the units hold it, so it lives no longer than the environment assembled here.
 pub fn recheck_measured<T>(
@@ -206,7 +195,7 @@ pub fn recheck_measured<T>(
     read: impl FnOnce(&Kernel<'_>) -> T,
 ) -> (Vec<Verdict>, T) {
     let globals = globals(predecessors);
-    let (rechecked, kernel) = recheck_program_measured(program, budget, &globals, *syntax);
+    let (rechecked, kernel) = certify_program(program, budget, &globals, *syntax);
 
     (rechecked.verdicts, read(&kernel))
 }
@@ -271,7 +260,7 @@ fn refusal_read(
     )
 }
 
-/// What erasure refused `module` with: what its reader refused, as [`elaborator_refusal`] reports the elaborator's error, and a refusal of its own as the one report it is.
+/// What erasure refused `module` with, as the one report each of its refusals is: in erasure's words, the program having been certified.
 pub(crate) fn erasure_refusal(
     error: &curios_erase::Error,
     module: &curios_core::Module,
@@ -280,20 +269,15 @@ pub(crate) fn erasure_refusal(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    match error {
-        curios_erase::Error::Reading(error) => {
-            elaborator_refusal(error, module, lexicons, text, predecessors, syntax)
-        }
-        refusal => read_for_report(
-            module,
-            None,
-            lexicons,
-            text,
-            predecessors,
-            syntax,
-            |reading| CompileError::Failure(refusal.reports(reading)),
-        ),
-    }
+    read_for_report(
+        module,
+        None,
+        lexicons,
+        text,
+        predecessors,
+        syntax,
+        |reading| CompileError::Failure(error.reports(reading)),
+    )
 }
 
 /// `report` over the reading a refusal of `module` is spelled and placed by: its unit's names spelled as resolution reaches them from the reader's place, and its positions placed in the files they were written in.
@@ -934,13 +918,15 @@ impl Entered {
             .collect::<Vec<_>>();
         let scope = Predecessors::over(&units);
         let cores = scope.cores();
-        let kept = scope.projected();
+        let places = scope.places();
         let erased = scope.erased();
+        // Erased through the kernel that judges the term: put to it again over the same scope, since the walk that certified it when it was entered keeps no kernel past itself, and a program's module holds nothing else to judge.
+        let globals = globals(scope);
+        let (_, mut kernel) = certify_program(&self.program, budget, &globals, *syntax);
 
         let mut linked = erase_program(
-            budget,
-            *syntax,
-            Erasures::of(&cores, &erased).keeping(&kept),
+            &mut kernel,
+            Erasures::of(&cores, &places, &erased),
             &self.program,
         )
         .map_err(|error| {
@@ -1181,7 +1167,7 @@ fn judged(
     // The independent kernel's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
     let rechecked = {
         curios_profile::profile!("recheck");
-        certify_program(&program, budget, &globals(scope), *syntax)
+        certify_program(&program, budget, &globals(scope), *syntax).0
     };
     if let Some(verdict) = rechecked.verdicts.first() {
         let refusal = verdict.format_with(&program.as_program().module, &scope.lexicons(), syntax);
@@ -1238,7 +1224,7 @@ pub fn examine_entrypoint(
     // The independent kernel's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
     let rechecked = {
         curios_profile::profile!("recheck");
-        certify_program(&program, budget, &globals(predecessors), *syntax)
+        certify_program(&program, budget, &globals(predecessors), *syntax).0
     };
 
     Ok(Examined {
@@ -1372,16 +1358,18 @@ pub(crate) fn compile_lowered(
     let core = Zonked::project(&core)
         .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
-    let rechecked = certify(&core, budget, predecessors, syntax);
+    // The unit is erased through the kernel that certified it.
+    let globals = globals(predecessors);
+    let (rechecked, mut kernel) = certify_module(&core, budget, &globals, *syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
     }
 
-    let kept = predecessors.projected();
+    let places = predecessors.places();
     let erased = predecessors.erased();
-    let scope = Erasures::of(&cores, &erased).keeping(&kept).fixed(&fixed);
-    let anf = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
+    let scope = Erasures::of(&cores, &places, &erased).fixed(&fixed);
+    let anf = erase_unit(&mut kernel, scope, &core).map_err(|error| {
         let refusal = erasure_refusal(
             &error,
             core.as_module(),

@@ -683,7 +683,7 @@ impl<'m> Verifier<'m> {
                 operands,
             } => {
                 if let CellOperation::Poll { some, none } = operation {
-                    self.outcome(some, 1)?;
+                    self.holding(some)?;
                     self.outcome(none, 0)?;
                 }
                 if operands.len() != operation.arity() {
@@ -715,7 +715,7 @@ impl<'m> Verifier<'m> {
                         }
                     }
                     ChannelOperation::Take { item, empty, ended } => {
-                        self.outcome(item, 1)?;
+                        self.holding(item)?;
                         self.outcome(empty, 0)?;
                         self.outcome(ended, 0)?;
                     }
@@ -1143,6 +1143,18 @@ impl<'m> Verifier<'m> {
             .module
             .constructor_count(id)
             .expect("a live family has a count"))
+    }
+
+    /// An outcome that holds the operation's value: a field for it where its row keeps one, and none where the row keeps none, the value being a proof there.
+    fn holding(&self, id: ConstructorId) -> Result<(), StructuralFault> {
+        let width = self.constructor(id)?.width();
+        if width > 1 {
+            return Err(fault(
+                StructuralRule::ConstructorWidth,
+                format!("operation hands {id} its one value; its payload width is {width}"),
+            ));
+        }
+        Ok(())
     }
 
     fn outcome(&self, id: ConstructorId, payload: usize) -> Result<(), StructuralFault> {

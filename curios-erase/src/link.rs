@@ -12,24 +12,24 @@
 
 use {
     crate::{
-        Binding, Environment, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures, Error,
-        Export,
+        AtSorts, Binding, Environment, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit,
+        Erasures, Error, Export, Origin, Sorts,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// A program under construction: the module, and where each name and each schema linked so far landed.
+/// A program under construction: the module, and where each name and each schema linked so far landed, by the name and the sorts of the form that declares it.
 #[derive(Default)]
 pub struct Linking {
     module: curios_anf::Module,
-    bound: BTreeMap<curios_core::Global, curios_anf::Atom>,
-    /// The name each value and each function a linked item bound is declared under: the first to bind it, which is the item that defines it, since an item that hands another's name on is linked after it.
-    values: BTreeMap<curios_anf::ValueId, curios_core::Global>,
-    functions: BTreeMap<curios_anf::FunctionId, curios_core::Global>,
-    /// The functions a linked item bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
+    bound: BTreeMap<AtSorts, curios_anf::Atom>,
+    /// The name and sorts each value and each function a linked form bound is declared under: the first to bind it, which is the form that defines it, since a form that hands another's name on is linked after it.
+    values: BTreeMap<curios_anf::ValueId, AtSorts>,
+    functions: BTreeMap<curios_anf::FunctionId, AtSorts>,
+    /// The functions a linked form bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
     computed: BTreeSet<curios_anf::FunctionId>,
-    structs: BTreeMap<curios_core::Global, curios_anf::ProductId>,
-    families: BTreeMap<curios_core::Global, curios_anf::FamilyId>,
+    structs: BTreeMap<AtSorts, curios_anf::ProductId>,
+    families: BTreeMap<AtSorts, curios_anf::FamilyId>,
     tuples: BTreeMap<usize, curios_anf::ProductId>,
     /// Whether a row a fragment imports and no linked item declares is the module's import, where a program links every row it names from its declaration: an evaluation's.
     imports_rows: bool,
@@ -44,28 +44,28 @@ impl Linking {
         }
     }
 
-    /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows. A declaration reached for its rows alone is linked only where the module does not import them.
+    /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows. A form reached for its rows alone is linked only where the module does not import them.
     pub fn add_reached(&mut self, units: &[&ErasedUnit], reached: &Reached) {
         for (unit, (items, rows)) in units.iter().zip(reached.items.iter().zip(&reached.rows)) {
-            for &place in items.union(rows) {
-                let erased = unit.item(place);
-                match (items.contains(&place), self.imports_rows) {
+            for &(place, form) in items.union(rows) {
+                let (erased, sorts) = unit.item(place).form(form);
+                match (items.contains(&(place, form)), self.imports_rows) {
                     (true, _) => {
-                        self.add(erased);
+                        self.add(erased, &sorts);
                     }
                     (false, true) => {}
-                    (false, false) => self.add_rows(erased),
+                    (false, false) => self.add_rows(erased, &sorts),
                 }
             }
         }
     }
 
-    /// Append one item's fragment, its imports standing for where the items that bind them landed, and hand back where its identities landed.
-    pub fn add(&mut self, erased: &ErasedItem) -> curios_anf::Linked {
-        let bound = |name: &curios_core::Global| {
-            *self.bound.get(name).unwrap_or_else(|| {
+    /// Append one form's fragment, which stands for its item at each of `sorts`, its imports standing for where the forms that bind them landed, and hand back where its identities landed.
+    pub fn add(&mut self, erased: &ErasedItem, sorts: &[Sorts]) -> curios_anf::Linked {
+        let bound = |(name, sorts): &AtSorts| {
+            *self.bound.get(&(*name, *sorts)).unwrap_or_else(|| {
                 panic!(
-                    "{} is imported before the item that binds it is linked",
+                    "{}{sorts} is imported before the form that binds it is linked",
                     name.faithful()
                 )
             })
@@ -78,27 +78,31 @@ impl Linking {
                 .map(|name| match bound(name) {
                     curios_anf::Atom::Function(function) => function,
                     atom => panic!(
-                        "{} is imported as a function and bound to {atom:?}",
-                        name.faithful()
+                        "{}{} is imported as a function and bound to {atom:?}",
+                        name.0.faithful(),
+                        name.1
                     ),
                 })
                 .collect(),
-            ..self.held(erased)
+            ..self.held(erased, sorts)
         };
 
         let linked = self.module.link(erased.module(), &resolution);
 
-        self.hold(erased, &linked);
+        self.hold(erased, sorts, &linked);
         for (name, binding) in erased.environment().bindings() {
             if let Binding::Atom(atom) = binding {
                 let atom = linked.atom(atom);
-                self.bound.insert(*name, atom);
+                for &at in sorts {
+                    self.bound.insert((*name, at), atom);
+                }
+                let first = (*name, sorts[0]);
                 match atom {
                     curios_anf::Atom::Value(value) => {
-                        self.values.entry(value).or_insert(*name);
+                        self.values.entry(value).or_insert(first);
                     }
                     curios_anf::Atom::Function(function) => {
-                        self.functions.entry(function).or_insert(*name);
+                        self.functions.entry(function).or_insert(first);
                         if erased.computed(name) {
                             self.computed.insert(function);
                         }
@@ -111,27 +115,28 @@ impl Linking {
         linked
     }
 
-    /// Register one item's schemas and nothing else of its fragment: the rows a linked fragment imports from a declaration the program never reaches.
-    fn add_rows(&mut self, erased: &ErasedItem) {
-        let resolution = self.held(erased);
+    /// Register one form's schemas and nothing else of its fragment: the rows a linked fragment imports from a declaration the program never reaches.
+    fn add_rows(&mut self, erased: &ErasedItem, sorts: &[Sorts]) {
+        let resolution = self.held(erased, sorts);
         let linked = self.module.link_rows(erased.module(), &resolution);
 
-        self.hold(erased, &linked);
+        self.hold(erased, sorts, &linked);
     }
 
-    /// Which of `erased`'s schemas the program already holds, each with where: a row by the declaration it is the row of, an anonymous one by its width. A module that imports rows holds one no linked item declares as an import, which linking registers.
-    fn held(&self, erased: &ErasedItem) -> curios_anf::Resolution {
+    /// Which of `erased`'s schemas the program already holds, each with where: a row by the declaration and sorts it is the row of — one the form declares at the first of `sorts`, which it stands for — and an anonymous one by its width. A module that imports rows holds one no linked form declares as an import, which linking registers.
+    fn held(&self, erased: &ErasedItem, sorts: &[Sorts]) -> curios_anf::Resolution {
         let environment = erased.environment();
         for name in environment.imported_rows() {
             // A newtype's row has no schema, so nothing of it is resolved.
-            let held = match environment.imported_struct_row(name) {
+            let held = match environment.imported_struct_row(*name) {
                 Some(schema) => schema.is_none() || self.structs.contains_key(name),
                 None => self.families.contains_key(name),
             };
             assert!(
                 held || self.imports_rows,
-                "the row of {} is imported before the rows of the item that declares it are linked",
-                name.faithful()
+                "the row of {}{} is imported before the rows of the form that declares it are linked",
+                name.0.faithful(),
+                name.1
             );
         }
 
@@ -139,8 +144,8 @@ impl Linking {
             imports_rows: self.imports_rows,
             ..Default::default()
         };
-        for (name, schema) in environment.struct_schemas() {
-            if let Some(&held) = self.structs.get(name) {
+        for (origin, name, schema) in environment.struct_schemas() {
+            if let Some(&held) = self.structs.get(&linked_as(origin, name, sorts)) {
                 resolution.products.insert(schema, held);
             }
         }
@@ -149,8 +154,8 @@ impl Linking {
                 resolution.products.insert(schema, held);
             }
         }
-        for (name, family) in environment.families() {
-            if let Some(&held) = self.families.get(name) {
+        for (origin, name, family) in environment.families() {
+            if let Some(&held) = self.families.get(&linked_as(origin, name, sorts)) {
                 resolution.families.insert(family, held);
             }
         }
@@ -158,17 +163,21 @@ impl Linking {
         resolution
     }
 
-    /// Record where each schema of `erased` landed, for the fragments linked after it.
-    fn hold(&mut self, erased: &ErasedItem, linked: &curios_anf::Linked) {
+    /// Record where each schema of `erased` landed, for the fragments linked after it: a row it declares under each of `sorts`, the assignments the form stands for.
+    fn hold(&mut self, erased: &ErasedItem, sorts: &[Sorts], linked: &curios_anf::Linked) {
         let environment = erased.environment();
-        for (name, schema) in environment.struct_schemas() {
-            self.structs.entry(*name).or_insert(linked.product(schema));
+        for (origin, name, schema) in environment.struct_schemas() {
+            for name in linked_under(origin, name, sorts) {
+                self.structs.entry(name).or_insert(linked.product(schema));
+            }
         }
         for (width, schema) in environment.tuple_schemas() {
             self.tuples.entry(width).or_insert(linked.product(schema));
         }
-        for (name, family) in environment.families() {
-            self.families.entry(*name).or_insert(linked.family(family));
+        for (origin, name, family) in environment.families() {
+            for name in linked_under(origin, name, sorts) {
+                self.families.entry(name).or_insert(linked.family(family));
+            }
         }
     }
 
@@ -189,8 +198,9 @@ impl Linking {
         erased: &ErasedItem,
         landed: &curios_anf::Linked,
     ) -> Option<ErasedItem> {
-        let declaring = |name: &curios_core::Global| units.iter().find_map(|unit| unit.find(name));
-        let exported = |name: &curios_core::Global| declaring(name)?.export(name);
+        let declaring =
+            |(name, sorts): &AtSorts| units.iter().find_map(|unit| unit.find(name, *sorts));
+        let exported = |at: &AtSorts| declaring(at)?.export(&at.0);
 
         // What each name is bound to now: where the value it bound came to be an alias, the atom that names.
         let bound = |atom: curios_anf::Atom| self.module.aliased(mark, landed.atom(atom));
@@ -238,7 +248,7 @@ impl Linking {
         let structs: BTreeMap<_, _> = self
             .structs
             .iter()
-            .map(|(name, schema)| (*schema, name))
+            .map(|(name, schema)| (*schema, *name))
             .collect();
         let tuples: BTreeMap<_, _> = self
             .tuples
@@ -248,17 +258,17 @@ impl Linking {
         let families: BTreeMap<_, _> = self
             .families
             .iter()
-            .map(|(name, family)| (*family, name))
+            .map(|(name, family)| (*family, *name))
             .collect();
         for (held, schema) in taken.landed.products() {
             match structs.get(&held) {
-                Some(name) => environment.import_struct_row(name, Some(schema)),
+                Some(name) => environment.import_struct_row(*name, Some(schema)),
                 None => environment.register_tuple_schema(*tuples.get(&held)?, schema),
             }
         }
         let positions = taken.module.imports().constructors();
         for (held, family) in taken.landed.families() {
-            let name = families.get(&held)?;
+            let name = *families.get(&held)?;
             environment.import_induct_family(name, family);
             for constructor in &taken.module.family(family)?.constructors {
                 environment.import_induct_constructor(
@@ -292,31 +302,49 @@ impl Linking {
     }
 }
 
-/// What a program takes of each unit it is linked from, as the places of its items, ascending.
+/// The name and sorts a row of `erased` stands under in a program: one it declares, at no sorts, under the assignment the form stands for first; one it imports, as it imports it.
+fn linked_as(origin: Origin, (name, sorts): AtSorts, assignments: &[Sorts]) -> AtSorts {
+    match origin {
+        Origin::Declared => (name, assignments[0]),
+        Origin::Imported => (name, sorts),
+    }
+}
+
+/// Every name and sorts a row of a form standing for `assignments` is linked under: one it declares under each, one it imports as it imports it.
+fn linked_under(origin: Origin, (name, sorts): AtSorts, assignments: &[Sorts]) -> Vec<AtSorts> {
+    match origin {
+        Origin::Declared => assignments.iter().map(|at| (name, *at)).collect(),
+        Origin::Imported => vec![(name, sorts)],
+    }
+}
+
+/// What a program takes of each unit it is linked from, as the places of its items and which of each item's forms, ascending.
 pub struct Reached {
-    /// The items it links.
-    items: Vec<BTreeSet<usize>>,
-    /// The items whose rows it links: the declarations of the rows a linked item imports, with theirs.
-    rows: Vec<BTreeSet<usize>>,
+    /// The forms it links.
+    items: Vec<BTreeSet<(usize, usize)>>,
+    /// The forms whose rows it links: those declaring the rows a linked form imports, with theirs.
+    rows: Vec<BTreeSet<(usize, usize)>>,
 }
 
 impl Reached {
-    pub fn items(&self) -> &[BTreeSet<usize>] {
+    pub fn items(&self) -> &[BTreeSet<(usize, usize)>] {
         &self.items
     }
 }
 
-/// The unit and the place of the item declaring each of `names` that one of `units` declares. A name none declares is the program's own, and every item of the program is linked.
+/// The unit, the place of the item and which of its forms declares each of `names` at its sorts that one of `units` declares. A name none declares is the program's own, and every form of the program is linked.
 fn places<'n>(
     units: &[&ErasedUnit],
-    names: impl Iterator<Item = &'n curios_core::Global>,
-) -> Vec<(usize, usize)> {
+    names: impl Iterator<Item = &'n AtSorts>,
+) -> Vec<(usize, (usize, usize))> {
     names
-        .filter_map(|name| {
-            units
-                .iter()
-                .enumerate()
-                .find_map(|(unit, erased)| Some((unit, erased.place(name)?)))
+        .filter_map(|(name, sorts)| {
+            units.iter().enumerate().find_map(|(unit, erased)| {
+                let place = erased.place(name)?;
+                let form = erased.item(place).index_at(*sorts)?;
+
+                Some((unit, (place, form)))
+            })
         })
         .collect()
 }
@@ -340,12 +368,15 @@ pub fn reached<'a>(
     }
     if computing {
         for (unit, erased) in units.iter().enumerate() {
-            items.extend(erased.computing().map(|place| (unit, place)));
+            for place in erased.computing() {
+                let forms = erased.item(place).forms().count();
+                items.extend((0..forms).map(|form| (unit, (place, form))));
+            }
         }
     }
-    while let Some((unit, place)) = items.pop() {
-        if reached.items[unit].insert(place) {
-            let erased = units[unit].item(place);
+    while let Some((unit, at)) = items.pop() {
+        if reached.items[unit].insert(at) {
+            let (erased, _) = units[unit].item(at.0).form(at.1);
             items.extend(places(
                 units,
                 erased.values().iter().chain(erased.functions()),
@@ -354,9 +385,9 @@ pub fn reached<'a>(
         }
     }
     // A row's fields name other rows, which the declaring fragment imports in its turn.
-    while let Some((unit, place)) = rows.pop() {
-        if reached.rows[unit].insert(place) {
-            let erased = units[unit].item(place);
+    while let Some((unit, at)) = rows.pop() {
+        if reached.rows[unit].insert(at) {
+            let (erased, _) = units[unit].item(at.0).form(at.1);
             rows.extend(places(units, erased.environment().imported_rows()));
         }
     }
@@ -371,7 +402,11 @@ pub fn link(
     entry: &ErasedItem,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("link_program");
-    let reached = reached(scope.units(), own.forms().chain([entry]), true);
+    let reached = reached(
+        scope.units(),
+        own.items().flat_map(|item| item.forms()).chain([entry]),
+        true,
+    );
     curios_profile::sample!(
         "link::computing",
         scope
@@ -387,10 +422,12 @@ pub fn link(
 
     let mut linking = Linking::default();
     linking.add_reached(scope.units(), &reached);
-    for erased in own.forms() {
-        linking.add(erased);
+    for item in own.items() {
+        for (erased, sorts) in item.distinct() {
+            linking.add(erased, &sorts);
+        }
     }
-    linking.add(entry);
+    linking.add(entry, &[Sorts::NONE]);
 
     let Linking {
         module,

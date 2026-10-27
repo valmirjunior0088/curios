@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Polarity, Telescope, Term, UniverseContext, UniverseError, Universes, Variance,
-        instantiate_universes_scoped,
+        Atom, Polarity, Quality, Telescope, Term, UniverseContext, UniverseError, Universes,
+        Variance, instantiate_qualities, instantiate_universes_scoped,
     },
     crate::Sharing,
     curios_utilities::{Plicity, Qualifier},
@@ -156,6 +156,19 @@ impl InductDecl {
     /// How many of this declaration's binders are uniform parameters.
     pub fn param_count(&self) -> usize {
         self.arity.len()
+    }
+
+    /// This declaration at one assignment of the sorts it leaves to a caller: every telescope it holds read at `qualities`, its level parameters its own still, and no sort left. What the kernel judges the entry at, and what erasure registers its row at, one assignment at a time.
+    pub fn at_qualities(&self, qualities: &[Quality]) -> Self {
+        let mut at = self.clone();
+        at.arity = instantiate_qualities(&at.arity, qualities);
+        at.result_sort = instantiate_qualities(&at.result_sort, qualities);
+        for constructor in at.signatures_mut() {
+            constructor.telescope = instantiate_qualities(&constructor.telescope, qualities);
+        }
+        at.universe_context.quality_count = 0;
+
+        at
     }
 
     /// This family's index telescope at `params` — the domains its index targets must inhabit.

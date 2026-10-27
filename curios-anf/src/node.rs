@@ -180,7 +180,7 @@ pub struct FoldSequenceStep {
     pub block: BlockId,
 }
 
-/// A write-once cell operation. `New` has no operands, `Fill` takes the cell then its proposed value, and `Poll` takes the cell.
+/// A write-once cell operation. `New` has no operands, `Fill` takes the cell then its proposed value, and `Poll` takes the cell and answers `some` or `none`: `some` holding the value where its row keeps a field for it, and nothing where the row keeps none, the value being a proof there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum CellOperation {
@@ -203,7 +203,7 @@ impl CellOperation {
     }
 }
 
-/// A bounded channel operation. `New` takes the positive capacity, `Push` takes the channel then the item, and every other operation takes the channel alone.
+/// A bounded channel operation. `New` takes the positive capacity, `Push` takes the channel then the item, and every other operation takes the channel alone. `Take`'s `item` holds the item taken where its row keeps a field for it, and nothing where the row keeps none, the item being a proof there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum ChannelOperation {

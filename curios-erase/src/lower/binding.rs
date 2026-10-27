@@ -5,14 +5,14 @@
 use {
     super::{Lowering, Outcome},
     crate::Error,
-    curios_elab::Retyping,
+    curios_cert::Reader,
 };
 
 impl Lowering<'_> {
     /// Erase one top-level definition as the fragment's item, and bind its name.
     pub fn erase_definition(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         definition: &curios_core::Definition,
     ) -> Result<(), Error> {
         let symbol = definition.name.faithful().to_string();

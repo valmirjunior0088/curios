@@ -1,6 +1,8 @@
 //! What an item erases to, what a unit's items erase to together, and the scope both are read through.
 //!
-//! **An item's erased form is its own.** An item erases into a fragment, a [`curios_anf::Module`] whose identities count from zero for it, so what a unit stores for a declaration says nothing of the declarations erased before it, and an edit to one renumbers no other. A name another item binds is not an identity of the fragment but an *import* of it, known by that name ([`ErasedItem::values`], [`ErasedItem::functions`]), and so is the row of a structure or an inductive another item declares: the fragment holds a schema of its widths, known by the declaration it stands for.
+//! **An item's erased form is its own.** An item erases into a fragment, a [`curios_anf::Module`] whose identities count from zero for it, so what a unit stores for a declaration says nothing of the declarations erased before it, and an edit to one renumbers no other. A name another item binds is not an identity of the fragment but an *import* of it, known by that name and the sorts it is read at ([`ErasedItem::values`], [`ErasedItem::functions`]), and so is the row of a structure or an inductive another item declares: the fragment holds a schema of its widths, known by the declaration and sorts it stands for.
+//!
+//! **An item that leaves sorts to its caller erases to a form at each assignment of them** ([`ErasedForms`]), as the kernel judges it at each: a form is read off the item's terms at its assignment, and an occurrence links the form at the sorts its instance states. Two assignments that erase alike are one form.
 //!
 //! **A unit holds its items' erased forms and no arena**, which is what lets a unit compiled over a baseline erase the items it redoes and take every other's as it stands, and what leaves nothing for two units to be ordered by.
 //!
@@ -9,7 +11,7 @@
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
-    crate::{Binding, Environment, Projection},
+    crate::{AtSorts, Binding, Environment, Sorts},
     curios_archive::{Bytes, Deferred},
     curios_elab::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
     curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
@@ -29,10 +31,10 @@ pub struct ErasedItem {
     module: curios_anf::Module,
     /// What each name the item declares is bound to, in the fragment's identities, and the fragment's schemas by the declaration each is the row of, the ones it declares told from the ones it imports.
     environment: Environment,
-    /// The name each value the fragment imports stands for, in the fragment's order.
-    values: Vec<curios_core::Global>,
-    /// The name each function the fragment imports stands for, in the fragment's order.
-    functions: Vec<curios_core::Global>,
+    /// The name and sorts each value the fragment imports stands for, in the fragment's order.
+    values: Vec<AtSorts>,
+    /// The name and sorts each function the fragment imports stands for, in the fragment's order.
+    functions: Vec<AtSorts>,
     /// What applying each function a declared name is bound to does ([`curios_anf::Module::interface`]), read once here, where the fragment is final, since every item that imports the name asks.
     interfaces: BTreeMap<curios_anf::FunctionId, curios_anf::Interface>,
     /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_anf::Module::unforced`]). Nothing here forces one; an item that reads one would, and is refused where it reads it.
@@ -65,8 +67,8 @@ impl ErasedItem {
     pub(super) fn new(
         module: curios_anf::Module,
         environment: Environment,
-        values: Vec<curios_core::Global>,
-        functions: Vec<curios_core::Global>,
+        values: Vec<AtSorts>,
+        functions: Vec<AtSorts>,
     ) -> Self {
         let interfaces = environment
             .bindings()
@@ -115,13 +117,13 @@ impl ErasedItem {
         &self.environment
     }
 
-    /// The name each imported value of the fragment stands for, in the fragment's order.
-    pub(super) fn values(&self) -> &[curios_core::Global] {
+    /// The name and sorts each imported value of the fragment stands for, in the fragment's order.
+    pub(super) fn values(&self) -> &[AtSorts] {
         &self.values
     }
 
-    /// The name each imported function of the fragment stands for, in the fragment's order.
-    pub(super) fn functions(&self) -> &[curios_core::Global] {
+    /// The name and sorts each imported function of the fragment stands for, in the fragment's order.
+    pub(super) fn functions(&self) -> &[AtSorts] {
         &self.functions
     }
 
@@ -165,7 +167,7 @@ impl ErasedItem {
 
     /// What an item importing the structure `name` reads of the row this item declares for it: its mask, and of its schema the name, the width and whether it is shared.
     fn struct_row_read(&self, name: &curios_core::Global) -> Option<StructRowRead<'_>> {
-        let declared = self.environment.declared_struct_row(name)?;
+        let declared = self.environment.declared_struct_row((*name, Sorts::NONE))?;
         let schema = declared.schema.map(|schema| {
             let held = self
                 .module
@@ -180,7 +182,7 @@ impl ErasedItem {
 
     /// What an item importing the inductive `name` reads of the row this item declares for it: the family's name, and each constructor's name, width and mask.
     fn induct_row_read(&self, name: &curios_core::Global) -> Option<InductRowRead<'_>> {
-        let declared = self.environment.declared_induct_row(name)?;
+        let declared = self.environment.declared_induct_row((*name, Sorts::NONE))?;
         let family = self
             .module
             .family(declared.family)
@@ -204,7 +206,10 @@ impl ErasedItem {
     /// How the item binds `name`, where it declares it.
     pub(super) fn export(&self, name: &curios_core::Global) -> Option<Export<'_>> {
         Some(
-            match self.environment.lookup(&curios_core::Free::from(name))? {
+            match self
+                .environment
+                .lookup(&curios_core::Free::from(name), Sorts::NONE)?
+            {
                 Binding::Dropped => Export::Dropped,
                 Binding::Atom(curios_anf::Atom::Constant(constant)) => Export::Constant(
                     self.module
@@ -228,6 +233,102 @@ impl ErasedItem {
                 },
             },
         )
+    }
+}
+
+/// An item's erased forms: one at each assignment of the sorts it leaves to its caller, two assignments that erase alike held as one form. An item that leaves no sort has one, at no sorts.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct ErasedForms {
+    /// The distinct forms, in the order of the first assignment each stands for.
+    forms: Vec<ErasedItem>,
+    /// Which of `forms` each assignment erases to, by the assignment's index ([`Sorts::index`]).
+    at: Vec<u32>,
+}
+
+impl ErasedForms {
+    /// The forms an item erased to, one at each of its assignments in [`Sorts::every`]' order, those whose archives agree held once.
+    pub(super) fn of(erased: Vec<ErasedItem>) -> Result<Self, String> {
+        let mut forms = Vec::<ErasedItem>::new();
+        let mut archives = Vec::<Vec<u8>>::new();
+        let mut at = Vec::with_capacity(erased.len());
+        for form in erased {
+            let archive = curios_archive::to_bytes(&form)?.to_vec();
+            let index = match archives.iter().position(|held| *held == archive) {
+                Some(index) => index,
+                None => {
+                    forms.push(form);
+                    archives.push(archive);
+                    forms.len() - 1
+                }
+            };
+            at.push(index as u32);
+        }
+
+        Ok(Self { forms, at })
+    }
+
+    /// The form at `sorts`, where the item leaves as many sorts as `sorts` states.
+    pub(super) fn at(&self, sorts: Sorts) -> Option<&ErasedItem> {
+        let index = *self.at.get(sorts.index())?;
+
+        (self.at.len() == 1 << sorts.count()).then(|| &self.forms[index as usize])
+    }
+
+    /// Each distinct form with the assignments it stands for, in order.
+    pub(super) fn distinct(&self) -> impl Iterator<Item = (&ErasedItem, Vec<Sorts>)> {
+        (0..self.forms.len()).map(|index| self.form(index))
+    }
+
+    /// Each distinct form, in order.
+    pub(super) fn forms(&self) -> impl Iterator<Item = &ErasedItem> {
+        self.forms.iter()
+    }
+
+    /// Which distinct form `sorts` erases to, by its place among [`ErasedForms::forms`].
+    pub(super) fn index_at(&self, sorts: Sorts) -> Option<usize> {
+        self.at(sorts)?;
+
+        Some(self.at[sorts.index()] as usize)
+    }
+
+    /// The distinct form at `index`, with the assignments it stands for.
+    pub(super) fn form(&self, index: usize) -> (&ErasedItem, Vec<Sorts>) {
+        let count = self.at.len().trailing_zeros() as usize;
+        let sorts = Sorts::every(count)
+            .filter(|sorts| self.at[sorts.index()] as usize == index)
+            .collect();
+
+        (&self.forms[index], sorts)
+    }
+
+    /// Each assignment's form, in [`Sorts::every`]' order: a form standing for two assignments is met twice.
+    fn by_assignment(&self) -> impl Iterator<Item = &ErasedItem> {
+        self.at.iter().map(|index| &self.forms[*index as usize])
+    }
+
+    /// Whether evaluating any form at initialization computes.
+    pub(super) fn computes(&self) -> bool {
+        self.forms.iter().any(|form| form.module.computes())
+    }
+
+    /// Whether an item that names `name` reads these forms and `other`'s alike: at every assignment ([`ErasedItem::read_alike`]).
+    pub(super) fn read_alike(&self, other: &ErasedForms, name: &curios_core::Global) -> bool {
+        self.at.len() == other.at.len()
+            && self
+                .by_assignment()
+                .zip(other.by_assignment())
+                .all(|(this, that)| this.read_alike(that, name))
+    }
+
+    /// The digest of what an item that names `name` reads of these forms, at every assignment in order ([`ErasedItem::read_digest`]).
+    pub fn read_digest(&self, name: &curios_core::Global) -> Result<String, String> {
+        let read = self
+            .by_assignment()
+            .map(|form| form.read_digest(name))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        curios_archive::to_bytes(&read).map(|bytes| digest(&bytes))
     }
 }
 
@@ -352,9 +453,9 @@ impl ErasedUnit {
         }
     }
 
-    /// `item`'s erased form, made here, at `place`, in place of what was held there.
-    pub(super) fn push(&mut self, place: usize, item: &curios_core::Item, erased: ErasedItem) {
-        let computes = erased.module.computes();
+    /// `item`'s erased forms, made here, at `place`, in place of what was held there.
+    pub(super) fn push(&mut self, place: usize, item: &curios_core::Item, erased: ErasedForms) {
+        let computes = erased.computes();
         self.keep(
             place,
             item,
@@ -395,8 +496,8 @@ impl ErasedUnit {
         }
     }
 
-    /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
-    pub fn item(&self, place: usize) -> &ErasedItem {
+    /// The erased forms of the item at `place`, read out of their bytes now where the unit was restored and nothing has read them before.
+    pub fn item(&self, place: usize) -> &ErasedForms {
         self.form(place)
             .erased
             .get()
@@ -411,8 +512,8 @@ impl ErasedUnit {
             .expect("a place the unit holds a form at")
     }
 
-    /// The erased forms, in item order, each read as [`ErasedUnit::item`] reads it.
-    pub(super) fn forms(&self) -> impl Iterator<Item = &ErasedItem> {
+    /// Each item's erased forms, in item order, each read as [`ErasedUnit::item`] reads them.
+    pub(super) fn items(&self) -> impl Iterator<Item = &ErasedForms> {
         self.index.items.iter().map(|(_, form)| {
             form.erased
                 .get()
@@ -425,9 +526,9 @@ impl ErasedUnit {
         self.index.declared.get(name).map(|at| place_of(*at))
     }
 
-    /// The erased form of the item declaring `name`.
-    pub(super) fn find(&self, name: &curios_core::Global) -> Option<&ErasedItem> {
-        self.place(name).map(|place| self.item(place))
+    /// The erased form at `sorts` of the item declaring `name`.
+    pub(super) fn find(&self, name: &curios_core::Global, sorts: Sorts) -> Option<&ErasedItem> {
+        self.item(self.place(name)?).at(sorts)
     }
 
     /// The erased form of the item declaring `name`, as this unit holds it, with whether it computes: what a unit compiled over this one keeps, reading nothing.
@@ -440,7 +541,7 @@ impl ErasedUnit {
         })
     }
 
-    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes, told by their digests where both were restored.
+    /// Whether the item declaring `name` holds the same erased forms in this unit and in `other`: the one handle, or two forms stored as the same bytes, told by their digests where both were restored.
     pub(super) fn form_alike(&self, other: &ErasedUnit, name: &curios_core::Global) -> bool {
         let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
             return false;
@@ -459,7 +560,7 @@ impl ErasedUnit {
         }
     }
 
-    /// The digest of the erased form of the item at `place`, whole, as it is stored.
+    /// The digest of the erased forms of the item at `place`, whole, as they are stored.
     pub fn form_digest(&self, place: usize) -> Result<String, String> {
         self.form(place).object().map(|object| object.digest.hex())
     }
@@ -519,7 +620,7 @@ impl ErasedUnit {
         self
     }
 
-    /// This unit's erased forms, each an object stored on its own, in the order of the items: the one a form was restored from, and otherwise its archive, made and digested now.
+    /// This unit's items' erased forms, each item's an object stored on its own, in the order of the items: the one they were restored from, and otherwise their archive, made and digested now.
     pub fn items_objects(&self) -> Result<Vec<Object>, String> {
         self.index
             .items
@@ -560,7 +661,8 @@ impl ErasedUnit {
 impl ErasedUnit {
     /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
     pub fn declared_families(&self) -> Vec<crate::test_support::ErasedFamily> {
-        self.forms()
+        self.items()
+            .flat_map(ErasedForms::forms)
             .flat_map(|form| {
                 let module = form.module();
 
@@ -599,7 +701,7 @@ impl ErasedUnit {
     }
 }
 
-/// An item's erased form as a unit holds it, with whether evaluating it at initialization computes: what another unit keeps of it without reading it.
+/// An item's erased forms as a unit holds them, with whether evaluating them at initialization computes: what another unit keeps of them without reading them.
 #[derive(Debug, Clone)]
 pub struct Held {
     erased: Rc<Form>,
@@ -613,16 +715,16 @@ impl Held {
             erased: Deferred::stored(object.bytes),
             digest: Some(object.digest),
         });
-        let computes = erased.erased.get()?.module.computes();
+        let computes = erased.erased.get()?.computes();
 
         Ok(Held { erased, computes })
     }
 }
 
-/// An item's erased form, in hand or read out of the object it was stored as, whose digest it keeps: what it is stored as again and compared by, digesting nothing.
+/// An item's erased forms, in hand or read out of the object they were stored as, whose digest it keeps: what they are stored as again and compared by, digesting nothing.
 #[derive(Debug)]
 struct Form {
-    erased: Deferred<ErasedItem>,
+    erased: Deferred<ErasedForms>,
     /// The digest of the object the form was restored from, where it was.
     digest: Option<Digest>,
 }
@@ -644,15 +746,13 @@ impl Form {
     }
 }
 
-/// The units in scope, as what erasing another reads: the Core each was erased from, and its items' erased forms.
+/// The units in scope, as what erasing another reads: the Core each was certified as, where it holds each name, and its items' erased forms.
 ///
-/// The two halves describe the same units, in dependency order, and pairing them in one value is the point: as two parameters nothing would say they correspond. The Core is read through, each declaration out of its universes when it is first read (`Projected`), so the types the unit's erasure reads reduce through it; the erased forms answer how each name is bound.
+/// The three describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying kernel's, which holds these units mounted; what this adds is what the kernel does not hold — what kind of definition a name is, read off its item, and how each name is bound, read off its erased form.
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
-    /// Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on.
     cores: &'a [&'a curios_core::Module],
-    /// What each unit keeps for erasure, where the caller holds the units and not their modules alone: where it holds each name, and what has been read of it out of its universes. `None` keys each module for this erasure.
-    kept: Option<&'a [(&'a curios_core::Places, &'a Projection)]>,
+    places: &'a [&'a curios_core::Places],
     erased: &'a [&'a ErasedUnit],
     /// Which units are other than the ones the baseline was erased after ([`Erasures::after`]): none where nothing says.
     moved: Option<&'a [bool]>,
@@ -666,17 +766,20 @@ impl<'a> Erasures<'a> {
         Self::default()
     }
 
-    /// The units `cores` were elaborated to and `erased` are the erased forms of, in dependency order.
-    pub fn of(cores: &'a [&'a curios_core::Module], erased: &'a [&'a ErasedUnit]) -> Self {
-        assert_eq!(
-            cores.len(),
-            erased.len(),
-            "a scope pairs each unit's Core with its erased forms",
+    /// The units `cores` were certified as, `places` says where each holds its names, and `erased` are the erased forms of, in dependency order.
+    pub fn of(
+        cores: &'a [&'a curios_core::Module],
+        places: &'a [&'a curios_core::Places],
+        erased: &'a [&'a ErasedUnit],
+    ) -> Self {
+        assert!(
+            cores.len() == places.len() && cores.len() == erased.len(),
+            "a scope says of each unit its Core, its places and its erased forms",
         );
 
         Self {
             cores,
-            kept: None,
+            places,
             erased,
             moved: None,
             fixed: None,
@@ -736,7 +839,7 @@ impl<'a> Erasures<'a> {
             .is_none_or(|(unit, _)| !self.is_fixed(unit))
     }
 
-    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its elaborated declaration ([`part_digest`]), how an item naming it reads its erased form ([`ErasedItem::read_digest`]), or that form whole. `Ok(None)` where no unit declares the name or the one that does holds no such part; `Err` where a part is asked of a scope read without its units' places.
+    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its certified declaration ([`part_digest`]), how an item naming it reads its erased forms ([`ErasedForms::read_digest`]), or those forms whole. `Ok(None)` where no unit declares the name or the one that does holds no such part.
     pub(super) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(name) = question.subject() else {
             return Ok(None);
@@ -748,35 +851,19 @@ impl<'a> Erasures<'a> {
         match question {
             Question::Erased(_) => self.erased[unit].item(place).read_digest(name).map(Some),
             Question::Ran(_) => self.erased[unit].form_digest(place).map(Some),
-            part => match self.kept(unit) {
-                Some((places, _)) => part_digest(self.cores[unit], places, part),
-                None => Err("a scope read without its units' places digests no part".to_string()),
-            },
+            part => part_digest(self.cores[unit], self.places[unit], part),
         }
     }
 
-    /// These units read by what each keeps for erasure, `kept`, in the same order: nothing of a unit is keyed for the erasure, and what it projects of one stays projected.
-    pub fn keeping(self, kept: &'a [(&'a curios_core::Places, &'a Projection)]) -> Self {
-        assert_eq!(
-            self.cores.len(),
-            kept.len(),
-            "a scope pairs each unit's Core with what the unit keeps for erasure",
-        );
-
-        Self {
-            kept: Some(kept),
-            ..self
-        }
-    }
-
-    /// What the unit at `place` keeps for erasure, where the scope holds it.
-    pub(super) fn kept(&self, place: usize) -> Option<(&'a curios_core::Places, &'a Projection)> {
-        self.kept.map(|kept| kept[place])
-    }
-
-    /// The Core each unit was erased from, in dependency order.
-    pub(super) fn cores(&self) -> &'a [&'a curios_core::Module] {
+    /// The definition a unit in scope declares under `name`, as the unit holds it: what kind of definition it is, and its body.
+    pub(super) fn definition(
+        &self,
+        name: &curios_core::Global,
+    ) -> Option<&'a curios_core::Definition> {
         self.cores
+            .iter()
+            .zip(self.places)
+            .find_map(|(core, places)| declared(core, places, name))
     }
 
     /// The units' erased forms, in dependency order.
@@ -792,8 +879,22 @@ impl<'a> Erasures<'a> {
             .find_map(|(unit, erased)| Some((unit, erased.place(name)?)))
     }
 
-    /// The erased form of the item declaring `name`, where a unit in scope declares it.
-    pub(super) fn find(&self, name: &curios_core::Global) -> Option<&'a ErasedItem> {
-        self.erased.iter().find_map(|erased| erased.find(name))
+    /// The erased form at `sorts` of the item declaring `name`, where a unit in scope declares it.
+    pub(super) fn find(&self, name: &curios_core::Global, sorts: Sorts) -> Option<&'a ErasedItem> {
+        let (unit, place) = self.place(name)?;
+
+        self.erased[unit].item(place).at(sorts)
+    }
+}
+
+/// The definition `module` declares under `name` by a `let`, where `places` says it holds one: what kind of definition it is and its body, which erasure reads of a constructor and of a concept method's wrapper, each a `let` of its own.
+pub(super) fn declared<'a>(
+    module: &'a curios_core::Module,
+    places: &curios_core::Places,
+    name: &curios_core::Global,
+) -> Option<&'a curios_core::Definition> {
+    match &module.items[places.place(name)?.item()] {
+        curios_core::Item::Let(definition) if definition.name == *name => Some(definition),
+        _ => None,
     }
 }

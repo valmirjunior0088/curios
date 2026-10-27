@@ -2,8 +2,9 @@ use {
     crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,
+    curios_cert::{Globals, certify_module, certify_program},
     curios_core::Zonkable,
-    curios_elab::{DEFAULT_BUDGET, InScope, Retyping, test_support::qed},
+    curios_elab::DEFAULT_BUDGET,
     curios_utilities::{Plicity, Qualifier, grown},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -16,8 +17,43 @@ fn nominal(path: &str) -> curios_core::Global {
     curios_core::Global::Authored(Qualifier::from([path]))
 }
 
-fn context() -> Retyping<'static> {
-    Retyping::new(DEFAULT_BUDGET, SYNTAX)
+/// A binder no fixture spells, minted far above where the kernel mints: a process-wide counter keeps two in one test apart.
+fn fresh(hint: Option<&str>) -> curios_core::Free {
+    static MINTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000_000);
+
+    curios_core::Free::local(
+        MINTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        hint,
+    )
+}
+
+/// `unit` certified with nothing in scope and erased through the kernel that certified it, as the driver erases a unit it compiles.
+fn erase_alone(unit: &curios_core::Zonked<curios_core::Module>) -> Result<ErasedUnit, Error> {
+    let globals = Globals::default();
+    let (rechecked, mut kernel) = certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    assert!(
+        rechecked.verdicts.is_empty(),
+        "the fixture is certified: {:?}",
+        rechecked.verdicts
+    );
+
+    erase_unit(&mut kernel, Erasures::nothing(), unit)
+}
+
+/// [`erase_alone`] over `baseline`.
+fn erase_over(
+    unit: &curios_core::Zonked<curios_core::Module>,
+    baseline: ErasedBaseline<'_>,
+) -> Result<ErasedUnit, Error> {
+    let globals = Globals::default();
+    let (rechecked, mut kernel) = certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    assert!(
+        rechecked.verdicts.is_empty(),
+        "the fixture is certified: {:?}",
+        rechecked.verdicts
+    );
+
+    erase_unit_over(&mut kernel, Erasures::nothing(), unit, baseline)
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
@@ -75,13 +111,16 @@ fn try_erase(
     program: &curios_core::Program,
     type_: curios_core::Term,
 ) -> Result<curios_anf::Module, Error> {
-    erase_program(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
-        &zonked(&stating(program, type_)),
-    )
-    .map(ErasedProgram::into_module)
+    let program = zonked(&stating(program, type_));
+    let globals = Globals::default();
+    let (rechecked, mut kernel) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
+    assert!(
+        rechecked.verdicts.is_empty(),
+        "the fixture is certified: {:?}",
+        rechecked.verdicts
+    );
+
+    erase_program(&mut kernel, Erasures::nothing(), &program).map(ErasedProgram::into_module)
 }
 
 fn erase(program: &curios_core::Program, type_: curios_core::Term) -> curios_anf::Module {
@@ -133,8 +172,7 @@ fn bound(module: &curios_anf::Module) -> impl Iterator<Item = &curios_anf::Rhs> 
 
 #[test]
 fn a_scalar_expression_erases_in_evaluation_order() {
-    let mut context = context();
-    let x_binder = context.fresh(Some("x"));
+    let x_binder = fresh(Some("x"));
     // let x = 2; x + 3
     let body = curios_core::Term::let_(
         &x_binder,
@@ -161,8 +199,47 @@ entry
 
 #[test]
 fn bool_and_byte_keep_their_shapes() {
-    let mut context = context();
-    let b = context.fresh(Some("b"));
+    let b = fresh(Some("b"));
+    let (held, p, proof) = (fresh(Some("b")), fresh(Some("P")), fresh(Some("p")));
+    // The bound a narrowing carries is `Holds(7 < 256)`, so the registry's `Holds` is declared, as a proposition its proof inhabits whatever it holds of.
+    let true_ = curios_core::Term::func_type(
+        [
+            (p, curios_core::Term::prop()),
+            (proof, curios_core::Term::free_var(&p)),
+        ],
+        curios_core::Term::free_var(&p),
+    );
+    let holds = curios_core::Item::Let(Box::new(curios_core::Definition {
+        name: curios_core::Global::Authored(Qualifier::from(["std", "Bool", "Holds"])),
+        ..match definition(
+            "Holds",
+            curios_core::Term::func_type(
+                [(
+                    held,
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::BoolType),
+                )],
+                // Quantifying over `Prop` lands a level up.
+                curios_core::Term::prop_at(curios_core::Level::constant(1)),
+            ),
+            curios_core::Term::func(
+                [(
+                    held,
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::BoolType),
+                )],
+                true_,
+            ),
+        ) {
+            curios_core::Item::Let(definition) => *definition,
+            curios_core::Item::Rec(_) => unreachable!("a fixture's definition is a `let`"),
+        }
+    }));
+    let qed = curios_core::Term::func(
+        [
+            (p, curios_core::Term::prop()),
+            (proof, curios_core::Term::free_var(&p)),
+        ],
+        curios_core::Term::free_var(&proof),
+    );
     // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears anywhere in the erased output.
     let body = curios_core::Term::let_(
         &b,
@@ -176,20 +253,24 @@ fn bool_and_byte_keep_their_shapes() {
             curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(
                 7usize,
             ))),
-            qed(),
+            qed,
         )),
     );
     let erased = erase(
-        &module(Vec::new(), body),
+        &module(vec![holds], body),
         curios_core::Term::intrinsic(curios_core::Intrinsic::ByteType),
     );
     assert_eq!(
         curios_anf::test_support::shape(&erased),
         "\
+items
+  Functions
+    function ~f0$/std/Bool/Holds(~v0$b)
+      Return Unit
 entry
-  Let ~v0$b = Operation BoolAnd [Bool(true), Bool(false)]
-  Let ~v1 = Operation NatToByte [Nat(7)]
-  Return ~v1
+  Let ~v1$b = Operation BoolAnd [Bool(true), Bool(false)]
+  Let ~v2 = Operation NatToByte [Nat(7)]
+  Return ~v2
 "
     );
 }
@@ -256,8 +337,7 @@ entry
 
 #[test]
 fn an_exit_seals_the_thunk_that_describes_it() {
-    let mut context = context();
-    let dead = context.fresh(Some("dead"));
+    let dead = fresh(Some("dead"));
     // let dead = /std/Process/exit(3); 7 — the trailing computation is *not* dead, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
     let body = curios_core::Term::let_(
         &dead,
@@ -305,8 +385,7 @@ enum Binder {
 
 /// `callee(4)` bound and never used, before an entry that answers `7`: `callee` is a function of one `Nat`, returning a type where `returns_a_type` and a `Nat` otherwise, so the two readings differ only in whether the binding's type is a sort.
 fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_anf::Module {
-    let mut context = context();
-    let n = context.fresh(Some("n"));
+    let n = fresh(Some("n"));
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let (result_type, result) = match returns_a_type {
         true => (curios_core::Term::type_ground(), nat.clone()),
@@ -327,7 +406,7 @@ fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_anf::Module {
         curios_core::Term::apply(curios_core::Term::free_var(&global("callee")), [nat_lit(4)]);
     let body = match binder {
         Binder::Let => {
-            let bound = context.fresh(Some("bound"));
+            let bound = fresh(Some("bound"));
             curios_core::Term::let_(&bound, result_type, call, nat_lit(7))
         }
         Binder::Item => {
@@ -346,8 +425,7 @@ fn calls(erased: &curios_anf::Module) -> usize {
 
 /// `identity : (Nat) -> Nat`, stamped `stamp` by elaboration, and an entry applying it — erased through the path production takes, as the program it links to.
 fn identity_arena(stamp: curios_core::Totality) -> ErasedProgram {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let mut items = vec![definition(
         "identity",
@@ -363,13 +441,10 @@ fn identity_arena(stamp: curios_core::Totality) -> ErasedProgram {
         [nat_lit(4)],
     );
 
-    erase_program(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
-        &zonked(&stating(&module(items, body), nat)),
-    )
-    .expect("the program erases")
+    let program = zonked(&stating(&module(items, body), nat));
+    let globals = Globals::default();
+    let (_, mut kernel) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
+    erase_program(&mut kernel, Erasures::nothing(), &program).expect("the program erases")
 }
 
 /// Every erased function's termination flag.
@@ -489,8 +564,7 @@ fn a_bound_value_is_computed_where_it_is_written() {
 
 /// A unit of `step`, a function adding `by` to its argument, and `stepped`, which is `step(4)`, with the unit erased whole.
 fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit) {
-    let mut context = context();
-    let n = context.fresh(Some("n"));
+    let n = fresh(Some("n"));
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let unit = zonked(
         &module(
@@ -519,8 +593,7 @@ fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit)
         )
         .module,
     );
-    let erased = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &unit)
-        .expect("the unit erases whole");
+    let erased = erase_alone(&unit).expect("the unit erases whole");
 
     (unit, erased)
 }
@@ -530,7 +603,7 @@ fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit)
 fn a_top_level_value_is_computed_where_its_unit_is_erased() {
     let (_, unit) = stepping(1);
     let stepped = unit
-        .find(&nominal("stepped"))
+        .find(&nominal("stepped"), Sorts::NONE)
         .expect("the unit declares it");
 
     assert_eq!(unit.computing().count(), 0);
@@ -553,17 +626,13 @@ fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
     let (before, baseline) = stepping(1);
     let (edited, whole) = stepping(2);
 
-    let (over, _) = erase_unit_over(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
+    let over = erase_over(
         &edited,
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
-            projection: &Projection::of(before.as_module()),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
             candidates: None,
@@ -581,17 +650,13 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
     let (before, baseline) = stepping(1);
     let (edited, _) = stepping(1);
 
-    let (over, _) = erase_unit_over(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
+    let over = erase_over(
         &edited,
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
-            projection: &Projection::of(before.as_module()),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
             candidates: None,
@@ -600,7 +665,7 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
     .expect("the unit erases over its baseline");
     let held = |unit: &ErasedUnit| {
         std::ptr::from_ref(
-            unit.find(&nominal("stepped"))
+            unit.find(&nominal("stepped"), Sorts::NONE)
                 .expect("the unit declares it"),
         )
     };
@@ -610,8 +675,7 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
 
 #[test]
 fn sequences_transcribe_without_carrier_choices() {
-    let mut context = context();
-    let list = context.fresh(Some("list"));
+    let list = fresh(Some("list"));
     let body = curios_core::Term::let_(
         &list,
         curios_core::Term::intrinsic(curios_core::Intrinsic::ListType(
@@ -643,7 +707,7 @@ entry
 
 #[test]
 fn erasure_is_deterministic() {
-    let x = context().fresh(Some("x"));
+    let x = fresh(Some("x"));
     // Both runs erase the *same* term, each through a reader made for it, so any difference would be erasure's own, not a difference in the binders handed to it.
     let build = || {
         let body = curios_core::Term::let_(
@@ -668,9 +732,8 @@ fn erasure_is_deterministic() {
 #[test]
 fn an_erased_form_keeps_no_binder_its_erasure_opened() {
     let erased = |opened: usize| {
-        let mut names = context();
-        let x = names.fresh(Some("x"));
-        let y = names.fresh(Some("y"));
+        let x = fresh(Some("x"));
+        let y = fresh(Some("y"));
         let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         // One constant: the module indexes its constants by hash, and two would print in an order of the table's own.
         let body = curios_core::Term::func(
@@ -696,21 +759,22 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
         .module;
 
         let unit = zonked(&unit);
-        let view = crate::projected(Erasures::nothing(), unit.as_module())
-            .expect("the unit's universes are its schemes'");
-        let mut context = Retyping::over(DEFAULT_BUDGET, SYNTAX, &view);
-        for _ in 0..opened {
-            context.fresh(None);
-        }
+        let globals = Globals::default();
+        let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let places = curios_core::Places::of(unit.as_module());
+        kernel.read(|reader| {
+            for _ in 0..opened {
+                reader.fresh(None);
+            }
 
-        crate::erase_items(
-            &mut context,
-            &view,
-            Erasures::nothing(),
-            unit.as_module(),
-            None,
-        )
-        .expect("the unit erases")
+            crate::erase_items(
+                reader,
+                Erasures::nothing(),
+                (unit.as_module(), &places),
+                None,
+            )
+            .expect("the unit erases")
+        })
     };
     let first = erased(0);
     let second = erased(8);
@@ -735,8 +799,7 @@ fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUn
         )
         .module,
     );
-    let erased = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &unit)
-        .expect("the unit erases whole");
+    let erased = erase_alone(&unit).expect("the unit erases whole");
 
     (unit, erased)
 }
@@ -745,7 +808,8 @@ fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUn
 fn form(unit: &ErasedUnit, name: &str) -> String {
     format!(
         "{:?}",
-        unit.find(&nominal(name)).expect("the unit declares it")
+        unit.find(&nominal(name), Sorts::NONE)
+            .expect("the unit declares it")
     )
 }
 
@@ -767,22 +831,16 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
     };
 
     let before = unit(1, 2);
-    let baseline = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &before)
-        .expect("the baseline erases");
+    let baseline = erase_alone(&before).expect("the baseline erases");
     let edited = unit(3, 4);
-    let whole = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &edited)
-        .expect("the unit erases whole");
-    let (over, _) = erase_unit_over(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
+    let whole = erase_alone(&edited).expect("the unit erases whole");
+    let over = erase_over(
         &edited,
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
             erased: &baseline,
             made: &BTreeSet::from([nominal("redone")]),
-            projection: &Projection::of(before.as_module()),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
             candidates: None,
@@ -803,17 +861,13 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
     let (before, baseline) = calling(1);
     let (edited, whole) = calling(2);
 
-    let (over, _) = erase_unit_over(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
+    let over = erase_over(
         &edited,
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
-            projection: &Projection::of(before.as_module()),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
             candidates: None,
@@ -831,17 +885,13 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
     let (before, baseline) = calling(1);
     let (edited, _) = calling(1);
 
-    let (over, _) = erase_unit_over(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
+    let over = erase_over(
         &edited,
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
-            projection: &Projection::of(before.as_module()),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
             candidates: None,
@@ -849,85 +899,19 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
     )
     .expect("the unit erases over its baseline");
     let held = |unit: &ErasedUnit| {
-        std::ptr::from_ref(unit.find(&nominal("caller")).expect("the unit declares it"))
+        std::ptr::from_ref(
+            unit.find(&nominal("caller"), Sorts::NONE)
+                .expect("the unit declares it"),
+        )
     };
 
     assert_eq!(held(&over), held(&baseline), "`caller` was erased again");
 }
 
 #[test]
-fn universe_erasure_is_a_validated_structural_projection() {
-    let parameter = curios_core::Level::param(curios_core::UniverseParam(0));
-    let definition = curios_core::Definition {
-        name: curios_core::Global::Authored(Qualifier::from(["poly"])),
-        kind: curios_core::DefinitionKind::Authored,
-        universe_context: curios_core::UniverseContext {
-            parameter_count: 1,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        island: Qualifier::empty(),
-        totality: curios_core::Totality::default(),
-        proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
-        value_sort: None,
-        type_: curios_core::Term::type_at(parameter.succ().unwrap()),
-        body: curios_core::Term::induct_type_at(
-            nominal("Family"),
-            [parameter],
-            Vec::<curios_core::Term>::new(),
-            Vec::<curios_core::Term>::new(),
-        ),
-    };
-    let source = stating(
-        &module(
-            vec![curios_core::Item::Let(Box::new(definition))],
-            curios_core::Term::instance_of(&global("poly"), vec![curios_core::Level::constant(2)]),
-        ),
-        curios_core::Term::type_at(curios_core::Level::constant(3)),
-    );
-
-    let source_module = zonked(&source.module);
-    let projected = crate::projected(Erasures::nothing(), source_module.as_module())
-        .expect("the module's universes are its schemes'");
-    let curios_core::Item::Let(definition) = projected.own(0) else {
-        panic!("expected definition")
-    };
-    assert_eq!(
-        definition.universe_context,
-        curios_core::UniverseContext::empty()
-    );
-    assert_eq!(definition.type_, curios_core::Term::type_ground());
-    let curios_core::Subterm::InductType(induct) = &*definition.body else {
-        panic!("expected nominal type")
-    };
-    assert!(induct.universes.is_empty());
-    // The entry is projected beside the module by the same structural rule, its instance dropped.
-    assert_eq!(
-        curios_core::project_erased_universes(&source.entry.body),
-        curios_core::Term::free_var(&global("poly"))
-    );
-
-    let invalid = module(
-        vec![self::definition(
-            "unsolved",
-            curios_core::Term::type_at(curios_core::Level::constant(1)),
-            curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(0))),
-        )],
-        nat_lit(0),
-    );
-    // The zonk evidence refuses a level that holds a metavariable, so the module is handed over as it stands: the projection's own validation is what answers here.
-    assert!(curios_core::Zonked::project(&invalid.module).is_err());
-    assert!(crate::projected(Erasures::nothing(), &invalid.module).is_err());
-}
-
-#[test]
 fn a_function_erases_with_a_parameter_for_each_binder_and_no_captures() {
-    let mut context = context();
-    let type_param = context.fresh(Some("A"));
-    let x = context.fresh(Some("x"));
+    let type_param = fresh(Some("A"));
+    let x = fresh(Some("x"));
     // (A : Type, x : A) => x — the type parameter is a parameter like the other, filled with the unit constant where a type is passed; the function stores no captures.
     let func_type = curios_core::Term::func_type(
         [
@@ -942,7 +926,7 @@ fn a_function_erases_with_a_parameter_for_each_binder_and_no_captures() {
         curios_core::Term::func(
             [
                 (type_param, curios_core::Term::type_ground()),
-                (x, curios_core::Term::type_ground()),
+                (x, curios_core::Term::free_var(&type_param)),
             ],
             curios_core::Term::free_var(&x),
         ),
@@ -974,9 +958,8 @@ entry
 
 #[test]
 fn a_capturing_closure_stores_no_capture_list() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
-    let y_binder = context.fresh(Some("y"));
+    let x = fresh(Some("x"));
+    let y_binder = fresh(Some("y"));
     // (y : Nat) => (x : Nat) => x + y — the inner closure references the outer parameter freely; analysis derives it, nothing is stored.
     let inner_type = curios_core::Term::func_type(
         [(
@@ -996,9 +979,15 @@ fn a_capturing_closure_stores_no_capture_list() {
         "make",
         outer_type,
         curios_core::Term::func(
-            [(y_binder, curios_core::Term::type_ground())],
+            [(
+                y_binder,
+                curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+            )],
             curios_core::Term::func(
-                [(x, curios_core::Term::type_ground())],
+                [(
+                    x,
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                )],
                 curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
                     curios_core::Term::free_var(&x),
                     curios_core::Term::free_var(&y_binder),
@@ -1060,8 +1049,7 @@ fn opt_type() -> curios_core::Term {
 
 // induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some` tag 1 (registry-sorted). Registered on the module so erasure seeds it.
 fn opt_induct() -> curios_core::InductDecl {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     curios_core::InductDecl {
         universe_context: curios_core::UniverseContext::empty(),
         arity: curios_core::Telescope::done(curios_core::Telescope::done(())),
@@ -1223,15 +1211,9 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             .collect::<Vec<_>>()
     };
 
-    let unit = erase_unit(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
-        &zonked(&fixture.module),
-    )
-    .expect("the unit erases");
+    let unit = erase_alone(&zonked(&fixture.module)).expect("the unit erases");
     let fragment = |name: &str| {
-        unit.find(&nominal(name))
+        unit.find(&nominal(name), Sorts::NONE)
             .expect("the unit declares it")
             .module()
     };
@@ -1258,10 +1240,9 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
 
 #[test]
 fn a_multi_field_tuple_shares_the_width_schema() {
-    let mut context = context();
-    let a = context.fresh(Some("a"));
-    let b = context.fresh(Some("b"));
-    let pair = context.fresh(Some("pair"));
+    let a = fresh(Some("a"));
+    let b = fresh(Some("b"));
+    let pair = fresh(Some("pair"));
     let tuple_type = curios_core::Term::tuple_type([
         (
             a,
@@ -1301,22 +1282,32 @@ entry
 
 #[test]
 fn an_anonymous_tuple_keeps_a_field_for_its_proof() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
-    let w = context.fresh(Some("w"));
-    let sub = context.fresh(Some("sub"));
+    let x = fresh(Some("x"));
+    let w = fresh(Some("w"));
+    let sub = fresh(Some("sub"));
+    let p = fresh(Some("P"));
     // { x : Nat, w : Prop-valued } is two fields, the proof's holding the unit constant: an anonymous tuple has no declaration to say which it keeps, and a reader that knows `w`'s type as a variable reads two.
     let subset_type = curios_core::Term::tuple_type([
         (
             x,
             curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         ),
-        (w, curios_core::Term::prop()),
+        // Quantifying over `Prop` lands a level up.
+        (
+            w,
+            curios_core::Term::prop_at(curios_core::Level::constant(1)),
+        ),
     ]);
     let body = curios_core::Term::let_(
         &sub,
         subset_type.clone(),
-        curios_core::Term::tuple([nat_lit(9), curios_core::Term::prop()]),
+        curios_core::Term::tuple([
+            nat_lit(9),
+            curios_core::Term::func_type(
+                [(p, curios_core::Term::prop())],
+                curios_core::Term::free_var(&p),
+            ),
+        ]),
         curios_core::Term::proj(curios_core::Term::free_var(&sub), 0),
     );
     let erased = erase(
@@ -1363,9 +1354,8 @@ entry
 
 #[test]
 fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
-    let mut context = context();
-    let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
+    let pred = fresh(Some("pred"));
+    let ih = fresh(Some("ih"));
     // match n | 0 => 0 | succ pred (ih dead) => pred — a case split, not a fold.
     let items = vec![definition(
         "n",
@@ -1402,9 +1392,8 @@ entry
 
 #[test]
 fn a_live_hypothesis_nat_match_erases_to_a_fold() {
-    let mut context = context();
-    let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
+    let pred = fresh(Some("pred"));
+    let ih = fresh(Some("ih"));
     // match n | 0 => 0 | succ pred ih => ih + 2 — genuine induction.
     let items = vec![definition(
         "n",
@@ -1444,10 +1433,9 @@ entry
 
 #[test]
 fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
-    let mut context = context();
-    let h = context.fresh(Some("h"));
-    let t = context.fresh(Some("t"));
-    let ih = context.fresh(Some("ih"));
+    let h = fresh(Some("h"));
+    let t = fresh(Some("t"));
+    let ih = fresh(Some("ih"));
     // match xs | [] => 0 | h :: t (ih) => ih + 1 — a length fold over a list.
     let list_ty = curios_core::Term::intrinsic(curios_core::Intrinsic::ListType(
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
@@ -1495,8 +1483,7 @@ entry
 
 #[test]
 fn a_variant_match_binds_payload_without_projections() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Opt"), opt_induct());
     let scrutinee = curios_core::Term::variant(
@@ -1553,10 +1540,9 @@ entry
 
 #[test]
 fn an_effectful_scrutinee_is_erased_once() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
-    let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
+    let x = fresh(Some("x"));
+    let pred = fresh(Some("pred"));
+    let ih = fresh(Some("ih"));
     // The peel path re-derives Core terms from the head (`n - 1`); an effectful compound head must still evaluate exactly once, through the alias.
     let io_read =
         curios_core::Term::apply(curios_core::Term::free_var(&global("read")), [nat_lit(0)]);
@@ -1570,7 +1556,10 @@ fn an_effectful_scrutinee_is_erased_once() {
             curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         ),
         curios_core::Term::func(
-            [(x, curios_core::Term::type_ground())],
+            [(
+                x,
+                curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+            )],
             curios_core::Term::free_var(&x),
         ),
     )];
@@ -1607,9 +1596,8 @@ fn an_effectful_scrutinee_is_erased_once() {
 
 #[test]
 fn a_recursive_function_group_erases_to_functions() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
-    let f = context.fresh(Some("f"));
+    let x = fresh(Some("x"));
+    let f = fresh(Some("f"));
     // rec f(x) = f(x); body f(3)
     let func_type = curios_core::Term::func_type(
         [(
@@ -1623,7 +1611,10 @@ fn a_recursive_function_group_erases_to_functions() {
             f,
             func_type.clone(),
             curios_core::Term::func(
-                [(x, curios_core::Term::type_ground())],
+                [(
+                    x,
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                )],
                 curios_core::Term::apply(
                     curios_core::Term::free_var(&f),
                     [curios_core::Term::free_var(&x)],
@@ -1652,10 +1643,9 @@ entry
 
 #[test]
 fn a_mixed_recursive_group_erases_to_a_rec_group() {
-    let mut context = context();
-    let u = context.fresh(Some("u"));
-    let produce = context.fresh(Some("produce"));
-    let consume = context.fresh(Some("consume"));
+    let u = fresh(Some("u"));
+    let produce = fresh(Some("produce"));
+    let consume = fresh(Some("consume"));
     // rec { produce() = consume; consume = produce } — a dormant knot: the computed member's initializer references the function, and the function body references the computed member (dormant until applied).
     let produce_type = curios_core::Term::func_type(
         [(
@@ -1669,7 +1659,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
             (
                 produce,
                 produce_type.clone(),
-                curios_core::Term::func([(u, curios_core::Term::type_ground())], nat_lit(5)),
+                curios_core::Term::func([(u, curios_core::Term::tuple_type_unit())], nat_lit(5)),
             ),
             (
                 consume,
@@ -1696,9 +1686,8 @@ entry
 
 #[test]
 fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
-    let mut context = context();
-    let a = context.fresh(Some("a"));
-    let b = context.fresh(Some("b"));
+    let a = fresh(Some("a"));
+    let b = fresh(Some("b"));
     // rec a = b; b = a — a mutual value-level cycle no forcing order satisfies. The verifier rejects it; erasure surfaces the diagnostic as an error, never a panic. (A *self*-knot `rec loop = loop` is admitted only while nothing outside its initializer reads it, which is when the lowering drops it.)
     let type_ = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let body = curios_core::Term::rec(
@@ -1715,8 +1704,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
 
 #[test]
 fn top_level_recursive_items_erase_through_the_item_chain() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     let func_type = curios_core::Term::func_type(
         [(
             x,
@@ -1738,7 +1726,10 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
             value_sort: None,
             type_: func_type.clone(),
             body: curios_core::Term::func(
-                [(x, curios_core::Term::type_ground())],
+                [(
+                    x,
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                )],
                 curios_core::Term::apply(
                     curios_core::Term::free_var(&global("go")),
                     [curios_core::Term::free_var(&x)],
@@ -1768,8 +1759,7 @@ entry
 
 /// A no-parameter single-field struct declaration — the classifier fixtures' newtype link.
 fn newtype_struct(field: &str, type_: curios_core::Term) -> curios_core::StructDecl {
-    let mut context = context();
-    let f = context.fresh(Some(field));
+    let f = fresh(Some(field));
     curios_core::StructDecl {
         universe_context: curios_core::UniverseContext::empty(),
         arity: curios_core::Telescope::done(curios_core::Telescope::build([(f, type_)], ())),
@@ -1791,8 +1781,7 @@ fn struct_type_of(name: &str) -> curios_core::Term {
 
 /// A no-parameter family with the single unary constructor `mk(x: payload)`.
 fn unary_induct(payload: curios_core::Term) -> curios_core::InductDecl {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     curios_core::InductDecl {
         universe_context: curios_core::UniverseContext::empty(),
         arity: curios_core::Telescope::done(curios_core::Telescope::done(())),
@@ -1815,7 +1804,6 @@ fn unary_induct(payload: curios_core::Term) -> curios_core::InductDecl {
 /// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload records its carrier, `Flt`.
 #[test]
 fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
-    let mut context = context();
     let mut struct_decls = BTreeMap::new();
     struct_decls.insert(
         nominal("Meters"),
@@ -1855,34 +1843,42 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     induct_decls.insert(nominal("Chained"), unary_induct(induct_type("Inner")));
     induct_decls.insert(nominal("Selfy"), unary_induct(induct_type("Selfy")));
 
-    // The families register lazily on first construction, and the classifier reads the declared field types, never the operands — so a `Nat` literal stands in for every payload value.
-    let construct = |family: &str| {
-        curios_core::Term::variant(
-            nominal(family),
-            Vec::<curios_core::Term>::new(),
-            curios_core::Atom::from("mk"),
-            [nat_lit(6)],
+    // The families register lazily on first construction, and the classifier reads the declared field types: each family is built by a function of its payload, so a family no value inhabits is built as readily as the others.
+    let building = |family: &str, payload: curios_core::Term| {
+        let value = fresh(Some("v"));
+        (
+            curios_core::Term::func(
+                [(value, payload.clone())],
+                curios_core::Term::variant(
+                    nominal(family),
+                    Vec::<curios_core::Term>::new(),
+                    curios_core::Atom::from("mk"),
+                    [curios_core::Term::free_var(&value)],
+                ),
+            ),
+            curios_core::Term::func_type([(value, payload)], induct_type(family)),
         )
     };
-    let a = context.fresh(Some("a"));
-    let b = context.fresh(Some("b"));
-    let c = context.fresh(Some("c"));
-    let d = context.fresh(Some("d"));
-    let e = context.fresh(Some("e"));
-    let body = curios_core::Term::tuple([
-        construct("Wrapped"),
-        construct("Knotted"),
-        construct("Boxed"),
-        construct("Chained"),
-        construct("Selfy"),
-    ]);
-    let expected = curios_core::Term::tuple_type([
-        (a, induct_type("Wrapped")),
-        (b, induct_type("Knotted")),
-        (c, induct_type("Boxed")),
-        (d, induct_type("Chained")),
-        (e, induct_type("Selfy")),
-    ]);
+    let (built, types): (Vec<_>, Vec<_>) = [
+        ("Wrapped", struct_type_of("Outer")),
+        ("Knotted", struct_type_of("Loop")),
+        (
+            "Boxed",
+            curios_core::Term::intrinsic(curios_core::Intrinsic::FltType),
+        ),
+        ("Chained", induct_type("Inner")),
+        ("Selfy", induct_type("Selfy")),
+    ]
+    .into_iter()
+    .map(|(family, payload)| building(family, payload))
+    .unzip();
+    let body = curios_core::Term::tuple(built);
+    let expected = curios_core::Term::tuple_type(
+        ["a", "b", "c", "d", "e"]
+            .into_iter()
+            .map(|label| fresh(Some(label)))
+            .zip(types),
+    );
     let fixture = curios_core::Program {
         module: curios_core::test_support::declaring(
             curios_core::Module {
@@ -1925,10 +1921,9 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
 /// An applied lambda is transcribed as the function and the call it is, whatever its parameters are marked: erasure reads the callee's type off the lambda itself and holds no opinion on what a declaration may type a `use` parameter at.
 #[test]
 fn an_applied_lambda_with_a_witness_slot_erases() {
-    let mut context = context();
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
-    let held = context.fresh(Some("held"));
-    let x = context.fresh(Some("x"));
+    let held = fresh(Some("held"));
+    let x = fresh(Some("x"));
     let lambda = curios_core::Term::func_marked(
         [
             (Plicity::Witness, held, struct_type_of("Dict")),
@@ -1977,16 +1972,15 @@ entry
 /// What erasing a function over a chain of `depth` eliminations spends, in budget units, read off the reader its erasure ran through. `step` wraps the type one level deeper and `eliminate` the term.
 fn chain_cost(
     depth: usize,
-    step: impl Fn(&mut Retyping, curios_core::Term) -> curios_core::Term,
+    step: impl Fn(curios_core::Term) -> curios_core::Term,
     eliminate: impl Fn(curios_core::Term) -> curios_core::Term,
 ) -> u64 {
-    let mut context = context();
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let mut domain = nat.clone();
     for _ in 0..depth {
-        domain = step(&mut context, domain);
+        domain = step(domain);
     }
-    let x = context.fresh(Some("x"));
+    let x = fresh(Some("x"));
     let mut body = curios_core::Term::free_var(&x);
     for _ in 0..depth {
         body = eliminate(body);
@@ -2004,19 +1998,20 @@ fn chain_cost(
     );
     // On a grown stack, as every entry point erases: a chain this deep is walked a frame a level.
     grown(|| {
-        let view = crate::projected(Erasures::nothing(), unit.as_module())
-            .expect("the unit's universes are its schemes'");
-        let mut reader = Retyping::over(DEFAULT_BUDGET, SYNTAX, &view);
-        crate::erase_items(
-            &mut reader,
-            &view,
-            Erasures::nothing(),
-            unit.as_module(),
-            None,
-        )
-        .expect("the unit erases");
+        let globals = Globals::default();
+        let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let places = curios_core::Places::of(unit.as_module());
+        kernel.read(|reader| {
+            crate::erase_items(
+                reader,
+                Erasures::nothing(),
+                (unit.as_module(), &places),
+                None,
+            )
+            .expect("the unit erases");
 
-        reader.consumed().units()
+            reader.consumed().units()
+        })
     })
 }
 
@@ -2026,9 +2021,9 @@ fn a_projection_chain_erases_in_work_proportional_to_its_depth() {
     let cost = |depth| {
         chain_cost(
             depth,
-            |context, inner| {
-                let kept = context.fresh(Some("kept"));
-                let pad = context.fresh(Some("pad"));
+            |inner| {
+                let kept = fresh(Some("kept"));
+                let pad = fresh(Some("pad"));
                 curios_core::Term::tuple_type([
                     (kept, inner),
                     (
@@ -2054,8 +2049,8 @@ fn a_curried_call_chain_erases_in_work_proportional_to_its_depth() {
     let cost = |depth| {
         chain_cost(
             depth,
-            |context, inner| {
-                let n = context.fresh(Some("n"));
+            |inner| {
+                let n = fresh(Some("n"));
                 curios_core::Term::func_type_marked(
                     [(
                         Plicity::Explicit,
@@ -2076,44 +2071,55 @@ fn a_curried_call_chain_erases_in_work_proportional_to_its_depth() {
     );
 }
 
-/// Erasure's reader is handed no proof's body either: out of its universes a definition marked a proof unfolds to nothing, and the definition beside it to its body.
+/// Erasure's reader is handed no proof's body either: the kernel it reads through defines a definition marked a proof as unfolding to nothing, and the definition beside it to its body.
 #[test]
 fn a_proofs_body_is_withheld_from_erasures_reader() {
-    let marked = |item| match item {
-        curios_core::Item::Let(definition) => {
-            curios_core::Item::Let(Box::new(curios_core::Definition {
-                proof: true,
-                ..*definition
-            }))
-        }
-        item => item,
+    let p = fresh(Some("P"));
+    let proof = fresh(Some("p"));
+    let curios_core::Item::Let(lemma) = definition(
+        "lemma",
+        curios_core::Term::func_type(
+            [
+                (p, curios_core::Term::prop()),
+                (proof, curios_core::Term::free_var(&p)),
+            ],
+            curios_core::Term::free_var(&p),
+        ),
+        curios_core::Term::func(
+            [
+                (p, curios_core::Term::prop()),
+                (proof, curios_core::Term::free_var(&p)),
+            ],
+            curios_core::Term::free_var(&proof),
+        ),
+    ) else {
+        unreachable!("a fixture's definition is a `let`")
     };
-    let unit = module(
-        vec![
-            marked(definition(
-                "lemma",
-                curios_core::Term::prop(),
-                curios_core::Term::prop(),
-            )),
-            definition(
-                "two",
-                curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-                nat_lit(2),
-            ),
-        ],
-        nat_lit(0),
-    )
-    .module;
+    let unit = zonked(
+        &module(
+            vec![
+                curios_core::Item::Let(Box::new(curios_core::Definition {
+                    proof: true,
+                    ..*lemma
+                })),
+                definition(
+                    "two",
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                    nat_lit(2),
+                ),
+            ],
+            nat_lit(0),
+        )
+        .module,
+    );
 
-    let view = Projected::over(Erasures::nothing(), &unit);
-    let unfolds = |path| {
-        view.definition(&nominal(path))
-            .expect("the unit declares it")
-            .body
-            .is_some()
-    };
-    assert!(!unfolds("lemma"));
-    assert!(unfolds("two"));
+    let globals = Globals::default();
+    let (rechecked, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+    kernel.read(|reader| {
+        assert!(reader.value(&global("lemma")).is_none());
+        assert!(reader.value(&global("two")).is_some());
+    });
 }
 
 /// A record of two fields at one type, `levels` deep: a graph of `levels` nodes over a tree of two to the `levels` leaves. Its binders are minted from `mint`, so two such types name no binder in common.
@@ -2212,4 +2218,36 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
     for (row, erased) in rows {
         assert!(erased, "{row} did not erase");
     }
+}
+
+/// An erasure that runs out of its budget is refused in erasure's words, at the term it was reading: the program was certified, and only erasing it stopped.
+#[test]
+fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
+    let unit = zonked(&module(Vec::new(), nat_lit(0)).module);
+    let globals = Globals::default();
+    let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let sum = curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(nat_lit(2), nat_lit(3)));
+    let error = kernel.read(|reader| {
+        // The whole budget spent, as a reading that ran out of it leaves it.
+        reader.restore_budget();
+        reader
+            .spend(curios_core::Cost::units(DEFAULT_BUDGET))
+            .expect("the budget affords itself");
+
+        crate::reduced(reader, &sum).expect_err("a spent budget refuses the reading")
+    });
+    let reading = curios_elab::Reading {
+        module: unit.as_module(),
+        kept: None,
+        scope: &[],
+        syntax: &SYNTAX,
+        spellings: None,
+        anchors: &[],
+        printer: None,
+    };
+
+    assert_eq!(
+        error.format(&reading),
+        "erasure ran out of steps reading: 2 + 3\n  recursion depth needed 1024 units with 0 left"
+    );
 }

@@ -10,6 +10,8 @@ workspace = true
 
 [features]
 profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/profile"]
+# `test_support`: what a reading through the kernel spends, which `curios-erase`'s suite measures. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+test-support = []
 
 # Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — the enumeration of the trusted base in this crate's `README.md` names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
 [dev-dependencies]

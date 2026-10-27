@@ -1,6 +1,6 @@
-//! A head is read at the type the checkers accepted it at. Erasure reads a callee's type off the finished term and needs its head, and a type's head may show only where reduction puts a question to conversion: a stuck fold's atoms classed, an arm's equation met at another spelling. Both checkers ask it, so the reader erasure reads through asks it too.
+//! A head is read at the type the checkers accepted it at. Erasure reads a callee's type off the finished term and needs its head, and a type's head may show only where reduction puts a question to conversion: a stuck fold's atoms classed, an arm's equation met at another spelling. Both checkers ask it, and erasure reads through the kernel that certified the term, so its reading asks it too.
 //!
-//! Each program types its callee `g` at a `Pick` of a decision that is `true` to conversion and stuck to the fold alone. Mutation-checked: with the reader's reduction plain (`Asking::set_plain` in `Retyping::new`) the prelude erases to the bytes it had and each of these panics at `erase: applied a non-function`.
+//! Each program types its callee `g` at a `Pick` of a decision that is `true` to conversion and stuck to the fold alone.
 
 use crate::tests::run;
 

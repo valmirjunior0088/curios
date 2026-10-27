@@ -1620,11 +1620,12 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             .places
             .clone()
             .unwrap_or_else(|| Places::of(finished.as_module()));
-        let judged = recheck_over(
+        let globals = crate::globals_after(predecessors, &[false]);
+        let (judged, _) = recheck_over(
             &finished,
             &places,
             DEFAULT_BUDGET,
-            predecessors,
+            &globals,
             Over {
                 baseline: std,
                 moved: &[false],

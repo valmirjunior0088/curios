@@ -9,7 +9,7 @@ use {
     curios_archive::{Bytes, joined, parted},
     curios_core::{Certification, ItemRun, Lexicon, Module, Places},
     curios_elab::{Candidating, Readers, Traces},
-    curios_erase::{ErasedUnit, Projection},
+    curios_erase::ErasedUnit,
     curios_text::PreparedText,
     curios_utilities::{Digest, Facet, Mount, Object, Recorded},
     std::{cell::OnceCell, rc::Rc},
@@ -32,9 +32,6 @@ struct Produced {
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
     places: Rc<OnceCell<Places>>,
-    /// What erasure has read of `core` out of its universes, made the first time an erasure reads the unit and kept beside its places: no erasure keys the unit again, and a declaration one projected the next finds. Never stored, being read off `core`.
-    #[archived_with(curios_archive::Skip)]
-    projection: Rc<OnceCell<Projection>>,
     /// What a report spells this unit's names by, made the first time a report is made over the unit and kept beside its places: no report builds a table over the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
     lexicon: Rc<OnceCell<Lexicon>>,
@@ -61,7 +58,6 @@ impl Produced {
             text: Rc::new(text),
             core: Rc::new(core),
             places: Rc::default(),
-            projection: Rc::default(),
             lexicon: Rc::default(),
             erased: Rc::new(erased),
             traces: Rc::new(Recorded::held(traces)),
@@ -93,11 +89,6 @@ impl Produced {
     /// See [`Unit::lexicon`].
     pub fn lexicon(&self) -> &Lexicon {
         self.lexicon.get_or_init(|| self.core.lexicon())
-    }
-
-    /// See [`Unit::projection`].
-    pub fn projection(&self) -> &Projection {
-        self.projection.get_or_init(|| Projection::of(&self.core))
     }
 
     /// See [`Unit::erased`].
@@ -280,7 +271,6 @@ impl Produced {
             readers: Rc::default(),
             core: Rc::new(Rc::unwrap_or_clone(self.core).with_items(found(&elaborated, find)?)?),
             places: Rc::default(),
-            projection: Rc::default(),
             lexicon: Rc::default(),
         })
     }
@@ -328,12 +318,6 @@ impl Unit {
         self
     }
 
-    /// This unit, holding `projection` as what erasure has read of its module out of its universes: what the erasure over a baseline that made the unit carries over from the baseline's, in place of making a cell for every item again.
-    pub fn projecting(mut self, projection: Projection) -> Self {
-        self.unit.projection = Rc::new(OnceCell::from(projection));
-        self
-    }
-
     /// What the certifier concluded about this unit's definitions. See the field.
     pub fn certification(&self) -> &Certification {
         &self.certification
@@ -362,11 +346,6 @@ impl Unit {
     /// What a report spells this unit's names by. See the field.
     pub fn lexicon(&self) -> &Lexicon {
         self.unit.lexicon()
-    }
-
-    /// What erasure has read of this unit's elaborated module out of its universes. See the field.
-    pub fn projection(&self) -> &Projection {
-        self.unit.projection()
     }
 
     /// This unit's items' erased forms — what a later unit's erasure reads how a name is bound from, what a program links, and what a recompile of this unit keeps for the items it does not redo.

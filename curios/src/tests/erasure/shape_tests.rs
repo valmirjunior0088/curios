@@ -1,6 +1,6 @@
 //! A structural type's runtime shape is its telescope's: a function takes a parameter for each binder and an anonymous tuple holds a field for each member, whatever a binder's type is read as. Each program makes a value at one reading of its type and uses it at another, a substitution or a refinement apart, where one reads a binder as a type and the other as a variable. With a binder dropped by either reading, the first three print `1`, the fourth stops the compiler in `curios-cps`'s verifier, and the tuple traps.
 //!
-//! A nominal type's runtime shape is its declaration's row, at a reading that erases a field the declaration keeps as at any other.
+//! A nominal type's runtime shape is its declaration's row at the sorts its instance states, read by every site that builds or reads a value of it: a use at `Prop` of a declaration that leaves its sort to its caller reads the row at `Prop`, which keeps no field for a proof, and a body generic in that sort is linked at the sort each use states.
 
 use crate::tests::run;
 
@@ -101,7 +101,7 @@ fn a_function_held_in_a_structure_is_called_at_a_variable() {
     assert_eq!(run(source), b"42");
 }
 
-// `S(P)` erases `x`, `A` being the proposition `P` there, and a value of it is the two fields its declaration keeps all the same. Read off the reading instead, `S(P)` would be its one number, so the family holding one would take the encoding that tells a number from its other case, and `a` would be matched as `b`, printing `7`.
+// `S(P)` is `S` at `Prop`, `A` being the proposition `P` there, so its row keeps `y` alone, and the family `U` holding one reads that row, as the site building it does. A row read by one of them at another sort, or off the reading rather than the declaration, would be a value of `S` built at one row and read at another.
 #[test]
 fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
     let source = r#"
@@ -128,4 +128,15 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
         entry()
         "#;
     assert_eq!(run(source), b"40");
+}
+
+// `count` leaves its sort to its caller and matches into data, so it erases to a form at each sort: at `Type` its `some` arm reads a payload, at `Prop` none, `holds` building its options at `Prop`. A use linked at the other sort's form would read a value built at one row at the other.
+#[test]
+fn a_body_generic_in_a_sort_is_linked_at_the_sort_each_use_states() {
+    let source = r#"
+        use /std/{Nat, Bool, Option, print};
+        let count(@A: Sort, o: Option(A)) -> Nat = match o | some(_) => 1 | none() => 0 end;
+        print(Nat/to_str(count(Option/some(4)) + count(Bool/holds(true)) + count(Bool/holds(false))))
+        "#;
+    assert_eq!(run(source), b"2");
 }

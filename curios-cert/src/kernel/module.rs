@@ -298,7 +298,7 @@ pub(crate) fn check_rec_group(
 ///
 /// # A declaration that leaves a sort to its caller
 ///
-/// Clause 3 is read off the entry as it is stated, so the family's own sort is one sort whatever a use states: the readers that take it literally read the entry, and an entry at an assignment would hand them a literal the entry does not hold. Every clause that types a telescope is judged at every assignment of the declaration's open sorts ([`at_every_sort`]), the entry read at each ([`induct_at_sorts`]).
+/// Clause 3 is read off the entry as it is stated, so the family's own sort is one sort whatever a use states: the readers that take it literally read the entry, and an entry at an assignment would hand them a literal the entry does not hold. Every clause that types a telescope is judged at every assignment of the declaration's open sorts ([`at_every_sort`]), the entry read at each ([`InductDecl::at_qualities`](curios_core::InductDecl::at_qualities)).
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub(crate) fn check_induct_decl(
@@ -314,7 +314,7 @@ pub(crate) fn check_induct_decl(
         let declaration = match sorts.is_empty() {
             true => declaration,
             false => {
-                at = induct_at_sorts(declaration, sorts);
+                at = declaration.at_qualities(sorts);
                 &at
             }
         };
@@ -333,31 +333,6 @@ pub(crate) fn check_induct_decl(
 
         Ok(())
     })
-}
-
-/// `declaration` at one assignment of the sorts it leaves open: every telescope it holds read at the assignment, and no sort left to a caller.
-fn induct_at_sorts(declaration: &InductDecl, sorts: &[Quality]) -> InductDecl {
-    let mut at = declaration.clone();
-
-    at.arity = instantiate_qualities(&at.arity, sorts);
-    at.result_sort = instantiate_qualities(&at.result_sort, sorts);
-    for constructor in at.signatures_mut() {
-        constructor.telescope = instantiate_qualities(&constructor.telescope, sorts);
-    }
-    at.universe_context.quality_count = 0;
-
-    at
-}
-
-/// [`induct_at_sorts`] for a `struct` registry entry.
-fn struct_at_sorts(declaration: &StructDecl, sorts: &[Quality]) -> StructDecl {
-    let mut at = declaration.clone();
-
-    at.arity = instantiate_qualities(&at.arity, sorts);
-    at.result_sort = instantiate_qualities(&at.result_sort, sorts);
-    at.universe_context.quality_count = 0;
-
-    at
 }
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
@@ -512,7 +487,7 @@ pub(crate) fn check_struct_decl(
         let declaration = match sorts.is_empty() {
             true => declaration,
             false => {
-                at = struct_at_sorts(declaration, sorts);
+                at = declaration.at_qualities(sorts);
                 &at
             }
         };

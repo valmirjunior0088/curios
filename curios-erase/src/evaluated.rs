@@ -10,7 +10,7 @@
 //!
 //! **An item that declares a row is not evaluated.** What is taken back out holds a schema as an import holds one, and a declared row is its fields.
 
-use crate::{ErasedItem, ErasedUnit, Erasures, Linking, reached};
+use crate::{ErasedItem, ErasedUnit, Erasures, Linking, Sorts, reached};
 
 /// What evaluating an item where it is erased came to.
 pub struct Evaluation {
@@ -20,8 +20,12 @@ pub struct Evaluation {
     pub ran: Vec<curios_core::Global>,
 }
 
-/// Evaluate `erased`, the erased form of the next item of `unit`, over what it reaches of `unit` and of `scope`. `None` for an item that computes nothing as it was erased, or that declares a row: there is nothing to evaluate, and nothing is read.
-pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> Option<Evaluation> {
+/// Evaluate `erased`, the erased form at `sorts` of the next item of `unit`, over what it reaches of `unit` and of `scope`. `None` for a form that computes nothing as it was erased, or that declares a row: there is nothing to evaluate, and nothing is read.
+pub fn evaluate(
+    scope: Erasures<'_>,
+    unit: &ErasedUnit,
+    (erased, sorts): (&ErasedItem, Sorts),
+) -> Option<Evaluation> {
     if !erased.module().computes() || erased.environment().declares_rows() {
         return None;
     }
@@ -34,7 +38,11 @@ pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> 
         .zip(reached.items())
         .enumerate()
         .filter(|(place, _)| *place >= scope.units().len() || !scope.is_fixed(*place))
-        .flat_map(|(_, (unit, items))| items.iter().map(|&place| unit.item(place)))
+        .flat_map(|(_, (unit, items))| {
+            items
+                .iter()
+                .map(|&(place, form)| unit.item(place).form(form).0)
+        })
         .map(|item| {
             let (name, _) = item
                 .environment()
@@ -57,7 +65,7 @@ pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> 
     let mut linking = Linking::importing_rows();
     linking.add_reached(&units, &reached);
     let mark = linking.mark();
-    let landed = linking.add(erased);
+    let landed = linking.add(erased, &[sorts]);
     let erased = linking
         .evaluate_since(&mark)
         .then(|| linking.taken(&units, &mark, erased, &landed))

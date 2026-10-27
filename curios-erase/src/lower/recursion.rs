@@ -5,7 +5,7 @@
 use {
     super::{Lowering, Outcome},
     crate::Error,
-    curios_elab::Retyping,
+    curios_cert::Reader,
 };
 
 /// One classified member of a recursive group, pre-bound for mutual visibility before any body is erased.
@@ -18,7 +18,7 @@ impl Lowering<'_> {
     /// Erase a local `rec` block, then continue with its tail.
     pub fn erase_rec(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         rec: &curios_core::Rec,
         expected: &curios_core::Term,
         hint: Option<&str>,
@@ -45,16 +45,13 @@ impl Lowering<'_> {
             .collect::<Vec<_>>();
         let tail = tail.open(&name_refs);
 
-        context.with_frame(|context| {
-            for (name, (type_, _)) in names.iter().zip(&members) {
-                context.assume(name, type_);
-                context.set_assumption_universe_context(name, group.universe_context().clone());
-            }
-            for (index, name) in names.iter().enumerate() {
-                context.define(
+        // Each member bound at its type to its selection, as the kernel's own group tail binds it.
+        context.scoped(|context| {
+            for (index, (name, (type_, _))) in names.iter().zip(&members).enumerate() {
+                context.bind(
                     name,
+                    type_,
                     &curios_core::Term::rec_proj(group.clone(), index),
-                    None,
                 );
             }
             self.emit_group(context, &names, &hints, &members)?;
@@ -62,24 +59,42 @@ impl Lowering<'_> {
         })
     }
 
-    /// Erase a top-level recursive item as the fragment's item. Its members are defined in the Core context already, as every item's names are.
+    /// Erase a top-level recursive item as the fragment's item. Its members are defined in the kernel's environment already, as every item's names are, each at the group's universes: a member names another at the group's own levels and at the sorts this form is read at, which is the occurrence the kernel reads, and the form's own name for it.
     pub fn erase_rec_item(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         rec: &curios_core::RecItem,
     ) -> Result<(), Error> {
-        let definitions = rec.definitions();
-        let names = definitions
+        let universes = curios_core::Universes {
+            levels: (0..rec.group.universe_context().parameter_count)
+                .map(|param| curios_core::Level::param(curios_core::UniverseParam(param)))
+                .collect(),
+            qualities: self.own.1.qualities(),
+        };
+        let names = rec
+            .definitions
             .iter()
             .map(|definition| curios_core::Free::from(&definition.name))
             .collect::<Vec<_>>();
-        let hints = definitions
+        let occurrences = names
+            .iter()
+            .map(|name| curios_core::Term::instance_of(name, universes.clone()))
+            .collect::<Vec<_>>();
+        let occurrences = occurrences.iter().collect::<Vec<_>>();
+        let hints = rec
+            .definitions
             .iter()
             .map(|definition| Some(definition.name.faithful().to_string()))
             .collect::<Vec<_>>();
-        let members = definitions
+        let members = rec
+            .group
             .iter()
-            .map(|definition| (definition.type_.clone(), definition.body.clone()))
+            .map(|member| {
+                (
+                    member.type_.open(&occurrences),
+                    member.body.open(&occurrences),
+                )
+            })
             .collect::<Vec<_>>();
         self.emit_group(context, &names, &hints, &members)
     }
@@ -87,7 +102,7 @@ impl Lowering<'_> {
     /// Pre-bind every member, erase function bodies and computed initializers, and emit the group statement (`Functions` when every member is a function, a recursive group otherwise). Statement emission falls through to the top-level item list when no block is open.
     fn emit_group(
         &mut self,
-        context: &mut Retyping,
+        context: &mut Reader,
         names: &[curios_core::Free],
         hints: &[Option<String>],
         members: &[(curios_core::Term, curios_core::Term)],

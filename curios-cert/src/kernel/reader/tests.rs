@@ -91,7 +91,7 @@ fn a_reader_reduces_a_term_to_its_head() {
     let term = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(3)]);
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
 
-    assert_eq!(kernel.read(|reader| reader.whnf(&term)), Ok(nat(3)));
+    assert_eq!(kernel.read(|reader| reader.head(&term)), Ok(nat(3)));
 }
 
 /// A neutral's type, and a type former's sort, are what the kernel infers.
@@ -175,11 +175,11 @@ fn a_case_stands_for_its_value_within_its_frame() {
         reader.scoped(|reader| {
             assert_eq!(reader.case(&variable, &boolean(true)), Ok(()));
             assert_eq!(reader.case(&call, &boolean(false)), Ok(()));
-            assert_eq!(reader.whnf(&variable), Ok(boolean(true)));
-            assert_eq!(reader.whnf(&call), Ok(boolean(false)));
+            assert_eq!(reader.head(&variable), Ok(boolean(true)));
+            assert_eq!(reader.head(&call), Ok(boolean(false)));
         });
-        assert_eq!(reader.whnf(&variable), Ok(variable.clone()));
-        assert_eq!(reader.whnf(&call), Ok(call.clone()));
+        assert_eq!(reader.head(&variable), Ok(variable.clone()));
+        assert_eq!(reader.head(&call), Ok(call.clone()));
     });
 }
 
@@ -220,10 +220,10 @@ fn a_reader_enters_an_arm_as_it_is_checked() {
             assert_eq!(entered.value, value);
             assert!(!entered.ruled_out);
             assert_eq!(
-                reader.whnf(&Term::free_var(&b)),
+                reader.head(&Term::free_var(&b)),
                 Ok(succ(Term::free_var(&q)))
             );
-            assert_eq!(reader.whnf(&Term::free_var(&subject)), Ok(value));
+            assert_eq!(reader.head(&Term::free_var(&subject)), Ok(value));
         });
         reader.scoped(|reader| {
             let entered = reader
@@ -252,9 +252,9 @@ fn a_reader_binds_a_fresh_local_within_its_frame() {
         assert_ne!(y, x);
         reader.scoped(|reader| {
             reader.bind(&y, &nat_type(), &nat(2));
-            assert_eq!(reader.whnf(&Term::free_var(&y)), Ok(nat(2)));
+            assert_eq!(reader.head(&Term::free_var(&y)), Ok(nat(2)));
         });
-        assert_eq!(reader.whnf(&Term::free_var(&y)), Ok(Term::free_var(&y)));
+        assert_eq!(reader.head(&Term::free_var(&y)), Ok(Term::free_var(&y)));
     });
 }
 

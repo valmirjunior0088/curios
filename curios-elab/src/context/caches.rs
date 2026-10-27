@@ -131,10 +131,6 @@ pub struct Caches {
     same: [HashMap<(Term, Term), bool>; 2],
     /// The stamps `sorts` and `same` were filled under.
     sorts_at: ElaborationStamp,
-    /// What [`is_erasable_in`](crate::is_erasable_in) answered of each closed type it walked through, by the reduction that read it. A function type answers as the codomain it ends in, so one walk to the end of a curried type answers every tail of it, which each partial application of a curried function would walk again. Filed and read only where no scrutinee refinement stands, since an arm's equation can make a closed term reduce otherwise; kept as long as the reducts are, whose reading it is, and the universe solver's state, which the sorts it reads rest on. No write to a local's assumption, a solution or a definition read nowhere moves it, as none moves a closed reduct.
-    erasable: [HashMap<Term, bool>; 2],
-    /// The universe stamp `erasable` was filled under.
-    erasable_at: Entropy,
     /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
     instances: HashMap<Keyed<RecGroup>, (RecGroup, Universes)>,
     /// Each top-level `rec` group reduction has opened by unfolding a name in the declaration in progress, beside the first name it was opened from: what a term the declaration commits names a stuck call on it by ([`named_members`](crate::named_members)). It lives one declaration, as the instances do. Behind a cell because a name is unfolded through a shared reference.
@@ -502,33 +498,7 @@ impl Caches {
         }
         self.classified.clear();
         self.clear_sorts();
-        self.clear_erasable();
         self.kernel_spellings.get_mut().clear();
-    }
-
-    fn clear_erasable(&mut self) {
-        for erasable in &mut self.erasable {
-            erasable.clear();
-        }
-    }
-
-    /// What [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, as plain reduction read it where `plain` and as a judgment's did otherwise ([`Caches::erasable`]).
-    pub fn erasable_get(&mut self, type_: &Term, plain: bool) -> Option<bool> {
-        self.settle_erasable();
-        self.erasable[usize::from(plain)].get(type_).copied()
-    }
-
-    pub fn erasable_insert(&mut self, type_: Term, plain: bool, erasable: bool) {
-        self.settle_erasable();
-        self.erasable[usize::from(plain)].insert(type_, erasable);
-    }
-
-    /// Empty the verdicts where the universe stamp has moved since they were filed.
-    fn settle_erasable(&mut self) {
-        if self.erasable_at != self.universe_mutation_stamp {
-            self.clear_erasable();
-            self.erasable_at = self.universe_mutation_stamp.clone();
-        }
     }
 
     /// A lookup found no definition for `name`: a reduct remembered from here on may be stuck on its absence.
@@ -788,8 +758,6 @@ impl Caches {
             for closed in &mut self.closed {
                 closed.retain_without(name);
             }
-            // A verdict names nothing it read, so one the name's absence may have decided goes with the rest.
-            self.clear_erasable();
         }
         // A sort is read through reducts and names none, so it has nothing to be retained by.
         self.clear_sorts();

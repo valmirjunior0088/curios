@@ -4,7 +4,11 @@
 //!
 //! The resume loop has no definition a description could name, so it is emitted where it is needed: beside each `Io/advance`, and once beside the entry, which hands the host a suspension it can advance without knowing its frames. A program that never builds a suspension never reaches either, since `curios-anf` takes the value arm of every test in it before anything is optimized.
 
-use {super::Lowering, crate::Error, curios_elab::Retyping};
+use {
+    super::Lowering,
+    crate::{Error, Sorts, inferred, reduced},
+    curios_cert::Reader,
+};
 
 /// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
 #[derive(Debug, Clone, Copy)]
@@ -159,17 +163,45 @@ impl Lowering<'_> {
         )
     }
 
-    /// The family of `/std/Option` and its two constructors, which a cell's poll answers.
-    pub fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
+    /// The family `option`, a type of `/sys/Option`, is at the sorts its instance states, and its two constructors: what a cell's poll answers, and what a host call's option crosses as.
+    pub fn polled(
+        &mut self,
+        context: &mut Reader,
+        option: &curios_core::Term,
+    ) -> Result<Polled, Error> {
+        let curios_core::Subterm::InductType(curios_core::InductType {
+            name, universes, ..
+        }) = &**option
+        else {
+            unreachable!("erase: an option is its family at an instance")
+        };
         let syntax = context.syntax().option;
+        let sorts = Sorts::of(&universes.qualities);
         Ok(Polled {
-            family: self.induct_family(
-                context,
-                &curios_core::Global::Authored(syntax.family.qualifier()),
-            )?,
-            some: self.outcome_constructor(context, syntax.family, syntax.some)?,
-            none: self.outcome_constructor(context, syntax.family, syntax.none)?,
+            family: self.induct_family(context, self.named(*name, sorts))?,
+            some: self.outcome_constructor(context, (syntax.family, sorts), syntax.some)?,
+            none: self.outcome_constructor(context, (syntax.family, sorts), syntax.none)?,
         })
+    }
+
+    /// What a poll of a cell the entry's suspension waits on answers: the option of `{}`, whose cells `Io/suspend` takes, at the sort the kernel reads `{}` in.
+    pub fn suspended_poll(&mut self, context: &mut Reader) -> Result<Polled, Error> {
+        let unit = curios_core::Term::tuple_type_unit();
+        let sort = inferred(context, &unit)?;
+        let curios_core::Subterm::Sort(quality, level) = &*reduced(context, &sort)? else {
+            unreachable!("erase: a type's type is a sort")
+        };
+        let option = curios_core::Term::induct_type_at(
+            curios_core::Global::Authored(context.syntax().option.family.qualifier()),
+            curios_core::Universes {
+                levels: vec![level.clone()],
+                qualities: vec![*quality],
+            },
+            vec![unit],
+            Vec::<curios_core::Term>::new(),
+        );
+
+        self.polled(context, &option)
     }
 
     /// `answer`, or where it is a suspension, what `surface` makes of it.

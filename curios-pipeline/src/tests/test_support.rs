@@ -129,10 +129,16 @@ pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
     let program = curios_core::Zonked::project(&program).expect("the elaborated program is zonked");
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
+        let globals = crate::globals(predecessors);
+        let (_, mut kernel) =
+            curios_cert::certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
         erase_program(
-            DEFAULT_BUDGET,
-            SYNTAX,
-            Erasures::of(&predecessors.cores(), &predecessors.erased()),
+            &mut kernel,
+            Erasures::of(
+                &predecessors.cores(),
+                &predecessors.places(),
+                &predecessors.erased(),
+            ),
             &program,
         )
     })

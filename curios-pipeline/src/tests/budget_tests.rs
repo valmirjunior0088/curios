@@ -124,10 +124,15 @@ fn erases(source: &str, budget: u64) -> bool {
         .expect("the program elaborates");
         let program = Zonked::project(&program).expect("the elaborated program is zonked");
 
+        let globals = crate::globals(predecessors);
+        let (_, mut kernel) = curios_cert::certify_program(&program, budget, &globals, SYNTAX);
         erase_program(
-            budget,
-            SYNTAX,
-            Erasures::of(&predecessors.cores(), &predecessors.erased()),
+            &mut kernel,
+            Erasures::of(
+                &predecessors.cores(),
+                &predecessors.places(),
+                &predecessors.erased(),
+            ),
             &program,
         )
         .is_ok()

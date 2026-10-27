@@ -858,8 +858,8 @@ impl<'s> Kernel<'s> {
         self.memos.end_closed_run(outer);
     }
 
-    /// What the declaration under judgment has consumed so far ([`Spend::consumed`]), which this crate's tests read between two judgments: the twin of the elaborator's `Context::consumed`.
-    #[cfg(test)]
+    /// What the declaration under judgment has consumed so far ([`Spend::consumed`]), which this crate's tests read between two judgments, and a reader's suite through [`Reader::consumed`](crate::Reader::consumed).
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn consumed(&self) -> Consumption {
         self.spend.consumed()
     }

@@ -3,7 +3,7 @@
 use {
     crate::Unit,
     curios_core::{Anchors, Lexicon, Module, Places},
-    curios_erase::{ErasedUnit, Projection},
+    curios_erase::ErasedUnit,
     curios_text::PreparedText,
 };
 
@@ -25,7 +25,7 @@ impl<'a> Predecessors<'a> {
 
     /// The units themselves, in dependency order.
     ///
-    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its certification together, and this crate cannot build it itself without depending on the kernel it is defined to stay below.
+    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its certification together, which the driver assembles beside the walk that reads it.
     pub fn units(&self) -> &'a [&'a Unit] {
         self.units
     }
@@ -55,12 +55,9 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.lexicon()).collect()
     }
 
-    /// What each predecessor keeps for erasure, beside [`Predecessors::cores`]: where it holds each name, and what has been read of it out of its universes. For `curios-erase`'s `Erasures`: a scope erased over, with nothing keyed for the compile.
-    pub fn projected(&self) -> Vec<(&'a Places, &'a Projection)> {
-        self.units
-            .iter()
-            .map(|unit| (unit.places(), unit.projection()))
-            .collect()
+    /// Where each predecessor holds each name, beside [`Predecessors::cores`]: for `curios-erase`'s `Erasures`, which reads a definition's kind off the item that declares it.
+    pub fn places(&self) -> Vec<&'a Places> {
+        self.units.iter().map(|unit| unit.places()).collect()
     }
 
     /// Where the source declarations of each predecessor lie, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.

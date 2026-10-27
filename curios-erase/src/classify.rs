@@ -3,38 +3,29 @@
 //! **Only a declaration drops.** A structure's fields and a constructor's payload are classified once, against the declaration's own signature, and every construction and elimination reads that one row. A function type and an anonymous tuple type have no declaration: the type a value of one stands at differs from site to site by a substitution or a refinement, and a domain one site reads as a proof or a type another reads as a variable. So neither is classified for its shape at all — a function has a parameter for each binder and a tuple a field for each member — and what [`is_erasable`] decides of a slot is only what fills it.
 
 use {
-    crate::{Error, Lowering},
+    crate::{AtSorts, Error, Lowering, Sorts, advance_assumed, is_erasable, reduced},
+    curios_cert::Reader,
     curios_core::{Advance, Bound},
-    curios_elab::{Opened, Retyping},
     std::collections::BTreeSet,
 };
 
-/// Whether a value of type `type_` carries nothing at run time, by the engine's rule read through erasure's reader ([`curios_elab::is_erasable_in`]): a type, a proof, or a function that ultimately answers one. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
-///
-/// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
-pub fn is_erasable(context: &mut Retyping, type_: &curios_core::Term) -> Result<bool, Error> {
-    Ok(context.is_erasable_in(&mut Opened::default(), type_)?)
-}
-
-/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`curios_elab::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
+/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders assumed as fresh opaque variables at their declared types, in the frame the caller opened ([`is_erasable`]). That opaque-open discipline is what makes a row a fact of its declaration at its sorts, the same at every instantiation of its levels and parameters, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
 pub fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
-    context: &mut Retyping,
+    context: &mut Reader,
     telescope: curios_core::Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_anf::FieldShape)>, Error> {
     let mut entries = Vec::new();
-    let mut opened = Opened::default();
     let mut cursor = telescope.cursor();
     while let Some((hint, type_)) = cursor.entry() {
         let label = hint.map(str::to_string);
-        let erasable = context.is_erasable_in(&mut opened, &type_)?;
+        let erasable = is_erasable(context, &type_)?;
         let shape = match erasable {
             true => curios_anf::FieldShape::Opaque,
             false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
         };
-        let name = cursor.advance_fresh(|hint| context.fresh(hint));
+        advance_assumed(context, &mut cursor, &type_);
         entries.push((label, erasable, shape));
-        opened.push(name, type_);
     }
     Ok(entries)
 }
@@ -44,8 +35,8 @@ pub fn constructor_entries<B: Bound>(
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 fn field_shape(
     lowering: &mut Lowering<'_>,
-    context: &mut Retyping,
-    visited: &mut BTreeSet<curios_core::Global>,
+    context: &mut Reader,
+    visited: &mut BTreeSet<AtSorts>,
     type_: &curios_core::Term,
 ) -> Result<curios_anf::FieldShape, Error> {
     shape_walk(lowering, Rows::Named, context, visited, type_)
@@ -54,7 +45,7 @@ fn field_shape(
 /// The register carrier a value of `type_` is held in where a register holds it ([`curios_anf::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than naming their rows — a value is held as a reference whatever row it holds.
 pub fn register_shape(
     lowering: &mut Lowering<'_>,
-    context: &mut Retyping,
+    context: &mut Reader,
     type_: &curios_core::Term,
 ) -> Result<Option<curios_anf::RegisterShape>, Error> {
     Ok(
@@ -106,7 +97,7 @@ impl Relevance {
 
 /// The type of the entry at `place` of `telescope`, the entries before it opened as fresh variables.
 fn entry_at<B: Bound>(
-    context: &mut Retyping,
+    context: &mut Reader,
     telescope: curios_core::Telescope<B>,
     place: usize,
 ) -> Option<curios_core::Term> {
@@ -124,11 +115,11 @@ fn entry_at<B: Bound>(
 fn shape_walk(
     lowering: &mut Lowering<'_>,
     rows: Rows,
-    context: &mut Retyping,
-    visited: &mut BTreeSet<curios_core::Global>,
+    context: &mut Reader,
+    visited: &mut BTreeSet<AtSorts>,
     type_: &curios_core::Term,
 ) -> Result<curios_anf::FieldShape, Error> {
-    let reduced = context.reduce_with(type_)?;
+    let reduced = reduced(context, type_)?;
     match &*reduced {
         curios_core::Subterm::Intrinsic(
             curios_core::Intrinsic::BoolType | curios_core::Intrinsic::ByteType,
@@ -154,23 +145,29 @@ fn shape_walk(
             Ok(curios_anf::FieldShape::Closure(telescope.len()))
         }
         curios_core::Subterm::StructType(struct_type) => {
+            let name = lowering.named(
+                struct_type.name,
+                Sorts::of(&struct_type.universes.qualities),
+            );
             // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no row to read yet. Answering `Opaque` costs a shape no value will ever occupy.
-            let Some(relevance) = lowering.struct_relevance(context, &struct_type.name)? else {
+            let Some(relevance) = lowering.struct_relevance(context, name)? else {
                 return Ok(curios_anf::FieldShape::Opaque);
             };
             match relevance {
                 Relevance::None => Ok(curios_anf::FieldShape::Opaque),
                 // The cycle the family arm below cuts, cut here too: a struct naming itself elaborates, so chasing its one relevant field returns to this declaration and the chain never lands. Guarding only where the chain continues keeps `visited` the ancestor chain rather than a seen-set.
                 Relevance::One(place) => {
-                    if !visited.insert(struct_type.name) {
+                    if !visited.insert(name) {
                         return Ok(curios_anf::FieldShape::Opaque);
                     }
-                    let Some(fields) = context
-                        .struct_decl(&struct_type.name)
-                        .map(|struct_decl| struct_decl.fields_at(&struct_type.params))
-                    else {
+                    let Some(fields) = context.struct_decl(&struct_type.name).map(|struct_decl| {
+                        struct_decl
+                            .at(&struct_type.universes)
+                            .fields_at(&struct_type.params)
+                    }) else {
                         return Ok(curios_anf::FieldShape::Opaque);
                     };
+                    let fields = fields?;
                     match entry_at(context, fields, place) {
                         Some(domain) => shape_walk(lowering, rows, context, visited, &domain),
                         None => Ok(curios_anf::FieldShape::Opaque),
@@ -178,7 +175,7 @@ fn shape_walk(
                 }
                 Relevance::Many => match rows {
                     Rows::Named => Ok(lowering
-                        .struct_row(context, &struct_type.name)?
+                        .struct_row(context, name)?
                         .schema
                         .map_or(curios_anf::FieldShape::Opaque, |schema| {
                             curios_anf::FieldShape::Product(schema)
@@ -200,9 +197,13 @@ fn shape_walk(
         }
         // A multi-constructor family is its own shape, and its *identity* is what a typed slot needs — never chased, whatever its encoding. A single-constructor family is always its payload row under the collapsed encoding, so the chain continues through it exactly as through a newtype struct; the `visited` guard cuts the cycle a legitimately recursive one would otherwise spin in.
         curios_core::Subterm::InductType(induct_type) => {
-            let family = |lowering: &mut Lowering<'_>, context: &mut Retyping| match rows {
+            let name = lowering.named(
+                induct_type.name,
+                Sorts::of(&induct_type.universes.qualities),
+            );
+            let family = |lowering: &mut Lowering<'_>, context: &mut Reader| match rows {
                 Rows::Named => Ok(curios_anf::FieldShape::Family(
-                    lowering.family_identity(context, &induct_type.name)?,
+                    lowering.family_identity(context, name)?,
                 )),
                 Rows::Unnamed => Ok(curios_anf::FieldShape::Opaque),
             };
@@ -214,12 +215,11 @@ fn shape_walk(
                 Some(_) => return family(lowering, context),
                 None => return Ok(curios_anf::FieldShape::Opaque),
             }
-            if !visited.insert(induct_type.name) {
+            if !visited.insert(name) {
                 return Ok(curios_anf::FieldShape::Opaque);
             }
             // A family whose row is being registered right now has no mask to read yet: a field of it is the one reaching it, whose shape the cycle makes `Opaque`.
-            let Some(relevance) = lowering.constructor_relevance(context, &induct_type.name)?
-            else {
+            let Some(relevance) = lowering.constructor_relevance(context, name)? else {
                 return Ok(curios_anf::FieldShape::Opaque);
             };
             match relevance {
@@ -231,11 +231,14 @@ fn shape_walk(
                             .induct_decl(&induct_type.name)
                             .and_then(|induct_decl| {
                                 let (tag, _) = induct_decl.constructors.first()?;
-                                induct_decl.instantiate(tag, &induct_type.params)
+                                induct_decl
+                                    .at(&induct_type.universes)
+                                    .payload(tag, &induct_type.params)
                             })
                     else {
                         return Ok(curios_anf::FieldShape::Opaque);
                     };
+                    let payload = payload?;
                     match entry_at(context, payload, place) {
                         Some(domain) => shape_walk(lowering, rows, context, visited, &domain),
                         None => Ok(curios_anf::FieldShape::Opaque),

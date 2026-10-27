@@ -1245,7 +1245,11 @@ fn certified_after(module: &Module, units: &[&Unit]) -> Vec<curios_cert::Verdict
     with_prelude(|prelude| {
         let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
 
-        crate::certify(&module, DEFAULT_BUDGET, Predecessors::over(&scope), &SYNTAX).verdicts
+        let globals = crate::globals(Predecessors::over(&scope));
+
+        curios_cert::certify_module(&module, DEFAULT_BUDGET, &globals, SYNTAX)
+            .0
+            .verdicts
     })
 }
 

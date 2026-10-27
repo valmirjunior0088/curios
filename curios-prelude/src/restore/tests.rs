@@ -3,10 +3,7 @@
 use {
     super::*,
     crate::std_directory,
-    curios_cert::{
-        Error, Globals, certify_module, infer, recheck_module_measured,
-        recheck_module_verdicts_uncached,
-    },
+    curios_cert::{Error, Globals, certify_module, infer, recheck_module_verdicts_uncached},
     curios_core::{
         Bound, Cases, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Match, Nat,
         Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked, instantiate_qualities,
@@ -476,12 +473,8 @@ fn kernel_disagreements() {
         // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel.
         for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
-            let rechecked = certify_module(
-                &zonked,
-                DEFAULT_BUDGET,
-                &certified(&prelude[..index]),
-                SYNTAX,
-            );
+            let globals = certified(&prelude[..index]);
+            let (rechecked, _) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             verdicts.extend(rechecked.verdicts);
         }
 
@@ -520,7 +513,9 @@ fn kernel_memo_parity() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
             assert_eq!(
-                certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX).verdicts,
+                certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX)
+                    .0
+                    .verdicts,
                 recheck_module_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
             );
         }
@@ -608,8 +603,7 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
         for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
-            let (rechecked, mut kernel) =
-                recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let (rechecked, mut kernel) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
             for definition in root.core().items.iter().flat_map(Item::definitions) {
@@ -703,6 +697,7 @@ fn stored_prelude_measurements() {
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
         let mut cores = Vec::new();
+        let mut places = Vec::new();
         let mut units = Vec::new();
 
         for (index, root) in prelude.iter().enumerate() {
@@ -714,24 +709,17 @@ fn stored_prelude_measurements() {
                 .unwrap_or_else(|| "?".to_string());
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
 
+            // Certified, then erased through the kernel that certified it, as the build makes the root.
+            let globals = certified(&prelude[..index]);
             let start = Instant::now();
-            erase_unit(
-                DEFAULT_BUDGET,
-                SYNTAX,
-                Erasures::of(&cores, &units),
-                &zonked,
-            )
-            .expect("a stored prelude root re-erases");
+            let (rechecked, mut kernel) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let certification = start.elapsed();
+            let heaviest = kernel.heaviest_declaration();
+
+            let start = Instant::now();
+            erase_unit(&mut kernel, Erasures::of(&cores, &places, &units), &zonked)
+                .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
-
-            let (rechecked, certification, heaviest) = {
-                let globals = certified(&prelude[..index]);
-                let start = Instant::now();
-                let (rechecked, kernel) =
-                    recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
-
-                (rechecked, start.elapsed(), kernel.heaviest_declaration())
-            };
 
             let definitions: usize = core
                 .items
@@ -775,6 +763,7 @@ fn stored_prelude_measurements() {
             );
 
             cores.push(core);
+            places.push(root.places());
             units.push(root.erased());
         }
 

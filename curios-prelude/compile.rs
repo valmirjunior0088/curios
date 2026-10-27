@@ -1,4 +1,4 @@
-//! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, erased and certified, each imaged as the certified unit the compiler restores.
+//! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, certified and erased through the kernel that certified them, each imaged as the certified unit the compiler restores.
 //!
 //! A module of two programs that stand beside it. `build.rs` is the one Cargo runs, into the crate's `OUT_DIR`; `profile.rs` runs the same work under a recorder for whoever asks, into a directory of its own.
 
@@ -13,7 +13,7 @@ use {
         Context, DEFAULT_BUDGET, Established, Reading, elaborate_and_zonk_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_erase::{Erasures, erase_unit},
+    curios_erase::{ErasedUnit, Erasures, erase_unit},
     curios_text::{
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
         sys_source,
@@ -119,19 +119,15 @@ fn reported(
     })
 }
 
-/// Elaborate, validate, erase, hash-cons and certify one lowered root into the unit its image is, against what the roots before it established.
+/// Elaborate, validate, hash-cons, certify and erase one lowered root into the unit its image is, against what the roots before it established.
 ///
-/// `predecessors` are the roots before it, made: an item of this root reads in their erased forms how a name of an earlier one is bound, and its own erased form holds nothing of theirs; and the kernel judges it against their modules, with the records their walks left.
+/// `predecessors` are the roots before it, made: the kernel judges it against their modules, with the records their walks left, and an item of this root reads in their erased forms how a name of an earlier one is bound, its own erased form holding nothing of theirs.
 fn unit(
     root: &str,
     mut prepared: PreparedText,
     established: &Established<'_>,
     predecessors: &[&Unit],
 ) -> Unit {
-    let erased = predecessors
-        .iter()
-        .map(|unit| unit.erased())
-        .collect::<Vec<_>>();
     let predecessors_core = predecessors
         .iter()
         .map(|unit| unit.core())
@@ -176,36 +172,13 @@ fn unit(
     // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
     prepared.credit(&context.credited());
 
-    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_unit` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
+    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated /{root} universes are invalid: {error}"));
 
     // This is the seam a unit is stored at, so it is where the rule about what a stored unit may carry is enforced: no identity meaningful only in the compilation that assigned it. Two calls rather than one, because the universe half of that rule is what the line above already refuses — an unsolved universe metavariable, named as such — and a rule stated twice is a copy rather than a second opinion.
     validate_stored_identities(&core).unwrap_or_else(|found| {
         panic!("elaborated /{root} carries a positional identity: {found}")
-    });
-
-    // The archive's own zonk evidence, taken where the module is final: erasure below consumes it, and it is the same claim strict zonking enforced as each item was published, restated as a checked value rather than inherited.
-    let zonked = Zonked::project(&core)
-        .unwrap_or_else(|refusal| panic!("elaborated /{root} is not zonked: {refusal}"));
-
-    // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
-    let anf = erase_unit(
-        DEFAULT_BUDGET,
-        SYNTAX,
-        Erasures::of(&predecessors_core, &erased).fixed(&vec![true; predecessors.len()]),
-        &zonked,
-    )
-    .unwrap_or_else(|error| {
-        panic!(
-            "/{root} failed to erase: {}",
-            reported(
-                |reading| error.format(reading),
-                &core,
-                &predecessors_core,
-                prepared.anchors(),
-            )
-        )
     });
 
     // Hash-cons the elaborated module, so each structure it spells is one allocation. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
@@ -223,15 +196,20 @@ fn unit(
         sharing.structures()
     );
 
-    let certification = certified(root, &core, predecessors);
+    let (certification, anf) = certified(root, &core, predecessors, prepared.anchors());
 
     Unit::new(prepared, core, anf, traces, certification)
 }
 
-/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left: the record of its definitions, or a panic at the first refusal, since a prelude the kernel does not accept is no prelude.
+/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the kernel that walked it: the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the kernel does not accept or erasure cannot erase is no prelude.
 ///
 /// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
-fn certified(root: &str, core: &Module, predecessors: &[&Unit]) -> Certification {
+fn certified(
+    root: &str,
+    core: &Module,
+    predecessors: &[&Unit],
+    anchors: &Anchors,
+) -> (Certification, ErasedUnit) {
     // Meta-free before the kernel walks it; projecting here is also what validates that claim at the boundary that certifies the root.
     let zonked = Zonked::project(core)
         .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the kernel: {refusal}"));
@@ -245,10 +223,13 @@ fn certified(root: &str, core: &Module, predecessors: &[&Unit]) -> Certification
         &vec![true; predecessors.len()],
         &vec![false; predecessors.len()],
     );
-    let Rechecked {
-        verdicts: refusals,
-        certification,
-    } = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (
+        Rechecked {
+            verdicts: refusals,
+            certification,
+        },
+        mut kernel,
+    ) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
 
     if let Some(verdict) = refusals.first() {
         // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
@@ -271,7 +252,32 @@ fn certified(root: &str, core: &Module, predecessors: &[&Unit]) -> Certification
         core.items.len()
     );
 
-    certification
+    // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
+    let cores = predecessors
+        .iter()
+        .map(|unit| unit.core())
+        .collect::<Vec<_>>();
+    let places = predecessors
+        .iter()
+        .map(|unit| unit.places())
+        .collect::<Vec<_>>();
+    let erased = predecessors
+        .iter()
+        .map(|unit| unit.erased())
+        .collect::<Vec<_>>();
+    let anf = erase_unit(
+        &mut kernel,
+        Erasures::of(&cores, &places, &erased).fixed(&vec![true; predecessors.len()]),
+        &zonked,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "/{root} failed to erase: {}",
+            reported(|reading| error.format(reading), core, &cores, anchors)
+        )
+    });
+
+    (certification, anf)
 }
 
 /// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.

@@ -11,7 +11,7 @@
 //! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A question about an erased form whole, which an item evaluated where it is erased asks of each item it ran (`evaluate`), is answered as it was where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
 
 use {
-    crate::{ErasedUnit, Erasures, Held, Projection},
+    crate::{ErasedUnit, Erasures, Held},
     curios_elab::{
         Answered, HeldTrace, Question, Read, Same, bytes_of, concepts_alike, entries_alike, found,
         inducts_alike, part_digest, structs_alike,
@@ -29,8 +29,6 @@ pub struct ErasedBaseline<'a> {
     pub core: &'a curios_core::Module,
     pub places: &'a curios_core::Places,
     pub erased: &'a ErasedUnit,
-    /// What erasure read of the baseline's module out of its universes, kept with its unit.
-    pub projection: &'a Projection,
     pub made: &'a BTreeSet<curios_core::Global>,
     pub dropped: &'a BTreeSet<curios_core::Global>,
     /// Where the module being erased holds each name.
@@ -373,7 +371,13 @@ impl<'a> ErasedOver<'a> {
             }
             Some(place) => match self.kept_form(place.item()) {
                 Some(true) => true,
-                Some(false) => match (unit.find(name), self.baseline.erased.find(name)) {
+                Some(false) => match (
+                    unit.place(name).map(|at| unit.item(at)),
+                    self.baseline
+                        .erased
+                        .place(name)
+                        .map(|at| self.baseline.erased.item(at)),
+                ) {
                     (Some(now), Some(then)) => now.read_alike(then, name),
                     _ => false,
                 },

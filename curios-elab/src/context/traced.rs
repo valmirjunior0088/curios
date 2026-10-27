@@ -6,7 +6,7 @@
 //!
 //! **Asked once, in the order first asked.** A judgment asks after one name thousands of times, and the trace keeps the first.
 //!
-//! **Erasure asks through the same doors.** An item is erased by a reader of finished terms (`Retyping`), which is a context, so what erasing it asks of the declarations around it is noted here as an elaboration's is; and it asks one thing more, of another item's erased form, which is a question of its own.
+//! **Erasure asks these questions too.** An item is erased through the certifying kernel's reader, which notes the names its lookups and reductions read; what erasing it asks of the declarations around it is each question a reading of those names could have met, and one thing more, of another item's erased form, which is a question of its own.
 //!
 //! **Of the declarations around it, so not of itself.** What a declaration asks of a name it declares — a recursive call's signature, the former a constructor is checked against, the witness it declares found at its own key — is answered by the attempt under way, and stands wherever the declaration does.
 

@@ -130,90 +130,11 @@ pub fn proof_position(context: &mut Context, type_: &Term) -> Result<Option<&'st
     })
 }
 
-/// Whether `type_`, as written, is an application of a declaration that lands in `Prop` ([`Sort::declared_into_prop`]), under the binders a surrounding walk has opened: what erasure's classifier asks before it reduces a type to read it.
-fn is_declared_prop_in(
-    context: &mut Context,
-    opened: &Opened,
-    type_: &Term,
-) -> Result<bool, Error> {
-    Sort::declared_into_prop(context, &Binders::default(), opened, type_)
-        .map(|level| level.is_some())
-        .map_err(|error| {
-            Error::from_reduce(error, |refusal| {
-                Error::reduce_exhausted(type_.clone(), refusal)
-            })
-        })
-}
-
-/// Whether a value of `type_` carries nothing at run time, under the binders a surrounding walk has opened, each with its declared type: `type_` is a sort, so the value is a type; a proposition, so the value is a proof; or a function that ultimately answers one of those. The empty tuple is none of them, being what an effect answers, so `{}` and `X -> {}` are kept.
-///
-/// A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — is a proof only through `opened`, which is threaded rather than assumed for the reason `is_prop_in` states.
-///
-/// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value. A `true` holds at every instantiation: a sort, a proposition and a function into one stay what they are under any substitution. Erasure asks through its reader ([`crate::Retyping`]), of a declaration's signature for what the declaration stores and of a slot's type for what the slot holds.
-pub fn is_erasable_in(
-    context: &mut Context,
-    opened: &mut Opened,
-    type_: &Term,
-) -> Result<bool, Error> {
-    let mark = opened.len();
-    let mut passed = Vec::new();
-    let verdict = erasable_end(context, opened, type_, &mut passed);
-    opened.truncate(mark);
-    // Each closed type the walk passed through answers as the type it ended at, so a later question about any of them is answered without walking it again.
-    if let Ok(verdict) = verdict {
-        for type_ in passed {
-            context.remember_erasable(type_, verdict);
-        }
-    }
-    verdict
-}
-
-/// [`is_erasable_in`]'s walk, a loop to the type that decides it: an instance answers as its head and a function as what it ultimately returns, past its parameters, each opened binder joining `opened` so what follows can read its sort. A proof- or type-producing function is pure and content-free; an effectful `X -> {}` is not. Each closed type passed through goes into `passed`, to be remembered at the answer.
-fn erasable_end(
-    context: &mut Context,
-    opened: &mut Opened,
-    type_: &Term,
-    passed: &mut Vec<Term>,
-) -> Result<bool, Error> {
-    let mut type_ = type_.clone();
-    loop {
-        let closed = type_.closed()
-            && !type_.has_local_free()
-            && !type_.has_metavar()
-            && !type_.has_universe_meta();
-        if closed {
-            if let Some(verdict) = context.remembered_erasable(&type_) {
-                return Ok(verdict);
-            }
-            passed.push(type_.clone());
-        }
-
-        // A proposition known by its head is erased with nothing run to read it.
-        if is_declared_prop_in(context, opened, &type_)? {
-            return Ok(true);
-        }
-
-        let reduced = reduce_with(context, &type_)?;
-        type_ = match &*reduced {
-            Subterm::Sort(..) => return Ok(true),
-            Subterm::Instance(instance) => instance.head.to_term(),
-            Subterm::FuncType(FuncType { telescope, .. }) => {
-                let mut cursor = telescope.cursor();
-                while let Some((_, domain)) = cursor.entry() {
-                    opened.push(cursor.advance_fresh(|hint| context.fresh(hint)), domain);
-                }
-                cursor.body().expect("a cursor past every entry")
-            }
-            _ => return is_prop_in(context, opened, &type_, "is_erasable_in"),
-        };
-    }
-}
-
 /// Whether a value of `type_` is a proof, under the binders a surrounding walk has opened, each with its declared type: `type_` is a proposition, or a function that ultimately answers one. A sort is neither, so a type and a family are not.
 ///
-/// It is what a published item's binders are asked, once, as the item is published ([`crate::state_proof_binders`]), and what the closed machine then leaves as written. The question is narrower than [`is_erasable_in`]'s on purpose. Erasure computes neither a proof nor a type, but a judgment reads a type: conversion compares the reduct it is handed, and two instances of a definition apart in a level are one type or two by whether they reach it as written or as what they unfold to. A proof's value is read by nothing.
+/// It is what a published item's binders are asked, once, as the item is published ([`crate::state_proof_binders`]), and what the closed machine then leaves as written. The question is narrower than erasure's, whether a value is a proof or a type, on purpose. Erasure computes neither a proof nor a type, but a judgment reads a type: conversion compares the reduct it is handed, and two instances of a definition apart in a level are one type or two by whether they reach it as written or as what they unfold to. A proof's value is read by nothing.
 ///
-/// A `true` holds at every instantiation, as [`is_erasable_in`]'s does, and a `false` says only that this reading computes the value.
+/// A `true` holds at every instantiation, since a proposition and a function into one stay what they are under any substitution, and a `false` says only that this reading computes the value.
 pub fn is_proof_in(
     context: &mut Context,
     opened: &mut Opened,

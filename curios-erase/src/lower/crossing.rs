@@ -6,11 +6,28 @@
 
 use {
     super::{Lowering, Polled},
+    crate::Error,
     curios_abi::WireType,
+    curios_cert::Reader,
     curios_num::{Binary, Floating, Integer, Natural},
 };
 
 impl Lowering<'_> {
+    /// How a value of `wire` crosses: as the option the row states, where the wire admits none, read at the instance `curios_core::wire_term` gives it; as itself otherwise.
+    pub fn crossed(
+        &mut self,
+        context: &mut Reader,
+        wire: &WireType,
+    ) -> Result<Option<Polled>, Error> {
+        if !wire.admits_null() {
+            return Ok(None);
+        }
+        let syntax = context.syntax();
+
+        self.polled(context, &curios_core::wire_term(wire, &syntax))
+            .map(Some)
+    }
+
     /// The list `option` crosses as: none of a value for `none`, and the one `some` holds.
     pub fn option_crossing(
         &mut self,
@@ -102,7 +119,7 @@ impl Lowering<'_> {
         operands: Vec<curios_anf::Atom>,
         params: &[WireType],
         results: &[WireType],
-        polled: Option<Polled>,
+        crossed: &[Option<Polled>],
         name: &str,
     ) -> curios_anf::Atom {
         let step = self.builder.reserve_function();
@@ -131,7 +148,8 @@ impl Lowering<'_> {
                 };
                 let element = lowering.builder.value(None);
                 let suffix = lowering.builder.value(None);
-                let answered = lowering.block(|lowering| lowering.answered(reply, results, polled));
+                let answered =
+                    lowering.block(|lowering| lowering.answered(reply, results, crossed));
                 let pending = lowering.block(|lowering| {
                     lowering.let_atom(curios_anf::Rhs::Suspension {
                         operation: curios_anf::SuspensionOperation::Later,
@@ -200,22 +218,22 @@ impl Lowering<'_> {
         })
     }
 
-    /// What a call of a row answering `results` answers, read out of `reply`, which holds those results and then the lane: the unit for none, the one result for one, and the record of them for several, each option among them read back from the list it crossed as.
+    /// What a call of a row answering `results` answers, read out of `reply`, which holds those results and then the lane: the unit for none, the one result for one, and the record of them for several, each option among them read back from the list it crossed as, as `crossed` says for each.
     fn answered(
         &mut self,
         reply: curios_anf::Atom,
         results: &[WireType],
-        polled: Option<Polled>,
+        crossed: &[Option<Polled>],
     ) -> curios_anf::Atom {
         let width = results.len() + 1;
         let mut read = Vec::with_capacity(results.len());
 
-        for (index, wire) in results.iter().enumerate() {
+        for (index, polled) in crossed.iter().enumerate() {
             let field = self.field(reply, width, index);
 
-            read.push(match (wire.admits_null(), polled) {
-                (true, Some(polled)) => self.option_crossed(field, polled),
-                _ => field,
+            read.push(match polled {
+                Some(polled) => self.option_crossed(field, *polled),
+                None => field,
             });
         }
 

@@ -4,12 +4,18 @@
 //!
 //! Erasure is a transcription under the **operand law**: every source subexpression erases to exactly one operand ([`curios_anf::Atom`]) — an atomic value directly, a compound one bound by a statement in the builder's innermost open block, in evaluation order — and every reuse references the bound atom, never a re-erased copy. Divergence is explicit: an expression that provably never yields a value (a process exit, a vacuous elimination) reports the terminator that seals its block instead of an atom, and dead code after it is never erased.
 //!
-//! Core classifies and traverses; the builder owns construction. An item erases into a fragment of its own, which names what another item binds as an import ([`ErasedItem`]), and a unit holds its items' fragments ([`ErasedUnit`]). Production compilation erases the fixed prelude once at compiler build time, imaged by `curios-prelude`, and every later unit reads how its names are bound ([`Erasures`]). [`erase_unit`] erases a unit, the prelude's included, and [`erase_program`] is the same walk with the entry erased and what it reaches linked into one module. Every entrypoint reads its Core module and its scope's through one view (`Projected`), which removes universe instances, declaration contexts, and nominal vectors from each declaration the first time it is read; no universe data reaches ANF and reduction never specializes runtime code by universe instance.
+//! Core classifies and traverses; the builder owns construction. An item erases into a fragment of its own, which names what another item binds as an import ([`ErasedItem`]), and a unit holds its items' fragments ([`ErasedUnit`]). Production compilation erases the fixed prelude once at compiler build time, imaged by `curios-prelude`, and every later unit reads how its names are bound ([`Erasures`]). [`erase_unit`] erases a unit, the prelude's included, and [`erase_program`] is the same walk with the entry erased and what it reaches linked into one module.
 //!
-//! The boundary validates what it has not already seen validated, and projects what is not already projected — which for a unit erased over a scope is the unit's own items and the registry entries it adds. The prelude arrives immutable and checked from `curios-prelude`'s restore, so validating and projecting it again would be a walk of the whole standard library, inside the erasure context's step budget, for an answer already in hand.
+//! **Erasure reads the module the kernel certified, through the kernel that certified it** ([`curios_cert::Reader`]): every type the walk is directed by is the kernel's reading of a term it accepted, at the sorts it judged. An item that leaves sorts to its caller erases at each assignment of them ([`ErasedForms`], [`Sorts`]), and a level carries nothing at run time, so no universe reaches ANF.
 
 mod error;
 pub use error::{ErasedName, Error};
+
+mod sorts;
+pub use sorts::{AtSorts, Sorts};
+
+mod read;
+use read::*;
 
 mod classify;
 use classify::*;
@@ -23,7 +29,7 @@ pub use lower::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
 
 mod erased;
 use erased::*;
-pub use erased::{ErasedItem, ErasedUnit, Erasures};
+pub use erased::{ErasedForms, ErasedItem, ErasedUnit, Erasures};
 
 mod over;
 pub use over::ErasedBaseline;
@@ -36,10 +42,6 @@ use link::*;
 
 mod evaluated;
 use evaluated::*;
-
-mod projected;
-pub use projected::Projection;
-use projected::*;
 
 #[cfg(test)]
 mod tests;
