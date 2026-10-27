@@ -52,6 +52,9 @@ use spend::*;
 mod whnf;
 pub(crate) use whnf::*;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{
         Baseline, entails, erased_half, holds_no_type, instantiate_qualities, one_up_to_instances,
@@ -856,12 +859,6 @@ impl<'s> Kernel<'s> {
     /// See [`Memos::end_closed_run`].
     pub(crate) fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
         self.memos.end_closed_run(outer);
-    }
-
-    /// What the declaration under judgment has consumed so far ([`Spend::consumed`]), which this crate's tests read between two judgments, and a reader's suite through [`Reader::consumed`](crate::Reader::consumed).
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn consumed(&self) -> Consumption {
-        self.spend.consumed()
     }
 
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Kernel::restore_budget`], this is a declaration-boundary reset.

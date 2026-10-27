@@ -9,6 +9,9 @@ mod qualities;
 use qualities::*;
 
 #[cfg(test)]
+mod test_support;
+
+#[cfg(test)]
 mod held_tests;
 #[cfg(test)]
 mod quality_tests;
@@ -891,12 +894,6 @@ impl UniverseSolver {
         self.constraints.clear();
         self.consistency = None;
         self.weak.clear();
-    }
-
-    /// How many constraints the store holds — none between declarations, which is what a refused item's boundary must leave.
-    #[cfg(test)]
-    pub fn constraint_count(&self) -> usize {
-        self.constraints.len()
     }
 
     /// Close every speculative scope at once and drop the journal. Sound only where no bracket is live: an item boundary a refusal reached by unwinding the recursion the hand-paired brackets sit on, past every `release` they would have called. Anywhere a scope is still open the journal is what its rollback restores from, which is why this is the one place the depth is reset outright rather than restored.

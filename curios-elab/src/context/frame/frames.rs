@@ -10,6 +10,9 @@
 //!
 //! **A frame is shared, and copied for a writer.** What waits takes the frames above the base as they stand ([`HeldFrames`]), a parked problem where it parks and a metavariable where it is born, and a write to a frame something holds copies the frame first, so a holder has what stood and nothing written since. A judgment made away from the live context stands on the frames held ([`Frames::stand_on`]), a retry on its problem's and what is judged of a metavariable on its birth's: the live ones above the base are set aside, the held ones stand in their place, and nothing is assumed, defined or registered again, so the frame an entry stands in is the frame it was registered in.
 
+#[cfg(test)]
+mod test_support;
+
 use {
     super::{
         Binding, ByValue, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry,
@@ -453,16 +456,6 @@ impl<'s> Frames<'s> {
     /// Whether `label` currently has a definition entry in some frame — the settled-globals gate for the elaboration cache. A name defined here will only ever be *re*defined (which clears both caches wholesale), never freshly defined, so an elaboration entry naming it is safe to keep across a later fresh `define`.
     pub fn is_defined(&self, name: &Free) -> bool {
         self.defined(name).is_some() || self.in_scope(name).is_some()
-    }
-    /// Every frame's locals in binding order (outermost first), the base frame's top-level names first: what a test reads of a declaration forgotten everywhere, where a judgment reads [`Frames::local_binders`].
-    #[cfg(test)]
-    pub fn locals(&self) -> impl Iterator<Item = &(Free, Term)> {
-        self.read_scope();
-        self.base
-            .locals
-            .iter()
-            .chain(self.top.iter().flat_map(|top| top.locals.iter()))
-            .map(|(_, local)| local)
     }
 
     /// The locals of the frames past the base, in scope order: the binders a term stands under, without the declarations of every unit in scope the base frame holds, so a question about them costs the scope a judgment stands in and not the program's size.

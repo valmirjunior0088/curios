@@ -1,5 +1,8 @@
 //! The context's doors to the metavariables: their births, solutions and restrictions, and what an attempt notes of the goals it wrote and of what blocked a solve.
 
+#[cfg(test)]
+mod test_support;
+
 use {
     super::{MetaKind, SharedSpine},
     crate::{
@@ -66,23 +69,6 @@ impl<'s> Context<'s> {
     /// Whether the declaration being elaborated wrote a goal ([`Goals::any`](super::Goals::any)).
     pub(crate) fn holds_goals(&self) -> bool {
         self.underway.attempt.goals.any()
-    }
-
-    /// Materialize a metavariable's birth record over a telescope stated for it ([`Solutions::birth`](super::Solutions::birth), [`Scoped::Stated`]), under the frames that stand, stamping the write: how a fixture states its metavariables, where elaboration births one where it stands ([`Context::birth_here`]).
-    #[cfg(test)]
-    pub fn birth_metavar(
-        &mut self,
-        id: MetavarId,
-        telescope: impl Into<BirthTelescope>,
-        result: Term,
-    ) {
-        self.birth_metavar_as(
-            id,
-            telescope.into(),
-            Scoped::Stated,
-            result,
-            MetaKind::Inference,
-        );
     }
 
     /// Materialize a metavariable's birth record where the context stands — its telescope the local binders in scope, taken with the frames that stand ([`Scoped::Held`]) — and hand back its identity spine.

@@ -1,5 +1,8 @@
 //! The context's doors to the frames: binders entered and left, arms opened and ruled out, what is assumed and defined in scope, and the refinements an arm installs.
 
+#[cfg(test)]
+mod test_support;
+
 use {
     super::{Bracket, ByValue, DefEntry, KeptWindow},
     crate::{
@@ -165,13 +168,6 @@ impl<'s> Context<'s> {
 
     pub(super) fn is_defined(&self, name: &Free) -> bool {
         self.typing.frames.is_defined(name)
-    }
-
-    /// [`Frames::locals`](super::Frames::locals).
-    /// Every frame's locals, the base's among them: what a test reads of a declaration forgotten everywhere, where every judgment reads [`Context::local_binders`].
-    #[cfg(test)]
-    pub fn locals(&self) -> impl Iterator<Item = &(Free, Term)> {
-        self.typing.frames.locals()
     }
 
     /// [`Frames::local_binders`](super::Frames::local_binders).

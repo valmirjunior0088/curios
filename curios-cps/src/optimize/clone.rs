@@ -157,16 +157,6 @@ pub(crate) struct CopyPlan {
 }
 
 impl CopyPlan {
-    #[cfg(test)]
-    pub(crate) fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
-        Self::new(module, functions, BTreeSet::new())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn continuation(module: &Module, continuation: ContinuationId) -> Self {
-        Self::new(module, BTreeSet::new(), BTreeSet::from([continuation]))
-    }
-
     /// Decline as soon as the complete lexical extent crosses `limit`, before traversing the rest of an ineligible body.
     pub(crate) fn functions_with_limit(
         module: &Module,
@@ -187,16 +177,6 @@ impl CopyPlan {
             BTreeSet::from([continuation]),
             limit,
         )
-    }
-
-    #[cfg(test)]
-    fn new(
-        module: &Module,
-        functions: BTreeSet<FunctionId>,
-        continuations: BTreeSet<ContinuationId>,
-    ) -> Self {
-        Self::limited(module, functions, continuations, usize::MAX)
-            .expect("an unlimited copy extent fits")
     }
 
     fn limited(
@@ -412,6 +392,9 @@ pub(crate) fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
         continuations: conts,
     }
 }
+
+#[cfg(test)]
+mod test_support;
 
 #[cfg(test)]
 mod tests;

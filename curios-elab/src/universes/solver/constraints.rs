@@ -10,6 +10,9 @@
 //!
 //! Change detection therefore cannot read the journal's length, which does not count every rewrite. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
+#[cfg(test)]
+mod test_support;
+
 use {
     curios_core::{Level, LevelHead, UniverseConstraint, UniverseError},
     curios_utilities::Entropy,
@@ -171,18 +174,6 @@ impl ConstraintStore {
     pub fn abandon(&mut self) {
         self.speculation = 0;
         self.rewrites.clear();
-    }
-
-    /// How many speculative scopes are open.
-    #[cfg(test)]
-    pub fn speculation(&self) -> usize {
-        self.speculation
-    }
-
-    /// How many pre-images the journal holds.
-    #[cfg(test)]
-    pub fn journal_len(&self) -> usize {
-        self.rewrites.len()
     }
 
     /// Drop every constraint failing `keep` and rebuild the index.
