@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::test_support::*};
 
 fn sym(index: u32, hint: &'static str) -> Term {
     Term::free_var(&crate::Free::local(u64::from(index), Some(hint)))
@@ -148,8 +148,7 @@ fn a_product_distributed_under_a_sum_is_merged_into_it() {
     let sum = |first: &Term, second: &Term| add(add(first.clone(), second.clone()), one.clone());
     let product = Term::intrinsic(Intrinsic::nat_mul(sum(&a, &w), sum(&w, &a)));
 
-    let normalized =
-        Nat::normalize(&mut crate::Folding, add(product, y.clone())).expect("normalizes");
+    let normalized = Nat::normalize(&mut Folding, add(product, y.clone())).expect("normalizes");
     let (floor, inner) = Nat::decompose(&normalized);
     assert_eq!(floor, Natural::from(1usize), "{normalized}");
     assert_eq!(Nat::summands(&inner).len(), 6, "{normalized}");

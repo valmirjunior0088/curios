@@ -4,19 +4,9 @@
 
 use {
     super::{Reducer, reduce_intrinsic},
-    crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
+    crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term, test_support::*},
     curios_num::Binary,
 };
-
-/// A binder no fixture spells: the suites name their symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
-fn fresh(hint: Option<&str>) -> Free {
-    static MINTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000_000);
-
-    Free::local(
-        MINTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        hint,
-    )
-}
 
 /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
 pub(super) struct Inert;
@@ -57,31 +47,6 @@ pub(super) fn occurrences(term: &Term, wanted: &Term) -> usize {
         .iter()
         .filter(|summand| *summand == wanted)
         .count()
-}
-
-/// A reducer that folds intrinsics all the way down, for the gates that must *evaluate* a rebuilt term rather than inspect its shape. `reduce_intrinsic` already reduces its own operands through this seam, so one pass suffices for the terms below.
-pub(crate) struct Folding;
-
-impl Reducer for Folding {
-    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        match &*term {
-            Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),
-            _ => Ok(term),
-        }
-    }
-
-    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        self.reduce(term)
-    }
-
-    /// Unbudgeted, for [`Inert`]'s reason.
-    fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
-        Ok(())
-    }
-
-    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
-        fresh(hint)
-    }
 }
 
 /// [`Folding`] under a budget, for the gates whose subject is a *charge* rather than a value.

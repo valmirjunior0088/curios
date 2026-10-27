@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{Folding, Free, One, Reducer, Scope, int_negate, int_of_nat, int_sum},
+    crate::{Free, One, Reducer, Scope, int_negate, int_of_nat, int_sum, test_support::*},
 };
 
 fn sym(index: u32, hint: &'static str) -> Term {

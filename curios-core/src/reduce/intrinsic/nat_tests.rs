@@ -5,7 +5,7 @@ use {
         Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split, nat_least,
         test_support::*,
     },
-    crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms},
+    crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms, test_support::*},
     curios_algebra::Deduction,
     curios_num::Natural,
 };

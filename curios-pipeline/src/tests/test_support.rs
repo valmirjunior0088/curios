@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::*,
+    crate::{compile::test_support::elaborate_and_zonk, *},
     curios_core::{Enter, Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
@@ -95,7 +95,7 @@ pub(super) fn mentions_metavar_id(report: &str) -> bool {
 pub(super) fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = entrypoint_of(source);
     with_prelude(|prelude| {
-        crate::elaborate_and_zonk(
+        elaborate_and_zonk(
             DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
@@ -115,7 +115,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
 pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
     let entrypoint = entrypoint_of(source);
     let (program, _foreigns, _records, _anchors) = with_prelude(|prelude| {
-        crate::elaborate_and_zonk(
+        elaborate_and_zonk(
             DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,

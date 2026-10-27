@@ -4,7 +4,9 @@
 
 use {
     super::test_support::{entrypoint_of, mounted},
-    crate::{EntryTail, check_entrypoint, compile_units, elaborate_and_zonk},
+    crate::{
+        EntryTail, check_entrypoint, compile::test_support::elaborate_and_zonk, compile_units,
+    },
     curios_core::Zonked,
     curios_erase::{Erasures, erase_program},
     curios_prelude::with_prelude,

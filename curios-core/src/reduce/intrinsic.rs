@@ -2222,6 +2222,4 @@ mod shift_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::Folding;
-#[cfg(test)]
 mod truth_tests;

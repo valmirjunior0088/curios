@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{
         Free, Intrinsic, Nat, Subterm, Term, decide_bool, peel_bytes, peel_int_pair, peel_list,
-        peel_nat_terms, peel_position,
+        peel_nat_terms, peel_position, test_support::*,
     },
     curios_algebra::Deduction,
     curios_num::Integer,

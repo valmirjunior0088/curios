@@ -2,7 +2,7 @@
 
 use {
     super::{bool_value, decide_bool, normalize_bool, test_support::*},
-    crate::{Exhaustion, Intrinsic, Nat, Subterm, Term},
+    crate::{Exhaustion, Intrinsic, Nat, Subterm, Term, test_support::*},
 };
 
 fn and(left: Term, right: Term) -> Term {

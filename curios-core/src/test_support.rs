@@ -6,8 +6,9 @@
 
 use {
     crate::{
-        Cases, ConceptDecl, Definition, DefinitionKind, Free, Global, InductDecl, Item, Match,
-        MatchResult, Module, Nominal, Program, RecItem, StructDecl, Subterm, Term,
+        Cases, ConceptDecl, Cost, Definition, DefinitionKind, Free, Global, InductDecl, Item,
+        Match, MatchResult, Module, Nominal, Program, RecItem, ReduceError, Reducer, StructDecl,
+        Subterm, Term, reduce_intrinsic,
     },
     curios_utilities::Qualifier,
     std::{
@@ -147,5 +148,40 @@ pub fn declaring(
     Module {
         items: stored.into(),
         ..module
+    }
+}
+
+/// A binder no fixture spells: the reduction suites name their symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
+pub fn fresh(hint: Option<&str>) -> Free {
+    static MINTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000_000);
+
+    Free::local(
+        MINTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        hint,
+    )
+}
+
+/// A reducer that folds intrinsics all the way down, for the gates that must *evaluate* a rebuilt term rather than inspect its shape. `reduce_intrinsic` already reduces its own operands through this seam, so one pass suffices for the terms the suites build.
+pub struct Folding;
+
+impl Reducer for Folding {
+    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        match &*term {
+            Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),
+            _ => Ok(term),
+        }
+    }
+
+    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        self.reduce(term)
+    }
+
+    /// Unbudgeted: these gates are about what a fold *decides*, and a limit would only decide it a second time.
+    fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
+        Ok(())
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        fresh(hint)
     }
 }

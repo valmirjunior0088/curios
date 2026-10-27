@@ -5,8 +5,7 @@
 use {
     super::{
         Atom, BlockId, Constant, DESCRIPTION_COPY_NODE_LIMIT, FunctionId, Module, RecGroupId, Rhs,
-        Statement, StatementId, Terminator, description_copy_charges, sequence_census,
-        spell_function, spell_value,
+        Statement, StatementId, Terminator, sequence_census, spell_function, spell_value,
     },
     curios_utilities::ArenaId,
 };
@@ -20,7 +19,8 @@ pub struct DescriptionCopy {
 
 /// The heaviest description the closed evaluator would copy among `module`'s closed calls, or `None` where no replacement holds one. The module is read as one round of the evaluator finds it, so what a test hands over is a program's module as linked.
 pub fn heaviest_description_copy(module: &Module) -> Option<DescriptionCopy> {
-    description_copy_charges(module)
+    module
+        .description_copy_charges()
         .into_iter()
         .max()
         .map(|charged| DescriptionCopy {

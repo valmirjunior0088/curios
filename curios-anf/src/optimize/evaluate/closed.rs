@@ -2,6 +2,9 @@
 //!
 //! A two-phase plan/apply split: interpretation borrows the module immutably (a closure names a module function) while installing a replacement mutates it. The plan phase finds every closed candidate call and records its freestanding result; the apply phase materializes each result, splices the construction statements ahead of the candidate, rewrites the candidate to an alias or a residual, and re-verifies.
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 #[cfg(test)]
 mod tests;
 
@@ -124,30 +127,6 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::sample!("evaluate::installed", installed.0);
     curios_profile::sample!("evaluate::residual_calls", installed.1);
     installed.0 > 0
-}
-
-/// What each replacement holding a description would build among `module`'s closed calls, in the nodes the dry run charges for it.
-///
-/// The pass's own steps over the module as one round finds it: each plan that holds a description is run dry under one replacement's widest budget in place of [`DESCRIPTION_COPY_NODE_LIMIT`], so a copy the tight cap declines is weighed beside those it admits, and a reader holds each to the cap by what the evaluator charges. A plan that materializes under no budget has no charge.
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn description_copy_charges(module: &Module) -> Vec<usize> {
-    let block_items = index_block_items(module);
-    let item_positions = index_item_positions(module);
-    let mut scope = ReifyScope::new();
-
-    plan(module, every_statement(module).into_iter())
-        .into_iter()
-        .flatten()
-        .filter(|plan| plan.contains_description(module))
-        .filter_map(|plan| {
-            let (_, _, position) = plan.splice_point(&block_items, &item_positions);
-            scope.begin_replacement(position, plan.block(), plan.looping(module));
-            let mut probe = ReifyBudget::new();
-
-            plan.materializes(module, &mut probe, &mut scope)
-                .then(|| probe.spent())
-        })
-        .collect()
 }
 
 /// [`evaluate_closed_terms`] over the top-level items at `from` and after, and no other statement: one round of [`evaluate_since`](crate::evaluate_since).
