@@ -14,15 +14,15 @@ use {
     super::{Mode, elaborate, elaborate_func_type_sized},
     crate::{
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
-        Readers, ScheduledTest, Traces, Zonked, body_levels, check, check_concept_registry,
-        check_is_sort, check_proof_totality, check_rec_item_totality, check_type_totality,
-        check_written_type_totality, compared_levels, decide_polarities, definition_variances,
-        field_variances, finalize_definition, goal_sites, hold_prop, hold_variances,
-        parameter_field, record_definition_totality, record_superclasses, record_variances,
-        reduce_with, register_witness, report_goals, result_sort_only_metas, sort_family_levels,
-        stamp_totality, state_proof_binders, superclass_targets, test_program_tail,
-        validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
-        zonk_solved_term_metas,
+        Readers, RecordKeyword, ScheduledTest, Traces, Zonked, body_levels, check,
+        check_concept_registry, check_is_sort, check_proof_totality, check_rec_item_totality,
+        check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
+        definition_variances, field_variances, finalize_definition, goal_sites, hold_prop,
+        hold_variances, parameter_field, record_definition_totality, record_superclasses,
+        record_variances, reduce_with, register_witness, report_goals, result_sort_only_metas,
+        sort_family_levels, stamp_totality, state_proof_binders, superclass_targets,
+        test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
+        zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -333,13 +333,20 @@ fn elaborate_struct(
 
             // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when every field is a proof, so that every projection lands in a `Prop`, the side irrelevance governs; it is checked here at declaration time rather than per projection, so `elaborate_proj` needs no guard.
             if declared_prop {
-                for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
+                let keyword = match context.concept(name).is_some() {
+                    true => RecordKeyword::Concept,
+                    false => RecordKeyword::Struct,
+                };
+                for ((mark, _, ty), label) in fields.iter().zip(&field_labels) {
                     if !hold_prop(context, ty, ty.extent())? {
                         return Err(Error::informative_prop_struct(
                             *name,
+                            keyword,
+                            *mark,
                             label.clone(),
                             ty.clone(),
-                        ));
+                        )
+                        .at_opt(ty.extent()));
                     }
                 }
             }

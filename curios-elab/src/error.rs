@@ -95,6 +95,22 @@ impl CycleMember {
     }
 }
 
+/// The keyword a record type is declared with, by which a report names it: a concept is a record, as a struct is.
+#[derive(Clone, Copy, Debug)]
+pub enum RecordKeyword {
+    Struct,
+    Concept,
+}
+
+impl fmt::Display for RecordKeyword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            RecordKeyword::Struct => "struct",
+            RecordKeyword::Concept => "concept",
+        })
+    }
+}
+
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
@@ -772,9 +788,11 @@ pub enum Error {
     },
     /// A record type formed over two sorts its declaration leaves to a caller, each a parameter of its own: a proposition where both are stated `Prop` and a type otherwise, so no one sort is its own.
     RecordOverTwoSorts,
-    /// A struct was declared at sort `Prop` but a field is informative (its type is not itself a proposition). Proof irrelevance would then let projection observe which inhabitant was built — the singleton-elimination condition, applied at declaration time. `field` is the offending field; `field_type` its type.
+    /// A struct or a concept was declared at sort `Prop` but a field is informative (its type is not itself a proposition). Proof irrelevance would then let projection observe which inhabitant was built — the singleton-elimination condition, applied at declaration time. `keyword` is the one the declaration is written with; `mark` and `field` are the offending field's mark and label, empty for a positional field or a superclass edge; `field_type` its type.
     InformativePropStruct {
         name: Global,
+        keyword: RecordKeyword,
+        mark: Plicity,
         field: String,
         field_type: Box<Term>,
     },
@@ -1420,11 +1438,15 @@ impl Error {
 
     pub fn informative_prop_struct<F: Into<String>, T: Into<Term>>(
         name: Global,
+        keyword: RecordKeyword,
+        mark: Plicity,
         field: F,
         field_type: T,
     ) -> Self {
         Self::InformativePropStruct {
             name,
+            keyword,
+            mark,
             field: field.into(),
             field_type: Box::new(field_type.into()),
         }

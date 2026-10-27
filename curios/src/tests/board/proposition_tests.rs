@@ -1,6 +1,9 @@
 //! What a proposition may carry and what it may be eliminated into.
 
-use {super::test_support::*, crate::tests::run};
+use {
+    super::test_support::*,
+    crate::tests::{error, run},
+};
 
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]
@@ -112,6 +115,27 @@ fn a_proposition_concept_may_not_carry_informative_methods() {
         A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS,
         "is informative",
     );
+}
+
+// The refusal names the declaration by the keyword it is written with and stands at the field's type, spelling the field as it is written: a superclass edge under `use`, a labeled field by its label.
+#[test]
+fn an_informative_field_is_reported_as_written_at_its_type() {
+    for (source, words, place) in [
+        (
+            "use /std/{Show};\nconcept Carry(A: Type): Prop { use Show(A), }\n/std/print(\"no\")\n",
+            "concept 'Carry' is declared at sort 'Prop' but its field 'use Show(A)' is informative\n  a 'Prop' concept's fields must all be propositions\n",
+            "    2 | concept Carry(A: Type): Prop { use Show(A), }\n      |                                    ^^^^^^^",
+        ),
+        (
+            "use /std/{Nat};\nuse /std/Bool/{True};\npub struct Bad: Prop { first: True, value: Nat, }\n/std/print(\"no\")\n",
+            "struct 'Bad' is declared at sort 'Prop' but its field 'value: Nat' is informative\n  a 'Prop' struct's fields must all be propositions\n",
+            "    3 | pub struct Bad: Prop { first: True, value: Nat, }\n      |                                            ^^^",
+        ),
+    ] {
+        let report = error(source);
+        assert!(report.contains(words), "expected the words:\n{report}");
+        assert!(report.contains(place), "expected the place:\n{report}");
+    }
 }
 
 // A superclass edge is a field of the generated record too, one no method wrapper names: two witnesses of a `Prop` concept over a data concept would be one value by irrelevance and hold two dictionaries a projection tells apart.

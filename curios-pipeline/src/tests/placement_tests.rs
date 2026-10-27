@@ -149,7 +149,7 @@ fn a_proof_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
 }
 
 #[test]
-fn a_structure_refused_as_a_whole_is_placed_at_its_name() {
+fn an_informative_field_of_a_proposition_is_placed_at_its_type() {
     let source = r#"
         use /std/{Nat};
 
@@ -159,7 +159,7 @@ fn a_structure_refused_as_a_whole_is_placed_at_its_name() {
 
         /std/print("x")
     "#;
-    assert_eq!(placed(source), at("P"));
+    assert_eq!(placed(source), at("Nat"));
 }
 
 #[test]

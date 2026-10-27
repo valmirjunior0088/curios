@@ -836,14 +836,23 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::InformativePropStruct {
                 name,
+                keyword,
+                mark,
                 field,
                 field_type,
             } => {
                 let name = spelling.symbol(name);
                 let field_type = field_type.spelled(spelling);
+                // The field as it is written: a superclass edge under `use`, a hidden field under `@`, and a positional one as its type alone.
+                let field = match (mark, field.is_empty()) {
+                    (Plicity::Witness, _) => format!("use {field_type}"),
+                    (Plicity::Implicit, _) => format!("@{field}: {field_type}"),
+                    (Plicity::Explicit, true) => field_type.to_string(),
+                    (Plicity::Explicit, false) => format!("{field}: {field_type}"),
+                };
                 write!(
                     f,
-                    "struct '{name}' is declared at sort 'Prop' but field '{field} : {field_type}' is informative\n  a 'Prop' struct's fields must all be propositions (or forced by indices)"
+                    "{keyword} '{name}' is declared at sort 'Prop' but its field '{field}' is informative\n  a 'Prop' {keyword}'s fields must all be propositions"
                 )
             }
             Error::NotStrictlyPositive {
