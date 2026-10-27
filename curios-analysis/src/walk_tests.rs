@@ -1,4 +1,4 @@
-//! Every walk this crate's classification runs over whole terms, over one doubling term: sixty levels that each hold the one below twice under one operation, around a local's application, a tree no walk per path finishes and a graph of sixty-one nodes. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; one that reads through a checker joins the table in `tests/driven.rs`, which has one.
+//! Every walk this crate's classification runs over whole terms, over one doubling term: sixty levels that each hold the one below twice under one operation, around a local's application, a tree no walk per path finishes and a graph of sixty-one nodes. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; one that reads through a checker joins the table in `tests/driven/walk_tests.rs`, which has one.
 
 use {
     crate::{Classes, atoms_in, atoms_of, atoms_within, classed, classed_in, refold},

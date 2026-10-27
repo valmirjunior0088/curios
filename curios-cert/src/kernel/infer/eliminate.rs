@@ -21,15 +21,19 @@
 #[cfg(test)]
 mod ambient_tests;
 #[cfg(test)]
+mod coverage_tests;
+#[cfg(test)]
 mod fold_tests;
+#[cfg(test)]
+mod large_elimination_tests;
 #[cfg(test)]
 mod proof_match_tests;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
-mod test_support;
+mod specialization_tests;
 #[cfg(test)]
-mod tests;
+mod test_support;
 
 use {
     super::check,

@@ -150,7 +150,7 @@ fn a_family_with_no_parameter_converts_by_its_name_at_two_instances() {
     }
 }
 
-// An arm's equation answers at another instance of a level its scrutinee's family is irrelevant in, and at no other instance of one it is invariant in: what reduction asks conversion of a stuck form and an equation's scrutinee is compared by variance, as every pair is. `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+// An arm's equation answers at another instance of a level its scrutinee's family is irrelevant in, and at no other instance of one it is invariant in: what reduction asks conversion of a stuck form and an equation's scrutinee is compared by variance, as every pair is. `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
 #[test]
 fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
     let mut kernel = kernel();

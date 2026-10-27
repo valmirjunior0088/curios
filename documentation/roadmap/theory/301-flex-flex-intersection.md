@@ -4,7 +4,7 @@
 
 ## What is missing
 
-Two distinct metavariables over compatible telescopes, met through one live name — `?0(x) ~ ?1(x)` — park and stay undecided: the solver does no intersection, so it never solves one as the other through a renaming. Where nothing else pins either, the item ends with an unsolved metavariable a program's author did not write. `curios-elab`'s `convert/solve_tests.rs` holds the case as undecided.
+Two distinct metavariables over compatible telescopes, met through one live name — `?0(x) ~ ?1(x)` — park and stay undecided: the solver does no intersection, so it never solves one as the other through a renaming. Where nothing else pins either, the item ends with an unsolved metavariable a program's author did not write. `curios-elab`'s `convert/flex_flex_tests.rs` holds the case as undecided.
 
 ## Refinement
 

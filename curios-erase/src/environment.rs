@@ -2,6 +2,9 @@
 //!
 //! One environment serves one form of one item's erasure, and its identities are that form's fragment's. Opened binders receive fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while the erasure runs; what it hands on keeps the names the item declares and no other ([`Environment::exporting`]). A name another item declares is bound at the sorts it is read at, since each of that item's forms binds it apart; the item's own names and rows are its form's, bound at no sorts, so two assignments that erase alike make one fragment. The schema maps hold the fragment's identity for each Core declaration it lowers a row of. A row is its declaration's: the item that declares a structure or an inductive registers the row, from the registry entry, with its masks; every other item holds it as an import of what it reads, which stands, in a program, for the declaration's own — a structure's schema at its width, an inductive's family and the constructors the item names, each at its position — and reads a mask where the declaring item holds it. An anonymous row is declared by no item and is each fragment's, one for a width.
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{AtSorts, Sorts},
     std::collections::BTreeMap,
@@ -182,12 +185,6 @@ impl Environment {
     /// The inductive `name`'s row as this fragment imports it, where it does.
     pub fn imported_induct_row(&self, name: AtSorts) -> Option<&ImportedFamily> {
         self.induct_imports.get(&name)
-    }
-
-    /// The row of each inductive this item declares.
-    #[cfg(feature = "test-support")]
-    pub fn declared_induct_rows(&self) -> impl Iterator<Item = &FamilyRow> {
-        self.induct_decls.values()
     }
 
     /// The row this fragment declares for `name`: what another item's import of it is read off.

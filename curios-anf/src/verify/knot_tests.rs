@@ -1,0 +1,495 @@
+//! Lazy values and their knots: a reference forced through a called function or rejected as a cycle, a stepper evaluated or left dormant, an effectful initializer, and the self knots a fragment admits.
+
+use {
+    super::test_support::nat_atom,
+    crate::*,
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
+    curios_num::Natural,
+    std::sync::Arc,
+};
+
+/// A recursive group function called by the computed member's eager initializer — a supported program.
+#[test]
+fn a_join_all_shaped_knot_verifies() {
+    let mut builder = Builder::new();
+
+    // rec { fn go(i) = go(i); result = go(0) }
+    let go = builder.reserve_function();
+    let i = builder.value(Some("i".into()));
+    builder.open_block();
+    let recur = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(go),
+            arguments: vec![Atom::Value(i)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(recur)));
+    builder.define_function(go, Some("go".into()), vec![i], body);
+
+    let result = builder.value(Some("result".into()));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(go),
+            arguments: vec![zero],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    let group = builder.rec_group(vec![go], vec![(result, init)]);
+    builder.item_rec(group);
+
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(result)));
+    builder.set_entry(entry);
+    builder.finalize().expect("the join_all shape is supported");
+}
+
+/// The self-referential lazy value: a value-only group whose knot closes through a closure constructed by the initializer. The reference to the member under initialization is dormant, so it is admitted; the lowering knots it through a cell.
+#[test]
+fn a_self_referential_lazy_value_verifies() {
+    let mut builder = Builder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Lazy".into()),
+        fields: ProductFields::Declared(vec![Field::opaque(Some("force".into()))]),
+    });
+
+    // rec { lazy = Lazy { force: fn() = lazy } }
+    let lazy = builder.value(Some("lazy".into()));
+    builder.open_block();
+    let force = builder.reserve_function();
+    builder.open_block();
+    let force_body = builder.seal_block(Terminator::Return(Atom::Value(lazy)));
+    builder.define_function(force, Some("force".into()), vec![], force_body);
+    builder.let_functions(vec![force]);
+    let boxed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Function(force)],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(Atom::Value(boxed)));
+    let group = builder.rec_group(vec![], vec![(lazy, init)]);
+    builder.item_rec(group);
+
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(lazy)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("the self-referential lazy value is supported");
+}
+
+/// A later computed member may evaluate an earlier one; only forward and self evaluation are unsatisfiable.
+#[test]
+fn a_backward_computed_reference_verifies() {
+    let mut builder = Builder::new();
+    let first = builder.value(Some("first".into()));
+    let second = builder.value(Some("second".into()));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_first = builder.seal_block(Terminator::Return(one));
+    builder.open_block();
+    let init_second = builder.seal_block(Terminator::Return(Atom::Value(first)));
+    let group = builder.rec_group(vec![], vec![(first, init_first), (second, init_second)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(second)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("backward evaluation is supported");
+}
+
+/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size`. Forced by need, that is legal — reading `size` runs its initializer first.
+#[test]
+fn a_forward_reference_through_a_called_function_is_forced_first() {
+    let mut builder = Builder::new();
+    let build = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![build], vec![(table, init_table), (size, init_size)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("the read through the call forces `size` first");
+}
+
+/// The same knot closed into a cycle — `size = table` — is what no forcing can satisfy: `table`'s initializer evaluates `size` through `build`, and `size`'s evaluates `table`. The refusal names the path and the call.
+#[test]
+fn a_cycle_through_a_called_function_is_rejected() {
+    let mut builder = Builder::new();
+    let build = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let init_size = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    let group = builder.rec_group(vec![build], vec![(table, init_table), (size, init_size)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("`table` evaluates itself through `build` and `size`");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() > 1 && steps.iter().any(|step| step.through.is_some())),
+        "{error}"
+    );
+}
+
+/// The same knot with `size` ahead of `table`, which by need makes no difference to.
+#[test]
+fn a_backward_reference_through_a_called_function_verifies() {
+    let mut builder = Builder::new();
+    let build = builder.reserve_function();
+    let size = builder.value(Some("size".into()));
+    let table = builder.value(Some("table".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    let group = builder.rec_group(vec![build], vec![(size, init_size), (table, init_table)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("a call reading an earlier member is supported");
+}
+
+/// The fold shape: `rec { table = each(step); fn step(n) = n + table }` where `each(f)` nests a `go` that captures `f` and applies it, and `step` reads `table` — so `table`'s initializer evaluates `table`. The stepper is handed to a combinator rather than called, and the combinator applies it only through a capture two functions down — which the summary follows, because an applied capture names a value of the scope that binds it, and that scope is `each`'s parameter list.
+#[test]
+fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initializer() {
+    let mut builder = Builder::new();
+    let each = builder.reserve_function();
+    let step = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    // each(f) = { fn go(x) = f(x); go(0) }
+    let f = builder.value(Some("f".into()));
+    let go = builder.reserve_function();
+    let x = builder.value(Some("x".into()));
+    builder.open_block();
+    let applied = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(f),
+            arguments: vec![Atom::Value(x)],
+        },
+    );
+    let go_body = builder.seal_block(Terminator::Return(Atom::Value(applied)));
+    builder.define_function(go, Some("go".into()), vec![x], go_body);
+    builder.open_block();
+    builder.let_functions(vec![go]);
+    let zero = nat_atom(&mut builder, 0);
+    let gone = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(go),
+            arguments: vec![zero],
+        },
+    );
+    let each_body = builder.seal_block(Terminator::Return(Atom::Value(gone)));
+    builder.define_function(each, Some("each".into()), vec![f], each_body);
+
+    // step(n) = n + table
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(table)],
+        },
+    );
+    let step_body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(step, Some("step".into()), vec![n], step_body);
+
+    builder.open_block();
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(each),
+            arguments: vec![Atom::Function(step)],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![step], vec![(table, init_table), (size, init_size)]);
+    builder.item_functions(vec![each]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the combinator applies the stepper, which evaluates `table`");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() == 1 && steps[0].member == "table" && steps[0].through.is_some()),
+        "{error}"
+    );
+}
+
+/// The bind shape: a stepper over a sibling handed to a combinator that only *stores* it — `keep(f) = Box { f }` — stays dormant, which is what keeps a parser knot built over its own members legal.
+#[test]
+fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
+    let mut builder = Builder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Box".into()),
+        fields: ProductFields::Declared(vec![Field::opaque(Some("held".into()))]),
+    });
+    let keep = builder.reserve_function();
+    let step = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let f = builder.value(Some("f".into()));
+    builder.open_block();
+    let boxed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Value(f)],
+        },
+    );
+    let keep_body = builder.seal_block(Terminator::Return(Atom::Value(boxed)));
+    builder.define_function(keep, Some("keep".into()), vec![f], keep_body);
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let step_body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(step, Some("step".into()), vec![n], step_body);
+
+    builder.open_block();
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(keep),
+            arguments: vec![Atom::Function(step)],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![step], vec![(table, init_table), (size, init_size)]);
+    builder.item_functions(vec![keep]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("a stored stepper is dormant until something applies it");
+}
+
+/// An initializer performs no effect: forced by need it runs later than it is written, or never, and an exit — or a host call, or a cell — cannot be moved that way. It is refused where it is declared.
+#[test]
+fn an_initializer_that_performs_an_effect_is_rejected() {
+    let mut builder = Builder::new();
+    let member = builder.value(Some("member".into()));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let exit = builder.foreign(Arc::new(ForeignFunction {
+        name: "/exit".to_string(),
+        signature: WireSignature {
+            params: vec![WireType::Byte],
+            returns: WireReturn::Never,
+        },
+    }));
+    let init = builder.seal_block(Terminator::Halt {
+        foreign: exit,
+        operands: vec![zero],
+    });
+    let group = builder.rec_group(vec![], vec![(member, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(member)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("an initializer that exits cannot be forced by need");
+    assert!(
+        matches!(&error, VerifyError::InitializerPerformsEffect { member, through: None, .. }
+            if member == "member"),
+        "{error}"
+    );
+}
+
+/// A computed-only evaluation cycle has no satisfiable initialization order.
+#[test]
+fn a_computed_only_cycle_is_rejected() {
+    let mut builder = Builder::new();
+    let first = builder.value(Some("first".into()));
+    let second = builder.value(Some("second".into()));
+    builder.open_block();
+    let init_first = builder.seal_block(Terminator::Return(Atom::Value(second)));
+    builder.open_block();
+    let init_second = builder.seal_block(Terminator::Return(Atom::Value(first)));
+    let group = builder.rec_group(vec![], vec![(first, init_first), (second, init_second)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(second)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("the cycle cannot initialize");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps } if steps.len() == 2),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_unused_direct_self_knot_is_admitted() {
+    // `rec loop = loop; 0` is language-accepted: nothing forces `loop`, so its initializer never runs, and the lowering drops it.
+    let mut builder = Builder::new();
+    let value = builder.value(Some("value".into()));
+    builder.open_block();
+    let init = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    let group = builder.rec_group(vec![], vec![(value, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("the unused self-knot is admitted");
+}
+
+/// A fragment cannot tell whether another module reads a member only its own initializer reads, so it is admitted there and named, for whoever erases a read of it to refuse: with a second member the fragment does read, which is no such knot, left out.
+#[test]
+fn a_fragment_names_the_self_knots_nothing_of_it_forces() {
+    let mut builder = Builder::new();
+    let knot = builder.value(Some("knot".into()));
+    let plain = builder.value(Some("plain".into()));
+    builder.open_block();
+    let init_knot = builder.seal_block(Terminator::Return(Atom::Value(knot)));
+    builder.open_block();
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let init_plain = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    let group = builder.rec_group(vec![], vec![(knot, init_knot), (plain, init_plain)]);
+    builder.item_rec(group);
+
+    let module = builder.into_module().expect("the fragment verifies");
+    let unforced = module.unforced();
+
+    assert_eq!(unforced.len(), 1, "{unforced:?}");
+    assert_eq!(
+        (unforced[0].member.as_str(), unforced[0].value),
+        ("knot", knot)
+    );
+    assert!(unforced[0].through.is_none());
+}
+
+#[test]
+fn a_used_direct_self_knot_is_rejected() {
+    // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. A self-read is an edge like any other once something forces the member, so this is refused here rather than admitted with the unused shape to trap as a black hole at runtime.
+    let mut builder = Builder::new();
+    let value = builder.value(Some("value".into()));
+    builder.open_block();
+    let init = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    let group = builder.rec_group(vec![], vec![(value, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the used self-knot cannot initialize");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() == 1 && steps[0].member == "value" && steps[0].through.is_none()),
+        "{error}"
+    );
+}

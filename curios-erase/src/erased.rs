@@ -10,6 +10,9 @@
 //!
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{
         AskedBy, AskedItems, AtSorts, Binding, Environment, HeldAsked, Part, Sorts,
@@ -651,50 +654,6 @@ impl ErasedUnit {
         self.index.items = forms;
 
         Ok(self)
-    }
-}
-
-#[cfg(feature = "test-support")]
-impl ErasedUnit {
-    /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
-    pub fn declared_families(&self) -> Vec<crate::test_support::ErasedFamily> {
-        self.items()
-            .flat_map(ErasedForms::forms)
-            .flat_map(|form| {
-                let module = form.module();
-
-                form.environment().declared_induct_rows().map(move |row| {
-                    let family = module
-                        .family(row.family)
-                        .expect("a declared row's family is its fragment's");
-
-                    crate::test_support::ErasedFamily {
-                        name: family.debug_name.clone().unwrap_or_default(),
-                        constructors: family
-                            .constructors
-                            .iter()
-                            .map(|&id| {
-                                module
-                                    .constructor(id)
-                                    .expect("a declared row's constructor is its fragment's")
-                                    .fields
-                                    .iter()
-                                    .map(|field| crate::test_support::ErasedField {
-                                        shape: field.shape,
-                                        family: match field.shape {
-                                            curios_anf::FieldShape::Family(family) => module
-                                                .family(family)
-                                                .and_then(|family| family.debug_name.clone()),
-                                            _ => None,
-                                        },
-                                    })
-                                    .collect()
-                            })
-                            .collect(),
-                    }
-                })
-            })
-            .collect()
     }
 }
 

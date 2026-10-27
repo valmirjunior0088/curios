@@ -15,7 +15,12 @@
 //! The split exists because the roles are easy to confuse. Answering a `FuncType` or a `TupleType` in `infer` with the lookup would admit a former whatever its parts said: a Σ whose field type is a nominal occurrence with ill-typed arguments would pass, and the projection rule would hand that field type back as a scrutinee at a forged equation.
 
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod classification_tests;
+#[cfg(test)]
+mod memo_tests;
 
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},

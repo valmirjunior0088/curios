@@ -30,7 +30,7 @@ fn a_proposition_may_not_carry_an_informative_field() {
 ///
 /// `carried : Type 0` makes the field a type held as data. Irrelevance identifies `Bad{{}}` with `Bad{False}` at `Bad`, and `.0` reads the carried type straight back out — a projection meets no elimination guard at all — so `{}` and `False` become convertible, and `subst` turns `()` into a closed inhabitant of `False`.
 ///
-/// This is the field-side face of the elimination-side hole in `super::super::infer::eliminate::tests`: both gates ask `carries_information`, which must count a universe-typed field as carrying information however completely erasure deletes it. No `.crs` file reaches it — `curios-elab` refuses the declaration by its own `is_prop` test, so the kernel is never asked from source, and only this fixture holds `check_struct_decl` to it.
+/// This is the field-side face of the elimination-side hole in `super::super::infer::eliminate::large_elimination_tests`: both gates ask `carries_information`, which must count a universe-typed field as carrying information however completely erasure deletes it. No `.crs` file reaches it — `curios-elab` refuses the declaration by its own `is_prop` test, so the kernel is never asked from source, and only this fixture holds `check_struct_decl` to it.
 #[test]
 fn a_proposition_may_not_carry_a_type() {
     let mut kernel = kernel();

@@ -78,7 +78,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
 
 // The control the rule above is most dangerous without, and the exploit it would be: `Two/a()` and `Two/b()` are distinct constructors, and they are proofs, so `Eq/refl()` inhabits `Eq()(Two/a(), Two/b())` by irrelevance. Reading the two forcings as a clash would make `absurd` total on an inhabited type, and `forged` a closed inhabitant of `False`. Two things stand in the way and either suffices: the forcings *convert* at `Two`, so the deletion rule keeps one before a clash is ever asked for; and the walk that would answer the clash reads the family's sort before its tags.
 //
-// The two are independent rather than one guard stated twice, as mutation at the unifier itself shows, in `curios-analysis`'s `tests/driven.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
+// The two are independent rather than one guard stated twice, as mutation at the unifier itself shows, in `curios-analysis`'s `tests/driven/forcing_tests.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
 #[test]
 fn two_proofs_forced_on_one_binder_do_not_clash() {
     rejected_by(
@@ -203,7 +203,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
 //
 // The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needs backing up: `carries_information` counts a component whose type is a universe as carrying information, since erasure deleting a type either way is what the runtime observes, not what conversion observes.
 //
-// No surface program reaches that gate. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::tests` pin the predicate at both halves of the clause that admitted it.
+// No surface program reaches that gate. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::large_elimination_tests` pin the predicate at both halves of the clause that admitted it.
 #[test]
 fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     rejected_by(

@@ -6,7 +6,7 @@ use {super::test_support::*, crate::tests::run};
 //
 // This is a disagreement between the two checkers rather than a route to `False`: the elaborator checks the catch-all at the actual scrutinee, and a kernel opening the motive's scrutinee binder at the family *type* `/Three` would refuse this program with `/Three` standing in both term positions of the `Eq`. That direction fails closed — nothing well-typed inhabits an expectation with a type substituted for a value — but the certifier's own judgment is the one that matters, and it would establish nothing about the scrutinee for any catch-all it accepted. No prelude catch-all has a scrutinee-dependent motive, so this fixture is where the rule is asked.
 //
-// The instance is pinned where the rule lives, in `curios_cert::kernel::infer::eliminate::tests`: `a_catch_all_sees_its_own_scrutinee` with its control `a_catch_all_at_another_value_of_the_family_is_refused`, which asserts the expectation itself so that not checking the catch-all cannot pass for closing the hole.
+// The instance is pinned where the rule lives, in `curios_cert::kernel::infer::eliminate::coverage_tests`: `a_catch_all_sees_its_own_scrutinee` with its control `a_catch_all_at_another_value_of_the_family_is_refused`, which asserts the expectation itself so that not checking the catch-all cannot pass for closing the hole.
 #[test]
 fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");

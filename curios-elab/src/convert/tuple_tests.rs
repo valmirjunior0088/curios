@@ -1,0 +1,780 @@
+//! Tuples and projections, and eta at a known type: a neutral at a type with one inhabitant, and a literal against a neutral.
+
+use {
+    super::test_support::*,
+    crate::*,
+    curios_core::{
+        Cases, Exhaustion, Free, InductDecl, Intrinsic, Match, MatchResult, MetavarId, StructDecl,
+        StructType, Subterm, Telescope, Term, UniverseContext, Universes,
+    },
+    curios_utilities::Qualifier,
+};
+
+#[test]
+fn convert_tuple_equal() {
+    let mut context = context();
+
+    let this = Term::tuple([nat(1), nat(2)]);
+    let that = Term::tuple([nat(1), nat(2)]);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+#[test]
+fn tuple_unequal_field() {
+    let mut context = context();
+
+    let this = Term::tuple([nat(1), nat(2)]);
+    let that = Term::tuple([nat(1), nat(3)]);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+#[test]
+fn proj_same_index_and_head() {
+    let mut context = context();
+    let r = context.fresh(Some("r"));
+
+    let this = Term::proj(Term::free_var(&r), 0);
+    let that = Term::proj(Term::free_var(&r), 0);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+#[test]
+fn proj_different_index_is_false() {
+    let mut context = context();
+    let r = context.fresh(Some("r"));
+
+    let this = Term::proj(Term::free_var(&r), 0);
+    let that = Term::proj(Term::free_var(&r), 1);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+#[test]
+fn eta_tuple_neutral_with_known_type() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    let r_binder = context.fresh(Some("r"));
+    let s_binder = context.fresh(Some("s"));
+
+    let tuple_type: Term = Term::tuple_type([
+        (x, Term::intrinsic(Intrinsic::NatType)),
+        (y, Term::intrinsic(Intrinsic::BoolType)),
+    ]);
+
+    let r: Term = Term::free_var(&r_binder);
+    let s: Term = Term::free_var(&s_binder);
+
+    assert_eq!(convert(&mut context, &tuple_type, &r, &r), Ok(true));
+
+    assert_eq!(convert(&mut context, &tuple_type, &r, &s), Ok(false));
+}
+
+#[test]
+fn partial_projection_tuple_at_narrow_type() {
+    let mut context = context();
+    let p = context.fresh(Some("p"));
+    let q = context.fresh(Some("q"));
+    let x = context.fresh(Some("x"));
+
+    // p = (1, 2), q = (1, 3) — both 2-tuples agreeing on field 0, differing on field 1.
+    context.define(&p, &Term::tuple([nat(1), nat(2)]), None);
+    context.define(&q, &Term::tuple([nat(1), nat(3)]), None);
+
+    let type_: Term = Term::tuple_type([(x, Term::intrinsic(Intrinsic::NatType))]);
+
+    // this = (p.0), that = (q.0). At the 1-field type both denote (a), so conversion should return true.
+    let this: Term = Term::tuple([Term::proj(Term::free_var(&p), 0)]);
+    let that: Term = Term::tuple([Term::proj(Term::free_var(&q), 0)]);
+
+    // Reduction does not eta-reduce a tuple (`reduce`'s `does_not_eta_reduce_tuple`), so each side stays a 1-tuple and its field is compared at the 1-field telescope: each `proj(_, 0)` reduces to `1`, and the two convert.
+    assert_eq!(convert(&mut context, &type_, &this, &that), Ok(true));
+}
+
+#[test]
+fn times_out_on_pathological_inputs() {
+    let mut context = context();
+    let loop_ = context.fresh(Some("loop"));
+    let x = context.fresh(Some("x"));
+    let z = context.fresh(Some("z"));
+    let y = context.fresh(Some("y"));
+
+    context.define(&loop_, &Term::free_var(&loop_), None);
+
+    let this = Term::tuple_type([
+        (
+            x,
+            Term::apply(func([&z], Term::free_var(&z)), [Term::free_var(&loop_)]),
+        ),
+        (y, Term::free_var(&x)),
+    ]);
+
+    let that = Term::tuple_type([(x, Term::free_var(&loop_)), (y, Term::free_var(&x))]);
+
+    assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
+}
+
+#[test]
+fn unit_typed_neutrals_in_a_type_argument_converge() {
+    let mut context = context();
+    let func = context.fresh(Some("F"));
+    let wildcard = context.fresh(Some("_"));
+    let r_binder = context.fresh(Some("r"));
+    let s_binder = context.fresh(Some("s"));
+
+    // F : (()) -> Type ; r, s : ()   (all neutral assumptions). r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s. `conv` compares at `Type`, exactly as the pipeline does via `expect`.
+    context.assume(
+        &func,
+        &Term::func_type([(wildcard, Term::tuple_type_unit())], Term::type_ground()),
+    );
+    context.assume(&r_binder, &Term::tuple_type_unit());
+    context.assume(&s_binder, &Term::tuple_type_unit());
+
+    let f = Term::free_var(&func);
+    let r = Term::free_var(&r_binder);
+    let s = Term::free_var(&s_binder);
+
+    let this = Term::apply(f.clone(), [r]); // F r
+    let that = Term::apply(f, [s]); // F s
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// Unit eta, by the goal's type: at the empty Σ and at a nominal struct that declares no field, any two terms converge whatever their shapes — two stuck applications of two heads, which the structural rule compares head against head and would refuse. It composes with the eta between two neutrals that reaches it: two variables at a record of units converge by their projections, each at its field's type, and two at a function into a unit by their applications. The kernel's twin of this proposition shares the name.
+///
+/// The rule is the type's: at `Type` two variables stay apart, and so do two at a record or a struct that has a relevant field.
+///
+/// Mutation-checked: without the check ahead of the structural dispatch the first goal is refused, with a tuple neutral's projections compared at `Type` the record of units' is, and with a struct's fields uncounted the last goal is accepted.
+#[test]
+fn any_two_terms_converge_at_a_type_with_no_field() {
+    let mut context = context();
+    let (f, g) = (context.fresh(Some("f")), context.fresh(Some("g")));
+    let (u, v) = (
+        Term::free_var(&context.fresh(Some("u"))),
+        Term::free_var(&context.fresh(Some("v"))),
+    );
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+
+    let unit = Term::tuple_type_unit();
+    let function_into_unit = Term::func_type([(a, nat_type())], unit.clone());
+    context.assume(&f, &function_into_unit);
+    context.assume(&g, &function_into_unit);
+
+    let field_less = declare_struct(&mut context, "U", Telescope::done(()));
+    let one_field = declare_struct(&mut context, "S", Telescope::build([(a, nat_type())], ()));
+
+    let record_of_units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let record_of_a_number = Term::tuple_type([(a, nat_type())]);
+    let applied = |head: &Free, argument: usize| Term::apply(Term::free_var(head), [nat(argument)]);
+
+    assert_eq!(
+        convert(&mut context, &unit, &applied(&f, 0), &applied(&g, 1)),
+        Ok(true)
+    );
+    assert_eq!(convert(&mut context, &unit, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &field_less, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &record_of_units, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &function_into_unit, &u, &v), Ok(true));
+
+    assert_eq!(
+        convert(&mut context, &Term::type_ground(), &u, &v),
+        Ok(false)
+    );
+    assert_eq!(
+        convert(&mut context, &record_of_a_number, &u, &v),
+        Ok(false)
+    );
+    assert_eq!(convert(&mut context, &one_field, &u, &v), Ok(false));
+}
+
+/// A nominal struct has no eta by its type, so what eta would decide between two terms at one is read off the type: any two converge at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record of such, another such struct — whatever their shapes. The kernel's twin of this proposition shares the name.
+///
+/// The refusals are the rule's bounds. One relevant field keeps two variables apart, at whatever depth it sits; and a struct that reaches itself, by its own fields or through another's, answers no where it is met again, which is what ends the walk. A struct nested in its own parameter is met again too, and is judged again: its declaration names no struct, and the parameter is what bounds the walk.
+///
+/// Mutation-checked: with the struct left to the dispatch the five held goals are refused; with every struct counted the four refused goals are accepted; with every struct met again refused the goal at the struct nested in its own parameter is; with none refused the last two goals spend the budget; and with a declaration read for its own name alone the last one does.
+#[test]
+fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
+    let mut context = context();
+    let (f, g) = (context.fresh(Some("f")), context.fresh(Some("g")));
+    let (u, v) = (
+        Term::free_var(&context.fresh(Some("u"))),
+        Term::free_var(&context.fresh(Some("v"))),
+    );
+    let applied = |head: &Free, argument: usize| Term::apply(Term::free_var(head), [nat(argument)]);
+    let unit = Term::tuple_type_unit;
+    let proposition = declare_proposition(&mut context, "P");
+    let declared = |context: &mut Context, path: &str, fields: Vec<Term>| {
+        let fields = fields
+            .into_iter()
+            .map(|field| (context.fresh(None), field))
+            .collect::<Vec<_>>();
+
+        declare_struct(context, path, Telescope::build(fields, ()))
+    };
+
+    let of_a_unit = declared(&mut context, "W", vec![unit()]);
+    let of_a_proof = declared(&mut context, "Proved", vec![proposition]);
+    let x = context.fresh(Some("x"));
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let nested = declared(
+        &mut context,
+        "N",
+        vec![
+            of_a_unit.clone(),
+            Term::func_type([(x, nat_type())], unit()),
+            Term::tuple_type([(a, unit()), (b, of_a_proof.clone())]),
+        ],
+    );
+    let of_a_number = declared(&mut context, "V", vec![nat_type(), unit()]);
+    let over_a_number = declared(
+        &mut context,
+        "M",
+        vec![of_a_unit.clone(), of_a_number.clone()],
+    );
+    // A struct over one parameter, named by its path: its declaration names a struct only where a field does.
+    let at = |path: &str| {
+        let name = nominal(path);
+
+        move |param: Term| {
+            Term::from(Subterm::StructType(StructType {
+                name,
+                universes: Universes::default(),
+                params: vec![param],
+            }))
+        }
+    };
+    let (n, m) = (context.fresh(Some("n")), context.fresh(Some("m")));
+    let over = |context: &mut Context, path: &str, parameter: Term, fields: Vec<Term>| {
+        let fields = fields
+            .into_iter()
+            .map(|field| (context.fresh(None), field))
+            .collect::<Vec<_>>();
+
+        context
+            .register_struct(
+                &nominal(path),
+                StructDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::build([(n, parameter)], Telescope::build(fields, ())),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .unwrap();
+    };
+    let after = |path: &str| Term::func_type([(m, nat_type())], at(path)(Term::free_var(&m)));
+    // `struct R(n: Nat) { next: (m: Nat) -> R(m) }`, which reaches itself at another parameter each time.
+    over(&mut context, "R", nat_type(), vec![after("R")]);
+    // `struct Left(n: Nat) { right: (m: Nat) -> Right(m) }` and `Right`, its mirror: each reaches itself through the other.
+    over(&mut context, "Left", nat_type(), vec![after("Right")]);
+    over(&mut context, "Right", nat_type(), vec![after("Left")]);
+    // `struct Pair(A: Type) { a: A, b: A }`, which names no struct: nested in its own parameter it is met again, and its declaration does not reach itself.
+    over(
+        &mut context,
+        "Pair",
+        Term::type_ground(),
+        vec![Term::free_var(&n), Term::free_var(&n)],
+    );
+    let pair = at("Pair");
+
+    assert_eq!(
+        [
+            convert(&mut context, &of_a_unit, &u, &v),
+            convert(&mut context, &of_a_unit, &applied(&f, 0), &applied(&g, 1)),
+            convert(&mut context, &of_a_proof, &u, &v),
+            convert(&mut context, &nested, &u, &v),
+            convert(&mut context, &pair(pair(unit())), &u, &v),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            convert(&mut context, &of_a_number, &u, &v),
+            convert(&mut context, &over_a_number, &u, &v),
+            convert(&mut context, &pair(pair(nat_type())), &u, &v),
+            convert(&mut context, &at("R")(nat(0)), &u, &v),
+            convert(&mut context, &at("Left")(nat(0)), &u, &v),
+        ],
+        [Ok(false), Ok(false), Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// A goal's type is read forced: a member of a declaration group is folded in weak-head form, and every rule a type directs is keyed on the type's own shape. Two variables converge at a group's member that is a struct of a unit, closed or over a variable, the unit, a record of units or a function into a unit, and stay apart at one that is a struct or a record with a relevant field. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the type read in weak-head form, the goal at the struct over a variable is refused; a closed type's forced form is the reduct the sort judgment left cached, and the other goals are met again by eta where the dispatch ends.
+#[test]
+fn a_goals_type_is_read_forced() {
+    let mut context = context();
+    let (u, v) = (
+        Term::free_var(&context.fresh(Some("u"))),
+        Term::free_var(&context.fresh(Some("v"))),
+    );
+    let (a, b, x) = (
+        context.fresh(Some("a")),
+        context.fresh(Some("b")),
+        context.fresh(Some("x")),
+    );
+    let unit = Term::tuple_type_unit;
+    let of_a_unit = declare_struct(&mut context, "W", Telescope::build([(a, unit())], ()));
+    let of_a_number = declare_struct(&mut context, "V", Telescope::build([(a, nat_type())], ()));
+    // `struct Tagged(n: Nat) { u: {} }` at a variable: a type with one inhabitant that is not closed, so that no cached reduct of it stands in for the forcing.
+    let over_a_variable = {
+        let (n, k) = (context.fresh(Some("n")), context.fresh(Some("k")));
+        context
+            .register_struct(
+                &nominal("Tagged"),
+                StructDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::build([(n, nat_type())], Telescope::build([(a, unit())], ())),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .unwrap();
+
+        Term::from(Subterm::StructType(StructType {
+            name: nominal("Tagged"),
+            universes: Universes::default(),
+            params: vec![Term::free_var(&k)],
+        }))
+    };
+    // `rec First : Type = <body> and Second : Type = {}; First`, the spelling a declaration in a group is referred to by.
+    let (first, second) = (context.fresh(Some("First")), context.fresh(Some("Second")));
+    let member = |body: Term| {
+        Term::rec(
+            [
+                (first, Term::type_ground(), body),
+                (second, Term::type_ground(), Term::tuple_type_unit()),
+            ],
+            Term::free_var(&first),
+        )
+    };
+
+    assert_eq!(
+        [
+            convert(&mut context, &member(of_a_unit), &u, &v),
+            convert(&mut context, &member(over_a_variable), &u, &v),
+            convert(&mut context, &member(unit()), &u, &v),
+            convert(
+                &mut context,
+                &member(Term::tuple_type([(a, unit()), (b, unit())])),
+                &u,
+                &v
+            ),
+            convert(
+                &mut context,
+                &member(Term::func_type([(x, nat_type())], unit())),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            convert(&mut context, &member(of_a_number), &u, &v),
+            convert(
+                &mut context,
+                &member(Term::tuple_type([(a, nat_type()), (b, unit())])),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(false), Ok(false)]
+    );
+}
+
+/// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where the structural rule would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: with eta by the type left to the dispatch's last arm, the two goals a unit decides are refused.
+#[test]
+fn eta_by_the_goals_type_is_fired_whatever_the_two_sides_shapes() {
+    let mut context = context();
+    let (s, t) = (context.fresh(Some("s")), context.fresh(Some("t")));
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let unit = Term::tuple_type_unit();
+    let applied = |head: &Free, argument: usize| Term::apply(Term::free_var(head), [nat(argument)]);
+    let (this, that) = (applied(&s, 0), applied(&t, 1));
+
+    let record_of_units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let function_into_unit = Term::func_type([(a, nat_type())], unit.clone());
+    let record_of_a_number = Term::tuple_type([(a, nat_type()), (b, unit)]);
+
+    assert_eq!(
+        [
+            convert(&mut context, &record_of_units, &this, &that),
+            convert(&mut context, &function_into_unit, &this, &that),
+            convert(&mut context, &record_of_a_number, &this, &that),
+        ],
+        [Ok(true), Ok(true), Ok(false)]
+    );
+}
+
+/// Two calls of one definition are compared by their spines whatever spells them. `h(p)` against `h(q)`, two proofs of one proposition, converges by the spines before either call unfolds, and so does the same pair where a solved metavariable stands for `h(p)` — the side `Eq/refl()`'s implicit leaves once it is solved.
+///
+/// The control is the same pair over a relevant family, refused under either spelling. The proposition's half holds by either rule — read as written both calls unfold, and the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates — so this holds the verdict under both spellings, and reading through the solutions is what keeps the two calls folded.
+#[test]
+fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
+    let judged = |sort: Term| {
+        let mut context = context();
+        context
+            .register_induct(
+                &nominal("F"),
+                InductDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::done(Telescope::done(())),
+                    constructors: Vec::new().into(),
+                    result_sort: sort,
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .unwrap();
+        let family = Term::induct_type(nominal("F"), Vec::<Term>::new(), Vec::<Term>::new());
+        let h = Free::global(Qualifier::from(["h"]));
+        let e = context.fresh(Some("e"));
+        let (p, q) = (context.fresh(Some("p")), context.fresh(Some("q")));
+        context.assume(&p, &family);
+        context.assume(&q, &family);
+
+        // `h(e: F) -> Nat = match e end`, an elimination with no arm, stuck on a variable.
+        let eliminated = Term::from(Subterm::Match(Match {
+            head: Term::free_var(&e),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+                stated: None,
+            },
+        }));
+        context.define_assuming(
+            &h,
+            &Term::func_type([(e, family.clone())], nat_type()),
+            &Term::func([(e, family.clone())], eliminated),
+            None,
+        );
+        let call = |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)]);
+
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        context.solve_metavar(MetavarId(0), call(&p));
+
+        [
+            convert(&mut context, &nat_type(), &call(&p), &call(&q)),
+            convert(&mut context, &nat_type(), &Term::hole(0), &call(&q)),
+        ]
+    };
+
+    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true)]);
+    assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
+}
+
+/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The kernel's twin of this proposition shares the name.
+///
+/// Neither side is expanded, and the refusals say what that keeps apart: two variables at a record with a relevant field, two proofs of two propositions and two numbers.
+///
+/// A looked-up type is read through the solutions already committed: two proofs whose proposition a solved metavariable spells converge as two at the proposition written do.
+///
+/// Mutation-checked: without the lookup the ten held goals are refused; with the two looked-up types left uncompared two proofs of two propositions converge; and with each looked-up type read as written the pair a solved metavariable types is refused.
+#[test]
+fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
+    let mut context = context();
+    let (one, another) = (
+        declare_proposition(&mut context, "P"),
+        declare_proposition(&mut context, "Q"),
+    );
+    let field_less = declare_struct(&mut context, "U", Telescope::done(()));
+    let unit = Term::tuple_type_unit();
+    let (a, b, z) = (
+        context.fresh(Some("a")),
+        context.fresh(Some("b")),
+        context.fresh(Some("z")),
+    );
+    let of_a_unit = declare_struct(&mut context, "W", Telescope::build([(a, unit.clone())], ()));
+    let record = Term::tuple_type([(a, nat_type()), (b, unit.clone())]);
+    let units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let function = Term::func_type([(z, nat_type())], unit.clone());
+    // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
+    let nested = {
+        let (f, n, motive) = (
+            context.fresh(Some("F")),
+            context.fresh(Some("n")),
+            context.fresh(Some("m")),
+        );
+        let (pred, ih) = (context.fresh(Some("pred")), context.fresh(Some("ih")));
+        let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
+        let family = Term::func_type([(n, nat_type())], Term::type_ground());
+        let body = Term::func(
+            [(n, nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive),
+                Term::type_ground(),
+                unit.clone(),
+                &pred,
+                &ih,
+                Term::tuple_type([(a, again)]),
+            ),
+        );
+        let definition = Term::rec([(f, family, body)], Term::free_var(&f));
+
+        move |depth: usize| Term::apply(definition.clone(), [nat(depth)])
+    };
+    let (folded, folded_twice) = (nested(0), nested(1));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::prop());
+    context.solve_metavar(MetavarId(0), one.clone());
+
+    let mut assumed = |hint: &str, type_: &Term| {
+        let name = context.fresh(Some(hint));
+        context.assume(&name, type_);
+
+        Term::free_var(&name)
+    };
+    let (p, q, other) = (
+        assumed("p", &one),
+        assumed("q", &one),
+        assumed("r", &another),
+    );
+    let (solved_p, solved_q) = (assumed("p", &Term::hole(0)), assumed("q", &Term::hole(0)));
+    let (u, v) = (assumed("u", &unit), assumed("v", &unit));
+    let (s, t) = (assumed("s", &field_less), assumed("t", &field_less));
+    let (x, y) = (assumed("x", &record), assumed("y", &record));
+    let (f, g) = (assumed("f", &function), assumed("g", &function));
+    let (m, n) = (assumed("m", &nat_type()), assumed("n", &nat_type()));
+    let (c, d) = (assumed("c", &units), assumed("d", &units));
+    let (w, e) = (assumed("w", &of_a_unit), assumed("e", &of_a_unit));
+    let (h, k) = (assumed("h", &folded), assumed("k", &folded));
+    let (i, j) = (assumed("i", &folded_twice), assumed("j", &folded_twice));
+
+    let eliminated = |proof: &Term| {
+        Term::from(Subterm::Match(Match {
+            head: proof.clone(),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+                stated: None,
+            },
+        }))
+    };
+    let (ground, number) = (Term::type_ground(), nat_type());
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut context, type_, this, that);
+
+    assert_eq!(
+        [
+            at(&ground, &p, &q),
+            at(&ground, &solved_p, &solved_q),
+            at(&ground, &u, &v),
+            at(&ground, &s, &t),
+            at(&ground, &c, &d),
+            at(&ground, &f, &g),
+            at(&ground, &w, &e),
+            at(&ground, &h, &k),
+            at(&ground, &i, &j),
+            at(&number, &eliminated(&p), &eliminated(&q)),
+        ],
+        [
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true)
+        ]
+    );
+    assert_eq!(
+        [
+            at(&ground, &x, &y),
+            at(&ground, &p, &other),
+            at(&ground, &m, &n),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and a literal with no field — whose walk compares nothing — would convert with anything: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, that struct's literal at another struct, and the unit literal against `1`, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: without the refusal in `eta_expand_func` the first goal is accepted, without the one in `eta_expand_tuple` the second and the last of the refused are, without the one in `eta_expand_struct` the two between are, and with a sort counted a former the goals at `Type` are refused.
+#[test]
+fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
+    let mut context = context();
+    let (f, x, a) = (
+        context.fresh(Some("f")),
+        context.fresh(Some("x")),
+        context.fresh(Some("a")),
+    );
+    context.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+    let field_less = declare_struct(&mut context, "U", Telescope::done(()));
+    let one_field = declare_struct(&mut context, "S", Telescope::build([(a, nat_type())], ()));
+
+    let expansion = Term::func(
+        [(x, nat_type())],
+        Term::apply(
+            Term::free_var(&f),
+            [Term::intrinsic(Intrinsic::nat_add(
+                Term::free_var(&x),
+                nat(0),
+            ))],
+        ),
+    );
+    let unit = Term::tuple(Vec::<Term>::new());
+    let empty = Term::struct_(nominal("U"), Vec::<Term>::new(), Vec::<Term>::new());
+    let (function, neutral) = (
+        Term::free_var(&f),
+        Term::free_var(&context.fresh(Some("n"))),
+    );
+    let (ground, number) = (Term::type_ground(), nat_type());
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut context, type_, this, that);
+
+    assert_eq!(
+        [
+            at(&number, &expansion, &function),
+            at(&number, &unit, &neutral),
+            at(&number, &empty, &neutral),
+            at(&one_field, &neutral, &empty),
+            at(&number, &unit, &nat(1)),
+        ],
+        [Ok(false), Ok(false), Ok(false), Ok(false), Ok(false)]
+    );
+    assert_eq!(
+        [
+            at(&Term::tuple_type_unit(), &unit, &neutral),
+            at(&field_less, &empty, &neutral),
+            at(&ground, &expansion, &function),
+            at(&ground, &unit, &neutral),
+            at(&ground, &neutral, &empty),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+}
+
+/// A literal's eta is taken against every neutral inhabitant, a term whose head does not show its type, and against no other. A stuck elimination is one as a variable is: a lambda, a tuple literal and a struct literal each converge with the stuck elimination they expand, where no type directs the rule and at the struct's own type — the lambda past a fold, since one that only forwards reduces to what it forwards — and each near miss beside them — a binder dropped, two components swapped, two fields swapped — is refused. Against a head that shows another type — a number, a lambda, a constructor's value — the rule is not taken, and the unit literal's empty walk equates it with nothing. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the set narrowed to a variable, a projection and an application the four held goals are refused, and with the rule taken against any term the unit literal converges with a number.
+#[test]
+fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let ground = Term::type_ground();
+    let empty = declare_family(&mut context, "E", Telescope::done(()), Term::type_ground());
+    let c = context.fresh(Some("c"));
+    context.assume(
+        &c,
+        &Term::induct_type(empty, Vec::<Term>::new(), Vec::<Term>::new()),
+    );
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let fields = || [(a, nat_type()), (b, nat_type())];
+    let record = declare_struct(&mut context, "S", Telescope::build(fields(), ()));
+    let built = declare_family(&mut context, "D", Telescope::done(()), Term::type_ground());
+
+    // `match c end` at an ambient goal: an elimination with no arm, stuck on a variable.
+    let stuck = |goal: Term| {
+        Term::from(Subterm::Match(Match {
+            head: Term::free_var(&c),
+            result: MatchResult::Ambient(goal),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+                stated: None,
+            },
+        }))
+    };
+    let function = stuck(Term::func_type([(x, nat_type())], nat_type()));
+    let pair = stuck(Term::tuple_type(fields()));
+    let structure = stuck(record.clone());
+    let literal = |first: usize, second: usize| {
+        Term::struct_(
+            nominal("S"),
+            Vec::<Term>::new(),
+            [
+                Term::proj_struct(structure.clone(), nominal("S"), first),
+                Term::proj_struct(structure.clone(), nominal("S"), second),
+            ],
+        )
+    };
+    let applied =
+        |argument: Term| Term::func([(x, nat_type())], Term::apply(function.clone(), [argument]));
+    let projected = |first: usize, second: usize| {
+        Term::tuple([
+            Term::proj(pair.clone(), first),
+            Term::proj(pair.clone(), second),
+        ])
+    };
+
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
+    let unit = Term::tuple(Vec::<Term>::new());
+    let constructed = Term::variant(built, Vec::<Term>::new(), "mk", Vec::<Term>::new());
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut context, type_, this, that);
+
+    assert_eq!(
+        [
+            at(
+                &ground,
+                &applied(Term::intrinsic(Intrinsic::nat_add(
+                    Term::free_var(&x),
+                    nat(0),
+                ))),
+                &function,
+            ),
+            at(&ground, &projected(0, 1), &pair),
+            at(&ground, &literal(0, 1), &structure),
+            at(&record, &literal(0, 1), &structure),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            at(&ground, &applied(nat(0)), &function),
+            at(&ground, &projected(1, 0), &pair),
+            at(&ground, &literal(1, 0), &structure),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+    assert_eq!(
+        [
+            at(&ground, &identity, &nat(1)),
+            at(&ground, &unit, &nat(1)),
+            at(&ground, &unit, &identity),
+            at(&ground, &literal(0, 1), &constructed),
+        ],
+        [Ok(false), Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
+fn declare_struct(context: &mut Context, path: &str, fields: Telescope<()>) -> Term {
+    context
+        .register_struct(
+            &nominal(path),
+            StructDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(fields),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    Term::from(Subterm::StructType(StructType {
+        name: nominal(path),
+        universes: Universes::default(),
+        params: Vec::new(),
+    }))
+}

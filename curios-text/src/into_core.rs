@@ -80,15 +80,21 @@ use {
 };
 
 #[cfg(test)]
+mod alias_tests;
+#[cfg(test)]
+mod audit_tests;
+#[cfg(test)]
 mod bang_tests;
 #[cfg(test)]
 mod binding_tests;
 #[cfg(test)]
-mod exposure_tests;
+mod dual_existence_tests;
+#[cfg(test)]
+mod duplicate_tests;
 #[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
-mod lint_tests;
+mod import_tests;
 #[cfg(test)]
 mod lower_tests;
 #[cfg(test)]
@@ -98,13 +104,19 @@ mod re_export_tests;
 #[cfg(test)]
 mod scan_tests;
 #[cfg(test)]
+mod shadowed_parameter_tests;
+#[cfg(test)]
 mod sys_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod universe_tests;
 #[cfg(test)]
-mod use_tests;
+mod unused_binder_tests;
+#[cfg(test)]
+mod unused_declaration_tests;
+#[cfg(test)]
+mod unused_import_tests;
 #[cfg(test)]
 mod visibility_tests;
 

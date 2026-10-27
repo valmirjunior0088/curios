@@ -891,3 +891,9 @@ pub(super) fn big_tuple() -> curios_cps::Module {
     module.set_entry(main);
     module
 }
+
+/// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
+#[track_caller]
+pub(super) fn assert_refuses_nothing(wat: &str) {
+    assert_eq!(refusals_besides_the_exit(wat), 0);
+}

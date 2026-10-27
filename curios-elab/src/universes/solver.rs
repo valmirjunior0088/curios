@@ -12,11 +12,15 @@ use qualities::*;
 mod test_support;
 
 #[cfg(test)]
+mod consistency_tests;
+#[cfg(test)]
+mod generalization_tests;
+#[cfg(test)]
 mod held_tests;
 #[cfg(test)]
-mod quality_tests;
+mod minimization_tests;
 #[cfg(test)]
-mod tests;
+mod quality_tests;
 #[cfg(test)]
 mod weak_tests;
 

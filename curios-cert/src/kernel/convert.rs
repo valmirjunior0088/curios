@@ -24,13 +24,17 @@ mod intrinsic;
 use intrinsic::*;
 
 #[cfg(test)]
-mod conversion_tests;
+mod eta_tests;
 #[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod irrelevance_tests;
 #[cfg(test)]
+mod memo_tests;
+#[cfg(test)]
 mod recursion_tests;
+#[cfg(test)]
+mod structural_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

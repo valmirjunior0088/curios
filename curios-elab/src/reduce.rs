@@ -1,11 +1,19 @@
 #[cfg(test)]
+mod cache_tests;
+#[cfg(test)]
+mod closed_fold_tests;
+#[cfg(test)]
 mod intrinsic_tests;
 #[cfg(test)]
 mod kernel_agreement_tests;
 #[cfg(test)]
 mod partial_arithmetic_tests;
 #[cfg(test)]
-mod reduction_tests;
+mod question_tests;
+#[cfg(test)]
+mod refinement_tests;
+#[cfg(test)]
+mod rule_tests;
 #[cfg(test)]
 mod settlement_tests;
 #[cfg(test)]

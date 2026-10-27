@@ -7,6 +7,7 @@ mod capacity_tests;
 mod domain_tests;
 mod flt_tests;
 mod grid_tests;
+mod late_bound_tests;
 mod packed_word_tests;
 mod power_tests;
 mod rounding_tests;

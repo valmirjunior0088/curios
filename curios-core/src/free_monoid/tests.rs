@@ -35,7 +35,7 @@ fn deep_list(depth: usize) -> Term {
     })
 }
 
-// A hundred thousand levels is what a loop builds: `FUSION_CAP` leaves a concatenation past it standing rather than fusing it into one run, so the walks here see depth — and a walk that recursed once per level would spend one granted segment and then the process, since `recurse` is taken at each checker's reduction entry point and checked between *its* frames rather than inside a helper it calls. The same depth constant for the same reason as `print::tests::a_deep_term_is_printed_without_overflowing` and `term::sharing_tests::deep_terms_compare_without_native_recursion`.
+// A hundred thousand levels is what a loop builds: `FUSION_CAP` leaves a concatenation past it standing rather than fusing it into one run, so the walks here see depth — and a walk that recursed once per level would spend one granted segment and then the process, since `recurse` is taken at each checker's reduction entry point and checked between *its* frames rather than inside a helper it calls. The same depth constant for the same reason as `print::form_tests::a_deep_term_is_printed_without_overflowing` and `term::sharing_tests::deep_terms_compare_without_native_recursion`.
 #[test]
 fn a_deep_concatenation_peels_its_first_generator() {
     const DEEP: usize = 100_000;

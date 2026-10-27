@@ -51,10 +51,18 @@ mod evaluated;
 use evaluated::*;
 
 #[cfg(test)]
-mod tests;
+mod cost_tests;
+#[cfg(test)]
+mod data_tests;
+#[cfg(test)]
+mod evaluation_tests;
+#[cfg(test)]
+mod stand_in_tests;
+#[cfg(test)]
+mod term_tests;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_erase::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 /// Unwrap an [`Outcome`] to its emitted atom, propagating divergence to the caller (the rest of the enclosing block is dead and is never erased).

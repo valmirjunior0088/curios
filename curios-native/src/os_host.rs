@@ -1713,4 +1713,15 @@ fn read_outcome(
 }
 
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod device_tests;
+#[cfg(test)]
+mod process_tests;
+#[cfg(test)]
+mod socket_tests;
+#[cfg(test)]
+mod stream_tests;
+#[cfg(test)]
+mod system_tests;

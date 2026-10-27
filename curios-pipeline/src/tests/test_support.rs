@@ -4,7 +4,7 @@
 
 use {
     crate::*,
-    curios_core::{Item, Module, Sharing, Variance},
+    curios_core::{Enter, Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
     curios_prelude::with_prelude,
@@ -650,4 +650,155 @@ pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
         .find(|(name, _)| name.faithful().to_string().ends_with(&format!("/{family}")))
         .map(|(_, declaration)| declaration.variances.clone())
         .unwrap_or_else(|| panic!("{family} is an inductive family of the unit"))
+}
+
+/// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
+pub(super) const BASE: &str = "use /std/{Nat};
+
+pub let double(n: Nat) -> Nat = n + n;
+
+pub let twice: Nat = double(2);
+
+pub let unrelated: Nat = 7;
+";
+
+/// Where the terms of the definition `unit` calls `name` were written, as `unit`'s own text places them: each position's line with the text it covers, in order and once each.
+pub(super) fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
+    let definition = unit
+        .core()
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Let(definition)
+                if definition
+                    .name
+                    .faithful()
+                    .to_string()
+                    .ends_with(&format!("/{name}")) =>
+            {
+                Some(definition)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("{name} is a let item of the unit"));
+    let mut extents = Vec::new();
+    for term in [&definition.type_, &definition.body] {
+        term.walk(
+            &mut extents,
+            |extents, term| {
+                extents.extend(term.extent());
+                Enter::Descend
+            },
+            |_, _, _| (),
+        );
+    }
+
+    let mut placed = extents
+        .iter()
+        .map(|extent| {
+            let span = unit
+                .text()
+                .anchors()
+                .resolve(extent)
+                .expect("a declaration of the unit is sited");
+
+            (
+                span.line_column().0,
+                span.source.text[span.start..span.end].to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    placed.sort();
+    placed.dedup();
+
+    placed
+}
+
+/// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the kernel does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
+pub(super) const UNTAKEN: &str = "use /std/{Nat};
+
+pub let spin(n: Nat) -> Nat = spin(n);
+
+pub let f: Nat =
+    match true
+    | true => 1
+    | false => spin(0)
+    end;
+
+pub let unrelated: Nat = 7;
+";
+
+/// Compile `source`, whose every `?` a goal report determines, write each goal's reported solution over the goal's own span, and compile the result. An error names the program as rewritten, so a failure shows the spelling that did not read back.
+pub(super) fn reads_back(source: &str) -> Result<(), String> {
+    let rewritten = pasted(source)?;
+    compile(&rewritten)
+        .map(|_| ())
+        .map_err(|error| format!("{rewritten}\ndoes not compile:\n{error}"))
+}
+
+/// `source` with each goal's reported solution written over the goal's own span.
+pub(super) fn pasted(source: &str) -> Result<String, String> {
+    let reports = match compile_with_prelude(
+        DEFAULT_BUDGET,
+        &entrypoint_of(source),
+        &RootSource::none(),
+        |_| {},
+    ) {
+        Err(CompileError::Incomplete(reports)) => reports,
+        Err(error) => return Err(format!("the program is refused:\n{error}")),
+        Ok(_) => return Err("the program has no goal to read back".to_string()),
+    };
+
+    let mut answers = reports
+        .iter()
+        .map(|report| {
+            let span = report.span.as_ref().expect("a goal report is located");
+            assert_eq!(
+                span.source.text, source,
+                "a goal's span points into the program"
+            );
+            let answer = solution(&report.message)
+                .unwrap_or_else(|| panic!("the goal is determined:\n{}", report.message));
+            (span.start, span.end, answer)
+        })
+        .collect::<Vec<_>>();
+
+    // Last first, so each splice leaves the offsets of the ones still to come where they were.
+    answers.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+    let mut rewritten = source.to_string();
+    for (start, end, answer) in answers {
+        rewritten.replace_range(start..end, &answer);
+    }
+    Ok(rewritten)
+}
+
+/// Whether every goal `source` writes is reported with a term shown as the compiler holds it: a report declines a term no program writes where its reader stands, and says so.
+pub(super) fn declined(source: &str) -> bool {
+    let Err(CompileError::Incomplete(reports)) = compile_with_prelude(
+        DEFAULT_BUDGET,
+        &entrypoint_of(source),
+        &RootSource::none(),
+        |_| {},
+    ) else {
+        panic!("the program is refused for its goals alone");
+    };
+
+    reports
+        .iter()
+        .all(|report| report.message.contains("as the compiler holds it"))
+}
+
+/// The `? = …` line of a goal report, with the lines a long solution breaks onto: those are indented past the two spaces every other line of the report takes.
+pub(super) fn solution(message: &str) -> Option<String> {
+    let mut lines = message.lines();
+    let first = lines
+        .by_ref()
+        .find_map(|line| line.strip_prefix("  ? = "))?;
+    let rest = lines.take_while(|line| line.starts_with("   "));
+    Some(
+        std::iter::once(first)
+            .chain(rest)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }

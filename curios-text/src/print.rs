@@ -1,5 +1,12 @@
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod body_layout_tests;
+#[cfg(test)]
+mod call_layout_tests;
+#[cfg(test)]
+mod list_layout_tests;
 
 use {
     super::{

@@ -2605,7 +2605,9 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
 }
 
 #[cfg(test)]
-mod tests;
+mod form_tests;
+#[cfg(test)]
+mod spelling_tests;
 
 /// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
 impl Pattern {

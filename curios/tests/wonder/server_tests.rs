@@ -1,0 +1,873 @@
+//! `curios wonder` spoken to in the language server protocol: what it publishes from the buffer and the disk, what a save asks again, what it answers while a check runs, and what it files in the store.
+
+use {
+    super::test_support::{curios, project, stdout, temporary, write},
+    curios_prelude::std_directory,
+    curios_utilities::fill,
+    curios_wonder::SETTLE,
+    std::{
+        fs,
+        io::{BufRead, BufReader, Read, Write},
+        path::Path,
+        process::{Child, ChildStdout, Command, Output, Stdio},
+        thread,
+        time::Duration,
+    },
+};
+
+/// Long enough that two notifications sent around one of these reach the analyst as two checks rather than one coalesced pair — which is what a test telling a save's answer from the edit behind it needs, since a coalesced pair is answered once.
+///
+/// Derived from the analyst's own settle rather than restated, so raising that figure cannot leave this one quietly too short. The multiple is slack for a loaded machine, not a second opinion about the cadence.
+const QUIET: Duration = SETTLE.saturating_mul(4);
+
+/// One side of the wire: frame a JSON-RPC message, and read one back.
+struct Editor {
+    child: Child,
+    reader: BufReader<ChildStdout>,
+}
+
+impl Editor {
+    fn launch(root: &Path) -> Self {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+            .current_dir(root)
+            .args(["wonder", "server"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("launch the server");
+        let reader = BufReader::new(child.stdout.take().unwrap());
+
+        Self { child, reader }
+    }
+
+    fn send(&mut self, body: &str) {
+        let stdin = self.child.stdin.as_mut().unwrap();
+        write!(stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+        stdin.flush().unwrap();
+    }
+
+    fn receive(&mut self) -> String {
+        let mut length = None;
+        loop {
+            let mut line = String::new();
+            self.reader.read_line(&mut line).unwrap();
+            let line = line.trim_end();
+            if line.is_empty() {
+                break;
+            }
+            if let Some(value) = line.strip_prefix("Content-Length:") {
+                length = Some(value.trim().parse::<usize>().unwrap());
+            }
+        }
+        let mut body = vec![0; length.expect("a Content-Length header")];
+        self.reader.read_exact(&mut body).unwrap();
+
+        String::from_utf8(body).unwrap()
+    }
+
+    /// The response to the request `id`, whatever the server sent ahead of it.
+    fn response(&mut self, id: u32) -> String {
+        loop {
+            let message = self.receive();
+            if message.contains(&format!(r#""id":{id},"#)) {
+                return message;
+            }
+        }
+    }
+
+    /// Every message the server sends ahead of the first one holding `marker`, which is read and left out: what the notifications before the marked one were answered with, whatever order one check publishes its paths in.
+    fn ahead_of(&mut self, marker: &str) -> Vec<String> {
+        let mut ahead = Vec::new();
+        loop {
+            let message = self.receive();
+            if message.contains(marker) {
+                return ahead;
+            }
+            ahead.push(message);
+        }
+    }
+
+    /// The answer to `method` asked of `params`, asked again while it is nothing: what a document's check leaves for a place to be answered from is left once its diagnostics are published, so a request sent on the publish may find nothing held yet.
+    fn asked(&mut self, method: &str, params: &str) -> String {
+        for id in 100..300 {
+            self.send(&fill!(
+                r#"{"jsonrpc":"2.0","id":${id},"method":"${method}","params":${params}}"#,
+                id,
+                method,
+                params
+            ));
+            let answer = self.response(id);
+            if !answer.contains(r#""result":null"#) && !answer.contains(r#""result":[]"#) {
+                return answer;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        panic!("{method} was never answered from a check")
+    }
+
+    fn finish(mut self) -> Output {
+        self.send(r#"{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}"#);
+        // Looked for rather than assumed to be next: the analyst answers on its own thread, so a publish a test had no reason to read can still be ahead of the response.
+        while !self.receive().contains(r#""id":9"#) {}
+        self.send(r#"{"jsonrpc":"2.0","method":"exit","params":null}"#);
+        // Read to the end rather than closing the pipe under the writer. A publish arriving after the read end is gone is a broken pipe, which the server reports as the session having failed — so dropping the reader here would make every test that left one in flight fail on the way out, for a reason that is the test's and not the server's.
+        let mut rest = String::new();
+        self.reader.read_to_string(&mut rest).ok();
+
+        self.child.wait_with_output().unwrap()
+    }
+}
+
+/// The server publishes the record the query would have rendered — the goal at its own occurrence, as information — from the buffer the editor holds, and clears it once the edit removes it.
+#[test]
+fn the_server_publishes_from_the_buffer_and_clears() {
+    let root = temporary("server");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    assert!(editor.receive().contains("textDocumentSync"));
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    // What the editor holds, not what the disk does: the file on disk compiles, the buffer has a goal.
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
+    let published = editor.receive();
+    assert!(
+        published.contains("textDocument/publishDiagnostics"),
+        "{published}"
+    );
+    assert!(
+        published.contains(r#""message":"goal `?`\n  ? : /std/Nat""#),
+        "{published}"
+    );
+    assert!(published.contains(r#""severity":3"#), "{published}");
+    assert!(
+        published.contains(r#""start":{"character":19,"line":0}"#),
+        "{published}"
+    );
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"/std/print(\"\")\n"}]}}"#, uri));
+    let cleared = editor.receive();
+    assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A save is answered from the disk as it stands, which may have moved under a file no editor holds since the last check read it: `helper.crs` is rewritten to a declaration that does not check while `scratch.crs`, which reads it, stays as it was, and the save that follows publishes the refusal. What proves it is what arrives ahead of the edit behind the save, which reads no helper: the refusal, where a save answered from the check before the disk moved leaves the edit's answer to arrive first.
+#[test]
+fn a_save_after_the_disk_moved_under_a_closed_file_is_answered_again() {
+    let root = temporary("moved-under");
+    write(&root, "helper.crs", "pub let word : /std/Str = \"fine\";\n");
+    write(
+        &root,
+        "scratch.crs",
+        "mod helper;\n\n/std/print(/helper/word)\n",
+    );
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"mod helper;\n\n/std/print(/helper/word)\n"}}}"#, uri));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+
+    write(&root, "helper.crs", "pub let word : /std/Str = 1;\n");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
+    let ahead = editor.ahead_of("goal `?`");
+    assert!(
+        ahead.iter().any(
+            |published| published.contains("helper.crs") && published.contains("type mismatch")
+        ),
+        "the save was answered from the check before the disk moved: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A refusal the last check published on a file no editor holds is cleared by the save after the file is fixed on disk, though the open document reads as it did — the case a skip asking whether the last check's reads still stand would miss, since a refused unit leaves no record of what it read. What proves it is what arrives ahead of the edit behind the save, which still reads the helper: the save clearing `helper.crs` and then answering for `scratch.crs`, where a save left unanswered leaves the edit to clear `helper.crs` alone.
+#[test]
+fn a_refusal_on_a_closed_file_fixed_on_disk_is_cleared_by_a_save() {
+    let root = temporary("fixed-under");
+    write(&root, "helper.crs", "pub let word : /std/Str = 1;\n");
+    write(
+        &root,
+        "scratch.crs",
+        "mod helper;\n\n/std/print(/helper/word)\n",
+    );
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"mod helper;\n\n/std/print(/helper/word)\n"}}}"#, uri));
+    let opened = editor.ahead_of(&uri);
+    assert!(
+        opened.iter().any(
+            |published| published.contains("helper.crs") && published.contains("type mismatch")
+        ),
+        "{opened:?}"
+    );
+
+    write(&root, "helper.crs", "pub let word : /std/Str = \"fine\";\n");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"mod helper;\n\nlet m : /std/Nat = ?;\n/std/print(/helper/word)\n"}]}}"#, uri));
+    let ahead = editor.ahead_of("goal `?`");
+    let cleared = ahead.iter().position(|published| {
+        published.contains("helper.crs") && published.contains(r#""diagnostics":[]"#)
+    });
+    let answered = ahead.iter().position(|published| published.contains(&uri));
+    assert!(
+        matches!((cleared, answered), (Some(cleared), Some(answered)) if cleared < answered),
+        "the save left the refusal standing on a file fixed on disk: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A save asks about every document the editor holds, not only the one saved: an edit to the library's `util.crs` takes away the name the open `app.crs` reads, which a check of `util.crs` alone does not say, and the save of `util.crs` publishes the refusal on `app.crs`. What proves it is what arrives ahead of the edit behind the save: the refusal, where a save that asked about `util.crs` alone leaves the edit's answer to arrive first.
+#[test]
+fn a_save_asks_about_every_open_document() {
+    let root = project("every-open");
+    let app = format!("file://{}", root.join("app.crs").display());
+    let util = format!("file://{}", root.join("util.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${app}","languageId":"curios","version":1,"text":"/std/print(/app/util/word)\n"}}}"#, app));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${util}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, util));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${util}","version":2},"contentChanges":[{"text":"pub let other : /std/Str = \"placed\";\n"}]}}"#, util));
+    let edited = editor.receive();
+    assert!(
+        edited.contains(&util) && edited.contains(r#""diagnostics":[]"#),
+        "{edited}"
+    );
+
+    write(
+        &root,
+        "util.crs",
+        "pub let other : /std/Str = \"placed\";\n",
+    );
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${util}"}}}"#, util));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${util}","version":3},"contentChanges":[{"text":"pub let other : /std/Str = ?;\n"}]}}"#, util));
+    let ahead = editor.ahead_of("goal `?`");
+    assert!(
+        ahead
+            .iter()
+            .any(|published| published.contains(&app) && published.contains("has no `word`")),
+        "the save left the open program answered from before its library moved: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// An editor discards what it held for a document it closed, so a reopen is answered even though the overlay it arrives with is exactly the one the last check read.
+#[test]
+fn a_reopened_document_is_published_again() {
+    let root = temporary("reopened");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+    let opening = fill!(
+        r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#,
+        uri
+    );
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&opening);
+    assert!(editor.receive().contains(r#""severity":3"#));
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
+    thread::sleep(QUIET);
+
+    editor.send(&opening);
+    thread::sleep(QUIET);
+
+    // An edit behind the reopen, so a reopen that was wrongly skipped is this edit's answer arriving first rather than silence — a test whose failure is nothing published is one that hangs instead of failing.
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let mm : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
+
+    let republished = editor.receive();
+    assert!(
+        republished.contains(r#""start":{"character":19,"line":0}"#),
+        "{republished}"
+    );
+
+    // And the edit behind it is answered in its turn, which is what says the reopen's publish was the reopen's.
+    let edited = editor.receive();
+    assert!(
+        edited.contains(r#""start":{"character":20,"line":0}"#),
+        "{edited}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The warming check is run for what it leaves on the analyst's thread and never for what it says. The workspace's library has a goal in it and the editor is never told: the first thing it hears about is the document it opened.
+///
+/// The wait before the document is what makes this a test of warming at all. A document sent straight after `initialize` is a document waiting, and the analyst drops the warming check rather than making it queue — so without the wait this would pass on a server that never warms.
+#[test]
+fn a_warming_check_never_publishes() {
+    let root = temporary("warmed");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
+    write(&root, "lib.crs", "pub mod util;\n");
+    write(&root, "util.crs", "pub let word : /std/Str = ?;\n");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let path = root.join("scratch.crs");
+    let uri = format!("file://{}", path.display());
+    let folder = format!("file://{}", root.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"workspaceFolders":[{"uri":"${folder}","name":"app"}]}}"#, folder));
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}"#, uri));
+
+    let published = editor.receive();
+    assert!(published.contains("scratch.crs"), "{published}");
+    assert!(!published.contains("util.crs"), "{published}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A lint reaches the editor as a warning, at the word it is about: the severity the protocol has for a finding that stops nothing.
+#[test]
+fn a_lint_is_published_as_a_warning() {
+    let root = temporary("lint");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"use /std/{Bool};\n/std/print(\"\")\n"}}}"#, uri));
+    let published = editor.receive();
+    assert!(
+        published.contains(r#""message":"unused import `Bool`; delete it""#),
+        "{published}"
+    );
+    assert!(published.contains(r#""severity":2"#), "{published}");
+    assert!(
+        published.contains(r#""start":{"character":10,"line":0}"#),
+        "{published}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A store a build already filled answers about the disk, so it does not answer here: the library's unit is in the store, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
+///
+/// The second half is that the record goes when the buffer stops disagreeing, with the store warm throughout. It does not witness a surviving hit: the document is still open, so the overlay still reaches its unit either way, and no progress event reaches this transport to say which happened.
+#[test]
+fn a_warm_store_does_not_answer_for_the_buffer() {
+    let root = project("warm");
+
+    // Filled by a build, so the store is warm before any document is open.
+    let built = curios(&root, &["run", "app"], "");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(
+        root.join(".curios/verdicts").is_dir(),
+        "a build files the library's unit"
+    );
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = 1;\n"}}}"#, uri));
+    let published = editor.receive();
+    assert!(published.contains("type mismatch"), "{published}");
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"placed\";\n"}]}}"#, uri));
+    let cleared = editor.receive();
+    assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A library header that does not parse is a located record like any other: published on the header, underlining the item head the parser refused, with a message that holds no snippet — the editor draws the location, and a caret drawn in text cannot line up in a proportional font.
+#[test]
+fn a_header_that_does_not_parse_is_located_without_a_snippet() {
+    let root = project("header");
+    write(&root, "lib.crs", "pub mod util;\na\n");
+    let uri = format!("file://{}", root.join("lib.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub mod util;\na\n"}}}"#, uri));
+
+    let published = editor.receive();
+    assert!(
+        published.contains(&format!(r#""uri":"{uri}""#)),
+        "{published}"
+    );
+    assert!(
+        published.contains(
+            r#""range":{"end":{"character":1,"line":1},"start":{"character":0,"line":1}}"#
+        ),
+        "{published}"
+    );
+    assert!(
+        published.contains("Expected a top-level item"),
+        "{published}"
+    );
+    assert!(
+        !published.contains("-->"),
+        "no snippet in a message: {published}"
+    );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// Formatting is `curios format` over what the editor holds: one whole-document edit to the canonical form, and none once it is canonical.
+#[test]
+fn formatting_answers_with_the_canonical_text() {
+    let root = temporary("format");
+    fs::create_dir_all(&root).unwrap();
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    assert!(
+        editor
+            .receive()
+            .contains(r#""documentFormattingProvider":true"#)
+    );
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let   x : /std/Nat =   1;\n/std/print(\"\")\n"}}}"#, uri));
+    editor.receive();
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"${uri}"},"options":{"tabSize":4,"insertSpaces":true}}}"#, uri));
+    let formatted = editor.receive();
+    assert!(
+        formatted.contains(r#""newText":"let x: /std/Nat =\n    1;\n\n/std/print(\"\")\n""#),
+        "{formatted}"
+    );
+    assert!(
+        formatted.contains(r#""start":{"character":0,"line":0}"#),
+        "{formatted}"
+    );
+    assert!(
+        formatted.contains(r#""end":{"character":0,"line":2}"#),
+        "{formatted}"
+    );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A place is answered from what the document's last check left: where the name there is declared, in the document itself and in another file of its package, and what the document declares, as an outline.
+#[test]
+fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
+    let root = project("places");
+    let path = root.join("app.crs");
+    let uri = format!("file://{}", path.display());
+    let text =
+        r#"let one: /std/Str = /app/util/word;\nlet two: /std/Str = one;\n/std/print(two)\n"#;
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    let capabilities = editor.receive();
+    assert!(
+        capabilities.contains(r#""definitionProvider":true"#)
+            && capabilities.contains(r#""documentSymbolProvider":true"#)
+            && capabilities.contains(r#""hoverProvider":true"#),
+        "{capabilities}"
+    );
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"${text}"}}}"#, uri, text));
+
+    // `one`, used on the second line: declared on the first, in this document.
+    let own = editor.asked(
+        "textDocument/definition",
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
+    );
+    assert!(own.contains(&format!(r#""uri":"{uri}""#)), "{own}");
+    assert!(
+        own.contains(
+            r#""range":{"end":{"character":7,"line":0},"start":{"character":4,"line":0}}"#
+        ),
+        "{own}"
+    );
+
+    // `/app/util/word`, on the first line: declared in the library's module.
+    let library = editor.asked(
+        "textDocument/definition",
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":0,"character":30}}"#,
+            uri
+        ),
+    );
+    assert!(
+        library.contains(&format!(
+            r#""uri":"file://{}""#,
+            root.join("util.crs").display()
+        )),
+        "{library}"
+    );
+    assert!(
+        library.contains(
+            r#""range":{"end":{"character":12,"line":0},"start":{"character":8,"line":0}}"#
+        ),
+        "{library}"
+    );
+
+    // What each names, as its declaration states it: the head as source, then the prose above it where there is any.
+    let stated = editor.asked(
+        "textDocument/hover",
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
+    );
+    assert!(
+        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```""#),
+        "{stated}"
+    );
+    assert!(stated.contains(r#""kind":"markdown""#), "{stated}");
+
+    let outline = editor.asked(
+        "textDocument/documentSymbol",
+        &fill!(r#"{"textDocument":{"uri":"${uri}"}}"#, uri),
+    );
+    assert!(
+        outline.contains(r#""name":"one""#) && outline.contains(r#""name":"two""#),
+        "{outline}"
+    );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A place is never behind a compile: asked right after an edit of another declaration, it is answered from what the last check left, where the declaration it stands in now stands, before that edit's diagnostics are published.
+#[test]
+fn a_place_is_answered_while_a_check_is_running() {
+    let root = temporary("placed-at-once");
+    fs::create_dir_all(&root).unwrap();
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+    let opened = r#"let one: /std/Nat = 1;\nlet two: /std/Nat = one;\n/std/print(\"\")\n"#;
+    let edited = r#"let zero: /std/Nat = ?;\n\nlet one: /std/Nat = 1;\nlet two: /std/Nat = one;\n/std/print(\"\")\n"#;
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"${opened}"}}}"#, uri, opened));
+    // Asked until the open's check has left something, which also reads past its publish.
+    editor.asked(
+        "textDocument/definition",
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
+    );
+
+    // The edit starts a check, two lines above what is asked about; the request follows it immediately.
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"${edited}"}]}}"#, uri, edited));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"${uri}"},"position":{"line":3,"character":21}}}"#, uri));
+
+    let first = editor.receive();
+    let second = editor.receive();
+    assert!(
+        first.contains(r#""id":2,"#),
+        "the answer comes first: {first}"
+    );
+    assert!(
+        first.contains(
+            r#""range":{"end":{"character":7,"line":2},"start":{"character":4,"line":2}}"#
+        ),
+        "where the declaration now stands: {first}"
+    );
+    assert!(
+        second.contains("publishDiagnostics"),
+        "then the check: {second}"
+    );
+    assert!(second.contains("goal `?`"), "{second}");
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A request is never behind a compile: a formatting request sent right after an edit is answered before the edit's diagnostics are published, because the protocol thread answers it while the analyst is still checking.
+#[test]
+fn formatting_is_answered_while_a_check_is_running() {
+    let root = temporary("interleaved");
+    fs::create_dir_all(&root).unwrap();
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    // The edit starts a check; the request follows it immediately.
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let   m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"${uri}"},"options":{"tabSize":4,"insertSpaces":true}}}"#, uri));
+
+    let first = editor.receive();
+    let second = editor.receive();
+    assert!(
+        first.contains(r#""id":2"#),
+        "the answer comes first: {first}"
+    );
+    assert!(first.contains(r#""newText""#), "{first}");
+    assert!(
+        second.contains("publishDiagnostics"),
+        "then the check: {second}"
+    );
+    assert!(second.contains("goal `?`"), "{second}");
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// A package named `std` is the standard library, so a question about one of its modules is answered rather than refused as a collision: the fold withholds the archived root and compiles the package over the archived unit as a baseline. This checkout's tree is the archive's own, so the diff is empty and everything is reused.
+///
+/// The costliest test in this file: it lowers the whole standard library once and erases it whole.
+#[test]
+fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_of() {
+    let module = std_directory()
+        .join("List.crs")
+        .canonicalize()
+        .expect("the standard library's tree");
+
+    let answered = curios(
+        module.parent().unwrap(),
+        &["wonder", "diagnostics", module.to_str().unwrap()],
+        "",
+    );
+
+    let stderr = String::from_utf8_lossy(&answered.stderr);
+    assert!(answered.status.success(), "{stderr}");
+    assert_eq!(stdout(&answered), "", "the standard library is clean");
+    assert!(!stderr.contains("collid"), "{stderr}");
+}
+
+/// A file with two refusals answers with both: the compiler recovers past the first and reports the second beside it, and a declaration reaching a refused one is not in the answer.
+#[test]
+fn diagnostics_on_a_broken_file_lists_every_refusal() {
+    let root = temporary("broken");
+    fs::create_dir_all(&root).unwrap();
+
+    let answered = curios(
+        &root,
+        &["wonder", "diagnostics", "-"],
+        "let _a : /std/Nat = true;\nlet _b : /std/Nat = _a;\nlet _c : /std/Nat = false;\n/std/print(\"\")\n",
+    );
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let text = stdout(&answered);
+    assert!(text.contains("--> <stdin>:1:21"), "{text}");
+    assert!(text.contains("--> <stdin>:3:21"), "{text}");
+    assert!(!text.contains("_b"), "{text}");
+}
+
+/// A server over a store it cannot write says so once, in a log message, and publishes what it would have.
+#[test]
+fn the_server_logs_once_that_the_store_takes_nothing() {
+    let root = project("unstored");
+    // A file where the slots would go.
+    write(&root, ".curios/verdicts", "");
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
+    let logged = editor.receive();
+    assert!(logged.contains("window/logMessage"), "{logged}");
+    assert!(logged.contains("Skipped storing"), "{logged}");
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"placed again\";\n"}]}}"#, uri));
+    let again = editor.receive();
+    assert!(
+        again.contains("textDocument/publishDiagnostics"),
+        "the second check says nothing more of the store: {again}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the store, an edit leaves the store as it was, and a test run afterwards, which compiles the library tested as the server does, starts from what the server filed.
+#[test]
+fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
+    let root = project("server-files");
+    let slots = |root: &Path| {
+        let mut slots = fs::read_dir(root.join(".curios/verdicts"))
+            .map(|entries| {
+                entries
+                    .map(|slot| fs::read(slot.unwrap().path()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        slots.sort();
+        slots
+    };
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+    let filed = slots(&root);
+    assert_eq!(
+        filed.len(),
+        1,
+        "the library, compiled whole from the text on disk"
+    );
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"typed\";\n"}]}}"#, uri));
+    let republished = editor.receive();
+    assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
+    assert!(slots(&root) == filed, "a keystroke moved the store");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let tested = curios(&root, &["test"], "");
+    let narrated = String::from_utf8_lossy(&tested.stderr);
+    assert!(narrated.contains("/app; reused"), "{narrated}");
+}
+
+/// A question about a file no package governs, or about standard input, opens no store: nothing is written beside it.
+#[test]
+fn a_loose_file_and_standard_input_leave_no_store() {
+    let root = temporary("loose-question");
+    let program = "/std/print(\"loose\")\n";
+    write(&root, "scratch.crs", program);
+
+    for arguments in [
+        ["wonder", "diagnostics", "scratch.crs"],
+        ["wonder", "diagnostics", "-"],
+        ["wonder", "cost", "scratch.crs"],
+    ] {
+        let asked = curios(&root, &arguments, program);
+        assert_eq!(
+            asked.status.code(),
+            Some(0),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&asked.stderr)
+        );
+    }
+    let linted = curios(&root, &["lint", "scratch.crs"], "");
+    assert_eq!(linted.status.code(), Some(0), "{}", stdout(&linted));
+
+    assert!(
+        !root.join(".curios").exists(),
+        "a question with no project wrote beside its file"
+    );
+}

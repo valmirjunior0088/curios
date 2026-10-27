@@ -6,6 +6,7 @@
 //!
 //! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
 
+mod descent_tests;
+mod partiality_tests;
 mod proof_release_tests;
 mod test_support;
-mod totality_tests;

@@ -31,7 +31,7 @@ Working specification for labelling a source of the package `std` by the package
 
 1. **A source states its label apart from where it was read.** Check: a report placed in the library reads a `/std/…` header, as a fixture; every other pinned report is the text it was.
 2. **The record and the store read by label.** Check: the store and recompile suites of `curios-verdicts` and `curios-pipeline` pass, and `the_std_record_names_every_authored_source_and_no_other` is restated over labels.
-3. **The server and the memo ask the unit's source.** Check: the transport test that asks about one of the library's files (`curios/tests/wonder.rs`) answers from the checkout it is run in, and a library file edited in a second checkout is parsed as that checkout's.
+3. **The server and the memo ask the unit's source.** Check: the transport test that asks about one of the library's files (`curios/tests/wonder/server_tests.rs`) answers from the checkout it is run in, and a library file edited in a second checkout is parsed as that checkout's.
 4. **The image is the bytes it is wherever it is built.** Check: `std.rkyv` built from one tree in two directories is the same bytes, and `strings` over the compiler finds no directory of its build.
 
 ## Verification

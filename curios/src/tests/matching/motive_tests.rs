@@ -43,7 +43,7 @@ fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
     assert_eq!(run(source), b"2");
 }
 
-// A motive binder's annotation is an ordinary type in an ordinary position, so the scrutinee binder's annotation may name the index binders written before it — recovering the eliminated family on the motive line. This is the dependent-lambda-telescope rule (`tests::binders`) applied to a motive.
+// A motive binder's annotation is an ordinary type in an ordinary position, so the scrutinee binder's annotation may name the index binders written before it — recovering the eliminated family on the motive line. This is the dependent-lambda-telescope rule (`tests::binders::scope_tests`) applied to a motive.
 #[test]
 fn a_motive_binder_annotation_may_name_earlier_index_binders() {
     let source = r#"

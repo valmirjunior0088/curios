@@ -78,13 +78,17 @@ mod capacity_tests;
 #[cfg(test)]
 mod entry_tests;
 #[cfg(test)]
+mod flt_intrinsic_tests;
+#[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod hoist_tests;
 #[cfg(test)]
-mod intrinsic_tests;
+mod int_intrinsic_tests;
 #[cfg(test)]
 mod module_tests;
+#[cfg(test)]
+mod nat_intrinsic_tests;
 #[cfg(test)]
 mod rope_tests;
 #[cfg(test)]

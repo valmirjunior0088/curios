@@ -5,7 +5,14 @@
 //! There is no code escape and there never will be one by accident: the document is data, and a computed configuration would be a new decision rather than a latent capability. There is also no privilege field in either mode — a mounted package is `RootKind::Ordinary` because the loader hands `insert_root` that argument, and this parser has no path to it.
 
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod dependency_tests;
+#[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
+mod package_tests;
 
 use {
     crate::{CompilerVersion, FileHash, STORE, Store, Subject, TreeHash},

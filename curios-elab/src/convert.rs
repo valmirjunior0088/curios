@@ -25,17 +25,31 @@ mod sort;
 pub use sort::*;
 
 #[cfg(test)]
-mod conversion_tests;
+mod alpha_tests;
+#[cfg(test)]
+mod cumulativity_tests;
+#[cfg(test)]
+mod flex_flex_tests;
+#[cfg(test)]
+mod flex_rigid_tests;
 #[cfg(test)]
 mod imitation_tests;
 #[cfg(test)]
 mod intrinsic_tests;
 #[cfg(test)]
-mod solve_tests;
+mod parked_tests;
 #[cfg(test)]
-mod structural_tests;
+mod pattern_tests;
+#[cfg(test)]
+mod recursive_tests;
+#[cfg(test)]
+mod revalidation_tests;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod tuple_tests;
+#[cfg(test)]
+mod typed_tests;
 #[cfg(test)]
 mod variance_tests;
 

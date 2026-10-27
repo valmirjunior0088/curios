@@ -96,7 +96,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         str_concat: registry_name(&["std", "Str", "concat"]),
         fmt_render: registry_name(&["std", "Fmt", "render"]),
     },
-    // These spellings are load-bearing for `lint_tests`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
+    // These spellings are load-bearing for `unused_declaration_tests`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {
         spell: SpellDerivation {
             spell: registry_field(&["std", "Spell", "Spell"], "spell"),

@@ -16,7 +16,7 @@ use {
 ///
 /// `Box : Prop 1 | mk(a : Type 0)` is a legal declaration — a proposition at the level its payload fits under — and the large-elimination guard is what keeps a proposition holding a type from handing it back. Were the guard to admit `unbox` — `carries_information` reporting a universe-typed payload as carrying nothing, on the reasoning that erasure deletes a type either way — every step after that is ordinary: irrelevance makes `mk(A)` and `mk(B)` convertible at `Box`, so `refl` inhabits `Eq(@Box)(mk(A), mk(B))`; congruence through `unbox` carries that to `Eq(@Type 0)(A, B)` for *any* two types; and transport — the licensed singleton case, `refl`'s payload being pinned by its own targets — turns `()` into a proof of `False`.
 ///
-/// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::kernel::infer::eliminate::tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
+/// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::kernel::infer::eliminate::large_elimination_tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
     let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), SYNTAX);

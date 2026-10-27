@@ -43,7 +43,7 @@ One commit.
 - `serve` reads `InitializeParams::capabilities.workspace.did_change_watched_files.dynamic_registration`, and where it is `true` sends a `client/registerCapability` request registering `workspace/didChangeWatchedFiles` with the two watchers above, after `Connection::initialize` has returned and before the loop.
 - `Server::notified` answers `DidChangeWatchedFiles::METHOD` as it answers a save: one job naming every open document, against the overlay as it stands.
 - `curios-wonder/src/server.rs`'s module documentation says a watched change is answered as a save, and `documentation/usage.md`'s `server` row that the server re-publishes every open document when a file it watches changes.
-- Check: an integration test in `curios/tests/wonder.rs` that initializes with the capability, reads the registration request and its two globs, answers it, rewrites a module no editor holds, sends `workspace/didChangeWatchedFiles` naming it, and reads the refusal on the open document's module ahead of an edit behind it (`Editor::ahead_of`); the existing tests, which state no capability, show that nothing is registered without it. `cargo xtask workspace lint`.
+- Check: an integration test in `curios/tests/wonder/server_tests.rs` that initializes with the capability, reads the registration request and its two globs, answers it, rewrites a module no editor holds, sends `workspace/didChangeWatchedFiles` naming it, and reads the refusal on the open document's module ahead of an edit behind it (`Editor::ahead_of`); the existing tests, which state no capability, show that nothing is registered without it. `cargo xtask workspace lint`.
 
 ## Verification
 

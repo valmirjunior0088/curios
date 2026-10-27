@@ -1,0 +1,755 @@
+//! The recursive heads: a folded call against its unfolding, two groups compared as binders, a pair unfolded once, the unfolding that spends the budget, and two instances of one group at their levels.
+
+use {
+    super::test_support::*,
+    crate::*,
+    curios_analysis::test_support::SYNTAX,
+    curios_core::{
+        Exhaustion, Free, Intrinsic, Level, MetavarId, Subterm, Term, UniverseMetaId, UniverseRole,
+    },
+};
+
+// === Folded recursive calls (match-guarded delta) ===========================
+
+/// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at a neutral scrutinee, with a `head`-call in an arm to make unfolding self-feeding.
+fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> Term {
+    let scrutinee = context.fresh(Some("x"));
+    let motive = context.fresh(Some("m"));
+    let payload = context.fresh(Some("p"));
+    Term::func(
+        [(scrutinee, Term::intrinsic(Intrinsic::NatType))],
+        Term::induct_match(
+            Term::free_var(&scrutinee),
+            Some(&motive),
+            Term::intrinsic(Intrinsic::NatType),
+            [
+                ("none", Vec::<Free>::new(), nat(none_value)),
+                (
+                    "some",
+                    vec![payload],
+                    Term::apply(Term::free_var(head), [Term::free_var(&payload)]),
+                ),
+            ],
+        ),
+    )
+}
+
+#[test]
+fn folded_recursive_call_against_its_unfolding() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let a = context.fresh(Some("a"));
+    let m = context.fresh(Some("m"));
+    let p = context.fresh(Some("p"));
+    let z = context.fresh(Some("z"));
+    let body = recursive_matcher(&mut context, &f, 0);
+    context.define(&f, &body, None);
+
+    let folded = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+
+    // The literal stuck body, spelled reducibly (the η-redex around `p`) so the sides are not syntactically equal: the folded call meets a non-apply shape, lazy delta unfolds it once, and the two stuck matches compare structurally.
+    let unfolded = Term::induct_match(
+        Term::free_var(&a),
+        Some(&m),
+        Term::intrinsic(Intrinsic::NatType),
+        [
+            ("none", Vec::<Free>::new(), nat(0)),
+            (
+                "some",
+                vec![p],
+                Term::apply(
+                    Term::free_var(&f),
+                    [Term::apply(
+                        func([&z], Term::free_var(&z)),
+                        [Term::free_var(&p)],
+                    )],
+                ),
+            ),
+        ],
+    );
+
+    assert_eq!(conv(&mut context, &folded, &unfolded), Ok(true));
+}
+
+#[test]
+fn same_recursive_head_compares_spines() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let a = context.fresh(Some("a"));
+    let z = context.fresh(Some("z"));
+    let b = context.fresh(Some("b"));
+    let body = recursive_matcher(&mut context, &f, 0);
+    context.define(&f, &body, None);
+
+    // Convertible (but not syntactically equal) spines: true.
+    let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+    let that = Term::apply(
+        Term::free_var(&f),
+        [Term::apply(
+            func([&z], Term::free_var(&z)),
+            [Term::free_var(&a)],
+        )],
+    );
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    // Mismatching spines: committal false, no unfolding retry.
+    let other = Term::apply(Term::free_var(&f), [Term::free_var(&b)]);
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
+/// `body` is built over the member's own parameter, which this helper mints — a caller that wants the identity function has to be handed that binder, not mint a like-named one of its own.
+fn structural_rec_proj(context: &mut Context, body: impl FnOnce(&Free) -> Term) -> Term {
+    let member = context.fresh(Some("f"));
+    let parameter = context.fresh(Some("x"));
+    let body = body(&parameter);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let rec = Term::rec(
+        [(
+            member,
+            Term::func_type([(parameter, nat_type.clone())], nat_type),
+            Term::func([(parameter, Term::intrinsic(Intrinsic::NatType))], body),
+        )],
+        Term::free_var(&member),
+    );
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(rec) else {
+        unreachable!()
+    };
+    Term::rec_proj(rec.group, 0)
+}
+
+#[test]
+fn same_structural_recursive_head_does_not_assume_injective_spines() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let constant = structural_rec_proj(&mut context, |_| nat(0));
+    let this = Term::apply(constant.clone(), [Term::free_var(&a)]);
+    let that = Term::apply(constant, [Term::free_var(&b)]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    let identity = structural_rec_proj(&mut context, Term::free_var);
+    let this = Term::apply(identity.clone(), [Term::free_var(&a)]);
+    let that = Term::apply(identity, [Term::free_var(&b)]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+#[test]
+fn distinct_recursive_heads_with_differing_bodies_is_false() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let g = context.fresh(Some("g"));
+    let a = context.fresh(Some("a"));
+    // The `none` arms disagree: the first unfolding round surfaces the finite disagreement on a sibling goal, well before the budget runs out.
+    let body = recursive_matcher(&mut context, &f, 0);
+    context.define(&f, &body, None);
+    let body = recursive_matcher(&mut context, &g, 1);
+    context.define(&g, &body, None);
+
+    let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+    let that = Term::apply(Term::free_var(&g), [Term::free_var(&a)]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+/// `rec f : (n: Nat) -> Nat = (n) => match n | 0 => base | pred + 1 => f(pred) + by; f`, its step's sum written `f(pred) + by` or, commuted, `by + f(pred)`: one recursion in two spellings no rename relates.
+fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Term {
+    let member = context.fresh(Some("f"));
+    let n = context.fresh(Some("n"));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
+    let step = match commuted {
+        false => Intrinsic::nat_add(call, nat(by)),
+        true => Intrinsic::nat_add(nat(by), call),
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type([(n, nat_type())], nat_type()),
+            Term::func(
+                [(n, nat_type())],
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    nat(base),
+                    &pred,
+                    &ih,
+                    Term::intrinsic(step),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// Two recursive groups are compared as the binders they are: the same member of two groups is one where, member for member, their types and their bodies convert under one shared set of labels. The two here are one recursion whose step is `f(pred) + 2` in one and `2 + f(pred)` in the other. They are compared bare, and as two calls, whose heads are compared in a run of its own before their spines are posed. The kernel's twin shares the name.
+#[test]
+fn two_groups_whose_bodies_convert_are_one() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let this = stepping(&mut context, 0, 2, false);
+    let that = stepping(&mut context, 0, 2, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(
+        conv(
+            &mut context,
+            &Term::apply(this, [Term::free_var(&a)]),
+            &Term::apply(that, [Term::free_var(&a)]),
+        ),
+        Ok(true),
+    );
+}
+
+/// The control: two groups of one shape whose base cases part are two functions, bare and at the head of two calls, where the delta step the comparison leaves them to meets the two base cases.
+///
+/// Mutation-checked: with the comparison holding any two groups of one shape, the two calls convert.
+#[test]
+fn two_groups_whose_bodies_part_are_apart() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let this = stepping(&mut context, 0, 2, false);
+    let that = stepping(&mut context, 1, 2, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+    assert_eq!(
+        conv(
+            &mut context,
+            &Term::apply(this, [Term::free_var(&a)]),
+            &Term::apply(that, [Term::free_var(&a)]),
+        ),
+        Ok(false),
+    );
+}
+
+/// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`, or with its two parameters in the other order where `flipped`: one recursion on `n` that hands `x` back, over two orders of its arguments.
+fn handing_back(context: &mut Context, flipped: bool) -> Term {
+    let member = context.fresh(Some("f"));
+    let (n, x) = (context.fresh(Some("n")), context.fresh(Some("x")));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let ordered = |n: Term, x: Term| match flipped {
+        false => [n, x],
+        true => [x, n],
+    };
+    let parameters = match flipped {
+        false => [(n, nat_type()), (x, nat_type())],
+        true => [(x, nat_type()), (n, nat_type())],
+    };
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&n),
+                    Some(&motive),
+                    nat_type(),
+                    Term::free_var(&x),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        ordered(Term::free_var(&pred), Term::free_var(&x)),
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// `rec g : (x: Nat, y: Nat, z: Nat) -> Nat = (x, y, z) => match z | 0 => 0 | pred + 1 => g(y, 0, pred); g`: a recursion that discards `x` at its first step and `y` at its second, so two calls apart in `x` are one after one unfolding, and two apart in `y` after two.
+fn shifting(context: &mut Context) -> Term {
+    let member = context.fresh(Some("g"));
+    let (x, y, z) = (
+        context.fresh(Some("x")),
+        context.fresh(Some("y")),
+        context.fresh(Some("z")),
+    );
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
+
+    Term::rec(
+        [(
+            member,
+            Term::func_type(parameters.clone(), nat_type()),
+            Term::func(
+                parameters,
+                Term::nat_match(
+                    Term::free_var(&z),
+                    Some(&motive),
+                    nat_type(),
+                    nat(0),
+                    &pred,
+                    &ih,
+                    Term::apply(
+                        Term::free_var(&member),
+                        [Term::free_var(&y), nat(0), Term::free_var(&pred)],
+                    ),
+                ),
+            ),
+        )],
+        Term::free_var(&member),
+    )
+}
+
+/// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds; unfolded, they pose their two heads again one binder further in. The second two are two calls of one member that a second unfolding would reconcile, and the first poses the member against itself at two spines, which is where it stops. The calls one unfolding reconciles are still one. The kernel's twin shares the name.
+///
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out on the first two and the second two convert.
+#[test]
+fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let [a, b, c, d, n] =
+        ["a", "b", "c", "d", "n"].map(|hint| Term::free_var(&context.fresh(Some(hint))));
+
+    let this = Term::apply(handing_back(&mut context, false), [n.clone(), a.clone()]);
+    let that = Term::apply(handing_back(&mut context, true), [a.clone(), n.clone()]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+
+    let shifting = shifting(&mut context);
+    let call =
+        |x: &Term, y: &Term| Term::apply(shifting.clone(), [x.clone(), y.clone(), n.clone()]);
+    assert_eq!(conv(&mut context, &call(&a, &c), &call(&b, &d)), Ok(false));
+    assert_eq!(conv(&mut context, &call(&a, &c), &call(&b, &c)), Ok(true));
+}
+
+#[test]
+fn growing_recursive_unfolding_spends_the_budget() {
+    // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.
+    let mut context = Context::new(20_000, SYNTAX);
+    let x = context.fresh(Some("x"));
+    let m = context.fresh(Some("m"));
+    let s = context.fresh(Some("s"));
+    let p = context.fresh(Some("p"));
+    let f = context.fresh(Some("f"));
+    let g = context.fresh(Some("g"));
+    let a = context.fresh(Some("a"));
+    // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs — every unfolding round's arm goal is structurally new, one more `s` on the folded argument — so no cycle exists to detect and the comparison rightly spends the budget: the accepted cost of fully general recursion. (The growth rides the match arm so each round refolds and returns to the drain queue; bare `f = λx. f(s(x))` growth would nest inside one `reduce` call instead.)
+    let growing = |head: &Free| {
+        Term::func(
+            [(x, Term::intrinsic(Intrinsic::NatType))],
+            Term::induct_match(
+                Term::free_var(&x),
+                Some(&m),
+                Term::intrinsic(Intrinsic::NatType),
+                [
+                    (
+                        "none",
+                        Vec::<Free>::new(),
+                        Term::apply(
+                            Term::free_var(head),
+                            [Term::apply(Term::free_var(&s), [Term::free_var(&x)])],
+                        ),
+                    ),
+                    ("some", vec![p], nat(0)),
+                ],
+            ),
+        )
+    };
+    let f_body = growing(&f);
+    let g_body = growing(&g);
+    context.define(&f, &f_body, None);
+    context.define(&g, &g_body, None);
+
+    let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+    let that = Term::apply(Term::free_var(&g), [Term::free_var(&a)]);
+    assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
+}
+
+/// `rec xs : E = cons(head, xs); xs`: a recursive value whose tail is itself.
+fn stream(context: &mut Context, head: Term) -> Term {
+    let xs = context.fresh(Some("xs"));
+
+    Term::rec(
+        [(
+            xs,
+            Term::induct_type(nominal("E"), Vec::<Term>::new(), Vec::<Term>::new()),
+            Term::variant(
+                nominal("E"),
+                Vec::<Term>::new(),
+                "cons",
+                [head, Term::free_var(&xs)],
+            ),
+        )],
+        Term::free_var(&xs),
+    )
+}
+
+/// Two recursive values whose bodies convert are one value: the two groups are compared as the binders they are, one label standing for the tail of both, and neither is unfolded. Their heads are one sum written both ways, so no rename relates the two spellings. Two whose heads part are two values, refused by the same comparison and again by the one unfolding it leaves them to.
+#[test]
+fn two_recursive_values_whose_bodies_convert_are_one() {
+    let mut context = context();
+    let a = Term::free_var(&context.fresh(Some("a")));
+    let sum =
+        |this: &Term, that: &Term| Term::intrinsic(Intrinsic::nat_add(this.clone(), that.clone()));
+    let this = stream(&mut context, sum(&a, &nat(1)));
+    let that = stream(&mut context, sum(&nat(1), &a));
+    let other = stream(&mut context, sum(&nat(2), &a));
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
+/// `rec m : Type = (m) -> Nat; m`, optionally carrying a second unused member, so that two such groups are of two shapes.
+fn equirecursive(context: &mut Context, padded: bool) -> Term {
+    let member = context.fresh(Some("m"));
+    let param = context.fresh(Some("x"));
+    let mut items = vec![(
+        member,
+        Term::type_ground(),
+        Term::func_type([(param, Term::free_var(&member))], nat_type()),
+    )];
+    if padded {
+        items.push((
+            context.fresh(Some("unused")),
+            Term::type_ground(),
+            nat_type(),
+        ));
+    }
+
+    Term::rec(items, Term::free_var(&member))
+}
+
+/// Two recursive types of two shapes that unfold alike are apart: no goal is held for having been met before. Both sides are the type `X = (X) -> Nat`, spelled as groups of two lengths, so no position pairs them as binders, and their two bodies are function types whose domains pose the two again. Inside their own unfolding the pair is apart. The kernel's twin shares the name.
+///
+/// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out.
+#[test]
+fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let this = equirecursive(&mut context, false);
+    let that = equirecursive(&mut context, true);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+/// A problem a run poses twice is decided once. Two towers of pairs built apart, each line naming the line before it twice, are two graphs of forty nodes whose trees have 2⁴⁰ leaves, and the run that compares them remembers what it has posed, so it takes them in their size. `curios`'s `tests::towers` holds the program at sixty lines.
+///
+/// Mutation-checked: with a problem posed however often it is met, the budget, small here, runs out.
+#[test]
+fn a_problem_a_run_poses_twice_is_decided_once() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let tower = |context: &mut Context, hint: &str| {
+        let mut line = context.fresh(Some(hint));
+        context.define(&line, &Term::tuple([nat(1), nat(2)]), None);
+        for _ in 0..40 {
+            let next = context.fresh(Some(hint));
+            let before = Term::free_var(&line);
+            context.define(&next, &Term::tuple([before.clone(), before]), None);
+            line = next;
+        }
+
+        Term::free_var(&line)
+    };
+    let this = tower(&mut context, "x");
+    let that = tower(&mut context, "y");
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// A recursive value that is its own body is not held by meeting itself. `rec xs : E = xs; xs`, opened alone against a term with nothing to open, poses the problem it was opened from, and a run that took that for posed already would hold the value equal to anything. It is posed inside the unfolding it came out of, which is another problem, so the walk goes on until its budget ends. Totality refuses the definition.
+///
+/// Mutation-checked: with a head unfolded alone left out of what a problem stands inside, the two convert.
+#[test]
+fn a_recursive_value_that_is_its_own_body_is_not_held_by_meeting_itself() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let xs = context.fresh(Some("xs"));
+    let own = Term::rec(
+        [(
+            xs,
+            Term::induct_type(nominal("E"), Vec::<Term>::new(), Vec::<Term>::new()),
+            Term::free_var(&xs),
+        )],
+        Term::free_var(&xs),
+    );
+    let other = Term::free_var(&context.fresh(Some("t")));
+
+    assert!(conv(&mut context, &own, &other).is_err_and(|spent| spent.is_exhausted()));
+}
+
+#[test]
+fn folded_recursive_call_against_neutral_head_is_false() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let a = context.fresh(Some("a"));
+    let h = context.fresh(Some("h"));
+    let body = recursive_matcher(&mut context, &f, 0);
+    context.define(&f, &body, None);
+
+    // The recursive side unfolds to its stuck match, the neutral side cannot unfold at all: a structural mismatch, decided well within the budget.
+    let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+    let neutral = Term::apply(Term::free_var(&h), [Term::free_var(&a)]);
+    assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
+}
+
+// === `Rec` (local groups, a term-level construct — no lambda-lifting in this design) ===
+
+#[test]
+fn rec_is_alpha_equivalent() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+
+    let this = Term::rec(
+        vec![(x, Term::type_ground(), Term::free_var(&x))],
+        Term::free_var(&x),
+    );
+
+    let that = Term::rec(
+        vec![(y, Term::type_ground(), Term::free_var(&y))],
+        Term::free_var(&y),
+    );
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => zero_arm | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is `level`. The recursive call keeps the body restuck, and it discards `x`. `zero_arm` is where a term-level difference between two such groups is planted.
+fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term {
+    let f = context.fresh(Some("f"));
+    let t = context.fresh(Some("t"));
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let sort = Term::type_at(level);
+
+    let body = Term::func(
+        [(t, sort.clone()), (x, nat_type()), (y, nat_type())],
+        Term::nat_match(
+            Term::free_var(&y),
+            Some(&motive),
+            nat_type(),
+            zero_arm,
+            &pred,
+            &ih,
+            Term::apply(
+                Term::free_var(&f),
+                [Term::free_var(&t), nat(0), Term::free_var(&pred)],
+            ),
+        ),
+    );
+
+    Term::rec(
+        [(
+            f,
+            Term::func_type([(t, sort), (x, nat_type()), (y, nat_type())], nat_type()),
+            body,
+        )],
+        Term::free_var(&f),
+    )
+}
+
+/// The fold applied to `Nat`, a discarded argument and a symbolic count.
+fn fold_call(fold: Term, discarded: &Free, count: &Free) -> Term {
+    Term::apply(
+        fold,
+        [nat_type(), Term::free_var(discarded), Term::free_var(count)],
+    )
+}
+
+fn zonked(context: &Context, meta: UniverseMetaId) -> Level {
+    context
+        .universes()
+        .zonk(&Level::meta(meta))
+        .expect("levels zonk")
+}
+
+/// Two instances of one recursive group are one term exactly when their levels are identified, and the acceptance carries the identification: the pair is decided at the applied head, where the kernel decides it by its levels under the item's hypotheses. The kernel's twin of this proposition shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_under_the_hypotheses() {
+    let mut context = context();
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), nat(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+
+    assert_eq!(
+        conv(
+            &mut context,
+            &fold_call(at_u0, &a, &n),
+            &fold_call(at_u1, &a, &n)
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "acceptance must carry the level identification that licenses it",
+    );
+}
+
+/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs and solves the metavariable, and the inner recursive call poses the two heads again, which then differ in nothing but levels and are identified where they are met. Decided by the unfolding alone, the pair would leave two universe parameters where the program has one level.
+#[test]
+fn two_instances_a_metavariable_kept_apart_are_identified_where_the_unfolding_meets_them_again() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+
+    assert_eq!(
+        conv(
+            &mut context,
+            &fold_call(at_u0, &a, &n),
+            &fold_call(at_u1, &a, &n)
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "the pair was held without the identification that licenses it",
+    );
+}
+
+/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the unfolding meets the pair once a metavariable that kept its skeletons apart is solved — because no commitment can join `Type 0` to `Type 1`; held there, it would be a pair the kernel refuses. The kernel's twin shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
+    {
+        let mut context = context();
+        let a = context.fresh(Some("a"));
+        let n = context.fresh(Some("n"));
+        let at_zero = polymorphic_fold(&mut context, Level::zero(), nat(0));
+        let at_one = polymorphic_fold(&mut context, Level::constant(1), nat(0));
+        assert_eq!(
+            conv(
+                &mut context,
+                &fold_call(at_zero, &a, &n),
+                &fold_call(at_one, &a, &n)
+            ),
+            Ok(false),
+            "two ground-unequal instances were reconciled at the head",
+        );
+    }
+
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        let a = context.fresh(Some("a"));
+        let n = context.fresh(Some("n"));
+        let at_zero = polymorphic_fold(&mut context, Level::zero(), Term::hole(0));
+        let at_one = polymorphic_fold(&mut context, Level::constant(1), nat(0));
+        assert_eq!(
+            conv(
+                &mut context,
+                &fold_call(at_zero, &a, &n),
+                &fold_call(at_one, &a, &n)
+            ),
+            Ok(false),
+            "two ground-unequal instances were held where the unfolding met them again",
+        );
+    }
+}
+
+/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone would accept it with the levels untouched — the pair the kernel refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
+#[test]
+fn two_instances_kept_apart_only_by_a_metavariable_identify_their_levels_once_it_is_solved() {
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let a = context.fresh(Some("a"));
+        let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+        let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+        let this = Term::apply(at_u0, [nat_type(), Term::free_var(&a), nat(0)]);
+        let that = Term::apply(at_u1, [nat_type(), Term::free_var(&a), nat(0)]);
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
+        assert_eq!(
+            zonked(&context, u0),
+            zonked(&context, u1),
+            "the pair was decided by unfolding past its level question",
+        );
+    }
+
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        context.birth_metavar(MetavarId(1), Vec::new(), nat_type());
+        let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let a = context.fresh(Some("a"));
+        let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+        let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), Term::hole(1));
+        let this = Term::apply(at_u0, [nat_type(), Term::free_var(&a), nat(0)]);
+        let that = Term::apply(at_u1, [nat_type(), Term::free_var(&a), nat(0)]);
+        assert!(
+            matches!(
+                convert_outcome(&mut context, &nat_type(), &this, &that),
+                Ok(Outcome::Blocked(_))
+            ),
+            "a head problem kept open by two distinct holes was decided",
+        );
+        assert_ne!(
+            zonked(&context, u0),
+            zonked(&context, u1),
+            "the levels were identified before anything licensed it",
+        );
+        context.solve_metavar(MetavarId(0), nat(0));
+        context.solve_metavar(MetavarId(1), nat(0));
+        assert!(
+            matches!(
+                convert_outcome(&mut context, &nat_type(), &this, &that),
+                Ok(Outcome::Converts)
+            ),
+            "the parked head problem did not convert once its holes were solved",
+        );
+        assert_eq!(zonked(&context, u0), zonked(&context, u1));
+    }
+}
+
+/// A pair met again inside its own unfolding that only an unsolved metavariable keeps from being a level question waits, parked, where one a rule had decided would be apart, and commits the identification once the metavariable is solved: the two zero arms are distinct unsolved holes, so nothing in the walk solves them, and the outcome is undecided; solved by hand, the same comparison converts with the levels identified.
+///
+/// Mutation-checked: with the pair left apart where it is met again, the outcome is a mismatch.
+#[test]
+fn a_pair_met_again_that_a_metavariable_keeps_open_parks_and_commits_once_it_is_solved() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+    context.birth_metavar(MetavarId(1), Vec::new(), nat_type());
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), Term::hole(1));
+    let this = fold_call(at_u0, &a, &n);
+    let that = fold_call(at_u1, &a, &n);
+
+    assert!(
+        matches!(
+            convert_outcome(&mut context, &nat_type(), &this, &that),
+            Ok(Outcome::Blocked(_))
+        ),
+        "a pair kept from a level question by unsolved metavariables was decided",
+    );
+    assert_ne!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "the levels were identified before anything licensed it",
+    );
+
+    context.solve_metavar(MetavarId(0), nat(0));
+    context.solve_metavar(MetavarId(1), nat(0));
+
+    assert!(
+        matches!(
+            convert_outcome(&mut context, &nat_type(), &this, &that),
+            Ok(Outcome::Converts)
+        ),
+        "the parked pair did not convert once its metavariables were solved",
+    );
+    assert_eq!(zonked(&context, u0), zonked(&context, u1));
+}

@@ -145,7 +145,7 @@ pub fn read_scrutinee_classed(
 ///
 /// Globals are deliberately not tested, and the asymmetry is the point: a reduct's globals are not bounded by the key's, so testing them would exclude exactly the unfoldings a settlement exists to perform.
 ///
-/// Relaxing it to admit everything refuses nothing that holds, and admits the respellings named above — what it costs is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equations_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
+/// Relaxing it to admit everything refuses nothing that holds, and admits the respellings named above — what it costs is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equation_scope_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
 pub fn could_reduce_to(key: &Term, candidate: &Term, proofs: &[Free]) -> bool {
     let allowed = key.free_vars();
 

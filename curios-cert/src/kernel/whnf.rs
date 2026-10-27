@@ -11,9 +11,13 @@ mod budget_tests;
 #[cfg(test)]
 mod closed_machine_tests;
 #[cfg(test)]
-mod equations_tests;
+mod equation_scope_tests;
+#[cfg(test)]
+mod guard_tests;
 #[cfg(test)]
 mod memo_tests;
+#[cfg(test)]
+mod question_tests;
 #[cfg(test)]
 mod rules_tests;
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! The size-change engine's own algebra: composition, join, idempotence, and the shape order.
 //!
-//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential — live in `curios-analysis/tests/driven.rs`; see that file's header for why they are an integration test rather than a module here.
+//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential — live under `curios-analysis/tests/driven/`; its `main.rs` says why they are an integration test rather than a module here.
 
 use {
     super::*,
@@ -13,7 +13,7 @@ use {
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
 ///
-/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live in `tests/driven.rs`, driven by the actual kernel.
+/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live under `tests/driven/`, driven by the actual kernel.
 ///
 /// They cannot be integration tests: [`Walk`] is an internal whose fields they set directly, and making it constructible from outside would mean publishing every one of them.
 #[derive(Default)]

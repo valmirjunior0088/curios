@@ -2140,4 +2140,11 @@ fn chunk_list<C: AsRef<[u8]>>(chunks: Vec<C>) -> Vec<Vec<u8>> {
 }
 
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod device_tests;
+#[cfg(test)]
+mod stream_tests;
+#[cfg(test)]
+mod system_tests;
