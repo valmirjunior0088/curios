@@ -621,7 +621,7 @@ pub fn elaborate_bang(
     let action = match (region_shape, action_shape) {
         (Some(region_shape), Some(action_shape)) if region_shape.embeds(&action_shape) => {
             let wrapped = lift_wrapped(context, &bang.action, term.extent());
-            note_embedding_site(context, &wrapped, &bang.action, expected, owner);
+            note_embedding_site(context, &wrapped, &bang.action, expected);
             wrapped
         }
         _ => bang.action.clone(),
@@ -770,13 +770,7 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> T
 }
 
 /// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
-fn note_embedding_site(
-    context: &mut Context,
-    wrapped: &Term,
-    action: &Term,
-    region: &Term,
-    owner: RegionOwner,
-) {
+fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
     let (Some(extent), Some(region)) = (wrapped.extent(), written_monad(region)) else {
         return;
     };
@@ -785,7 +779,6 @@ fn note_embedding_site(
         EmbeddingSite {
             action: action.clone(),
             region,
-            owner,
         },
     );
 }
@@ -816,8 +809,7 @@ pub fn lift_on_check(
         return Ok(None);
     }
     let wrapped = lift_wrapped(context, term, None);
-    let owner = context.region_owner();
-    note_embedding_site(context, &wrapped, term, expected, owner);
+    note_embedding_site(context, &wrapped, term, expected);
     Ok(Some(wrapped))
 }
 

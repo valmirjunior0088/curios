@@ -77,7 +77,7 @@ impl<'s> Context<'s> {
     }
 
     /// Read `body` as a term that awaits: a metavariable born while it runs is awaited by it, and once it has read its parts and met its expectation it takes the choices left among the problems it awaits ([`Context::complete`]). A refusal completes nothing.
-    pub fn awaiting<R>(
+    pub(crate) fn awaiting<R>(
         &mut self,
         body: impl FnOnce(&mut Self) -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -92,7 +92,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `work`, a parked problem's retry, as awaited by the term that awaits what the problem watched, where one still stands, and by none where none does: the terms being read where the wake found it are not the problem's.
-    pub fn retried_under<R>(
+    pub(crate) fn retried_under<R>(
         &mut self,
         watching: &BTreeSet<MetavarId>,
         work: impl FnOnce(&mut Self) -> R,
@@ -167,7 +167,7 @@ impl<'s> Context<'s> {
     }
 
     /// Park blocked work: hold the local frames as they stand around it and record which unsolved metavariables could unblock it.
-    pub fn park(&mut self, work: ParkedWork, origin: Term) {
+    pub(crate) fn park(&mut self, work: ParkedWork, origin: Term) {
         curios_profile::profile!("ctx::park");
         let frames = self.hold_frames();
         self.repark(work, origin, frames);
@@ -198,12 +198,12 @@ impl<'s> Context<'s> {
         (id, term)
     }
 
-    pub fn wake_parked(&mut self) -> Vec<ParkedProblem> {
+    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         curios_profile::profile!("ctx::wake_parked");
         self.underway.attempt.solutions.wake_parked()
     }
 
-    pub fn take_parked(&mut self) -> Vec<ParkedProblem> {
+    pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
         self.underway.attempt.solutions.take_parked()
     }
 
@@ -212,15 +212,15 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.take_checking(placeholder)
     }
 
-    pub fn parked_len(&self) -> usize {
+    pub(crate) fn parked_len(&self) -> usize {
         self.underway.attempt.solutions.parked_len()
     }
 
-    pub fn has_newly_solved(&self) -> bool {
+    pub(crate) fn has_newly_solved(&self) -> bool {
         self.underway.attempt.solutions.has_newly_solved()
     }
 
-    pub fn parking_suppressed(&self) -> bool {
+    pub(crate) fn parking_suppressed(&self) -> bool {
         self.underway.attempt.solutions.parking_suppressed()
     }
 
@@ -230,7 +230,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `work`, a `!` reading its region's monad, with an application of an unsolved metavariable imitated where conversion meets one: the region is the `!`'s expectation, so nothing read later bears on what its monad is.
-    pub fn imitating<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn imitating<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
         let before = self.underway.attempt.solutions.set_imitating(true);
         let result = work(self);
         self.underway.attempt.solutions.set_imitating(before);
@@ -253,12 +253,12 @@ impl<'s> Context<'s> {
     }
 
     /// Whether work that cannot be judged yet may park. Inside an oracle it may not, and the oracle records that a site wanted to ([`Context::declined_to_park`]): the refusal that site goes on to raise says its term could not be judged, not that it is wrong. A site asks this last, once everything else says it would park, so the record is made only where a park was wanted.
-    pub fn may_park(&mut self) -> bool {
+    pub(crate) fn may_park(&mut self) -> bool {
         self.underway.attempt.solutions.may_park()
     }
 
     /// Whether a site inside the oracle in progress wanted to park and was refused. Read inside the oracle, by a reader with three answers: where the question failed and this holds, the failure is undecided rather than a refusal. It errs one way only — a check that recovered from a declined park and then failed on something rigid reads as undecided, and the rigid failure is reported when the work is retried.
-    pub fn declined_to_park(&self) -> bool {
+    pub(crate) fn declined_to_park(&self) -> bool {
         self.underway.attempt.solutions.declined_to_park()
     }
 
@@ -292,7 +292,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `work`, a report's own judgment of the terms it shows, leaving the attempt under way as it found it: what `work` needs of a declaration that has not finished does not void the attempt, and what it asks of the declarations around it is no part of the attempt's trace. The budget is restored for it, as for a declaration's.
-    pub fn reporting<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn reporting<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
         let needed = self.underway.needs.take();
         let traced = self.typing.traced.set_aside();
         self.restore_budget();

@@ -144,7 +144,7 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.rec_slot_name(id)
     }
 
-    pub fn is_rec_slot(&self, id: MetavarId) -> bool {
+    pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
         self.underway.attempt.solutions.is_rec_slot(id)
     }
 
@@ -153,7 +153,7 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.owner_fills(id)
     }
 
-    pub fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
+    pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .underway
             .attempt
@@ -188,12 +188,12 @@ impl<'s> Context<'s> {
         self.typing.frames.is_top_level(name)
     }
 
-    pub fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
+    pub(crate) fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
         self.typing.frames.identity_snapshot()
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* extent and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
-    pub fn fresh_metavar(
+    pub(crate) fn fresh_metavar(
         &mut self,
         result: Term,
         extent: Option<Extent>,
@@ -213,12 +213,12 @@ impl<'s> Context<'s> {
     }
 
     /// Record what an unsolved bound's type reduced to when a later attempt asked, for the report the hole becomes.
-    pub fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
+    pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
         self.underway.attempt.solutions.note_reduct(id, reduct);
     }
 
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
-    pub fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
+    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         self.underway.attempt.solutions.note_refusal(id, refusal);
     }
 
@@ -233,7 +233,7 @@ impl<'s> Context<'s> {
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.
-    pub fn fresh_witness_metavar(
+    pub(crate) fn fresh_witness_metavar(
         &mut self,
         result: Term,
         extent: Option<Extent>,
@@ -243,29 +243,29 @@ impl<'s> Context<'s> {
     }
 
     /// An open witness slot as a report's term holds one: what elaboration mints for a `use` argument a program leaves out, minted for a report's printer alone. No metavariable is born for it, so nothing but a printer reads it.
-    pub fn open_witness_slot(&mut self, origin: WitnessOrigin) -> Term {
+    pub(crate) fn open_witness_slot(&mut self, origin: WitnessOrigin) -> Term {
         let id = self.underway.attempt.solutions.mint();
 
         Term::metavar_birthed(id, MetavarOrigin::Witness(origin), Vec::new())
     }
 
     /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
-    pub fn fresh_hole_metavar(&mut self, result: Term, extent: Option<Extent>) -> Term {
+    pub(crate) fn fresh_hole_metavar(&mut self, result: Term, extent: Option<Extent>) -> Term {
         self.fresh_hole(result, extent).1
     }
 
     /// [`Context::fresh_hole_metavar`] with the hole's identity beside it, for a site that reads whether unification solved it: an operator's operand type, defaulted where no operand pins it.
-    pub fn fresh_hole(&mut self, result: Term, extent: Option<Extent>) -> (MetavarId, Term) {
+    pub(crate) fn fresh_hole(&mut self, result: Term, extent: Option<Extent>) -> (MetavarId, Term) {
         self.fresh_metavar_with(result, extent, MetavarOrigin::Hole)
     }
 
     /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
-    pub fn mint_metavar(&mut self) -> MetavarId {
+    pub(crate) fn mint_metavar(&mut self) -> MetavarId {
         self.underway.attempt.solutions.mint()
     }
 
     /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
-    pub fn domain_scope(&mut self) -> DomainScope {
+    pub(crate) fn domain_scope(&mut self) -> DomainScope {
         let (telescope, spine) = self.identity_snapshot();
         let frames = self.hold_frames();
         DomainScope {
@@ -276,7 +276,7 @@ impl<'s> Context<'s> {
     }
 
     /// Mint the metavariable standing for a settle-synthesized lambda's unannotated domain — like [`Context::fresh_hole_metavar`] but carrying the binder's name where it has one, so zonk's unsolved report can point at the parameter whose type was never determined instead of raising a bare "cannot infer", and born at the settle site's ambient `scope` rather than under the lambda's own binders.
-    pub fn fresh_domain_metavar(
+    pub(crate) fn fresh_domain_metavar(
         &mut self,
         scope: &DomainScope,
         result: Term,
@@ -300,7 +300,7 @@ impl<'s> Context<'s> {
     }
 
     /// Whether `inner`'s birth context is contained in `outer`'s: every binder name of `inner`'s birth telescope is a binder name of `outer`'s. Binder names are entropy-fresh, so name identity is context identity, and the type at a shared name is the one both frames recorded. `solve`'s embedded-metavariable guard asks this to tell a candidate metavariable that could smuggle a name past `outer`'s scope from one that provably cannot.
-    pub fn metavar_context_contained(&self, inner: MetavarId, outer: MetavarId) -> bool {
+    pub(crate) fn metavar_context_contained(&self, inner: MetavarId, outer: MetavarId) -> bool {
         let (Some(inner_entry), Some(outer_entry)) =
             (self.metavar_entry(inner), self.metavar_entry(outer))
         else {
@@ -314,7 +314,7 @@ impl<'s> Context<'s> {
     }
 
     /// Whether a candidate for `outer` binds what `inner`'s birth context holds beyond `outer`'s: `inner` was born under no refinement `outer` was not, and each binder of its telescope that is none of `outer`'s stands, at every one of `occurrences`, as a variable the candidate binds itself. The occurrence then sits where `inner` was born, a binder of the candidate's own in the binder's place, and whatever `inner` comes to arrives through that spine and names nothing the candidate does not bind. It is what a settled lambda's codomain is in the function type the lambda states: born under the lambda's binders, so that the body's type may name them.
-    pub fn metavar_bound_by_candidate(
+    pub(crate) fn metavar_bound_by_candidate(
         &self,
         inner: MetavarId,
         occurrences: &[MetavarSpine],
@@ -373,7 +373,7 @@ impl<'s> Context<'s> {
     /// A candidate for `outer` is inverted through `outer`'s spine — its variables back to their binders, its other entries abstracted — so whatever `inner` contributes must be spelled in those entries, and the stand-in takes them as its arguments. An `inner` contained by names keeps its own telescope. One whose telescope holds binders `outer`'s lacks is applied to `outer`'s entries spelled in its own birth names: an implicit born under a match arm's `v`, embedded in the match's type `?M(r, success(v))`, becomes `?E′(r, success(v))` for a stand-in over `?M`'s binders. No solution `outer` could take is lost — one of `inner` using `v` outside `success(v)` was never one the inversion admits, and one using it inside is the stand-in's — and an entry `inner` cannot spell is one it could never have contributed to. This is pruning (Abel and Pientka, *Higher-Order Dynamic Pattern Unification*, 2011), which restricts one pattern substitution by the inverse of another, over the solver's wider inverse; dropping `v` instead, as a context approximation does, would lose exactly the solutions through `success(v)`, which is how a match's inferred type depends on its scrutinee.
     ///
     /// What cannot be spelled that way waits: occurrences that disagree or are not a renaming, a binder the stand-in needs whose type depends on one it cannot take, and a type of `inner`'s own that mentions one. So does a hole something else fills: a written goal reports by its identity, a witness hole is filled by resolution, a bound by its discharge, a parked check's placeholder by that check, and a recursive group's slot by its group.
-    pub fn metavar_restriction(
+    pub(crate) fn metavar_restriction(
         &self,
         inner: MetavarId,
         origin: &MetavarOrigin,
@@ -506,7 +506,7 @@ impl<'s> Context<'s> {
     /// A block's term is closed over its labels where the block ends, and its type is not: a label in the spine of a metavariable the type holds is bound by nothing there, and a solution that names its binder, which a problem parked in the block may still give, reads at that occurrence as a name the kernel refuses. A label is a definition, so no solution depends on it that does not depend on its value as well, and none is lost with its binder: the stand-in takes a candidate that names the label by its value (`Convert::solve`). It is the restriction a candidate's embedded metavariable takes ([`Context::metavar_restriction`]), at the other place a metavariable leaves the context it was born in, and what Lean makes of a metavariable where a `let` is closed (`elimMVarDeps`). The spine stays the renaming a solution is inverted through, where the label's value written into it would be an entry the inversion cannot read, and a second name for whatever variable the value is.
     ///
     /// What cannot be spelled that way is read by value where it stands, its spine with it: an occurrence that is not the metavariable read where it was born, one born under a binder inside the block's tail, whose refinements and binders the block's own may type, one whose type still holds an unsolved metavariable naming a label, and a hole something else fills.
-    pub fn block_restriction(
+    pub(crate) fn block_restriction(
         &self,
         inner: MetavarId,
         origin: &MetavarOrigin,
@@ -562,7 +562,7 @@ impl<'s> Context<'s> {
     }
 
     /// Whether `term` holds an unsolved metavariable whose spine names one of the labels `values` pairs with a value: what a block's end restricts before it reads the rest by value ([`Context::block_restriction`]).
-    pub fn names_in_unsolved_spine(&self, term: &Term, values: &[(Free, Term)]) -> bool {
+    pub(crate) fn names_in_unsolved_spine(&self, term: &Term, values: &[(Free, Term)]) -> bool {
         let labels = Names::new(values.iter().map(|(label, _)| *label));
         term.metavars().iter().any(|id| {
             self.metavar_solution(*id).is_none()
@@ -573,7 +573,7 @@ impl<'s> Context<'s> {
     }
 
     /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`], [`Context::block_restriction`]), holding the frames the plan states. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
-    pub fn restrict_metavar(
+    pub(crate) fn restrict_metavar(
         &mut self,
         inner: MetavarId,
         (origin, extent): Provenance,
@@ -633,19 +633,19 @@ impl<'s> Context<'s> {
         (id, metavar)
     }
 
-    pub fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
+    pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
         self.underway.attempt.solutions.entry(id)
     }
 
-    pub fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
+    pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
         self.underway.attempt.solutions.witness_hole(term)
     }
 
-    pub fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
+    pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
         self.underway.attempt.solutions.solution(id)
     }
 
-    pub fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
+    pub(crate) fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
         self.underway.attempt.solutions.resolve(metavar)
     }
 
@@ -661,14 +661,14 @@ impl<'s> Context<'s> {
     }
 
     /// Close a [`Context::solution_mark`] transaction, keeping whatever it left in place. Undoing is [`Context::rollback_solutions`]; a path that undoes still ends here.
-    pub fn end_solutions(&mut self, mark: SolutionMark) {
+    pub(crate) fn end_solutions(&mut self, mark: SolutionMark) {
         self.underway.attempt.universe_solver.release(mark.universe);
     }
 
     /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far. Spans both unification stores, which is why it lives here rather than on either.
     ///
     /// Opens a speculative scope on the universe solver, which [`Context::end_solutions`] closes. The two are paired by hand at every site: a closure bracket in the manner of [`Context::with_frame`] would be safer, but these sit on elaboration's recursions, where its body is a stack frame per level.
-    pub fn solution_mark(&mut self) -> SolutionMark {
+    pub(crate) fn solution_mark(&mut self) -> SolutionMark {
         SolutionMark {
             term_solution_log_len: self.underway.attempt.solutions.solved_len(),
             held_len: self.underway.attempt.solutions.held_len(),
@@ -680,17 +680,17 @@ impl<'s> Context<'s> {
     }
 
     /// How many term solutions have been committed so far: the watermark [`Context::solutions_since`] reads after.
-    pub fn solutions_committed(&self) -> usize {
+    pub(crate) fn solutions_committed(&self) -> usize {
         self.underway.attempt.solutions.solved_len()
     }
 
     /// The solutions committed since `watermark` that still stand, each with its id.
-    pub fn solutions_since(&self, watermark: usize) -> Vec<(MetavarId, Term)> {
+    pub(crate) fn solutions_since(&self, watermark: usize) -> Vec<(MetavarId, Term)> {
         self.underway.attempt.solutions.solved_since(watermark)
     }
 
     /// Rewrite standing solutions in place to terms they already denote — what a recursive group does to its own members once its generalization has minted their instance — clearing every cache as a rollback does, since a cached reduct may have gone through a spelling replaced here.
-    pub fn restamp_solutions(&mut self, solutions: Vec<(MetavarId, Term)>) {
+    pub(crate) fn restamp_solutions(&mut self, solutions: Vec<(MetavarId, Term)>) {
         if solutions.is_empty() {
             return;
         }
@@ -704,7 +704,7 @@ impl<'s> Context<'s> {
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
     ///
     /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so every cache clears. A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing: a witness probe rolls back after every trial — hundreds of times re-validating one `Str/split_once` stated in a type, few of which unwind a solution — and a clear at each would throw away the reducts and elaborations the next node needs.
-    pub fn rollback_solutions(&mut self, mark: SolutionMark) {
+    pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
         let unwinds_terms =
             self.underway.attempt.solutions.solved_len() > mark.term_solution_log_len;
         let universes_before = self.underway.attempt.universe_solver.state_token();

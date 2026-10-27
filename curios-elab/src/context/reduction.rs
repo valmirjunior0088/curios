@@ -10,7 +10,7 @@ use {
 
 impl<'s> Context<'s> {
     /// The closed machine's memo for the reduction in progress.
-    pub fn closed_memo_mut(&mut self) -> &mut ClosedMemo {
+    pub(crate) fn closed_memo_mut(&mut self) -> &mut ClosedMemo {
         let plain = self.typing.asking.plain();
 
         self.typing.caches.closed_memo(plain)
@@ -19,7 +19,7 @@ impl<'s> Context<'s> {
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
     ///
     /// **A universe metavariable in the term does not exclude it.** Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. Excluding one would remember nothing of a web of universe-polymorphic definitions inside the declaration that instantiates them, whose occurrences all carry that declaration's level metas, and a reduct shared as a graph would be re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` guards under `numeric, proved`.
-    pub fn cached_reduced(&mut self, term: &Term) -> Option<Term> {
+    pub(crate) fn cached_reduced(&mut self, term: &Term) -> Option<Term> {
         self.typing
             .caches
             .reduction_get(term, self.typing.asking.plain())
@@ -45,7 +45,7 @@ impl<'s> Context<'s> {
     }
 
     /// Remember what classifying the stuck operation `term` found, unless a question was declined for a commit since `declined` was read, where the classing began: a classification its conversion classed across a declined question is one a later solution can change, as a reduct taken across one is (`reduce`'s `remember`). One no question entered reads the operation alone and is kept.
-    pub fn keep_classification(
+    pub(crate) fn keep_classification(
         &mut self,
         term: Term,
         classification: Classification,
@@ -85,7 +85,7 @@ impl<'s> Context<'s> {
     }
 
     /// Remember `type_`'s sort. Stored for nothing, as a reduct is.
-    pub fn record_sort(&mut self, type_: Term, sort: Sort) {
+    pub(crate) fn record_sort(&mut self, type_: Term, sort: Sort) {
         self.typing
             .caches
             .sort_insert(type_, self.typing.asking.plain(), sort);
@@ -106,12 +106,12 @@ impl<'s> Context<'s> {
     }
 
     /// Whether the binder `name` is a proof, where that has been asked and remembered ([`Context::remember_proof`]).
-    pub fn cached_proof(&self, name: &Free) -> Option<bool> {
+    pub(crate) fn cached_proof(&self, name: &Free) -> Option<bool> {
         self.typing.caches.proof_get(name)
     }
 
     /// Remember whether the binder `name` is a proof, for the declaration.
-    pub fn remember_proof(&mut self, name: Free, proof: bool) {
+    pub(crate) fn remember_proof(&mut self, name: Free, proof: bool) {
         self.typing.caches.proof_insert(name, proof);
     }
 
@@ -169,7 +169,7 @@ impl<'s> Context<'s> {
     }
 
     /// How many questions reduction has put to conversion.
-    pub fn questions(&self) -> u64 {
+    pub(crate) fn questions(&self) -> u64 {
         self.typing.asking.questions()
     }
 
@@ -309,22 +309,22 @@ impl<'s> Context<'s> {
     }
 
     /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
-    pub fn plain(&self) -> bool {
+    pub(crate) fn plain(&self) -> bool {
         self.typing.asking.plain()
     }
 
     /// A judgment's reduction is putting a question to conversion. Its answer rests on the level constraints that stand, so a scope that is rolled back with constraints withdrawn after one was asked inside it clears what was reduced meanwhile ([`Context::rollback_solutions`]).
-    pub fn note_question(&mut self) {
+    pub(crate) fn note_question(&mut self) {
         self.typing.asking.note_question();
     }
 
     /// A question asked with nothing committed was answered no because answering yes would have committed a solution or a level constraint. The answer can change once the solver moves, so no reduct taken across it is remembered (`reduce`'s `remember`).
-    pub fn note_declined(&mut self) {
+    pub(crate) fn note_declined(&mut self) {
         self.typing.asking.note_declined();
     }
 
     /// How many questions have been declined for a commit.
-    pub fn declined(&self) -> u64 {
+    pub(crate) fn declined(&self) -> u64 {
         self.typing.asking.declined()
     }
 
@@ -334,7 +334,7 @@ impl<'s> Context<'s> {
     }
 
     /// Where the context stands as a question is asked with nothing committed: what its answer is held against before it is filed ([`Context::remember_same`]).
-    pub fn asked_at(&self) -> AskedAt {
+    pub(crate) fn asked_at(&self) -> AskedAt {
         AskedAt {
             stamps: self.typing.caches.stamps(),
             declined: self.typing.asking.declined(),
@@ -350,7 +350,7 @@ impl<'s> Context<'s> {
     }
 
     /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; and no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the kernel files its own by.
-    pub fn remember_same(&mut self, asked: &AskedAt, this: &Term, that: &Term, same: bool) {
+    pub(crate) fn remember_same(&mut self, asked: &AskedAt, this: &Term, that: &Term, same: bool) {
         if self.typing.caches.stamps_unchanged(&asked.stamps)
             && self.typing.asking.declined() == asked.declined
             && self.typing.asking.apart() == asked.apart
@@ -365,12 +365,12 @@ impl<'s> Context<'s> {
     }
 
     /// Enter or leave a question asked with nothing committed (`same_uncommitted`), answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.
-    pub fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
+    pub(crate) fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
         self.typing.asking.withhold(withheld)
     }
 
     /// Whether an equation of `left` and `right` is withheld: conversion is answering a question asked with nothing committed, which joins no two levels, and the store does not already read the two as one. One withheld is noted on the question, whose no the solver can then change.
-    pub fn withholds(&mut self, left: &Level, right: &Level) -> Result<bool, ReduceError> {
+    pub(crate) fn withholds(&mut self, left: &Level, right: &Level) -> Result<bool, ReduceError> {
         if !self.typing.asking.withholding()
             || self
                 .universes()
@@ -385,7 +385,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold, at a missed equation or at a stuck elimination's atoms — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
-    pub fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.typing.asking.set_plain(true);
         let answer = read(self);
         self.typing.asking.set_plain(previous);

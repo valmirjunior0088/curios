@@ -109,7 +109,6 @@ impl<'a> Standing<'a> {
                 Some(Defined {
                     type_: &definition.type_,
                     body: (!definition.proof).then_some(&definition.body),
-                    kind: &definition.kind,
                     universe_context: &definition.universe_context,
                     totality: definition.totality,
                     variances: &definition.variances,
@@ -127,7 +126,6 @@ impl<'a> Standing<'a> {
                 Some(Defined {
                     type_,
                     body: (!definition.proof).then_some(body),
-                    kind: &definition.kind,
                     universe_context: rec.group.universe_context(),
                     totality: definition.totality,
                     // A group's member files no vector where it is published, so it answers none here.

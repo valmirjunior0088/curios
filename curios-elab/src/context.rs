@@ -91,7 +91,7 @@ mod spelling_tests;
 mod window_tests;
 
 use {
-    super::{Error, RegionOwner, UniverseMark},
+    super::{Error, UniverseMark},
     crate::{Published, ZonkPass, zonk},
     curios_core::{
         Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
@@ -179,7 +179,6 @@ pub struct Context<'s> {
 pub struct EmbeddingSite {
     pub action: Term,
     pub region: Term,
-    pub owner: RegionOwner,
 }
 
 impl<'s> Context<'s> {
@@ -200,27 +199,19 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// A context whose caches clear every table at every boundary, as they did before an answer was kept for as long as what it read stands. Exists for one purpose: asserting that keeping an answer longer moves no elaborated term (`curios-pipeline`'s `std_memo_census`), as `curios-cert`'s `Kernel::uncached` asserts of the kernel's memos that switching them off moves no verdict.
-    pub fn wholesale(budget: u64, syntax: SyntaxRegistry) -> Self {
-        let mut context = Self::new(budget, syntax);
-        context.typing.caches = Caches::wholesale();
-
-        context
-    }
-
     /// Read through to `scope` wherever this context's own stores hold nothing under a name: the units already judged, which a unit is judged against and nothing of which is brought in (`InScope`).
-    pub fn read_through(&mut self, scope: &'s dyn InScope) {
+    pub(crate) fn read_through(&mut self, scope: &'s dyn InScope) {
         self.typing.frames.read_through(scope);
         self.typing.program.read_through(scope);
     }
 
     /// Record what the auto-lift at `extent` named as written.
-    pub fn note_embedding_site(&mut self, extent: Extent, site: EmbeddingSite) {
+    pub(crate) fn note_embedding_site(&mut self, extent: Extent, site: EmbeddingSite) {
         self.underway.embedding_sites.push((extent, site));
     }
 
     /// What the auto-lift at `extent` named as written, where it recorded it — the latest record, since re-validation may elaborate a site again.
-    pub fn embedding_site(&self, extent: &Extent) -> Option<&EmbeddingSite> {
+    pub(crate) fn embedding_site(&self, extent: &Extent) -> Option<&EmbeddingSite> {
         self.underway
             .embedding_sites
             .iter()
@@ -240,49 +231,49 @@ impl<'s> Context<'s> {
     }
 
     /// The table [`Context::set_imports`] installed.
-    pub fn imports(&self) -> &Imports {
+    pub(crate) fn imports(&self) -> &Imports {
         &self.underway.imports
     }
 
     /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.
     ///
     /// Sort-hood is *not* decided here. The type may still carry unsolved metavariables, and deciding would both reduce on the hot path and risk an answer a later solution invalidates; the gate classifies post-zonk, memoized per distinct type.
-    pub fn record_checked(&mut self, term: &Term, type_: &Term) {
+    pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
         self.underway.checked.record(term, type_);
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
-    pub fn set_checked_site(&mut self, site: Global) -> Option<Global> {
+    pub(crate) fn set_checked_site(&mut self, site: Global) -> Option<Global> {
         self.underway.checked.set_site(Some(site))
     }
 
     /// Restore a site saved by [`Context::set_checked_site`].
-    pub fn restore_checked_site(&mut self, site: Option<Global>) {
+    pub(crate) fn restore_checked_site(&mut self, site: Option<Global>) {
         self.underway.checked.set_site(site);
     }
 
     /// The site being elaborated, as [`Context::set_checked_site`] last set it: `None` is the entry.
-    pub fn checked_site(&self) -> Option<Global> {
+    pub(crate) fn checked_site(&self) -> Option<Global> {
         self.underway.checked.site()
     }
 
     /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
-    pub fn checked(&self) -> &[(Term, Term, Option<Global>)] {
+    pub(crate) fn checked(&self) -> &[(Term, Term, Option<Global>)] {
         self.underway.checked.terms()
     }
 
     /// How many terms are recorded — where an item begins, so [`Context::truncate_checked`] can forget what a refused item recorded.
-    pub fn checked_mark(&self) -> usize {
+    pub(crate) fn checked_mark(&self) -> usize {
         self.underway.checked.mark()
     }
 
     /// Forget every term recorded since `mark`: a refused item's, which no obligation may read.
-    pub fn truncate_checked(&mut self, mark: usize) {
+    pub(crate) fn truncate_checked(&mut self, mark: usize) {
         self.underway.checked.truncate(mark);
     }
 
     /// Begin a unit's items: the declarations they make, which place each of its names, and the names of those its walk is to decide, none finished yet; every other declaration of the unit is a baseline's, and finished. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
-    pub fn begin_unit(&mut self, declarations: Declarations, unfinished: BTreeSet<Global>) {
+    pub(crate) fn begin_unit(&mut self, declarations: Declarations, unfinished: BTreeSet<Global>) {
         self.underway.declarations = declarations;
         self.underway.needs.begin(unfinished);
         self.underway.offering = false;
@@ -336,12 +327,12 @@ impl<'s> Context<'s> {
     }
 
     /// Take the state the attempt that just stood elaborated in, leaving one that has minted nothing: a declaration that wrote goals keeps its own until they are reported.
-    pub fn set_aside(&mut self) -> Attempted {
+    pub(crate) fn set_aside(&mut self) -> Attempted {
         self.exchange(Attempted::above(&Mints::default()))
     }
 
     /// Run `run` in `state`, the one a finished declaration elaborated in, then put the context's own back.
-    pub fn within<T>(&mut self, state: Attempted, run: impl FnOnce(&mut Self) -> T) -> T {
+    pub(crate) fn within<T>(&mut self, state: Attempted, run: impl FnOnce(&mut Self) -> T) -> T {
         let own = self.exchange(state);
         let ran = run(self);
         self.exchange(own);
@@ -350,7 +341,7 @@ impl<'s> Context<'s> {
     }
 
     /// Publish an item that holds a written goal by its types alone: each name stays assumed at its type, zonked, and is bound to nothing. What the item elaborated to holds the metavariables of the state its declaration elaborated in, which no other declaration reads, so what reads this one reads a constant of its type and what would unfold it stays stuck where the goal did. Refused where a type holds a goal itself.
-    pub fn publish_held(&mut self, item: &Item) -> Result<(), Error> {
+    pub(crate) fn publish_held(&mut self, item: &Item) -> Result<(), Error> {
         let types = match item {
             Item::Let(definition) => vec![(
                 definition.name,
@@ -487,14 +478,14 @@ impl<'s> Context<'s> {
     }
 
     /// Credit the written binders `credited` names, each by its definition's name and its place among that definition's written binders: what the proofs of a declaration taken from a candidate read.
-    pub fn credit_adopted(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
+    pub(crate) fn credit_adopted(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
         self.underway.credits.adopt(credited);
     }
 
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     ///
     /// One pass across them all, the solutions standing still while it runs: the terms are each other's subterms, a deep expression's recorded once at each of its levels, and zonked apart they would cost the sum of their sizes.
-    pub fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
+    pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
         let mut zonked = HashMap::<Term, Term>::new();
         let mut pass = ZonkPass::default();
         let mut settled = Vec::with_capacity(self.underway.checked.mark() - mark);
@@ -515,7 +506,7 @@ impl<'s> Context<'s> {
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
-    pub fn finish(&mut self, names: &[&Global]) {
+    pub(crate) fn finish(&mut self, names: &[&Global]) {
         for name in names {
             self.underway.witnesses.settle(name);
         }
@@ -523,12 +514,12 @@ impl<'s> Context<'s> {
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
-    pub fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
+    pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
         self.underway.checked.split_off(mark)
     }
 
     /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
-    pub fn enter_item(&mut self, declaration: Option<Global>) {
+    pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
         self.underway.credits.begin_item();
         self.underway.attempt.universe_solver.open_scheme();
         self.underway.defining = false;
@@ -536,12 +527,12 @@ impl<'s> Context<'s> {
     }
 
     /// Elaborate the value of a declaration of `kind` from here on: a definition its author wrote is a region of its own ([`Context::region_owner`]).
-    pub fn enter_value(&mut self, kind: &DefinitionKind) {
+    pub(crate) fn enter_value(&mut self, kind: &DefinitionKind) {
         self.underway.defining = matches!(kind, DefinitionKind::Authored);
     }
 
     /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.
-    pub fn enter_declaration(&mut self, declaration: Option<Global>) {
+    pub(crate) fn enter_declaration(&mut self, declaration: Option<Global>) {
         self.underway.declaration = declaration;
     }
 

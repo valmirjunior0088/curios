@@ -27,12 +27,12 @@ impl<'s> Context<'s> {
     }
 
     /// The group `instance` was opened from and the instance it was opened at, where it was opened in the declaration in progress.
-    pub fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
+    pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
         self.typing.caches.instance_get(instance)
     }
 
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.
-    pub fn universe_metas_in(&self, term: &Term) -> BTreeSet<UniverseMetaId> {
+    pub(crate) fn universe_metas_in(&self, term: &Term) -> BTreeSet<UniverseMetaId> {
         let mut universes = BTreeSet::new();
         let mut seen_metas = BTreeSet::new();
         let mut pending = vec![term.clone()];
@@ -83,7 +83,7 @@ impl<'s> Context<'s> {
         Ok(Some((type_, universes)))
     }
 
-    pub fn instantiate_assumption(
+    pub(crate) fn instantiate_assumption(
         &mut self,
         name: &Free,
         extent: Option<Extent>,
@@ -92,7 +92,7 @@ impl<'s> Context<'s> {
             .map_err(Error::from)
     }
 
-    pub fn instantiate_assumption_at(
+    pub(crate) fn instantiate_assumption_at(
         &mut self,
         name: &Free,
         universes: &Universes,
@@ -131,7 +131,7 @@ impl<'s> Context<'s> {
         Ok(Some(type_))
     }
 
-    pub fn instantiate_universe_bound<B: Bound>(
+    pub(crate) fn instantiate_universe_bound<B: Bound>(
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
@@ -148,7 +148,7 @@ impl<'s> Context<'s> {
         Ok((value, universes))
     }
 
-    pub fn instantiate_universe_bound_at<B: Bound>(
+    pub(crate) fn instantiate_universe_bound_at<B: Bound>(
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
@@ -168,7 +168,7 @@ impl<'s> Context<'s> {
         instantiate_universes_scoped(value, universes)
     }
 
-    pub fn instantiate_induct_decl_at(
+    pub(crate) fn instantiate_induct_decl_at(
         &mut self,
         induct_decl: &InductDecl,
         universes: &Universes,
@@ -189,7 +189,7 @@ impl<'s> Context<'s> {
     }
 
     /// What `read` takes of the inductive declaration `name` at the occurrence `universes`, the declaration's constraints instantiated where the occurrence stands, or `None` where `name` declares no inductive: a read instantiates the facet it takes — the sort, the arity, one constructor — and pays for no other, where [`Context::instantiate_induct_decl_at`] instantiates every constructor.
-    pub fn induct_facet<T>(
+    pub(crate) fn induct_facet<T>(
         &mut self,
         name: &Global,
         universes: &Universes,
@@ -211,7 +211,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Context::induct_facet`] for the structure declaration `name`: a read of the sort, the parameters or one field pays for that facet, where [`Context::instantiate_struct_decl_at`] instantiates every field.
-    pub fn struct_facet<T>(
+    pub(crate) fn struct_facet<T>(
         &mut self,
         name: &Global,
         universes: &Universes,
@@ -232,7 +232,7 @@ impl<'s> Context<'s> {
         )
     }
 
-    pub fn instantiate_struct_decl_at(
+    pub(crate) fn instantiate_struct_decl_at(
         &mut self,
         struct_decl: &StructDecl,
         universes: &Universes,
@@ -281,11 +281,11 @@ impl<'s> Context<'s> {
     }
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.
-    pub fn universe_state(&self) -> UniverseStateToken {
+    pub(crate) fn universe_state(&self) -> UniverseStateToken {
         self.underway.attempt.universe_solver.state_token()
     }
 
-    pub fn universes(&self) -> &UniverseSolver {
+    pub(crate) fn universes(&self) -> &UniverseSolver {
         &self.underway.attempt.universe_solver
     }
 
@@ -306,7 +306,7 @@ impl<'s> Context<'s> {
         closed
     }
 
-    pub fn finish_universe_transaction(&mut self) {
+    pub(crate) fn finish_universe_transaction(&mut self) {
         let before = self.underway.attempt.universe_solver.state_token();
         self.closing_universes(UniverseSolver::clear_constraints);
         if self.underway.attempt.universe_solver.state_token() != before {
@@ -325,12 +325,17 @@ impl<'s> Context<'s> {
     }
 
     /// Hold two sorts' qualities one, as conversion compares them: an unsolved one solved to the other, and two that each state a sort one where they state the same. Where conversion answers a question asked with nothing committed it solves none, as it joins no two levels there ([`Context::withholds`]), and an equation it would have made is noted on the question.
-    pub fn same_quality(&mut self, this: Quality, that: Quality) -> bool {
+    pub(crate) fn same_quality(&mut self, this: Quality, that: Quality) -> bool {
         self.same_quality_at(this, that, None)
     }
 
     /// [`Context::same_quality`] asked on behalf of the term at `site`: what a `Sort` this decides is reported with.
-    pub fn same_quality_at(&mut self, this: Quality, that: Quality, site: Option<Extent>) -> bool {
+    pub(crate) fn same_quality_at(
+        &mut self,
+        this: Quality,
+        that: Quality,
+        site: Option<Extent>,
+    ) -> bool {
         let this = self.universes().quality(this);
         let that = self.universes().quality(that);
         if this == that {
@@ -346,7 +351,7 @@ impl<'s> Context<'s> {
         self.universes_mut().unify_qualities(this, that, site)
     }
 
-    pub fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
+    pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {
         let metas = terms
             .iter()
             .flat_map(|term| self.universe_metas_in(term))
@@ -368,7 +373,7 @@ impl<'s> Context<'s> {
     }
 
     /// Finalize a declaration's levels — see `UniverseSolver::finalize`.
-    pub fn finalize_universe_metas(
+    pub(crate) fn finalize_universe_metas(
         &mut self,
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
@@ -405,7 +410,7 @@ impl<'s> Context<'s> {
         Ok(count)
     }
 
-    pub fn finalize_universe_metas_at_instance(
+    pub(crate) fn finalize_universe_metas_at_instance(
         &mut self,
         metas: BTreeSet<UniverseMetaId>,
         instance: &Universes,
@@ -421,7 +426,7 @@ impl<'s> Context<'s> {
     }
 
     /// Settle the levels a witness's scheme minted at one use: pinned to what its goal fixes, and closed there only once the declaration that raised the goal has finalized.
-    pub fn close_universe_instance(
+    pub(crate) fn close_universe_instance(
         &mut self,
         minted: &[Level],
         instance: &[Level],
@@ -433,7 +438,7 @@ impl<'s> Context<'s> {
         Ok(())
     }
 
-    pub fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
+    pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
         zonk_universe_levels_scoped(value, &self.underway.attempt.universe_solver)
             .map_err(Error::from)
     }

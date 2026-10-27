@@ -8,8 +8,8 @@
 
 use {
     curios_core::{
-        ConceptDecl, DefinitionKind, FuncType, Global, InductDecl, ParameterField, RecGroup,
-        StructDecl, Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
+        ConceptDecl, FuncType, Global, InductDecl, ParameterField, RecGroup, StructDecl, Subterm,
+        Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::fmt::Debug,
@@ -21,7 +21,6 @@ pub struct Defined<'a> {
     pub type_: &'a Term,
     /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
     pub body: Option<&'a Term>,
-    pub kind: &'a DefinitionKind,
     pub universe_context: &'a UniverseContext,
     pub totality: Totality,
     /// The vector its publication filed, empty where it filed none.

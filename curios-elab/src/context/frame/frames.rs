@@ -24,8 +24,7 @@ use {
         locals_outside_spines, read_outside_spines,
     },
     curios_core::{
-        DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
-        project_erased_universes,
+        Free, Global, HeadTag, RecGroup, Term, UniverseContext, project_erased_universes,
     },
     curios_utilities::Keyed,
     std::{
@@ -554,16 +553,6 @@ impl<'s> Frames<'s> {
             self.read(entry.depth());
         }
         entry
-    }
-
-    /// The [`DefinitionKind`] of the module item that defined `label`, or `None` for a local binding or an undefined name.
-    ///
-    /// The structural replacement for splitting a definition's qualified name into a family and a case and looking the family up in a registry: the kind was known where the definition was generated, so it is read back rather than re-derived from the name's spelling.
-    pub fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
-        match self.defined(name) {
-            Some(entry) => entry.kind(),
-            None => self.in_scope(name).map(|defined| defined.kind),
-        }
     }
 
     /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Frames::var_reduct_at`] would silently mean something else inside a match arm.

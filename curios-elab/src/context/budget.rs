@@ -9,7 +9,7 @@ use {
 
 impl<'s> Context<'s> {
     /// What the attempt under way asked of the declarations around it, taken: its trace, which is its declaration's where the attempt stands.
-    pub fn take_trace(&mut self) -> Trace<Question, Answered> {
+    pub(crate) fn take_trace(&mut self) -> Trace<Question, Answered> {
         self.typing.traced.take()
     }
 
@@ -56,19 +56,19 @@ impl<'s> Context<'s> {
     }
 
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
-    pub fn island(&self) -> Option<&Qualifier> {
+    pub(crate) fn island(&self) -> Option<&Qualifier> {
         self.underway.posture.island()
     }
 
     /// Set the current module before elaborating an item (see `elaborate_module_suffix`).
-    pub fn set_island(&mut self, island: Qualifier) {
+    pub(crate) fn set_island(&mut self, island: Qualifier) {
         // Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
         self.typing.caches.invalidate_for_island_change();
         self.underway.posture.stand(Some(island));
     }
 
     /// Run `f` with no island — suppressing the representation-privacy checks for re-derivation of already-elaborated terms, whose machinery-built projections were never subject to surface privacy in the first place. The bracket is the only way to clear an island (mirroring the parking half of the oracle package), so no context can be left permanently altered.
-    pub fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.underway.posture.stand(None);
         let result = f(self);
         self.underway.posture.stand(previous);
@@ -77,12 +77,12 @@ impl<'s> Context<'s> {
     }
 
     /// Whether the procedure that proves a bound from the facts in scope is running, so it is not asked again from inside its own candidate.
-    pub fn entailing(&self) -> bool {
+    pub(crate) fn entailing(&self) -> bool {
         self.underway.posture.entailing()
     }
 
     /// Run `f` as that procedure, which is not asked again until `f` returns.
-    pub fn with_entailing<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn with_entailing<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.underway.posture.set_entailing(true);
         let result = f(self);
         self.underway.posture.set_entailing(previous);

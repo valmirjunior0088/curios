@@ -48,7 +48,7 @@ impl<'s> Context<'s> {
     }
 
     /// What the region a `!` sequences in here belongs to: a function's body where a frame that stands opened one, and otherwise the value being elaborated.
-    pub fn region_owner(&self) -> RegionOwner {
+    pub(crate) fn region_owner(&self) -> RegionOwner {
         match (self.typing.frames.in_body(), self.underway.defining) {
             (true, _) => RegionOwner::Function,
             (false, true) => RegionOwner::Definition,
@@ -67,7 +67,7 @@ impl<'s> Context<'s> {
             .invalidate_frame_exit(dropped_refinements, dropped_definitions);
     }
 
-    pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.enter_frame();
         let result = f(self);
         self.leave_frame();
@@ -76,7 +76,7 @@ impl<'s> Context<'s> {
     }
 
     /// Say that the arm whose frame is being elaborated is never taken: its case is of type `case` and its scrutinee of type `scrutinee`, one family at indices that clash. The reason stands for that frame and every frame inside it, and an error raised there is reported with it: by the arm where the error propagates ([`Error::in_dead_arm`](crate::Error::in_dead_arm)), and by the record of an implicit minted there where one nothing solved is reported once the arm has closed.
-    pub fn rule_out_arm(&mut self, case: Term, scrutinee: Term) -> Rc<DeadArm> {
+    pub(crate) fn rule_out_arm(&mut self, case: Term, scrutinee: Term) -> Rc<DeadArm> {
         let dead = Rc::new(DeadArm::Indices { case, scrutinee });
         self.typing.frames.rule_out(Rc::clone(&dead));
 
@@ -106,14 +106,14 @@ impl<'s> Context<'s> {
     }
 
     /// Step `walk` past its next binder: mint one from the entry's hint, assume it at `domain`, and hand it back for the caller's own capture.
-    pub fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
+    pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
         let binder = walk.advance_fresh(|hint| self.fresh(hint));
         self.assume(&binder, domain);
         binder
     }
 
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary assumption that additionally joins the witness scope, where resolution finds it (innermost-first).
-    pub fn assume_witness(&mut self, name: &Free, type_: &Term) {
+    pub(crate) fn assume_witness(&mut self, name: &Free, type_: &Term) {
         self.assume(name, type_);
         self.typing.frames.push_witness_binder(name, type_);
     }
@@ -121,7 +121,7 @@ impl<'s> Context<'s> {
     /// Enter a telescope's member into scope under its mark: assumed at its type, and, where the mark is `use`, in the witness scope as well, so resolution in what follows finds it.
     ///
     /// **The one way a walk enters a member it opens**, whatever the telescope — a function type's, a lambda's, a declaration's parameters, a constructor's payload in a signature or in an arm, a structure's fields — so what a mark means where a telescope is opened is said here and at no site.
-    pub fn enter(&mut self, name: &Free, type_: &Term, mark: Plicity) {
+    pub(crate) fn enter(&mut self, name: &Free, type_: &Term, mark: Plicity) {
         match mark {
             Plicity::Witness => self.assume_witness(name, type_),
             Plicity::Explicit | Plicity::Implicit => self.assume(name, type_),
@@ -140,7 +140,7 @@ impl<'s> Context<'s> {
     }
 
     /// The type `name` is assumed at. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
-    pub fn assumption(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Signature);
         let assumed = self.typing.frames.assumption(name);
         if assumed.is_none() {
@@ -217,7 +217,7 @@ impl<'s> Context<'s> {
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
-    pub fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
+    pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
         self.define_entry(*name, DefEntry::new(term.clone(), kind.cloned()));
     }
 
@@ -235,7 +235,7 @@ impl<'s> Context<'s> {
         );
     }
 
-    pub fn define_assuming(
+    pub(crate) fn define_assuming(
         &mut self,
         name: &Free,
         type_: &Term,
@@ -244,11 +244,6 @@ impl<'s> Context<'s> {
     ) {
         self.assume(name, type_);
         self.define(name, term, kind);
-    }
-
-    pub fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
-        self.asks(name, Question::Kind);
-        self.typing.frames.definition_kind(name)
     }
 
     /// Undo a top-level declaration's bindings ([`Frames::forget`](super::Frames::forget)) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
@@ -424,7 +419,11 @@ impl<'s> Context<'s> {
     }
 
     /// Record one guard's equation under every spelling it is met by — each `(canonical, original, alias)` — with the refinement cache protocol run once for all of them rather than once per spelling.
-    pub fn refine_scrutinee_spellings(&mut self, spellings: Vec<(Term, Term, bool)>, value: &Term) {
+    pub(crate) fn refine_scrutinee_spellings(
+        &mut self,
+        spellings: Vec<(Term, Term, bool)>,
+        value: &Term,
+    ) {
         self.typing.caches.invalidate_for_refinement();
         for (canonical, original, alias) in spellings {
             self.typing.frames.refine_scrutinee(
@@ -440,11 +439,11 @@ impl<'s> Context<'s> {
         }
     }
 
-    pub fn has_scrutinee_refinements(&self) -> bool {
+    pub(crate) fn has_scrutinee_refinements(&self) -> bool {
         self.typing.frames.has_scrutinee_refinements()
     }
 
-    pub fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
+    pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
         self.typing.frames.scrutinee_head_refined(head)
     }
 
@@ -467,16 +466,16 @@ impl<'s> Context<'s> {
     }
 
     /// Every equation in force with the key it is held under, aliases among them, innermost frame first.
-    pub fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
+    pub(crate) fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
         self.typing.frames.scrutinee_equations()
     }
 
     /// Every equation an arm in force withholds, innermost frame first.
-    pub fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
+    pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
         self.typing.frames.withheld_equations()
     }
 
-    pub fn visible_scrutinee_entries(
+    pub(crate) fn visible_scrutinee_entries(
         &self,
     ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
         self.typing.frames.visible_scrutinee_entries()

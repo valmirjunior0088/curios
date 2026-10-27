@@ -1,8 +1,12 @@
-//! What a suite reads of a context and no judgment does, what the declaration being elaborated has spent; and, for this crate's tests alone, the fixtures the context's suites share.
+//! What a suite asks of a context and no judgment does: what the declaration being elaborated has spent, and a context whose caches clear every table at every boundary; and, for this crate's tests alone, the fixtures the context's suites share.
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use {super::Context, curios_core::Consumption};
+use {
+    super::{Caches, Context},
+    curios_core::Consumption,
+    curios_utilities::SyntaxRegistry,
+};
 
 #[cfg(test)]
 use {
@@ -17,6 +21,14 @@ use {
 };
 
 impl Context<'_> {
+    /// A context whose caches clear every table at every boundary, as they did before an answer was kept for as long as what it read stands. Exists for one purpose: asserting that keeping an answer longer moves no elaborated term (`curios-pipeline`'s `std_memo_census`), as `curios-cert`'s `Kernel::uncached` asserts of the kernel's memos that switching them off moves no verdict.
+    pub fn wholesale(budget: u64, syntax: SyntaxRegistry) -> Self {
+        let mut context = Self::new(budget, syntax);
+        context.typing.caches = Caches::wholesale();
+
+        context
+    }
+
     /// What the declaration being elaborated has consumed so far (`Spend::consumed`), which the measurements read between two judgments.
     pub fn consumed(&self) -> Consumption {
         self.typing.spend.consumed()
