@@ -259,9 +259,9 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
     );
 }
 
-// A proof-valued function is a parameter of its callee's telescope like any other. `app` keeps `f`, the call in `pf` hands it a lambda that erases as the proof it is, and `app` applies what it was handed. A proof bound in a statement position runs regardless of sort, so the slot has to hold something applicable: `kept_operand` fills it with a function of the declared arity returning the unit constant, where a bare unit would trap.
+// A proof-valued function is a parameter of its callee's telescope like any other: `app` keeps `f`, and the call in `pf` hands it a lambda that erases as the proof it is. The program applies no stand-in at run time, since `f(n)` is a proof and an application whose callee is no function the program names collapses to the unit constant; what a stand-in's arity holds is pinned where erasure makes it, by `curios-erase`'s `a_slot_typed_by_a_definition_of_a_function_type_holds_a_function_stand_in`.
 #[test]
-fn a_proof_valued_function_in_a_kept_slot_is_applicable() {
+fn a_proof_valued_function_in_a_kept_slot_erases_and_runs() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str};
