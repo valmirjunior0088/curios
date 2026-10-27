@@ -842,8 +842,10 @@ pub(crate) fn check_entrypoint_reading(
             read,
         },
     )?;
-    let verdict = entered.and_then(|entered| {
-        entered.erased(budget, predecessors, syntax)?;
+    let verdict = entered.and_then(|mut entered| {
+        if let Some(erased) = entered.erased.take() {
+            erased?;
+        }
         Ok(entered.program())
     });
 
@@ -869,16 +871,19 @@ pub(crate) struct Closing<'a> {
     pub(crate) refused: &'a mut dyn FnMut(&PreparedText),
 }
 
-/// A program entered: the unit its declarations are, and the term it closes with, elaborated and accepted by the kernel. What [`Entered::erased`] erases and links, and what the lowering after it needs of the entry.
+/// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
+type Erasure = Result<curios_anf::Module, CompileError>;
+
+/// A program entered: the unit its declarations are, and the term it closes with, elaborated, accepted by the kernel and erased through the kernel that accepted it ([`Entered::erased`]): what the lowering after it needs of the entry.
 ///
 /// **A program's declarations are a unit, and its final term is compiled over it.** The declarations are kept between compilations as any unit's are — handed back by a cache where nothing they were compiled from moved, compiled over a baseline where something did — and the term is elaborated, judged and erased on every compile: it is no declaration, and has no name to be kept under.
 struct Entered {
     /// The unit of the program's declarations: restored, compiled over a baseline, or compiled whole.
     unit: Unit,
-    /// The lowering this compile made of the program, where its unit was restored and so holds another: what a report about the entry is placed and spelled by. `None` where the unit was compiled now, whose own it is.
-    lowered: Option<PreparedText>,
     /// The term the program closes with beside a module of nothing, zonked and accepted by the kernel, stating the type it was judged at.
     program: Zonked<Program>,
+    /// The program erased and linked through the kernel that judged it, or what erasing it refused it for: every program but a test program that schedules no test, which nothing is compiled of. The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
+    erased: Option<Erasure>,
     /// One per scheduled test, when the entry is compiled as a test program.
     records: Vec<TestRecord>,
     /// The path of every test in scope, scheduled or not, when the entry is compiled as a test program ([`EntryTail::declared`]).
@@ -886,11 +891,6 @@ struct Entered {
 }
 
 impl Entered {
-    /// The lowering this compile made of the program.
-    fn lowering(&self) -> &PreparedText {
-        self.lowered.as_ref().unwrap_or_else(|| self.unit.text())
-    }
-
     /// The program as one module and its entry: the unit's declarations, and the term that closes it.
     fn program(&self) -> Program {
         Program {
@@ -898,57 +898,9 @@ impl Entered {
             entry: self.program.as_program().entry.clone(),
         }
     }
-
-    /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
-    ///
-    /// The program's final term is erased here and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
-    ///
-    /// The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
-    fn erased(
-        &self,
-        budget: u64,
-        predecessors: Predecessors<'_>,
-        syntax: &SyntaxRegistry,
-    ) -> Result<curios_anf::Module, CompileError> {
-        let units = predecessors
-            .units()
-            .iter()
-            .copied()
-            .chain([&self.unit])
-            .collect::<Vec<_>>();
-        let scope = Predecessors::over(&units);
-        let cores = scope.cores();
-        let places = scope.places();
-        let certifications = scope.certifications();
-        let erased = scope.erased();
-        // Erased through the kernel that judges the term: put to it again over the same scope, since the walk that certified it when it was entered keeps no kernel past itself, and a program's module holds nothing else to judge.
-        let globals = globals(scope);
-        let (_, mut kernel) = certify_program(&self.program, budget, &globals, *syntax);
-
-        let mut linked = erase_program(
-            &mut kernel,
-            Erasures::of(&cores, &places, &certifications, &erased),
-            &self.program,
-        )
-        .map_err(|error| {
-            erasure_refusal(
-                &error,
-                &self.program.as_program().module,
-                &scope.lexicons(),
-                self.lowering(),
-                predecessors,
-                syntax,
-            )
-        })?;
-        for unit in scope.units() {
-            linked.mark_total(unit.certification());
-        }
-
-        Ok(linked.into_module())
-    }
 }
 
-/// Enter the program `source` is: its declarations as the unit they are — the one `cache` hands back, compiled over the baseline it offers, or compiled whole and handed to it — and the term `tail` closes it with, elaborated and put to the kernel over that unit. Beside it come the lowering's findings, credited by elaboration, whatever the verdict; the outer refusal is a program that did not lower.
+/// Enter the program `source` is: its declarations as the unit they are — the one `cache` hands back, compiled over the baseline it offers, or compiled whole and handed to it — and the term `tail` closes it with, elaborated, put to the kernel over that unit and erased through that kernel ([`judged`]). Beside it come the lowering's findings, credited by elaboration, whatever the verdict; the outer refusal is a program that did not lower.
 ///
 /// **Where the unit is compiled the term is elaborated in its walk**, so a program holding a refused declaration reports every refusal and what its final term said beside them, as one batch. Where the unit is restored nothing of it is elaborated, and the term is elaborated alone, over the units in scope and the one restored.
 fn enter<O>(
@@ -964,6 +916,7 @@ where
     O: FnMut(Stage<'_>),
 {
     let Told { observe, read } = told;
+    let tested = matches!(tail, EntryTail::Test { .. });
     let entrypoint = source
         .entrypoint()
         .expect("a program is entered from the source that carries its entrypoint");
@@ -1078,23 +1031,32 @@ where
                     entry: entry.clone(),
                 }));
             }
-            let program = {
+            // A test program that schedules no test is compiled to nothing, so it is not erased.
+            let erases = !(tested && records.is_empty());
+            let judged = {
                 let units = predecessors
                     .units()
                     .iter()
                     .copied()
                     .chain([&unit])
                     .collect::<Vec<_>>();
+                let text = lowered.as_ref().unwrap_or_else(|| unit.text());
 
-                judged(budget, Predecessors::over(&units), syntax, entry)
+                judged(
+                    budget,
+                    (Predecessors::over(&units), predecessors),
+                    syntax,
+                    entry,
+                    erases.then_some(text),
+                )
             };
 
             (
                 findings,
-                program.map(|program| Entered {
+                judged.map(|(program, erased)| Entered {
                     unit,
-                    lowered,
                     program,
+                    erased,
                     records,
                     declared,
                 }),
@@ -1151,13 +1113,16 @@ fn close_over(
     closed
 }
 
-/// The term a program closes with put to the kernel, over `scope`: the units in scope and, last, the unit of the program's own declarations. Handed back beside a module of nothing with the zonk evidence the kernel and erasure consume.
+/// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the kernel; and, where `erasing` holds the program's lowering, erased and linked through the kernel that judged it, with what erasing it refused it for reported against that lowering and `predecessors`, the units before the program's own.
+///
+/// **One walk.** The kernel that judged the term is the one erasure reads it through, as a unit's is (`compile_lowered`): its environment borrows the scope built here, so it cannot leave this call, and what it erased can. The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
 fn judged(
     budget: u64,
-    scope: Predecessors<'_>,
+    (scope, predecessors): (Predecessors<'_>, Predecessors<'_>),
     syntax: &SyntaxRegistry,
     entry: curios_core::Entrypoint,
-) -> Result<Zonked<Program>, CompileError> {
+    erasing: Option<&PreparedText>,
+) -> Result<(Zonked<Program>, Option<Erasure>), CompileError> {
     // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&Program {
         module: nothing(),
@@ -1166,9 +1131,10 @@ fn judged(
     .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     // The independent kernel's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
-    let rechecked = {
+    let globals = globals(scope);
+    let (rechecked, mut kernel) = {
         curios_profile::profile!("recheck");
-        certify_program(&program, budget, &globals(scope), *syntax).0
+        certify_program(&program, budget, &globals, *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
         let refusal = verdict.format_with(&program.as_program().module, &scope.lexicons(), syntax);
@@ -1178,7 +1144,37 @@ fn judged(
         }));
     }
 
-    Ok(program)
+    // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
+    let erased = erasing.map(|text| {
+        let (cores, places, certifications, forms) = (
+            scope.cores(),
+            scope.places(),
+            scope.certifications(),
+            scope.erased(),
+        );
+        let mut linked = erase_program(
+            &mut kernel,
+            Erasures::of(&cores, &places, &certifications, &forms),
+            &program,
+        )
+        .map_err(|error| {
+            erasure_refusal(
+                &error,
+                &program.as_program().module,
+                &scope.lexicons(),
+                text,
+                predecessors,
+                syntax,
+            )
+        })?;
+        for unit in scope.units() {
+            linked.mark_total(unit.certification());
+        }
+
+        Ok(linked.into_module())
+    });
+
+    Ok((program, erased))
 }
 
 /// What each checker said of a program the elaborator built.
@@ -1767,7 +1763,6 @@ where
 {
     curios_profile::profile!("compile_entrypoint");
     let Told { observe, read } = told;
-    let tested = matches!(tail, EntryTail::Test { .. });
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -1781,11 +1776,11 @@ where
             read,
         },
     )?;
-    let entered = entered?;
-    let compiled = match tested && entered.records.is_empty() {
-        true => None,
-        false => {
-            let anf_module = entered.erased(budget, predecessors, syntax)?;
+    let mut entered = entered?;
+    let compiled = match entered.erased.take() {
+        None => None,
+        Some(anf_module) => {
+            let anf_module = anf_module?;
 
             // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
             Some(lower_from_anf(anf_module, observe))
