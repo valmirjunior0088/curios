@@ -8,7 +8,7 @@
 
 use {
     super::{Lowering, Outcome},
-    crate::{Error, advance_assumed, emitted, is_erasable, reduced},
+    crate::{Error, advance_assumed, emitted, inferred, is_erasable, reduced},
     curios_cert::Reader,
 };
 
@@ -168,6 +168,9 @@ impl Lowering<'_> {
         context: &mut Reader,
         type_: &curios_core::Term,
     ) -> Result<curios_anf::Atom, Error> {
+        if never_a_function(context, type_)? {
+            return Ok(self.unit());
+        }
         let ft = match curios_core::Term::unwrap_or_clone(reduced(context, type_)?) {
             curios_core::Subterm::FuncType(ft) => ft,
             _ => return Ok(self.unit()),
@@ -198,6 +201,89 @@ impl Lowering<'_> {
         self.builder.let_functions(vec![function]);
         Ok(curios_anf::Atom::Function(function))
     }
+}
+
+/// Whether no instance of `type_` reduces to a function type, told without reducing what its head is applied to: a definition applied in full whose reduct at fresh arguments is a type former of another kind, or a `Bool` or `Nat` match on one of them whose every arm reduces to one, is no function whatever the arguments are, since reduction commutes with substitution. `false` where that does not tell, and the stand-in is shaped by the type reduced whole.
+///
+/// **What a decided bound is spared.** `Holds(c)` reduces to `True` or `False` by evaluating `c`, which a bound's `c` may do by running an accumulation the checkers ran already; at a fresh `c` it is a match on `c` whose arms are the two propositions, so its stand-in is the unit constant with `c` unevaluated.
+fn never_a_function(context: &mut Reader, type_: &curios_core::Term) -> Result<bool, Error> {
+    let curios_core::Subterm::Apply(apply) = &**type_ else {
+        return Ok(false);
+    };
+    if named_head(&apply.head).is_none() {
+        return Ok(false);
+    }
+    let head_type = inferred(context, &apply.head)?;
+    let head_type = reduced(context, &head_type)?;
+    let curios_core::Subterm::FuncType(ft) = &*head_type else {
+        return Ok(false);
+    };
+    if ft.telescope.len() != apply.arguments.len() {
+        return Ok(false);
+    }
+
+    context.scoped(|context| {
+        let mut cursor = ft.telescope.cursor();
+        let mut fresh = Vec::new();
+        while let Some((_, domain)) = cursor.entry() {
+            fresh.push(advance_assumed(context, &mut cursor, &domain));
+        }
+        let generalized = curios_core::Term::apply_marked(
+            apply.head.clone(),
+            apply
+                .plicities()
+                .zip(fresh.iter().map(curios_core::Term::free_var)),
+        );
+
+        reduces_to_no_function(context, &generalized, &fresh, NO_FUNCTION_DEPTH)
+    })
+}
+
+/// How many matches on a fresh argument [`never_a_function`] reads through before it stops telling.
+const NO_FUNCTION_DEPTH: usize = 4;
+
+/// Whether `term`, reduced, is a type former that is no function type, or a `Bool` or `Nat` match on one of `fresh` whose every arm is, reading `depth` such matches at most. An arm is read without its case in force: where it is stuck without it, it is read as the match it is stuck on, so every way the case could reduce is read.
+fn reduces_to_no_function(
+    context: &mut Reader,
+    term: &curios_core::Term,
+    fresh: &[curios_core::Free],
+    depth: usize,
+) -> Result<bool, Error> {
+    let reduct = reduced(context, term)?;
+    Ok(match &*reduct {
+        curios_core::Subterm::Sort(..)
+        | curios_core::Subterm::InductType(_)
+        | curios_core::Subterm::StructType(_)
+        | curios_core::Subterm::TupleType(_) => true,
+        curios_core::Subterm::Match(m) if depth > 0 => {
+            let on_fresh = matches!(
+                &*m.head,
+                curios_core::Subterm::Var(var)
+                    if var.as_free().is_some_and(|free| fresh.contains(free))
+            );
+            if !on_fresh {
+                return Ok(false);
+            }
+            match &m.cases {
+                curios_core::Cases::Bool {
+                    false_case,
+                    true_case,
+                } => {
+                    reduces_to_no_function(context, false_case, fresh, depth - 1)?
+                        && reduces_to_no_function(context, true_case, fresh, depth - 1)?
+                }
+                curios_core::Cases::Switch { cases, default } => {
+                    let mut every = reduces_to_no_function(context, default, fresh, depth - 1)?;
+                    for (_, arm) in cases {
+                        every = every && reduces_to_no_function(context, arm, fresh, depth - 1)?;
+                    }
+                    every
+                }
+                curios_core::Cases::Induct { .. } | curios_core::Cases::FreeMonoid { .. } => false,
+            }
+        }
+        _ => false,
+    })
 }
 
 /// The definition a call's head names, and the instance it names it at, where the head is a name another item declares: a name standing alone, or at an instance.

@@ -1,6 +1,6 @@
 # A finished term is erased through the kernel that certified it
 
-Erasure, a crate of its own, `curios-erase`, walks the module the kernel certified at the sorts the kernel judged, reads every type it is directed by through that kernel, files its own record of what it read, and erases the prelude where the prelude is certified. What is left is two ready deliveries, independent of each other — stage 6, a decided bound's stand-in shaped without evaluating it, and stage 7, one walk for a program — and the retirement.
+Erasure, a crate of its own, `curios-erase`, walks the module the kernel certified at the sorts the kernel judged, reads every type it is directed by through that kernel, files its own record of what it read, and erases the prelude where the prelude is certified. What is left is stage 7, one walk for a program, a ready delivery, and the retirement.
 
 ## What this builds on
 
@@ -18,9 +18,7 @@ Erasure, a crate of its own, `curios-erase`, walks the module the kernel certifi
 
 ## What is wrong today
 
-**Shaping a proof stub evaluates its bound's subject again.** `proof_stub` (`curios-erase/src/lower/function.rs`) reduces a slot's type to its head to tell a proof from a proof-valued function, and a decided bound's type, `Holds(c)`, reduces to `True` or `False` only by evaluating `c`. For `Bytes/slice(built, 0, 10)` over `built = go(6400, x[])` (`curios`'s `tests::reduction`, `bytes_growing(6400)`), `c` reads `Bytes/len(built)`, so erasing `head` runs the accumulation both checkers ran: one reduction, charged 589 244 kernel units where the heaviest declaration costs each checker 591 871 and 595 927, in two closed-machine entries, allocating 279.7 MB of the compile's 1 245.6 MB and 2.0 of its 9.1 million allocations, 211 ms of erasure's 250. Counted at `a0267b661` in a scratch copy with a span around the reduction (`cargo xtask profile`), the times one reading of a debug build. The stand-in is the unit constant whatever `c` is: at a fresh `c`, `Holds(c)` is a match on it whose arms are the two propositions.
-
-**A program is certified twice.** `compile_entrypoint` judges the program's term for its verdict in `enter` (`curios-pipeline/src/compile.rs`), and `Entered::erased` judges it again over the same scope to hold a kernel erasure reads through, since the verdict's walk keeps no kernel past `enter`. So decision 3 holds for a unit and not for a program: in the profile above `check_entrypoint` runs twice, 224 and 221 ms of a 1 163 ms compile, and each walk evaluates the accumulation the program's bound reads.
+**A program is certified twice.** `compile_entrypoint` judges the program's term for its verdict in `enter` (`curios-pipeline/src/compile.rs`), and `Entered::erased` judges it again over the same scope to hold a kernel erasure reads through, since the verdict's walk keeps no kernel past `enter`. So decision 3 holds for a unit and not for a program: in a profile of `bytes_growing(6400)` (`curios`'s `tests::reduction`) at `a0267b661`, in a scratch copy, `check_entrypoint` runs twice, 224 and 221 ms of a 1 163 ms compile, one reading of a debug build, and each walk evaluates the accumulation the program's bound reads.
 
 ## Decisions
 
@@ -44,7 +42,6 @@ Erasure, a crate of its own, `curios-erase`, walks the module the kernel certifi
 
 ## Stages
 
-6. **A decided bound's stand-in.** Before reducing a slot's type, `proof_stub` asks whether no instance of it reduces to a function type: a definition applied in full whose reduct at fresh arguments is a type former of another kind, or a `Bool` or `Nat` match on one of them whose every arm is, is none whatever the arguments are, since reduction commutes with substitution, and its stand-in is the unit constant; anything else is reduced whole as now, so no stand-in changes shape. Prototyped at `a0267b661` in a scratch copy: `bytes_growing(6400)`'s erasure takes 40 ms, 13.3 MB and 111 thousand allocations, reducing no bound; every item of `/sys` and `/std` erases to the bytes it did; `curios`'s erasure tests and `curios-erase`'s pass. Check: those; controls whose slot type is a definition reducing to a function type, and one matching to a function in one arm, each applied at run time (`curios`'s `tests::erasure::dropped_tests`, beside `a_proof_valued_function_in_a_kept_slot_is_applicable`); and a test that a decided bound's stand-in charges erasure nothing of its subject.
 7. **One walk for a program.** `enter`'s two callers, `check_entrypoint_reading` and `compile_with_tail`, both erase what it entered, but for a test program that schedules no test; so `enter` erases the program's term with the kernel that judged it where its caller asks for the erased program. The walk's kernel borrows a scope `enter` builds once the program's unit is compiled, so it cannot be handed out of `enter`, and the erased module can. Check: one `check_entrypoint` under `compile_entrypoint` in a profile of `bytes_growing(6400)`; `curios-pipeline`'s tests; `curios`'s erasure tests.
 
 ## Verification
