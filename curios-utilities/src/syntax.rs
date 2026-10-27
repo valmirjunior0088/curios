@@ -638,7 +638,7 @@ impl DerivationSyntax {
     }
 }
 
-/// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+/// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the renderers the body applies over the spelled pieces — `call` for a constructor over its payloads, `record` for a struct over its fields, and `hidden` for a member written under its mark. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
 /// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so a derived witness references those shared names too. They have one registry entry, shared with ordinary string literals.
 #[derive(Debug, Clone, Copy)]
@@ -646,6 +646,8 @@ pub struct SpellDerivation {
     pub spell: ConceptField,
     pub call: SyntaxName,
     pub record: SyntaxName,
+    /// What a hidden member spells as, under its mark.
+    pub hidden: SyntaxName,
 }
 
 /// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and nothing else. What the body builds beside that is an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness — neither names a global for anything to order against.
@@ -708,10 +710,11 @@ impl Derivation {
                 spell: _,
                 call,
                 record,
+                hidden,
             }) => [method]
                 .into_iter()
                 .chain(
-                    [call, record]
+                    [call, record, hidden]
                         .into_iter()
                         .chain(string.targets())
                         .map(SyntaxName::qualifier),
@@ -740,7 +743,8 @@ impl Derivation {
                 spell,
                 call,
                 record,
-            }) => vec![spell.concept, call, record],
+                hidden,
+            }) => vec![spell.concept, call, record, hidden],
             Derivation::Eql(EqlDerivation { eql }) => vec![eql.concept],
             Derivation::Ord(OrdDerivation {
                 ord,

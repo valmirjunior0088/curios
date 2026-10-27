@@ -101,6 +101,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             spell: field(&["std", "Spell", "Spell"], "spell"),
             call: name(&["std", "Spell", "call"]),
             record: name(&["std", "Spell", "record"]),
+            hidden: name(&["std", "Spell", "hidden"]),
         },
         eql: EqlDerivation {
             eql: field(&["std", "Equal", "Equal"], "eql"),

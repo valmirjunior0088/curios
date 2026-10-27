@@ -1180,7 +1180,7 @@ and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A)) {
 }
 ```
 
-The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied and representation-transparent where the witness is declared. An implicit payload or a hidden field is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
+The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied and representation-transparent where the witness is declared. A hidden payload or field takes part as a plain one does, `Spell` writing it under its mark — `Tagged/tag(@9, 1)`, `Sized { @len = 9, items = 1 }` — unless it is a type or a proof, which the re-parsed text infers; a plain payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
 
 | Concept | The body the compiler writes | A proof payload |
 | --- | --- | --- |

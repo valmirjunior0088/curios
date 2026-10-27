@@ -143,7 +143,7 @@ fn a_proof_payload_spells_as_a_goal() {
 
 #[test]
 fn an_indexed_family_spells_each_constructor() {
-    // The implicit index payload is bound by the arm and omitted from the text; each arm is checked at its own target indices as a written match's would be.
+    // The implicit index payload is bound by the arm and written under its mark, as a call may write it, so the text reads back at the index it states; each arm is checked at its own target indices as a written match's would be.
     let source = r#"
         use /std/{Nat, Str, Spell, print};
         induct Vec(T: Type): (n: Nat) -> pub Type
@@ -154,7 +154,7 @@ fn an_indexed_family_spells_each_constructor() {
         print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
         "#;
 
-    assert_eq!(run(source), b"Vec/cons(1, Vec/cons(2, Vec/nil()))");
+    assert_eq!(run(source), b"Vec/cons(@1, 1, Vec/cons(@0, 2, Vec/nil()))");
 }
 
 #[test]
@@ -218,8 +218,8 @@ fn a_struct_and_a_parameterized_family_compare_fieldwise() {
 }
 
 #[test]
-fn proofs_and_implicit_payloads_take_no_part_in_equality() {
-    // The proof erases and cannot be compared; the index is implicit and fixed by the payloads it indexes. Both witnesses derive, and equality reads the values alone.
+fn proofs_take_no_part_in_equality() {
+    // The proof erases and cannot be compared; the index is implicit and fixed by the payloads it indexes, so comparing it, as a hidden member that is a value is compared, agrees with comparing them. Both witnesses derive.
     let source = r#"
         use /std/{Nat, Bool, Str, Eq, print};
         use /std/ops/{Eql};
@@ -240,6 +240,31 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
         "#;
 
     assert_eq!(run(source), b"true false true false ");
+}
+
+/// A hidden member that is a value takes part in a derived witness: nothing written determines `size`, so two values a match tells apart by it are unequal and hash apart, and `Spell` writes it under its mark, so the text reads back, as a structure's hidden field does.
+#[test]
+fn a_hidden_member_takes_part_in_a_derived_witness_under_its_mark() {
+    let source = r#"
+        use /std/{Bool, Nat, Str, Bytes, Hash, Spell, print};
+        use /std/ops/{Eql};
+        induct Tagged: Type | tag(@size: Nat, k: Nat) end
+        satisfy Eql(Tagged) { .. }
+        satisfy Hash(Tagged) { .. }
+        satisfy Spell(Tagged) { .. }
+        struct Sized: Type { @len: Nat, items: Nat }
+        satisfy Eql(Sized) { .. }
+        satisfy Spell(Sized) { .. }
+        let size(t: Tagged) -> Nat = match t | tag(@s, _) => s end;
+        let (a, b) = (Tagged/tag(@9, 1), Tagged/tag(@2, 1));
+        let _ = print(Str/flatten([Bool/to_str(a == b), " ", Bool/to_str(Bytes/eql(Hash/hash(a), Hash/hash(b))), " ", Spell/spell(a), " ", Nat/to_str(size(a)), " ", Nat/to_str(size(b))]))!;
+        print(Str/flatten([" ", Spell/spell(Sized { @len = 9, items = 1 }), " ", Bool/to_str(Sized { @len = 9, items = 1 } == Sized { @len = 2, items = 1 })]))
+        "#;
+
+    assert_eq!(
+        run(source),
+        b"false false Tagged/tag(@9, 1) 9 2 Sized { @len = 9, items = 1 } false"
+    );
 }
 
 #[test]

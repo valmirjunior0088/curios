@@ -12,6 +12,10 @@ pub use Spell/*;
 pub let call(head: Str, args: List(Str)) -> Str =
     Fmt/render("%(%)")(head)(Str/join(", ", args));
 
+--- How a hidden member spells: under its mark, as a call or a literal writes it where it writes it at all.
+pub let hidden(value: Str) -> Str =
+    Str/concat("@", value);
+
 --- How a record spells: the head, then its fields in braces.
 ---
 --- A field whose label is empty spells as its value alone, which is the positional field of a newtype-like structure.

@@ -6,11 +6,11 @@
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island, its parameters and indices given by the key. A proposition is no key: every concept with a derivation is over a `Type`, where none stands. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` extent.
 //!
-//! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
+//! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each classified by its type under the binders before it. A plain payload that is itself a type is refused, and a hidden one takes part as a plain one does where it is a value, written under its mark, and none where it is a type or a proof, which the text read back infers; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
-//! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its explicit payloads, so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
+//! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
-//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
+//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. `neq` negates the same comparison, built a second time over binders of its own.
 //!
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
@@ -257,7 +257,7 @@ impl Payload {
     }
 }
 
-/// How one explicit payload takes part in a derived body.
+/// How one payload takes part in a derived body.
 enum Part {
     /// Evidence: it erases, spells as the goal, and compares as nothing.
     Proof,
@@ -265,14 +265,15 @@ enum Part {
     Value { premise: Option<String> },
 }
 
-/// One explicit payload, classified: its position among the payloads (or fields), where it sits, and what it is.
+/// One payload that takes part, classified: its position among the payloads (or fields), where it sits, what it is, and whether it is hidden, which `Spell` writes under its mark.
 struct Classified {
     position: usize,
     payload: Payload,
     part: Part,
+    hidden: bool,
 }
 
-/// Classify one explicit payload of type `type_`, read under the binders in `opened`.
+/// Classify one payload of type `type_`, read under the binders in `opened`, as a plain one takes part.
 fn classify(
     context: &mut Context,
     site: &Site<'_>,
@@ -299,6 +300,7 @@ fn classify(
             position,
             payload,
             part: Part::Proof,
+            hidden: false,
         });
     }
 
@@ -315,6 +317,33 @@ fn classify(
         part: Part::Value {
             premise: telescope_variable.then(|| reduced.to_string()),
         },
+        hidden: false,
+    })
+}
+
+/// Classify one member of type `type_` under its mark `mark`: a plain one as [`classify`] does, and a hidden one as a plain one where it is a value. A hidden member that is a type or a proof takes no part, the text read back inferring it.
+fn member(
+    context: &mut Context,
+    site: &Site<'_>,
+    opened: &mut Opened,
+    (position, payload): (usize, Payload),
+    type_: &Term,
+    mark: Plicity,
+) -> Result<Option<Classified>, Error> {
+    if mark == Plicity::Explicit {
+        return classify(context, site, opened, position, payload, type_).map(Some);
+    }
+    if matches!(&*reduce_with(context, type_)?, Subterm::Sort(..)) {
+        return Ok(None);
+    }
+    let classified = classify(context, site, opened, position, payload, type_)?;
+
+    Ok(match classified.part {
+        Part::Proof => None,
+        Part::Value { .. } => Some(Classified {
+            hidden: true,
+            ..classified
+        }),
     })
 }
 
@@ -341,7 +370,7 @@ impl Constructor<'_> {
         self.signature.plicities()[self.param_count..].to_vec()
     }
 
-    /// The explicit payloads opened at `binders` — one per payload, after the declaration's parameters — each classified with its type read under the binders before it. `value` is the scrutinee, the one binder in scope above the arm.
+    /// The payloads that take part, opened at `binders` — one per payload, after the declaration's parameters — each classified under its mark with its type read under the binders before it ([`member`]). `value` is the scrutinee, the one binder in scope above the arm.
     fn parts(
         &self,
         context: &mut Context,
@@ -373,18 +402,16 @@ impl Constructor<'_> {
             .walk(&args, |index, _, type_| {
                 if index >= self.param_count {
                     let position = index - self.param_count;
-                    if plicities[index] == Plicity::Explicit {
-                        let label = labels[index].as_str();
-                        let payload = Payload::new(self.owner, Some(self.tag), label, position + 1);
-                        parts.push(classify(
-                            context,
-                            site,
-                            &mut opened,
-                            position,
-                            payload,
-                            type_,
-                        )?);
-                    }
+                    let label = labels[index].as_str();
+                    let payload = Payload::new(self.owner, Some(self.tag), label, position + 1);
+                    parts.extend(member(
+                        context,
+                        site,
+                        &mut opened,
+                        (position, payload),
+                        type_,
+                        plicities[index],
+                    )?);
                     opened.push(binders[position], type_.clone());
                 }
                 Ok::<(), Error>(())
@@ -404,7 +431,7 @@ fn dictionary<const N: usize>(site: &Site<'_>, methods: [Term; N]) -> Term {
     )
 }
 
-/// The plain fields of a struct at `params`, each classified with its type read through the projections off `value` before it. A hidden field takes no part in a derivation, as a hidden payload takes none: it is no member a literal writes, so `Spell` leaves it out and the re-parsed text infers it.
+/// The fields of a struct at `params` that take part, each classified under its mark with its type read through the projections off `value` before it ([`member`]): a hidden field as a hidden payload is.
 fn struct_parts(
     context: &mut Context,
     site: &Site<'_>,
@@ -429,12 +456,20 @@ fn struct_parts(
     let mut parts = Vec::new();
     let mut ordinal = 0;
     fields.walk(&projections, |index, _, type_| {
+        // A field is described by its place among the plain fields, which is what a literal counts.
         if marks[index] == Plicity::Explicit {
             ordinal += 1;
-            let label = labels[index].as_str();
-            let payload = Payload::new(name, None, label, ordinal);
-            parts.push(classify(context, site, &mut opened, index, payload, type_)?);
         }
+        let label = labels[index].as_str();
+        let payload = Payload::new(name, None, label, ordinal);
+        parts.extend(member(
+            context,
+            site,
+            &mut opened,
+            (index, payload),
+            type_,
+            marks[index],
+        )?);
         Ok::<(), Error>(())
     })?;
     Ok(parts)
@@ -517,10 +552,15 @@ fn spell_body(
                 .map(|classified| {
                     let read =
                         Term::proj_struct(Term::free_var(&value), *name, classified.position);
-                    Term::tuple([
-                        str_literal(string, classified.payload.label.as_bytes()),
-                        spell(context, classified, read),
-                    ])
+                    let spelled = spell(context, classified, read);
+                    let label = &classified.payload.label;
+                    // A hidden field is written under its mark: `@label = value` where it has a label, `@value` where it has none.
+                    let (label, spelled) = match (classified.hidden, label.is_empty()) {
+                        (true, false) => (format!("@{label}"), spelled),
+                        (true, true) => (String::new(), syn_call(row.hidden, [spelled])),
+                        (false, _) => (label.clone(), spelled),
+                    };
+                    Term::tuple([str_literal(string, label.as_bytes()), spelled])
                 })
                 .collect::<Vec<_>>();
             let items = list(context, entries);
@@ -543,7 +583,11 @@ fn spell_body(
                     .iter()
                     .map(|classified| {
                         let read = Term::free_var(&binders[classified.position]);
-                        spell(context, classified, read)
+                        let spelled = spell(context, classified, read);
+                        match classified.hidden {
+                            true => syn_call(row.hidden, [spelled]),
+                            false => spelled,
+                        }
                     })
                     .collect::<Vec<_>>();
                 let items = list(context, pieces);
@@ -576,7 +620,7 @@ fn spell_body(
 
 /// The `Hash` witness record: `hash` over the derived encoding.
 ///
-/// One arm per constructor, each `Hash/tagged(ordinal, [hash(p₀), …])` — the constructor's position followed by its explicit payloads' encodings, every part framed by `tagged` so that no two distinct values share a byte string. A struct has one shape and takes ordinal zero.
+/// One arm per constructor, each `Hash/tagged(ordinal, [hash(p₀), …])` — the constructor's position followed by the encodings of its payloads that take part, every part framed by `tagged` so that no two distinct values share a byte string. A struct has one shape and takes ordinal zero.
 ///
 /// **A proof payload is omitted rather than encoded.** `Spell` renders one as `"?"` because a reader wants to see it; here two values differing only in a proof *are* the same value, so giving them different encodings would be wrong — and erasure drops the payload anyway, so nothing could produce the bytes at run time.
 fn hash_body(
