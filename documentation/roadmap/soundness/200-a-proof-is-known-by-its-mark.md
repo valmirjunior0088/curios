@@ -17,7 +17,7 @@
 
 **A mark is not exact, so nothing may read it in its type's place.** A binder at a proposition may bear no mark, and a function type's and a motive's binders state none. A reader that took the mark for the sort would hold two proofs apart wherever the mark is missing, and labels are outside a scope's identity, so two terms that differ in a mark are one term to every store.
 
-**Erasure decides what is kept by reducing a type.** `is_erasable` (`curios-erase/src/classify.rs`) reads a sort where the mark already says it. [A finished term is erased through the kernel that certified it](../compilation/304-a-finished-term-is-erased-through-the-kernel-that-certified-it.md) has `curios-erase` read through the kernel, and leaves relevance read off a sort until a mark is exact: `curios-erase` is this mark's consumer, and reads it where it reads a sort.
+**`curios-erase` decides what is kept by reducing a type.** `is_erasable` (`curios-erase/src/read.rs`) reads a sort through the kernel that certified the term ([`curios-erase`'s README](../../../curios-erase/README.md#erasure-reads-through-the-kernel-that-certified-the-term)) where the mark already says it, and reads relevance off a sort until a mark is exact: `curios-erase` is this mark's consumer, and reads it where it reads a sort.
 
 ## The form
 
@@ -27,7 +27,7 @@
 
 **Conversion between two terms handed no type asks that and nothing else.** Two proofs are one; anything else is compared by its head. What is remembered of two terms then stands for as long as the equations it read do, and the clearing at an arm's close goes.
 
-**Erasure reads the mark where it reads a sort.**
+**`curios-erase` reads the mark where it reads a sort.**
 
 ## Not known
 
