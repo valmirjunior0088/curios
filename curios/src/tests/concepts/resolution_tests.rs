@@ -1,6 +1,9 @@
 //! Resolving a witness through the table: a method wrapper, a premise, an explicit override, several parameters, a later declaration and the operator concepts — and what a premise may be.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 // The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to the `Show(Nat)` witness.
 #[test]
@@ -249,6 +252,37 @@ fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
         report.contains("write 'Nat' where the signature computes it"),
         "expected the way out:\n{report}"
     );
+}
+
+// A definition applied under a function's binder is not read through, so the head it names is the definition itself, which keys no declared type: the witness is refused as unkeyable, not as one keyed at the definition with advice to write what is already written. A name bound to the type former is a definition alike.
+#[test]
+fn a_witness_keyed_through_a_definition_under_its_binder_cannot_be_keyed() {
+    for through in [
+        "let through(S: Type, A: Type) -> Type = Box(S, A);",
+        "let through : (Type, Type) -> Type = Box;",
+    ] {
+        let source = fill!(
+            r#"
+            use /std/{Nat, Str};
+            induct Box(S: Type, A: Type): Type | box(A) end
+            concept Tag(F: (Type) -> Type): Type { name: Nat }
+            ${through}
+            satisfy (@S: Type) => Tag((A: Type) => through(S, A)) { name = 1 }
+            /std/print("no")
+            "#,
+            through,
+        );
+
+        let report = error(&source);
+        assert!(
+            report.contains("this witness cannot be keyed"),
+            "expected the unkeyable report:\n{report}"
+        );
+        assert!(
+            !report.contains("head 'through'") && !report.contains("write 'through'"),
+            "expected no key at the definition:\n{report}"
+        );
+    }
 }
 
 // A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`: it is strictly smaller than the head, so resolution through it still decreases. The transformer's `Io` edge is then written once for every base, and here it resolves at base `Io` through the prelude's identity edge, `Lift(Io, Io)`.

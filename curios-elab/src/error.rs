@@ -1010,7 +1010,7 @@ pub enum Error {
         concept: Global,
         target: Box<Term>,
     },
-    /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or intrinsic head — nothing to key the table entry on.
+    /// A witness's concept parameter at `position` (0-based) does not reduce to a keyable head — a declared type, an intrinsic type or a tuple type, or a function whose body applies one as written — nothing to key the table entry on.
     InvalidWitnessHead {
         position: usize,
         head: Box<Term>,

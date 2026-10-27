@@ -1054,7 +1054,13 @@ fn read_witness_signature(
     let mut heads = Vec::with_capacity(params.len());
     for (position, param) in params.iter().enumerate() {
         let head = reduce_with(context, param)?;
-        let Some(head) = HeadKey::of_whnf(&head) else {
+        // A function's body names whatever global heads its application, and reduction does not read a definition through under a binder: a nominal key is one only where it names a declared type, which is the key every goal at it reaches.
+        let Some(head) = HeadKey::of_whnf(&head).filter(|key| match key {
+            HeadKey::Nominal(name) => {
+                context.induct_decl(name).is_some() || context.struct_decl(name).is_some()
+            }
+            _ => true,
+        }) else {
             return Err(Error::invalid_witness_head(position, head));
         };
         heads.push(head);
