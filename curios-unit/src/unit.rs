@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        Indexed, Kind, anchors_indexed, apart_parts, digests, found, halved, halves,
+        Indexed, Kind, anchors_indexed, apart_parts, asked_indexed, digests, found, halved, halves,
         imports_indexed, lowering_indexed, reads_indexed, traces_indexed,
     },
     curios_abi::ForeignStore,
@@ -11,7 +11,7 @@ use {
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_text::PreparedText,
-    curios_utilities::{Digest, Facet, Mount, Object, Recorded},
+    curios_utilities::{Digest, Mount, Object, Recorded},
     std::{cell::OnceCell, rc::Rc},
 };
 
@@ -113,13 +113,13 @@ impl Produced {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item asked ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
+    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item read ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
     ///
     /// **With `candidates`, what a store files: each stage's records completed** ([`Candidating::complete`], [`ErasedUnit::complete`]), where a filing has not completed them, with what each declaration was made from, read and made, and named by those, so a store finds them by what each was made from.
     fn indexed(
         &self,
         unit: &[u8],
-        reads: Option<(&[u8], Kind)>,
+        (reads, certification): (Option<(&[u8], Kind)>, &Certification),
         candidates: bool,
     ) -> Result<Indexed, String> {
         let items = self.text.items_objects()?;
@@ -133,6 +133,7 @@ impl Produced {
             self.erased.complete(
                 &self.core,
                 self.places(),
+                certification,
                 &named.iter().copied().collect(),
                 &self
                     .core
@@ -146,8 +147,8 @@ impl Produced {
             core: Rc::clone(&self.core),
             named,
         };
-        let (traces_table, traces) = traces_indexed(&self.traces, Facet::Elaboration)?;
-        let (asked_table, asked) = traces_indexed(self.erased.recorded(), Facet::Erasure)?;
+        let (traces_table, traces) = traces_indexed(&self.traces)?;
+        let (asked_table, asked) = asked_indexed(self.erased.recorded())?;
         let (text, lowering) = lowering_indexed(&self.text)?;
         let (imports, scopes) = imports_indexed(&self.text)?;
         let (anchors, places) = anchors_indexed(&self.text)?;
@@ -387,7 +388,8 @@ impl Unit {
         let unit = curios_archive::to_bytes(self)?;
         let (table, reads) = reads_indexed(self.certification.recorded())?;
 
-        self.unit.indexed(&unit, Some((&table, reads)), true)
+        self.unit
+            .indexed(&unit, (Some((&table, reads)), &self.certification), true)
     }
 
     /// This unit as the fixed prelude images it: [`Unit::stored`]'s form, with no stage's records completed, since no store files the compiler's own units and finds their declarations by what each was made from.
@@ -395,7 +397,8 @@ impl Unit {
         let unit = curios_archive::to_bytes(self)?;
         let (table, reads) = reads_indexed(self.certification.recorded())?;
 
-        self.unit.indexed(&unit, Some((&table, reads)), false)
+        self.unit
+            .indexed(&unit, (Some((&table, reads)), &self.certification), false)
     }
 
     /// The unit whose index is `index` ([`Unit::stored`]), each object it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or an object `find` holds none for.

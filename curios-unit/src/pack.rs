@@ -4,7 +4,7 @@
 //!
 //! **A function of what it holds.** Objects are laid out in the order of their names, each once, so two filers packing the same objects write the same bytes, under the same name.
 //!
-//! **An object is its bytes, or a member of them.** An entry names the run of the pack an object lies in, and where that run holds several objects archived together, which of them it is and what kind of run it is: the elaborated declarations of one pack share one table of nodes ([`curios_core::ItemRun`]), and the traces one table of names ([`curios_elab::TraceTable`]), so a node or a name two of them hold is stored and restored once, and each is still named by the digest of its form archived alone, which no pack's choice of neighbours moves. A merge of packs runs each kind's members again into one run of it ([`repacked`], [`rerun`]), so a pack keeps one table a kind however it was made.
+//! **An object is its bytes, or a member of them.** An entry names the run of the pack an object lies in, and where that run holds several objects archived together, which of them it is and what kind of run it is: the elaborated declarations of one pack share one table of nodes ([`curios_core::ItemRun`]), and the elaborator's traces, the certifier's reads and erasure's records each one table of names ([`curios_elab::TraceTable`], [`curios_core::ReadTable`], [`curios_erase::AskedTable`]), so a node or a name two of them hold is stored and restored once, and each is still named by the digest of its form archived alone, which no pack's choice of neighbours moves. A merge of packs runs each kind's members again into one run of it ([`repacked`], [`rerun`]), so a pack keeps one table a kind however it was made.
 
 #[cfg(test)]
 mod tests;
@@ -13,6 +13,7 @@ use {
     curios_archive::Bytes,
     curios_core::{ItemRun, ReadEntry, ReadTable},
     curios_elab::{TraceTable, TracedEntry},
+    curios_erase::{AskedEntry, AskedTable},
     curios_utilities::{Digest, Member, Object},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -269,6 +270,13 @@ pub fn rerun(kind: u8, members: &[Object]) -> Result<Vec<Object>, String> {
                 entries
                     .iter()
                     .map(|entry: &&ReadEntry| (&entry.0, &entry.1, entry.2.as_ref())),
+            )
+        }),
+        AskedTable::KIND => rerun_with(kind, members, AskedTable::read, |entries| {
+            AskedTable::run(
+                entries
+                    .iter()
+                    .map(|entry: &&AskedEntry| (&entry.0, &entry.1, entry.2.as_ref())),
             )
         }),
         other => Err(format!("no run is of kind {other}")),

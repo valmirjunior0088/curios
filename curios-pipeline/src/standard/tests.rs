@@ -6,8 +6,8 @@ use {
         Cache, DEFAULT_BUDGET, Earlier, Fold, Over, compile_unit, compile_unit_over,
         complete_records, recheck_over,
         tests::test_support::{
-            Store, assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
-            lowering_stored, restored, traces_stored,
+            Store, asked_stored, assert_stored_alike, compile_with_units, elaborated_above,
+            elaborated_wholesale, lowering_stored, restored, traces_stored,
         },
     },
     curios_anf::FieldShape,
@@ -234,11 +234,11 @@ fn std_unit_reproduction() {
             differing.push("what its declarations asked".to_string());
         }
         let erasures = |unit: &Unit| {
-            traces_stored(
+            asked_stored(
                 unit.erased()
                     .recorded()
                     .get()
-                    .expect("an erased unit's traces restore"),
+                    .expect("what erasing a unit read restores"),
             )
         };
         if erasures(&first) != erasures(&second) {
@@ -444,7 +444,14 @@ fn std_part_digest_census() {
         let held = compile_unit(DEFAULT_BUDGET, Predecessors::over(&roots), &SYNTAX, &unit)
             .expect("the library compiles");
         let stored = restored(&held);
-        let digests = |unit: &Unit| part_digests(unit.core(), unit.places(), unit.erased());
+        let digests = |unit: &Unit| {
+            part_digests(
+                unit.core(),
+                unit.places(),
+                unit.certification(),
+                unit.erased(),
+            )
+        };
         let (now, then) = (digests(&held), digests(&stored));
 
         let differing = now
@@ -605,7 +612,7 @@ fn std_image_division() {
             .map_or(0, |member| member.bytes.as_slice().len());
         let (lowered, forms) = (alone(0..lowered), alone(lowered..lowered + forms));
         let asked = traces_stored(std.traces()).len();
-        let erasures = traces_stored(
+        let erasures = asked_stored(
             std.erased()
                 .recorded()
                 .get()

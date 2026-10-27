@@ -142,7 +142,7 @@ pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     (length <= rest.len()).then(|| rest.split_at(length))
 }
 
-/// The thirteen parts of what a unit stores apart from itself ([`Unit::stored`](crate::Unit::stored)), each a run of the buffer `stored` is in: the digests of its lowered items, of its erased forms, of its elaborated items, of what each declaration asked as it elaborated, of what erasing each item asked, of the lowering's records and scans, of its import scopes and of each source's texts (`digests`), where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, the text's part of its baseline half, and the rest of the elaborator's and erasure's. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
+/// The thirteen parts of what a unit stores apart from itself ([`Unit::stored`](crate::Unit::stored)), each a run of the buffer `stored` is in: the digests of its lowered items, of its erased forms, of its elaborated items, of what each declaration asked as it elaborated, of what erasing each item read, of the lowering's records and scans, of its import scopes and of each source's texts (`digests`), where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, the text's part of its baseline half, and the rest of the elaborator's and erasure's. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
 pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 13]> {
     parted(stored)?.try_into().ok()
 }

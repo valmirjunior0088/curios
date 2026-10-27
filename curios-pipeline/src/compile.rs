@@ -276,7 +276,7 @@ pub(crate) fn erasure_refusal(
         text,
         predecessors,
         syntax,
-        |reading| CompileError::Failure(error.reports(reading)),
+        |reading| CompileError::Failure(error.reports(reading.spelling(), reading.anchors)),
     )
 }
 
@@ -919,6 +919,7 @@ impl Entered {
         let scope = Predecessors::over(&units);
         let cores = scope.cores();
         let places = scope.places();
+        let certifications = scope.certifications();
         let erased = scope.erased();
         // Erased through the kernel that judges the term: put to it again over the same scope, since the walk that certified it when it was entered keeps no kernel past itself, and a program's module holds nothing else to judge.
         let globals = globals(scope);
@@ -926,7 +927,7 @@ impl Entered {
 
         let mut linked = erase_program(
             &mut kernel,
-            Erasures::of(&cores, &places, &erased),
+            Erasures::of(&cores, &places, &certifications, &erased),
             &self.program,
         )
         .map_err(|error| {
@@ -1367,8 +1368,9 @@ pub(crate) fn compile_lowered(
     }
 
     let places = predecessors.places();
+    let certifications = predecessors.certifications();
     let erased = predecessors.erased();
-    let scope = Erasures::of(&cores, &places, &erased).fixed(&fixed);
+    let scope = Erasures::of(&cores, &places, &certifications, &erased).fixed(&fixed);
     let anf = erase_unit(&mut kernel, scope, &core).map_err(|error| {
         let refusal = erasure_refusal(
             &error,

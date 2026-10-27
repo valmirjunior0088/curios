@@ -2,34 +2,28 @@
 //!
 //! Behind the `test-support` feature, so no build that ships holds it. What it hands out is owned and names a family by its spelling, since a family's identity is its fragment's own and means nothing outside it.
 
-use {
-    crate::ErasedUnit,
-    curios_elab::{Parts, Question, part_digest},
-};
+use crate::{ErasedUnit, NamedPart, Part, declared_digest, erased_digest};
 
-/// The digest of every part of every declaration `module` holds where `places` keeps it, of how an item naming each name reads `erased`'s form of it, and of that form whole, each beside the question it answers: what a unit records of a read. A unit held in hand and the same unit restored from a store are read alike by a unit compiled over either only where these agree.
+/// The digest of every part of every declaration `module` holds where `places` keeps it, under the record `certification` its walk filed: each signature, body and kind, how an item naming each name reads `erased`'s forms of it, and those forms whole, each beside the name and part it is of. What a unit records of a read: a unit held in hand and the same unit restored from a store are read alike by a unit compiled over either only where these agree.
 pub fn part_digests(
     module: &curios_core::Module,
     places: &curios_core::Places,
+    certification: &curios_core::Certification,
     erased: &ErasedUnit,
-) -> Vec<(Question, Result<Option<String>, String>)> {
+) -> Vec<(NamedPart, Result<Option<String>, String>)> {
     module
         .items
         .places()
         .flat_map(|place| module.items.names(place).into_iter().copied())
-        .flat_map(|name| Parts::ALL.questions(name))
-        .map(|question| {
-            let digest = match (
-                question,
-                question.subject().and_then(|name| erased.place(name)),
-            ) {
-                (Question::Erased(name), Some(at)) => erased.item(at).read_digest(&name).map(Some),
-                (Question::Ran(_), Some(at)) => erased.form_digest(at).map(Some),
-                (Question::Erased(_) | Question::Ran(_), None) => Ok(None),
-                (part, _) => part_digest(module, places, &part),
+        .flat_map(|name| Part::ALL.map(|part| (name, part)))
+        .map(|read| {
+            let digest = match (read.1, erased.place(&read.0)) {
+                (Part::Binding | Part::Forms, Some(at)) => erased_digest(erased, at, read),
+                (Part::Binding | Part::Forms, None) => Ok(None),
+                _ => declared_digest(module, places, certification, read),
             };
 
-            (question, digest)
+            (read, digest)
         })
         .collect()
 }

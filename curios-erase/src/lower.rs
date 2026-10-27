@@ -4,18 +4,17 @@
 
 use {
     crate::{
-        AtSorts, Binding, Environment, ErasedBaseline, ErasedForms, ErasedItem, ErasedOver,
-        ErasedUnit, Erasures, Error, Export, Sorts, declared, emitted, evaluate, link, reduced,
-        register_shape,
+        Asked, AskedBy, AskedItems, AskedRecord, AtSorts, Binding, Environment, ErasedBaseline,
+        ErasedForms, ErasedItem, ErasedOver, ErasedUnit, Erasures, Error, Export, Part, Sorts,
+        declared, emitted, evaluate, link, reduced, register_shape,
     },
     curios_cert::Reader,
     curios_core::Bound,
-    curios_elab::{Answered, Foreign, Parts, Question, Readers, TraceRecord, Traces},
     curios_utilities::{grown, recurse},
     std::{
         borrow::Cow,
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
         sync::Arc,
     },
@@ -596,7 +595,7 @@ pub fn erase_unit(
     })
 }
 
-/// [`erase_unit`] for a unit compiled over a baseline: an item keeps the erased forms `baseline` has for it, the baseline's own and no copy of them, where the elaborator kept its declaration and everything its erasure asked there is answered as it was (`over`), and every other is erased. The walk visits the items an edit could reach and no other; where the module is a version of the baseline's, the unit is a version of the baseline's unit.
+/// [`erase_unit`] for a unit compiled over a baseline: an item keeps the erased forms `baseline` has for it, the baseline's own and no copy of them, where the elaborator kept its declaration and everything its erasure read there digests as it did (`over`), and every other is erased. The walk visits the items an edit could reach and no other; where the module is a version of the baseline's, the unit is a version of the baseline's unit.
 pub fn erase_unit_over(
     kernel: &mut curios_cert::Kernel<'_>,
     scope: Erasures<'_>,
@@ -645,9 +644,9 @@ pub fn erase_program(
     })
 }
 
-/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name. What erasing each item asked is kept with the unit: of the declarations around it, through the kernel's reads, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
+/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name. What erasing each item read is kept with the unit ([`AskedItems`]): of the declarations around it, their signatures and bodies through the kernel's reads and their kinds off their items, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
 ///
-/// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure asked, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
+/// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure read, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
 pub fn erase_items(
     reader: &mut Reader,
     scope: Erasures<'_>,
@@ -666,9 +665,9 @@ pub fn erase_items(
                 unit.forget(*place, &baseline.core.items.names(*place));
             }
 
-            (unit, baseline.erased.traces().clone())
+            (unit, baseline.erased.asked_items().clone())
         }
-        None => (ErasedUnit::default(), Traces::default()),
+        None => (ErasedUnit::default(), AskedItems::default()),
     };
     if shared.is_some()
         && let Some(over) = &over
@@ -708,16 +707,16 @@ pub fn erase_items(
                 record
             }
             (None, None) => {
-                let (erased, trace) = erase_forms(reader, scope, &unit, (module, places), item)?;
-                // One sample for each item erased, with how much its erasure asked.
-                curios_profile::sample!("erase::asked", trace.len());
+                let (erased, read) = erase_forms(reader, scope, &unit, (module, places), item)?;
+                // One sample for each item erased, with how much its erasure read.
+                curios_profile::sample!("erase::asked", read.len());
                 unit.push(place, item, erased);
 
-                Rc::new(TraceRecord::new(trace))
+                Rc::new(AskedRecord::new(read))
             }
         };
         made.extend(names.first().map(|name| **name));
-        // A trace is filed under the first name, so one the baseline filed under another is a declaration this one now holds the name of.
+        // A record is filed under the first name, so one the baseline filed under another is an item this one now holds the name of.
         for name in names.iter().skip(1) {
             asked.forget(name);
             others.push(**name);
@@ -726,7 +725,7 @@ pub fn erase_items(
             asked.share(**name, record);
         }
     }
-    // Who asked what of the unit's traces: the baseline's, with the edges of every item erased again, or no longer held, replaced.
+    // Who read what of the unit's records: the baseline's, with the edges of every item erased again, or no longer held, replaced.
     let readers = over.as_ref().map(|over| {
         let earlier = over.earlier();
         let mut readers = earlier.readers().clone();
@@ -754,81 +753,82 @@ pub fn erase_items(
     })
 }
 
-/// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`). What will not digest is recorded nowhere, and a read with no record does not stand.
-fn note_foreign(asked: &mut Traces, unit: &ErasedUnit, scope: Erasures<'_>) {
-    let mut read = Foreign::default();
-    for trace in asked.each() {
-        for part in foreign_parts(trace, unit, scope) {
-            if read.digest(&part).is_none()
-                && let Ok(digest) = scope.part_digest(&part)
-            {
-                read.record(part, digest);
-            }
+/// Record what erasing `unit`'s items read of declarations the unit does not hold, each part by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by. What will not digest is recorded nowhere, and a read with no record does not stand.
+fn note_foreign(asked: &mut AskedItems, unit: &ErasedUnit, scope: Erasures<'_>) {
+    let parts = asked
+        .records()
+        .flat_map(|(_, record)| foreign_parts(record, unit, scope))
+        .collect::<BTreeSet<_>>();
+    for part in parts {
+        if let Ok(digest) = scope.part_digest(part) {
+            asked.record_abroad(part, digest);
         }
     }
-    asked.read(Rc::new(read));
 }
 
-/// [`note_foreign`] for an erasure over a baseline, as elaboration revises its own: the baseline's table, revised where an item was erased again or dropped ([`Foreign::revised`]). A part a kept form's erasure read of a unit that moved digests to what it did, or the form would have been erased again, so its record stands; and an erasure that erased and dropped nothing, in a scope that did not move, holds the baseline's table.
+/// [`note_foreign`] for an erasure over a baseline: the baseline's table, revised where an item was erased again or dropped. Each part an item erased again reads now is recorded, digested again where nothing was recorded of it or the unit declaring it moved, and taken out where it will not digest; each part an item erased again or dropped read before is taken out where no item reads it now; and each part of a name the unit declares now and the baseline did not is taken out. A part a kept form's erasure read of a unit that moved digests to what it did, or the form would have been erased again, so its record stands; and an erasure that erased and dropped nothing, in a scope that did not move, holds the baseline's table.
 fn revise_foreign(
-    asked: &mut Traces,
+    asked: &mut AskedItems,
     unit: &ErasedUnit,
     scope: Erasures<'_>,
     over: &ErasedOver<'_>,
     made: &[curios_core::Global],
     others: &[curios_core::Global],
-    readers: &Readers,
+    readers: &AskedBy,
 ) {
     let (earlier, baseline) = (over.earlier(), over.baseline());
+    asked.read_abroad_of(earlier.asked_items());
     if scope.settled() && made.is_empty() && over.lost().is_empty() {
-        asked.read(Rc::clone(earlier.foreign()));
         return;
     }
 
     let read = made
         .iter()
         .filter_map(|name| asked.held(name))
-        .flat_map(|trace| foreign_parts(trace, unit, scope))
-        .collect::<Vec<_>>();
+        .flat_map(|record| foreign_parts(record, unit, scope))
+        .collect::<BTreeSet<_>>();
     let dropped = made
         .iter()
         .chain(others)
         .chain(over.lost())
         .filter_map(|name| earlier.asked(name))
-        .flat_map(|trace| foreign_parts(trace, unit, scope))
-        .collect::<Vec<_>>();
+        .flat_map(|record| foreign_parts(record, unit, scope))
+        .collect::<BTreeSet<_>>();
+    for (name, part) in read {
+        if asked.abroad(&name, part).is_some() && scope.unmoved(&name) {
+            continue;
+        }
+        match scope.part_digest((name, part)) {
+            Ok(digest) => asked.record_abroad((name, part), digest),
+            Err(_) => asked.forget_abroad((name, part)),
+        }
+    }
+    for (name, part) in dropped {
+        if !readers.asks(&name, part) {
+            asked.forget_abroad((name, part));
+        }
+    }
     // A name the unit declares now and the baseline did not is read of the unit, no other.
-    let declared = baseline
+    for name in baseline
         .made
         .iter()
         .filter(|name| baseline.places.place(name).is_none())
-        .flat_map(|name| Parts::ALL.questions(*name));
-    let revised = earlier.foreign().revised(
-        read,
-        dropped,
-        declared,
-        |part| part.subject().is_some_and(|name| !scope.unmoved(name)),
-        |part| scope.part_digest(part),
-        |part| readers.asks(part),
-    );
-    asked.read(Rc::new(revised));
+    {
+        for part in Part::ALL {
+            asked.forget_abroad((*name, part));
+        }
+    }
 }
 
-/// The parts `trace` reads of declarations `unit` does not hold, as the table of them records each: every part asked; none of a declaration of a fixed unit.
+/// The parts `asked` reads of declarations `unit` does not hold, as the table of them records each: none of a declaration of a fixed unit.
 fn foreign_parts<'t>(
-    trace: &'t curios_core::Trace<Question, Answered>,
+    asked: &'t Asked,
     unit: &'t ErasedUnit,
     scope: Erasures<'t>,
-) -> impl Iterator<Item = Question> + 't {
-    trace
-        .asked()
-        .iter()
-        .filter_map(move |(question, answered)| {
-            let name = question.subject()?;
-
-            (*answered == Answered::Part && unit.place(name).is_none() && scope.recorded(name))
-                .then_some(*question)
-        })
+) -> impl Iterator<Item = (curios_core::Global, Part)> + 't {
+    asked
+        .reads()
+        .filter(move |(name, _)| unit.place(name).is_none() && scope.recorded(name))
 }
 
 /// Erase `item` into a form at each assignment of the sorts it leaves to its caller, each read at its assignment as the kernel judged it, with what erasing them asked between them.
@@ -838,9 +838,9 @@ fn erase_forms(
     unit: &ErasedUnit,
     (module, places): (&curios_core::Module, &curios_core::Places),
     item: &curios_core::Item,
-) -> Result<(ErasedForms, curios_core::Trace<Question, Answered>), Error> {
+) -> Result<(ErasedForms, Asked), Error> {
     let names = item.declared_names();
-    let mut asked = Asked::of(&names);
+    let mut asked = Asking::of(&names);
     let mut forms = Vec::new();
     for sorts in Sorts::every(left_open(item)) {
         let (erased_read, declared_read) = (RefCell::new(Vec::new()), RefCell::new(Vec::new()));
@@ -861,18 +861,18 @@ fn erase_forms(
         )?;
         asked.read(reader.take_reads(), declared_read.take());
         for name in erased_read.take() {
-            asked.note(Question::Erased(name));
+            asked.note(name, Part::Binding);
         }
         // What the item's top-level statements compute is computed here, and its trace says what that ran whether or not it could be finished.
         let erased = match evaluate(scope, unit, (&erased, sorts)) {
             Some(evaluation) => {
                 for name in &evaluation.ran {
-                    asked.note(Question::Ran(*name));
+                    asked.note(*name, Part::Forms);
                 }
                 match evaluation.erased {
                     Some(evaluated) => {
                         for (name, _) in evaluated.environment().imported_rows() {
-                            asked.note(Question::Erased(*name));
+                            asked.note(*name, Part::Binding);
                         }
 
                         evaluated
@@ -887,7 +887,7 @@ fn erase_forms(
     let forms = ErasedForms::of(forms)
         .unwrap_or_else(|error| panic!("an erased form failed to archive: {error}"));
 
-    Ok((forms, asked.trace))
+    Ok((forms, asked.asked))
 }
 
 /// How many sorts `item` leaves to its caller: its definition's or its group's.
@@ -929,50 +929,37 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
     })
 }
 
-/// What erasing an item's forms asked, each question once, in the order first asked: the kernel's reads of the declarations around it read as the parts they are, the kinds and bodies erasure read off their items, and the erased forms it read. Nothing asked of a name the item declares is kept, as the item's own.
-struct Asked<'a> {
+/// What erasing an item's forms asked, as it is asked: the kernel's reads of the declarations around it, read as the parts they are, the kinds and bodies erasure read off their items, and the erased forms it read. Nothing asked of a name the item declares is kept, as the item's own.
+struct Asking<'a> {
     own: &'a [&'a curios_core::Global],
-    noted: HashSet<Question>,
-    trace: curios_core::Trace<Question, Answered>,
+    asked: Asked,
 }
 
-impl<'a> Asked<'a> {
+impl<'a> Asking<'a> {
     fn of(own: &'a [&'a curios_core::Global]) -> Self {
         Self {
             own,
-            noted: HashSet::new(),
-            trace: curios_core::Trace::default(),
+            asked: Asked::default(),
         }
     }
 
-    fn note(&mut self, question: Question) {
-        let own = question
-            .subject()
-            .is_some_and(|name| self.own.contains(&name));
-        if !own && self.noted.insert(question) {
-            self.trace.record(question, Answered::Part);
+    fn note(&mut self, name: curios_core::Global, part: Part) {
+        if !self.own.contains(&&name) {
+            self.asked.note(name, part);
         }
     }
 
-    /// What the kernel read while erasure read through it, and the definitions erasure read the kind and body of. The kernel's record says a declaration's signature or its body was read, coarser than the parts a recompile digests, so a signature read asks every part a reading of one could have met.
+    /// What the kernel read while erasure read through it, and the definitions erasure read the kind and body of off their items.
     fn read(&mut self, reads: curios_core::Reads, declared: Vec<curios_core::Global>) {
         for name in reads.signatures {
-            for question in [
-                Question::Signature(name),
-                Question::Sort(name),
-                Question::Kind(name),
-                Question::Induct(name),
-                Question::Struct(name),
-            ] {
-                self.note(question);
-            }
+            self.note(name, Part::Signature);
         }
         for name in reads.bodies {
-            self.note(Question::Body(name));
+            self.note(name, Part::Body);
         }
         for name in declared {
-            self.note(Question::Kind(name));
-            self.note(Question::Body(name));
+            self.note(name, Part::Kind);
+            self.note(name, Part::Body);
         }
     }
 }

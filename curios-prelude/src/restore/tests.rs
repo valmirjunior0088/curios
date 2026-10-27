@@ -698,6 +698,7 @@ fn stored_prelude_measurements() {
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
         let mut cores = Vec::new();
         let mut places = Vec::new();
+        let mut records = Vec::new();
         let mut units = Vec::new();
 
         for (index, root) in prelude.iter().enumerate() {
@@ -717,8 +718,12 @@ fn stored_prelude_measurements() {
             let heaviest = kernel.heaviest_declaration();
 
             let start = Instant::now();
-            erase_unit(&mut kernel, Erasures::of(&cores, &places, &units), &zonked)
-                .expect("a stored prelude root re-erases");
+            erase_unit(
+                &mut kernel,
+                Erasures::of(&cores, &places, &records, &units),
+                &zonked,
+            )
+            .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
 
             let definitions: usize = core
@@ -764,6 +769,7 @@ fn stored_prelude_measurements() {
 
             cores.push(core);
             places.push(root.places());
+            records.push(root.certification());
             units.push(root.erased());
         }
 

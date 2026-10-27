@@ -131,6 +131,7 @@ fn erases(source: &str, budget: u64) -> bool {
             Erasures::of(
                 &predecessors.cores(),
                 &predecessors.places(),
+                &predecessors.certifications(),
                 &predecessors.erased(),
             ),
             &program,

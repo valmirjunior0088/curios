@@ -1,4 +1,4 @@
-//! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
+//! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure read digests as it did.
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_erase::ErasedBaseline`).
 //!
@@ -26,9 +26,9 @@ use {
 ///
 /// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 ///
-/// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
+/// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
 ///
-/// **`candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_elab::ErasedOver`, `curios_cert::certify_module_over`).
+/// **`candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_module_over`).
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -224,22 +224,25 @@ pub(crate) fn compile_lowered_over(
     }
     let certification = rechecked.certification;
 
-    // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and what its erasure asked is answered as it was.
+    // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and everything its erasure read digests as it did.
     let scope_places = predecessors.places();
+    let certifications = predecessors.certifications();
     let erased = predecessors.erased();
     let anf = erase_unit_over(
         &mut kernel,
-        Erasures::of(&cores, &scope_places, &erased)
+        Erasures::of(&cores, &scope_places, &certifications, &erased)
             .fixed(&fixed)
             .after(moved),
         &core,
         ErasedBaseline {
             core: baseline.core(),
             places: baseline.places(),
+            certification: baseline.certification(),
             erased: baseline.erased(),
             made: &made,
             dropped: &dropped,
             now: &places,
+            recorded: &certification,
             candidates,
         },
     )

@@ -261,19 +261,29 @@ fn certified(
         .iter()
         .map(|unit| unit.places())
         .collect::<Vec<_>>();
+    let certifications = predecessors
+        .iter()
+        .map(|unit| unit.certification())
+        .collect::<Vec<_>>();
     let erased = predecessors
         .iter()
         .map(|unit| unit.erased())
         .collect::<Vec<_>>();
     let anf = erase_unit(
         &mut kernel,
-        Erasures::of(&cores, &places, &erased).fixed(&vec![true; predecessors.len()]),
+        Erasures::of(&cores, &places, &certifications, &erased)
+            .fixed(&vec![true; predecessors.len()]),
         &zonked,
     )
     .unwrap_or_else(|error| {
         panic!(
             "/{root} failed to erase: {}",
-            reported(|reading| error.format(reading), core, &cores, anchors)
+            reported(
+                |reading| error.format(reading.spelling(), reading.anchors),
+                core,
+                &cores,
+                anchors
+            )
         )
     });
 

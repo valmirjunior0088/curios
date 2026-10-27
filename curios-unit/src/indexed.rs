@@ -5,6 +5,7 @@ use {
     curios_archive::{Bytes, parted},
     curios_core::{Anchors, Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
+    curios_erase::{AskedItems, AskedTable, HeldAsked},
     curios_text::PreparedText,
     curios_utilities::{Digest, Facet, Member, Object, Recorded},
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
@@ -57,6 +58,8 @@ pub(crate) enum Kind {
     },
     /// Declarations' traces, each with its digest and the name it is filed under.
     Traces(Vec<(Digest, Global, HeldTrace)>),
+    /// What erasing items read, each record with its digest and the name it is filed under.
+    Asked(Vec<(Digest, Global, HeldAsked)>),
     /// What judging definitions read, each with its digest and the definition's name.
     Reads(Vec<(Digest, Global, HeldReads)>),
     /// The records and scans of a lowering's baseline half, each stored alone, by their digests.
@@ -83,6 +86,7 @@ impl Kind {
             Kind::Stored(objects) => Box::new(objects.iter().map(|object| &object.digest)),
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
+            Kind::Asked(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Lowering { digests, .. }
             | Kind::Imports { digests, .. }
@@ -134,6 +138,26 @@ impl Kind {
 
                 members(
                     TraceTable::KIND,
+                    entries.iter().map(|(digest, ..)| *digest),
+                    run,
+                )
+            }
+            Kind::Asked(entries) => {
+                let entries = entries
+                    .iter()
+                    .filter(|(digest, ..)| fresh(digest))
+                    .collect::<Vec<_>>();
+                if entries.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let run = AskedTable::run(
+                    entries
+                        .iter()
+                        .map(|(_, name, held)| (name, &***held, held.made())),
+                )?;
+
+                members(
+                    AskedTable::KIND,
                     entries.iter().map(|(digest, ..)| *digest),
                     run,
                 )
@@ -339,13 +363,8 @@ pub(crate) fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>,
     ))
 }
 
-/// What a unit stores of the traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each record by the digest it is stored under ([`curios_elab::TraceRecord::digest`]).
-///
-/// A record held is named as `facet`'s ([`curios_elab::TraceRecord::digest`]).
-pub(crate) fn traces_indexed(
-    recorded: &Recorded<Traces>,
-    facet: Facet,
-) -> Result<(Cow<'_, [u8]>, Kind), String> {
+/// What a unit stores of the elaborator's traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each record by the digest it is stored under, as elaboration's ([`curios_elab::TraceRecord::digest`]).
+pub(crate) fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -357,11 +376,35 @@ pub(crate) fn traces_indexed(
     let entries = traces
         .declarations()
         .map(|(name, held)| {
-            let digest = held.digest(facet, name)?;
+            let digest = held.digest(Facet::Elaboration, name)?;
 
             Ok((digest, *name, Rc::clone(held)))
         })
         .collect::<Result<_, String>>()?;
 
     Ok((Cow::Owned(table), Kind::Traces(entries)))
+}
+
+/// What erasing a unit's items read, as a unit stores it: the table archived with the unit, and each item's record an entry of erasure's kind, by the digest it is stored under. A record restored is stored again as the object it was found as.
+pub(crate) fn asked_indexed(
+    recorded: &Recorded<AskedItems>,
+) -> Result<(Cow<'_, [u8]>, Kind), String> {
+    if let Some((table, entries)) = recorded.as_stored() {
+        return Ok((
+            Cow::Borrowed(table.as_slice()),
+            Kind::Stored(entries.to_vec()),
+        ));
+    }
+    let asked = recorded.get()?;
+    let table = curios_archive::to_bytes(asked)?.to_vec();
+    let entries = asked
+        .records()
+        .map(|(name, held)| {
+            let digest = held.digest(name)?;
+
+            Ok((digest, *name, Rc::clone(held)))
+        })
+        .collect::<Result<_, String>>()?;
+
+    Ok((Cow::Owned(table), Kind::Asked(entries)))
 }

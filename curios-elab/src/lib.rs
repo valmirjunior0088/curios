@@ -4,7 +4,7 @@
 //!
 //! # What this stage starts from
 //!
-//! A compilation unit is elaborated *against* what is already in scope, and that scope is not part of the unit. [`Established`] carries it for elaboration, as a view a context reads through to where its own stores miss — a name's type and body, a registry entry, the witness at a key, each by reference into the unit that holds it — and `curios_erase::Erasures` carries it for erasure, pairing the Core of each unit in scope, read the same way out of its universes, with what its items erased to. `Established::nothing()` is a from-scratch elaboration, so one protocol serves both entry points instead of two implementations kept in agreement by reading.
+//! A compilation unit is elaborated *against* what is already in scope, and that scope is not part of the unit. [`Established`] carries it for elaboration, as a view a context reads through to where its own stores miss — a name's type and body, a registry entry, the witness at a key, each by reference into the unit that holds it — and `curios_erase::Erasures` carries it for erasure, pairing the Core of each unit in scope and the record its certification filed with what its items erased to. `Established::nothing()` is a from-scratch elaboration, so one protocol serves both entry points instead of two implementations kept in agreement by reading.
 //!
 //! That they are types rather than a re-seeded context and two values passed apart is `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`'s decision; the lowered module carries only its own items.
 //!

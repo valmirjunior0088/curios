@@ -2,7 +2,7 @@
 
 use {
     crate::Unit,
-    curios_core::{Anchors, Lexicon, Module, Places},
+    curios_core::{Anchors, Certification, Lexicon, Module, Places},
     curios_erase::ErasedUnit,
     curios_text::PreparedText,
 };
@@ -53,6 +53,11 @@ impl<'a> Predecessors<'a> {
     /// What a report spells each predecessor's names by, beside [`Predecessors::cores`]: the lexicon each keeps, made the first time a report is made over it.
     pub fn lexicons(&self) -> Vec<&'a Lexicon> {
         self.units.iter().map(|unit| unit.lexicon()).collect()
+    }
+
+    /// The record each predecessor's certification filed, beside [`Predecessors::cores`]: what `curios-erase`'s `Erasures` digests a part read of a unit under.
+    pub fn certifications(&self) -> Vec<&'a Certification> {
+        self.units.iter().map(|unit| unit.certification()).collect()
     }
 
     /// Where each predecessor holds each name, beside [`Predecessors::cores`]: for `curios-erase`'s `Erasures`, which reads a definition's kind off the item that declares it.

@@ -40,6 +40,15 @@ fn erase_alone(unit: &curios_core::Zonked<curios_core::Module>) -> Result<Erased
     erase_unit(&mut kernel, Erasures::nothing(), unit)
 }
 
+/// What certifying `unit` with nothing in scope records: what a part of the unit is digested under, by an erasure over it and by one of it.
+fn certified(unit: &curios_core::Zonked<curios_core::Module>) -> curios_core::Certification {
+    let globals = Globals::default();
+
+    certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX)
+        .0
+        .certification
+}
+
 /// [`erase_alone`] over `baseline`.
 fn erase_over(
     unit: &curios_core::Zonked<curios_core::Module>,
@@ -631,10 +640,12 @@ fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
+            certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
+            recorded: &certified(&edited),
             candidates: None,
         },
     )
@@ -655,10 +666,12 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
+            certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
+            recorded: &certified(&edited),
             candidates: None,
         },
     )
@@ -839,10 +852,12 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
+            certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("redone")]),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
+            recorded: &certified(&edited),
             candidates: None,
         },
     )
@@ -866,10 +881,12 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
+            certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
+            recorded: &certified(&edited),
             candidates: None,
         },
     )
@@ -879,7 +896,7 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
     assert_eq!(form(&over, "caller"), form(&whole, "caller"));
 }
 
-/// An erased form the elaborator kept is kept where everything its erasure asked is answered as it was, whatever was elaborated again beside it: `callee` is elaborated again to the constant it was, so `caller`, which read that binding, holds the baseline's own erased form.
+/// An erased form the elaborator kept is kept where everything its erasure read digests as it did, whatever was elaborated again beside it: `callee` is elaborated again to the constant it was, so `caller`, which read that binding, holds the baseline's own erased form.
 #[test]
 fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
     let (before, baseline) = calling(1);
@@ -890,10 +907,12 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
         ErasedBaseline {
             core: before.as_module(),
             places: &curios_core::Places::of(before.as_module()),
+            certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
             dropped: &BTreeSet::new(),
             now: &curios_core::Places::of(edited.as_module()),
+            recorded: &certified(&edited),
             candidates: None,
         },
     )
@@ -2236,18 +2255,13 @@ fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
 
         crate::reduced(reader, &sum).expect_err("a spent budget refuses the reading")
     });
-    let reading = curios_elab::Reading {
-        module: unit.as_module(),
-        kept: None,
-        scope: &[],
-        syntax: &SYNTAX,
-        spellings: None,
-        anchors: &[],
-        printer: None,
-    };
+    // Spelled as a report spells a unit's terms, the unit's own names by its lexicon.
+    let spelling = curios_core::Spelling::default()
+        .with_lexicons(&unit.as_module().lexicon(), &[])
+        .with_erased_universes();
 
     assert_eq!(
-        error.format(&reading),
+        error.format(spelling, &[]),
         "erasure ran out of steps reading: 2 + 3\n  recursion depth needed 1024 units with 0 left"
     );
 }

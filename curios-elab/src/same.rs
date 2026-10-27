@@ -1,6 +1,6 @@
 //! Which parts of a declaration elaborated again are the parts its baseline holds, as a unit stores them.
 //!
-//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was; so does an erased form, by what its erasure asked. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone, and a proof proved another way moves none that asked what it unfolds to, which is nothing whatever its body ([`curios_core::Definition::proof`]).
+//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone, and a proof proved another way moves none that asked what it unfolds to, which is nothing whatever its body ([`curios_core::Definition::proof`]).
 //!
 //! **Equal as stored, so by spelling.** A binder's name moves no judgment, and a term's equality reads none; it is in what a unit stores all the same, the declaration's own and a dependent's that was handed its signature. So a part is compared under its binders' names ([`Term::equal_modulo_metas`], over terms that hold no metavariable), and a parameter renamed is a signature changed. A position is in no comparison: a declaration moved, or respaced, has moved no part.
 //!
@@ -137,11 +137,7 @@ impl Same {
             Question::Induct(_) => self.induct,
             Question::Struct(_) => self.struct_,
             Question::Concept(_) => self.concept,
-            Question::Witness(..)
-            | Question::WitnessDeclared(..)
-            | Question::Lemmas
-            | Question::Erased(_)
-            | Question::Ran(_) => false,
+            Question::Witness(..) | Question::WitnessDeclared(..) | Question::Lemmas => false,
         }
     }
 }
@@ -309,11 +305,7 @@ pub fn item_part_digest(
                 )))
             })
             .transpose(),
-        Question::Witness(..)
-        | Question::WitnessDeclared(..)
-        | Question::Lemmas
-        | Question::Erased(_)
-        | Question::Ran(_) => Ok(None),
+        Question::Witness(..) | Question::WitnessDeclared(..) | Question::Lemmas => Ok(None),
     }
 }
 

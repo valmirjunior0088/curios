@@ -33,11 +33,11 @@ pub type Read = Option<Option<[u8; 32]>>;
 /// What a filing completes a declaration's trace with: what the declaration was made from, what each of its questions read and what it made. See the module documentation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Made {
-    /// What the declaration was made from: the digest of its lowered items for its elaboration ([`declaration_input`](crate::declaration_input)), the identity of its elaborated item for its erasure.
+    /// What the declaration was made from: the digest of its lowered items ([`declaration_input`](crate::declaration_input)).
     pub input: Digest,
     /// What each question read, in the trace's order.
     pub reads: Vec<Read>,
-    /// What it made, each by its identity: its elaborated items in the order of its lowered ones, or its erased form.
+    /// What it made, each by its identity: its elaborated items in the order of its lowered ones.
     pub outputs: Vec<Digest>,
     /// The written binders its proofs read, each by the name of its definition and its place among that definition's written binders.
     pub credited: Vec<(Global, u32)>,
@@ -284,11 +284,9 @@ impl Parts {
     pub const INDUCT: Parts = Parts(1 << 5);
     pub const STRUCT: Parts = Parts(1 << 6);
     pub const CONCEPT: Parts = Parts(1 << 7);
-    pub const ERASED: Parts = Parts(1 << 8);
-    pub const RAN: Parts = Parts(1 << 9);
-    pub const SORT: Parts = Parts(1 << 10);
+    pub const SORT: Parts = Parts(1 << 8);
     /// Every part: what a declaration made or taken away moves of what it declares.
-    pub const ALL: Parts = Parts((1 << 11) - 1);
+    pub const ALL: Parts = Parts((1 << 9) - 1);
 
     /// The part `question` asks of the name it is about, where it asks one: a witness's key, whether one is declared and whether lemmas are on offer ask none.
     pub fn of(question: &Question) -> Option<Parts> {
@@ -302,8 +300,6 @@ impl Parts {
             Question::Induct(_) => Parts::INDUCT,
             Question::Struct(_) => Parts::STRUCT,
             Question::Concept(_) => Parts::CONCEPT,
-            Question::Erased(_) => Parts::ERASED,
-            Question::Ran(_) => Parts::RAN,
             Question::Witness(..) | Question::WitnessDeclared(..) | Question::Lemmas => {
                 return None;
             }
@@ -322,8 +318,6 @@ impl Parts {
             (Parts::INDUCT, Question::Induct(name)),
             (Parts::STRUCT, Question::Struct(name)),
             (Parts::CONCEPT, Question::Concept(name)),
-            (Parts::ERASED, Question::Erased(name)),
-            (Parts::RAN, Question::Ran(name)),
         ]
         .into_iter()
         .filter(move |(part, _)| self.meets(*part))
@@ -568,14 +562,6 @@ impl Readers {
     /// Every name a question was about, each once, in no stated order: what a unit in scope that moved is read again by.
     pub fn names(&self) -> impl Iterator<Item = &Global> {
         self.parts.iter().map(|(name, _)| name)
-    }
-
-    /// Every declaration that asked something of the unit as a whole — the witness at a key, whether one is declared there, whether lemmas are on offer — in no stated order: erasure asks none of them, and keeps no form whose trace holds one.
-    pub fn asked_whole(&self) -> impl Iterator<Item = &Global> {
-        self.keys
-            .iter()
-            .flat_map(|(_, keyed)| keyed.readers.iter())
-            .chain(self.lemmas.iter().map(|(reader, _)| reader))
     }
 
     /// Every witness key asked at, with what it was answered and who asked: what a unit in scope that moved may answer otherwise.

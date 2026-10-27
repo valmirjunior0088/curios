@@ -6,14 +6,16 @@
 //!
 //! **A unit holds its items' erased forms and no arena**, which is what lets a unit compiled over a baseline erase the items it redoes and take every other's as it stands, and what leaves nothing for two units to be ordered by.
 //!
-//! **A unit keeps what erasing each item asked.** An item's erased form is a function of its elaborated declaration and of what its erasure reads of the declarations around it: their types and registry entries, through the doors an elaboration reads them by, and how each name it uses is bound in the erased form of the item that declares it. Each is noted as the item is erased (`Traced`), and the unit keeps each item's trace as its baseline half: a unit erased over this one keeps an erased form where everything its erasure asked is answered as it was, and nothing compiled after the unit reads the traces.
+//! **A unit keeps what erasing each item read.** An item's erased form is a function of its certified declaration and of what its erasure reads of the declarations around it: their signatures and bodies through the kernel that certified the unit, their kinds off their items, and how each name it uses is bound in the erased form of the item that declares it. Each is noted as the item is erased, and the unit keeps each item's record as its baseline half ([`AskedItems`]): a unit erased over this one keeps an erased form where everything its erasure read digests as it did, and nothing compiled after the unit reads the records.
 //!
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
-    crate::{AtSorts, Binding, Environment, Sorts},
+    crate::{
+        AskedBy, AskedItems, AtSorts, Binding, Environment, HeldAsked, Part, Sorts,
+        declared_digest, erased_digest,
+    },
     curios_archive::{Bytes, Deferred},
-    curios_elab::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
     curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
     std::{
         borrow::Borrow,
@@ -429,14 +431,14 @@ fn place_of(position: i64) -> usize {
 pub struct ErasedUnit {
     #[archived_with(Ranked)]
     index: ErasedIndex,
-    /// What erasing each item asked of the declarations around it, by the first name the item declares — see the module documentation.
+    /// What erasing each item read of the declarations around it, by the first name the item declares — see the module documentation.
     ///
-    /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors, each item's trace an object ([`ErasedUnit::recorded`]), handed back where the unit is restored ([`ErasedUnit::with_baseline`]), and read when an erasure over the unit first asks.
+    /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors, each item's record an object ([`ErasedUnit::recorded`]), handed back where the unit is restored ([`ErasedUnit::with_baseline`]), and read when an erasure over the unit first asks.
     #[archived_with(curios_archive::Skip)]
-    asked: Recorded<Traces>,
-    /// Who asked what, of what erasing each item asked, read backwards the first time an erasure over the unit asks (`Readers`).
+    asked: Recorded<AskedItems>,
+    /// Who read what, of what erasing each item read, read backwards the first time an erasure over the unit asks ([`AskedBy`]).
     #[archived_with(curios_archive::Skip)]
-    readers: OnceCell<Readers>,
+    readers: OnceCell<AskedBy>,
 }
 
 impl ErasedUnit {
@@ -445,7 +447,7 @@ impl ErasedUnit {
         self.index.items.is_empty()
     }
 
-    /// This unit's index with none of its traces: what a unit erased over this one starts from, where its module is a version of this one's.
+    /// This unit's index with none of its records: what a unit erased over this one starts from, where its module is a version of this one's.
     pub(super) fn version(&self) -> ErasedUnit {
         ErasedUnit {
             index: self.index.clone(),
@@ -570,26 +572,26 @@ impl ErasedUnit {
         self.index.computing.iter().map(|(at, _)| place_of(at))
     }
 
-    /// This unit with `asked` as what erasing each of its items asked.
-    pub(super) fn asking(mut self, asked: Traces) -> Self {
+    /// This unit with `asked` as what erasing each of its items read.
+    pub(super) fn asking(mut self, asked: AskedItems) -> Self {
         self.asked = Recorded::held(asked);
         self
     }
 
-    /// What erasing each item asked, read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
-    pub(super) fn traces(&self) -> &Traces {
+    /// What erasing each item read, out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
+    pub(super) fn asked_items(&self) -> &AskedItems {
         self.asked
             .get()
-            .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"))
+            .unwrap_or_else(|error| panic!("an erased unit's records failed to restore: {error}"))
     }
 
-    /// Who asked what, of what erasing each item asked, read backwards the first time it is asked: what an erasure over the unit finds the items an edit could reach by.
-    pub(super) fn readers(&self) -> &Readers {
-        self.readers.get_or_init(|| Readers::of(self.traces()))
+    /// Who read what, of what erasing each item read, read backwards the first time it is asked: what an erasure over the unit finds the items an edit could reach by.
+    pub(super) fn readers(&self) -> &AskedBy {
+        self.readers.get_or_init(|| AskedBy::of(self.asked_items()))
     }
 
-    /// This unit holding `readers` as who asked what of its traces: the baseline's, with the edges of every item erased again or no longer held replaced.
-    pub(super) fn reading(self, readers: Readers) -> Self {
+    /// This unit holding `readers` as who read what of its records: the baseline's, with the edges of every item erased again or no longer held replaced.
+    pub(super) fn reading(self, readers: AskedBy) -> Self {
         let held = OnceCell::new();
         let _ = held.set(readers);
 
@@ -599,18 +601,13 @@ impl ErasedUnit {
         }
     }
 
-    /// What erasing the item declaring `name` first asked, as the unit holds it.
-    pub(super) fn asked(&self, name: &curios_core::Global) -> Option<&HeldTrace> {
-        self.traces().held(name)
+    /// What erasing the item declaring `name` first read, as the unit holds it.
+    pub(super) fn asked(&self, name: &curios_core::Global) -> Option<&HeldAsked> {
+        self.asked_items().held(name)
     }
 
-    /// What erasing the unit's items read of declarations the unit does not hold, each part and each binding by the digest it had.
-    pub fn foreign(&self) -> &Rc<Foreign> {
-        self.traces().foreign()
-    }
-
-    /// This unit's baseline half: what erasing each of its items asked, as the unit holds it, which nothing compiled after the unit reads, and which it stores apart from what it is for its successors, each item's trace an object.
-    pub fn recorded(&self) -> &Recorded<Traces> {
+    /// This unit's baseline half: what erasing each of its items read, as the unit holds it, which nothing compiled after the unit reads, and which it stores apart from what it is for its successors, each item's record an object.
+    pub fn recorded(&self) -> &Recorded<AskedItems> {
         &self.asked
     }
 
@@ -746,13 +743,14 @@ impl Form {
     }
 }
 
-/// The units in scope, as what erasing another reads: the Core each was certified as, where it holds each name, and its items' erased forms.
+/// The units in scope, as what erasing another reads: the Core each was certified as, where it holds each name, the record its certification filed, and its items' erased forms.
 ///
-/// The three describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying kernel's, which holds these units mounted; what this adds is what the kernel does not hold — what kind of definition a name is, read off its item, and how each name is bound, read off its erased form.
+/// The four describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying kernel's, which holds these units mounted; what this adds is what the kernel does not hold — what kind of definition a name is, read off its item, how each name is bound, read off its erased form, and the record a part read of a unit is digested under.
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
     cores: &'a [&'a curios_core::Module],
     places: &'a [&'a curios_core::Places],
+    certifications: &'a [&'a curios_core::Certification],
     erased: &'a [&'a ErasedUnit],
     /// Which units are other than the ones the baseline was erased after ([`Erasures::after`]): none where nothing says.
     moved: Option<&'a [bool]>,
@@ -766,20 +764,24 @@ impl<'a> Erasures<'a> {
         Self::default()
     }
 
-    /// The units `cores` were certified as, `places` says where each holds its names, and `erased` are the erased forms of, in dependency order.
+    /// The units `cores` were certified as, `places` says where each holds its names, `certifications` are the records of and `erased` the erased forms of, in dependency order.
     pub fn of(
         cores: &'a [&'a curios_core::Module],
         places: &'a [&'a curios_core::Places],
+        certifications: &'a [&'a curios_core::Certification],
         erased: &'a [&'a ErasedUnit],
     ) -> Self {
         assert!(
-            cores.len() == places.len() && cores.len() == erased.len(),
-            "a scope says of each unit its Core, its places and its erased forms",
+            cores.len() == places.len()
+                && cores.len() == certifications.len()
+                && cores.len() == erased.len(),
+            "a scope says of each unit its Core, its places, its record and its erased forms",
         );
 
         Self {
             cores,
             places,
+            certifications,
             erased,
             moved: None,
             fixed: None,
@@ -839,19 +841,23 @@ impl<'a> Erasures<'a> {
             .is_none_or(|(unit, _)| !self.is_fixed(unit))
     }
 
-    /// The digest of what `question` asks of the declaration a unit in scope holds under its name: a part of its certified declaration ([`part_digest`]), how an item naming it reads its erased forms ([`ErasedForms::read_digest`]), or those forms whole. `Ok(None)` where no unit declares the name or the one that does holds no such part.
-    pub(super) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
-        let Some(name) = question.subject() else {
-            return Ok(None);
-        };
-        let Some((unit, place)) = self.place(name) else {
+    /// The digest of `part` of the declaration a unit in scope holds under `name`: a part of its certified declaration ([`declared_digest`]), how an item naming it reads its erased forms or those forms whole ([`erased_digest`]). `Ok(None)` where no unit declares the name or the one that does holds no such part.
+    pub(super) fn part_digest(
+        &self,
+        (name, part): (curios_core::Global, Part),
+    ) -> Result<Option<String>, String> {
+        let Some((unit, place)) = self.place(&name) else {
             return Ok(None);
         };
 
-        match question {
-            Question::Erased(_) => self.erased[unit].item(place).read_digest(name).map(Some),
-            Question::Ran(_) => self.erased[unit].form_digest(place).map(Some),
-            part => part_digest(self.cores[unit], self.places[unit], part),
+        match part {
+            Part::Binding | Part::Forms => erased_digest(self.erased[unit], place, (name, part)),
+            Part::Signature | Part::Body | Part::Kind => declared_digest(
+                self.cores[unit],
+                self.places[unit],
+                self.certifications[unit],
+                (name, part),
+            ),
         }
     }
 

@@ -6,7 +6,7 @@ use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
-    curios_erase::{Erasures, erase_program},
+    curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
@@ -137,6 +137,7 @@ pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
             Erasures::of(
                 &predecessors.cores(),
                 &predecessors.places(),
+                &predecessors.certifications(),
                 &predecessors.erased(),
             ),
             &program,
@@ -486,6 +487,23 @@ pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
     bytes
 }
 
+/// What a unit stores of `asked`, what erasing its items read: the rest of it, then each item's record, all in one run.
+pub(crate) fn asked_stored(asked: &AskedItems) -> Vec<u8> {
+    let mut bytes = curios_archive::to_bytes(asked)
+        .expect("what erasing a unit read serializes")
+        .to_vec();
+    bytes.extend(
+        AskedTable::run(
+            asked
+                .records()
+                .map(|(name, held)| (name, &***held, held.made())),
+        )
+        .expect("what erasing a unit read serializes"),
+    );
+
+    bytes
+}
+
 /// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
 pub(crate) fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
@@ -521,11 +539,11 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     let baseline = |unit: &Unit| lowering_stored(unit.text());
     let traces = traces_stored;
     let erasures = |unit: &Unit| {
-        traces(
+        asked_stored(
             unit.erased()
                 .recorded()
                 .get()
-                .expect("an erased unit's traces restore"),
+                .expect("what erasing a unit read restores"),
         )
     };
     let parts = [

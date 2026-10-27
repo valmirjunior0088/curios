@@ -6,7 +6,7 @@
 //!
 //! **A hit is believed whole, so it rests on every unit its unit could have read.** That is the units it may name and, in turn, the ones those may name: a term names what its unit may name, or what a term handed to it names, which that term's unit may name; a witness is declared with its concept or with the type it is at, both of which whoever states the goal can name. A record names what each of those contained and no unit beside them, so an edit to a unit outside them leaves the hit standing, and two folds that reach one unit after different others file it once.
 //!
-//! **A slot whose record no longer agrees is still a baseline.** The unit it holds is compiled over, each stage asking again what its own record says it read: of the unit's own text, of the units its record names where they contain what they did, nothing, and of any other unit in scope each part by its digest (`curios_elab::Foreign`, `curios_core::Abroad`). So a unit after an edited dependency redoes the declarations that read what the edit changed.
+//! **A slot whose record no longer agrees is still a baseline.** The unit it holds is compiled over, each stage asking again what its own record says it read: of the unit's own text, of the units its record names where they contain what they did, nothing, and of any other unit in scope each part by its digest (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). So a unit after an edited dependency redoes the declarations that read what the edit changed.
 //!
 //! What a record holds and how it is framed ahead of the unit are `curios-unit`'s, since the prelude image is written the same way by a build script below every store; what a record is *verified against* is here.
 

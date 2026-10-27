@@ -134,6 +134,25 @@ pub(crate) fn held_digest(
     read.digest(body).map(Some)
 }
 
+/// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the kernel records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
+pub fn part_digest(
+    module: &Module,
+    places: &Places,
+    certification: &Certification,
+    name: &Global,
+    body: bool,
+) -> Result<Option<String>, String> {
+    // A vector is the entry's, filed for a name the unit holds one under, as a unit in scope answers it (`Globals`).
+    let nominal = module.nominal(places, name).is_some();
+    let verdicts = (
+        certification.totality(name) == Some(Totality::Partial),
+        certification.polarities(name).filter(|_| nominal),
+        certification.variances(name).filter(|_| nominal),
+    );
+
+    held_digest(module, places, name, verdicts, body)
+}
+
 /// What a read reads of a declaration: its terms, the registry entries its former carries, and the certifier's verdict on it.
 struct Readable<'a> {
     held: Held<'a>,

@@ -6,7 +6,6 @@
 
 use {
     crate::ErasedNames,
-    curios_elab::Reading,
     curios_num::Natural,
     curios_utilities::{Note, Report},
     std::{collections::BTreeMap, rc::Rc},
@@ -163,25 +162,33 @@ impl Error {
     }
 
     /// Render this error for its reader: [`Error::reports`], rendered.
-    pub fn format(&self, reading: &Reading<'_>) -> String {
-        Report::render_all(&self.reports(reading))
+    pub fn format(
+        &self,
+        spelling: curios_core::Spelling,
+        anchors: &[&curios_core::Anchors],
+    ) -> String {
+        Report::render_all(&self.reports(spelling, anchors))
     }
 
-    /// This error as its reports: one at its extent, spelled for a reader standing outside every declaration.
-    pub fn reports(&self, reading: &Reading<'_>) -> Vec<Report> {
+    /// This error as its reports: one at its extent, its terms spelled by `spelling` for a reader standing outside every declaration, and its positions placed in the files `anchors` say they were written in. What spells a term and where a declaration lies are the report layer's to hand in, which holds the tables a unit's names are spelled by.
+    pub fn reports(
+        &self,
+        spelling: curios_core::Spelling,
+        anchors: &[&curios_core::Anchors],
+    ) -> Vec<Report> {
         let (extent, refusal) = match self {
             Self::Located { extent, error } => (Some(extent), &**error),
             refusal => (None, refusal),
         };
-        let spelling = Rc::new(reading.spelling().for_reader(curios_core::ReaderPosition {
+        let spelling = Rc::new(spelling.for_reader(curios_core::ReaderPosition {
             owner: None,
             witnesses: Rc::default(),
         }));
 
         vec![Report {
-            span: extent.and_then(|extent| extent.resolved(reading.anchors)),
+            span: extent.and_then(|extent| extent.resolved(anchors)),
             message: refusal.message(&spelling),
-            notes: refusal.notes(&spelling, reading.anchors),
+            notes: refusal.notes(&spelling, anchors),
         }]
     }
 
