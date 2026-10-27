@@ -1,7 +1,7 @@
 //! What the sources this crate elaborates must be true of, beyond elaborating.
 
 use {
-    crate::{std_directory, std_source, with_prelude},
+    crate::{test_support::*, with_prelude},
     curios_abi::HostOp,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},
     curios_text::{

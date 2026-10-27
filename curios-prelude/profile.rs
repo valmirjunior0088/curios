@@ -8,9 +8,9 @@ mod compile;
 use compile::*;
 
 // Held as the build script holds it, so `compile.rs` reads one crate root in both programs.
-#[path = "src/library.rs"]
-mod library;
-use library::*;
+#[path = "src/test_support.rs"]
+mod test_support;
+use test_support::*;
 
 use {
     curios_profile::{Destination, fold_at, trace},

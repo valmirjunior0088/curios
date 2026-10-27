@@ -20,7 +20,7 @@ use {
         test_support::written_for_reader,
     },
     curios_erase::{ErasedUnit, test_support::part_digests},
-    curios_prelude::{std_directory, with_prelude},
+    curios_prelude::{test_support::*, with_prelude},
     curios_text::{
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,

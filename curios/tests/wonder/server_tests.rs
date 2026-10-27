@@ -2,7 +2,7 @@
 
 use {
     super::test_support::{curios, project, stdout, temporary, write},
-    curios_prelude::std_directory,
+    curios_prelude::test_support::*,
     curios_utilities::fill,
     curios_wonder::SETTLE,
     std::{

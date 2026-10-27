@@ -42,6 +42,8 @@ curios-wasm = { workspace = true }
 curios-prelude = { workspace = true }
 
 [dev-dependencies]
+# Where the standard library is authored, for the suites that compile it from its tree.
+curios-prelude = { workspace = true, features = ["test-support"] }
 # A finished term printed as a report spells it, for the suites that print a declaration. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-elab = { workspace = true, features = ["test-support"] }
 # The families a unit's items declare, which the measurement over the library's families surveys, and the digest of every part a unit's items are read by. A dev-dependency entry beside the normal one, for the same reason.

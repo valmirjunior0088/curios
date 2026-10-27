@@ -20,7 +20,10 @@ profile = [
     "dep:curios-cert",
     "dep:curios-elab",
     "dep:curios-erase",
+    "dep:curios-package",
 ]
+# `test_support`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = ["dep:curios-package"]
 
 # The program that is asked for the build's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `compile.rs` as a module.
 [[bin]]
@@ -32,15 +35,15 @@ required-features = ["profile"]
 curios-archive = { workspace = true }
 curios-core = { workspace = true }
 curios-document = { workspace = true }
-curios-package = { workspace = true }
 curios-profile = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
 curios-utilities = { workspace = true }
-# For `profile-prelude` alone, which makes the prelude as the build script does.
+# For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `test_support` too.
 curios-cert = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
 curios-erase = { workspace = true, optional = true }
+curios-package = { workspace = true, optional = true }
 
 # The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased, each root imaged as the certified unit the crate restores.
 [build-dependencies]
@@ -64,6 +67,8 @@ curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-native = { workspace = true }
 curios-pipeline = { workspace = true }
+# This crate on itself, only to turn `test-support` on for its own tests: `tests/std.rs` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
+curios-prelude = { path = ".", features = ["test-support"] }
 # The scratch store the claims file what they compiled into.
 curios-verdicts = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.

@@ -6,9 +6,9 @@ mod compile;
 use compile::*;
 
 // The library's module too, which a build script cannot reach as a dependency of its own package.
-#[path = "src/library.rs"]
-mod library;
-use library::*;
+#[path = "src/test_support.rs"]
+mod test_support;
+use test_support::*;
 
 use {
     curios_package::MANIFEST,

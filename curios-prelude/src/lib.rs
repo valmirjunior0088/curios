@@ -10,5 +10,5 @@ mod tests;
 mod restore;
 pub use restore::{documentation, with_prelude};
 
-mod library;
-pub use library::{std_directory, std_source};
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

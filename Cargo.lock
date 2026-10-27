@@ -867,6 +867,7 @@ dependencies = [
  "curios-native",
  "curios-package",
  "curios-pipeline",
+ "curios-prelude",
  "curios-profile",
  "curios-text",
  "curios-unicode",
