@@ -4,6 +4,7 @@ use {
     super::*,
     crate::{Failure, Handle},
     curios_abi::event,
+    rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
 };
 
 /// What `later` comes to, filed with `host` and waited for as a run waits for it.
@@ -80,4 +81,14 @@ pub fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     let server = host.socket_accept(listener.clone()).unwrap();
 
     (listener, client, server)
+}
+
+/// A pseudo-terminal: its near end, and the name its far end opens by.
+pub fn pseudo_terminal() -> (OwnedFd, Vec<u8>) {
+    let near = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).expect("a pseudo-terminal");
+    grantpt(&near).expect("its far end granted");
+    unlockpt(&near).expect("its far end unlocked");
+    let name = ptsname(&near, Vec::new()).expect("its far end's name");
+
+    (near, name.into_bytes())
 }

@@ -2,7 +2,7 @@
 
 use {
     super::{
-        test_support::{awaited, come},
+        test_support::{awaited, pseudo_terminal},
         *,
     },
     crate::{Failure, Handle, Mode, SerialFlow, SerialOp, SerialParity},
@@ -10,21 +10,10 @@ use {
     curios_utilities::test_support::Temporary,
     rustix::{
         fs::OFlags,
-        pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
         termios::{ControlModes, InputModes, LocalModes},
     },
     std::{path::Path, thread, time::Duration},
 };
-
-/// A pseudo-terminal: its near end, and the name its far end opens by.
-fn pseudo_terminal() -> (OwnedFd, Vec<u8>) {
-    let near = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).expect("a pseudo-terminal");
-    grantpt(&near).expect("its far end granted");
-    unlockpt(&near).expect("its far end unlocked");
-    let name = ptsname(&near, Vec::new()).expect("its far end's name");
-
-    (near, name.into_bytes())
-}
 
 /// A descriptor that is not a terminal refuses a take and a size through the errno lane, which is how a program learns it has none, and one never taken has nothing to give back. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_take` would leave it in raw mode.
 #[test]
@@ -329,68 +318,6 @@ fn a_serial_open_clears_the_input_modes_it_finds() {
         !termios
             .input_modes
             .intersects(InputModes::IXOFF | InputModes::INPCK)
-    );
-}
-
-/// The open reads back what the device took. A Linux pseudo-terminal keeps two stop bits, hardware flow control and its speed, and forces eight data bits with no parity, so the first frame opens with its modes set and the second is refused as one the device did not take.
-#[cfg(target_os = "linux")]
-#[test]
-fn a_serial_open_is_refused_a_frame_the_device_did_not_take() {
-    let (_near, name) = pseudo_terminal();
-    let host = OsHost::with_args(vec![]);
-
-    let port = host
-        .serial_open(
-            name.clone(),
-            9600,
-            8,
-            SerialParity::None,
-            2,
-            SerialFlow::Hardware,
-        )
-        .unwrap();
-
-    let termios = host
-        .with_fd(&port, |fd| tcgetattr(fd))
-        .expect("a filed descriptor")
-        .expect("its settings");
-    assert!(
-        termios
-            .control_modes
-            .contains(ControlModes::CSTOPB | ControlModes::CRTSCTS)
-    );
-    assert_eq!(termios.output_speed(), 9600);
-    host.handle_close(port);
-
-    assert_eq!(
-        host.serial_open(name, 9600, 7, SerialParity::Even, 1, SerialFlow::None),
-        Err(Failure::Other(errno::EINVAL))
-    );
-}
-
-/// A drain answers once the port has sent what it accepted — at once on a pseudo-terminal, whose far end has no wire to wait on — with the output arrived rather than discarded. Only a port has output to wait for. Linux alone, since `tcdrain` on a macOS pseudo-terminal can wait for good.
-#[cfg(target_os = "linux")]
-#[test]
-fn a_serial_drain_answers_once_the_output_has_left() {
-    let (near, name) = pseudo_terminal();
-
-    let host = OsHost::with_args(vec![]);
-    let port = host
-        .serial_open(name, 115_200, 8, SerialParity::None, 1, SerialFlow::None)
-        .unwrap();
-
-    assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(2));
-    assert_eq!(come(&host, host.serial_drain(port.clone())), Ok(()));
-
-    let mut arrived = [0; 8];
-    assert_eq!(rustix::io::read(&near, &mut arrived), Ok(2));
-    assert_eq!(&arrived[..2], b"ok");
-
-    host.handle_close(port.clone());
-    assert_eq!(come(&host, host.serial_drain(port)), Err(Failure::NotFound));
-    assert_eq!(
-        come(&host, host.serial_drain(Handle::Stdin)),
-        Err(Failure::NotFound)
     );
 }
 
