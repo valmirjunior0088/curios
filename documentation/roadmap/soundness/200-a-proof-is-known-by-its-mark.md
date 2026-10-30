@@ -19,6 +19,8 @@
 
 **`curios-erase` decides what is kept by reducing a type.** `is_erasable` (`curios-erase/src/read.rs`) reads a sort through the kernel that certified the term ([`curios-erase`'s README](../../../curios-erase/README.md#erasure-reads-through-the-kernel-that-certified-the-term)) where the mark already says it, and reads relevance off a sort until a mark is exact: `curios-erase` is this mark's consumer, and reads it where it reads a sort.
 
+**A typing the kernel remembers answers for a term marked otherwise.** `hold_proof` (`curios-cert/src/obligation.rs`) refuses a mark at a type that is no proposition where `infer_telescope`, `check_lambda` and `under_bindings` (`curios-cert/src/kernel/infer.rs`) open a binder, and an arm's mark is held to its constructor's declared proofs (`curios-cert/src/kernel/infer/eliminate.rs`), but `Kernel::infer_hit` and `Kernel::check_hit` (`curios-cert/src/kernel.rs`) key a typing by the term, which reads no label. So within one declaration a function literal or a `let` typed once unmarked hands its verdict to the same term marked at `Nat`, and the closed machine binds a `Nat` unreduced: a cost and never a verdict, since nothing but the machine reads a mark. No source program reaches it, since the elaborator states marks from the binder's type; a module built by hand does, shown at `a2ac62b97` by three tests of `proof_binder_tests` that fail today. The form settles it under the first question of *Not known*.
+
 ## The form
 
 **A mark is exact, and the kernel holds it both ways.** Every binder of a finished term states whether it binds a proof, and a binder at a proposition that bears no mark is refused as one marked at a type is.
