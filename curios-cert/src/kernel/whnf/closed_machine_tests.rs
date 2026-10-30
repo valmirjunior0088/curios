@@ -468,6 +468,64 @@ fn the_closed_machine_agrees_with_the_strategy() {
     }
 }
 
+/// **Runs past the fusion cap are the bytes they spell under the machine as under the strategy.** A concatenation of runs too long to fuse stays a node, and both evaluators fold a pointwise operation and a structural fold over it through it: `xor` of two such values split apart at different seams, one of them nested, is the elementwise run, and the fold over that run sums its bytes. A machine that read the node otherwise than the strategy would answer a closed computation in a type with a value reduction of the same term would not.
+#[test]
+fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
+    let run = |byte: u8, count: usize| {
+        Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![byte; count])))
+    };
+    let spine = |operands: Vec<Term>| Term::intrinsic(Intrinsic::BytesConcat { operands });
+    let left = spine(vec![run(0x0F, 65), run(0x3C, 66)]);
+    let right = spine(vec![
+        run(0xF0, 64),
+        spine(vec![run(0x55, 1), run(0xAA, 66)]),
+    ]);
+    // A stand-in for the discharged bound, closed so the machine takes the term; no fold reads it.
+    let xor = Term::intrinsic(Intrinsic::bytes_xor(left, right, nat(0)));
+
+    let mut combined = vec![0xFF; 64];
+    combined.push(0x0F ^ 0x55);
+    combined.extend([0x3C ^ 0xAA; 66]);
+    let total = combined
+        .iter()
+        .map(|&byte| usize::from(byte))
+        .sum::<usize>();
+
+    let summed = {
+        let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
+        let m = binder(100, "m");
+        Term::bytes_match_scoped(
+            xor.clone(),
+            Scope::close(Many(1), &[&m], nat_type()),
+            nat(0),
+            &[&h, &t, &ih],
+            Term::intrinsic(Intrinsic::nat_add(
+                Term::intrinsic(Intrinsic::ByteToNat(Term::free_var(&h))),
+                Term::free_var(&ih),
+            )),
+        )
+    };
+
+    for (term, value) in [
+        (
+            xor,
+            Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(combined))),
+        ),
+        (summed, nat(total)),
+    ] {
+        assert_eq!(
+            kernel().reduce_forced(term.clone()),
+            Ok(value),
+            "the machine answers the bytes the runs spell for {term}",
+        );
+        assert_eq!(
+            kernel().reduce_forced(term.clone()),
+            strategy_kernel().reduce_forced(term.clone()),
+            "the machine and the strategy agree on {term}",
+        );
+    }
+}
+
 /// A closed one-arm match on a proof of a proposition whose index pins its payload fires on the *stated* instance with the proof unevaluated — `ClosedHost::stated_payload` — and the machine and the strategy bind the same payload and reach the same value. The arm reads its payload, so the rule's second clause runs rather than the `unread` one: `match mk(5) at P(5) : (i, q) => Nat | mk(x) => x end` is `5` under both. A machine that read the payload off the scrutinee while the strategy read it off the stated instance (or the reverse) would answer a closed computation in a type with a value reduction of the same term would not.
 #[test]
 fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {

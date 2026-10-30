@@ -4,9 +4,11 @@ use {
     super::test_support::*,
     curios_cert::{Error, Verdict},
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
+    curios_num::Binary,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Qualifier,
+    std::hash::{DefaultHasher, Hash, Hasher},
 };
 
 // The shapes a fold reads a `Bytes` value by: a fill of a successor opens with its atom, which is the cons `x[a, ..fill]`, and the same run spelled as a snoc ends with it. The two are one value at every count, so a strip or a byte split that told them apart would refute at the symbolic count what `n = 0` makes `true`, and `absurd(0, 7, qed)` would be a closed inhabitant of `False`. What holds them is that a chunk facing an element is handed on, never clashed: the comparison stays a stuck `==`.
@@ -145,6 +147,77 @@ fn a_fold_over_a_concatenation_threads_its_operands_in_order() {
         Eq/subst((v: Nat) => Holds(v == 12), swapped([1], [2]), True/qed())
         "#,
         "List/fold(@Nat, @Nat, xs, List/fold(@Nat, @Nat, ys, 0,",
+    );
+}
+
+// A pointwise operation reads the bytes its operands' runs spell, wherever the runs past the fusion cap split them: `not` over a 65-byte run beside a 66-byte one flips the first 65 bytes of one value and the next 66 of the other. A fold that placed the seam at 64 would answer `misaligned`; carried along `grouping` to the same bytes grouped otherwise, the claim becomes `not(regrouped) == misaligned`, which the fold over the other grouping refutes, so the closing term would be a proof of `False`.
+#[test]
+fn a_pointwise_operation_answers_the_bytes_its_runs_spell_wherever_they_split() {
+    rejected_by(
+        r#"
+        use /std/{Bytes, Eq};
+        use /std/Bool/{True, Holds};
+
+        let spelled : Bytes = x[..Bytes/replicate(65, 0x0F), ..x[], ..Bytes/replicate(66, 0x3C)];
+        let regrouped : Bytes = x[..Bytes/replicate(60, 0x0F), ..x[..Bytes/replicate(5, 0x0F), ..Bytes/replicate(66, 0x3C)]];
+        let misaligned : Bytes = x[..Bytes/replicate(64, 0xF0), ..Bytes/replicate(67, 0xC3)];
+
+        let claimed : Holds(Bytes/eql(Bytes/not(spelled), misaligned)) = True/qed();
+        let grouping : Eq()(spelled, regrouped) = Eq/refl();
+
+        Eq/subst((z: Bytes) => Holds(Bytes/eql(Bytes/not(z), misaligned)), grouping, claimed)
+        "#,
+        "while elaborating claimed:\ntype mismatch",
+    );
+}
+
+// Runs past the fusion cap stay a concatenation, and two such values are compared by the bytes they spell, not by the node that holds them: `x[..run, 0x01]` and `x[..run, 0x02]` share 65 bytes and part at the last. Held one value, `merged` would carry a decided equality of the two to its negation.
+#[test]
+fn runs_past_the_fusion_cap_that_part_at_their_last_byte_are_two_values() {
+    rejected_by(
+        r#"
+        use /std/{Bytes, Eq};
+        use /std/Bool/{True, Holds};
+
+        let run : Bytes = Bytes/replicate(65, 0x00);
+        let merged : Eq()(x[..run, 0x01], x[..run, 0x02]) = Eq/refl();
+
+        Eq/subst((z: Bytes) => Holds(Bytes/eql(z, x[..run, 0x01])), merged, True/qed())
+        "#,
+        "while elaborating merged:\ntype mismatch",
+    );
+}
+
+// A run's hash reads 32 bytes of it, so two 100-byte runs apart only at the byte with index 1, which none of those 32 is, hash alike, as the test asserts first. Every table a fold answers from keys a term by that hash and confirms it by the bytes, so `sum(marked)` is `1` in the declaration that met `sum(zeros)` first; a table that took the hash for the value would answer it `0` there and `1` everywhere else.
+#[test]
+fn two_runs_whose_sampled_bytes_agree_are_still_two_values() {
+    let hashed = |bytes: Vec<u8>| {
+        let mut hasher = DefaultHasher::new();
+        Binary::from_bytes(bytes).hash(&mut hasher);
+        hasher.finish()
+    };
+    let mut marked = vec![0x00; 100];
+    marked[1] = 0x01;
+    assert_eq!(
+        hashed(vec![0x00; 100]),
+        hashed(marked),
+        "the two runs hash alike, which is the case the program puts",
+    );
+
+    rejected_by(
+        r#"
+        use /std/{Bytes, Nat, Byte, Eq};
+        use /std/Bool/{True, Holds};
+
+        let zeros : Bytes = Bytes/replicate(100, 0x00);
+        let marked : Bytes = Bytes/xor(zeros, x[..x[0x00, 0x01], ..Bytes/replicate(98, 0x00)]);
+        let sum(z: Bytes) -> Nat = Bytes/fold(z, 0, (h: Byte, acc: Nat) => acc + Byte/to_nat(h));
+
+        let conflated : Eq()(sum(zeros) + sum(marked), 0) = Eq/refl();
+
+        Eq/subst((n: Nat) => Holds(n == 1), conflated, True/qed())
+        "#,
+        "expected: Eq(@Nat)(1, 0)",
     );
 }
 
