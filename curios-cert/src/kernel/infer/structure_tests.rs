@@ -183,6 +183,25 @@ fn a_tuple_literal_is_no_value_of_a_structure() {
     ));
 }
 
+/// A record's field is checked at the field's type opened at the parameters its literal states: `Boxed(Nat) { true }` is refused, inferred as it is written.
+#[test]
+fn a_records_field_is_checked_at_the_parameters_its_literal_states() {
+    let mut kernel = kernel();
+    let name = parameterized_struct(&mut kernel);
+
+    assert!(matches!(
+        infer(
+            &mut kernel,
+            &boxed(
+                name,
+                vec![nat_type()],
+                Term::intrinsic(Intrinsic::Bool(true))
+            )
+        ),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
 /// The literal of the one-field structure [`parameterized_struct`] declares, at `params`, holding `value`: entry-free, as elaboration leaves one.
 fn boxed(name: Global, params: Vec<Term>, value: Term) -> Term {
     Subterm::Struct(Struct {

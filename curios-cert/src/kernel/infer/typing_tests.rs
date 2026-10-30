@@ -126,6 +126,45 @@ fn an_application_of_the_wrong_arity_is_refused() {
     );
 }
 
+/// A domain is opened at the argument its own binder was given and no other: under `(T: Type, U: Type, x: T)`, `3` at `(Bool, Nat)` is refused, where opening `x`'s domain one binder off would read it at `Nat`.
+#[test]
+fn a_later_domain_is_opened_at_the_argument_its_own_binder_was_given() {
+    let mut kernel = kernel();
+    let (t, u, x) = (binder(0, "T"), binder(1, "U"), binder(2, "x"));
+
+    let f = Term::func(
+        [
+            (t, Term::type_ground()),
+            (u, Term::type_ground()),
+            (x, Term::free_var(&t)),
+        ],
+        Term::free_var(&x),
+    );
+
+    assert!(matches!(
+        infer(
+            &mut kernel,
+            &Term::apply(f, [bool_type(), nat_type(), nat(3)])
+        ),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
+/// A tuple checked against a Σ checks each component at its entry opened at the components before it: `(Bool, 3)` is no value of `(t: Type, x: t)`.
+#[test]
+fn a_tuple_component_is_checked_at_its_entry_opened_at_the_components_before_it() {
+    let mut kernel = kernel();
+
+    assert!(matches!(
+        check(
+            &mut kernel,
+            &Term::tuple([bool_type(), nat(3)]),
+            &dependent_pair_type()
+        ),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
 #[test]
 fn applying_a_non_function_is_refused() {
     let mut kernel = kernel();
