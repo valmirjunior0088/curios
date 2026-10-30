@@ -36,7 +36,7 @@ judge_cd() {
     if [[ $# -ne 1 || $1 != /* || ! -d $1 ]] || ! within=$(within_worktree "$1") || [[ -n $within ]]; then
         refuse "cd $*" "cd enters the root of a hunter's worktree, by its absolute path, and nothing else"
     fi
-    entered=$(realpath -m -- "$1")
+    entered=$(resolve "$1")
 }
 
 # Cargo in a hunter's worktree alone, entered by `(cd <worktree> && cargo …)`, so nothing a hunter builds or runs is the main checkout's: that checkout moves under its own commits while a hunt runs. A build, a test, or the compiler and the board run there, with the words that follow judged as the program's own. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
