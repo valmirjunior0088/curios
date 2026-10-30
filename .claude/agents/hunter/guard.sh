@@ -269,8 +269,8 @@ while ((i < length)); do
             if ((${#entered_stack[@]} == 0)); then
                 refuse "$text" 'a subshell closed that was never opened'
             fi
-            entered=${entered_stack[-1]}
-            unset 'entered_stack[-1]'
+            entered=${entered_stack[${#entered_stack[@]} - 1]}
+            unset "entered_stack[${#entered_stack[@]} - 1]"
             ;;
         '<') ;;
         '`' | '$') refuse "$text" 'a substitution or a parameter the shell would evaluate' ;;
