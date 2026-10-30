@@ -444,3 +444,67 @@ fn a_binder_at_a_type_whose_sort_an_arm_decides_is_refused_outside_the_arm() {
     );
     assert!(infer(&mut kernel, &inside).is_ok());
 }
+
+/// The board's unit guard settled under an arm whose case solves the split variable by index inversion rather than by a split on the variable itself: `Is : (Bool) -> Type | yes : (true) | no : (false)`, and `e : Is(c)` matched, its `yes` arm refining `c` to `true` and re-typing `p, q` at the unit type there.
+#[test]
+fn a_guard_settled_where_inversion_solves_its_operands_type_answers_nothing_after_the_match() {
+    let mut kernel = kernel();
+    let is = declare_at(
+        &mut kernel,
+        "Is",
+        Term::type_ground(),
+        vec![bool_type()],
+        vec![
+            nullary("yes", Term::intrinsic(Intrinsic::Bool(true))),
+            nullary("no", Term::intrinsic(Intrinsic::Bool(false))),
+        ],
+    );
+    let guarded = Guarded::new();
+    let evidence = binder(48, "e");
+    let measured = |x: &Free| Term::apply(Term::free_var(&guarded.h), [Term::free_var(x)]);
+    let inverted = |arm: Term| {
+        Term::induct_match_scoped_marked(
+            Term::free_var(&evidence),
+            Scope::constant(Many(2), nat_type()),
+            [
+                ("yes", Vec::<(Plicity, Free)>::new(), arm),
+                ("no", Vec::new(), nat(0)),
+            ],
+            None,
+        )
+    };
+    let forged = |arm: Term| {
+        Term::func(
+            [
+                (guarded.c, bool_type()),
+                (
+                    guarded.h,
+                    Term::func_type([(binder(46, "x"), carried(&guarded.c, true))], nat_type()),
+                ),
+                (
+                    guarded.k,
+                    Term::func_type([(binder(47, "n"), nat_type())], bool_type()),
+                ),
+                (guarded.p, carried(&guarded.c, true)),
+                (guarded.q, carried(&guarded.c, true)),
+                (
+                    evidence,
+                    Term::induct_type(is, Vec::<Term>::new(), [Term::free_var(&guarded.c)]),
+                ),
+            ],
+            Term::bool_match(
+                guarded.read(measured(&guarded.p), measured(&guarded.q)),
+                None,
+                nat_type(),
+                nat(0),
+                arm,
+            ),
+        )
+    };
+
+    assert!(infer(&mut kernel, &forged(inverted(settles(&guarded.k)))).is_ok());
+    assert!(refused_after_the_split(infer(
+        &mut kernel,
+        &forged(after(&guarded.k, inverted(settles(&guarded.k))))
+    )));
+}

@@ -576,3 +576,80 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
         "the machine and the strategy disagreed on {term}",
     );
 }
+
+/// The restuck call under heads the opaque one is reached through: a transparent `wrap(x) = g(x)` the machine opens to the opaque `g`, an intrinsic over the stuck call, `g(member(pred)) + 1`, and the stuck call as an argument of a second, `g(g(member(pred)))`. Each is one value however it is spelled, so the machine and the strategy hand back one forced form.
+#[test]
+fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_does() {
+    let g = Free::global(Qualifier::from(["g"]));
+    let wrap = Free::global(Qualifier::from(["wrap"]));
+    let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
+    let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
+    let unary = Term::func_type([(x, nat_type())], nat_type());
+    let declare = |kernel: &mut Kernel| {
+        kernel
+            .declare(&g, &unary, &monomorphic())
+            .expect("declared once");
+        kernel
+            .define(
+                &wrap,
+                &unary,
+                &Term::func(
+                    [(x, nat_type())],
+                    Term::apply(Term::free_var(&g), [Term::free_var(&x)]),
+                ),
+                &monomorphic(),
+            )
+            .expect("declared once");
+    };
+    let call = || Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
+    let steps: [(&str, Term); 3] = [
+        ("wrap", Term::apply(Term::free_var(&wrap), [call()])),
+        (
+            "plus one",
+            Term::intrinsic(Intrinsic::nat_add(
+                Term::apply(Term::free_var(&g), [call()]),
+                nat(1),
+            )),
+        ),
+        (
+            "twice",
+            Term::apply(
+                Term::free_var(&g),
+                [Term::apply(Term::free_var(&g), [call()])],
+            ),
+        ),
+    ];
+
+    for (label, step) in steps {
+        let body = Term::func(
+            [(n, nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive_b),
+                nat_type(),
+                nat(0),
+                &pred,
+                &hypothesis,
+                step,
+            ),
+        );
+        let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+            [(member, Term::func_type([(n, nat_type())], nat_type()), body)],
+            Term::apply(Term::free_var(&member), [nat(3)]),
+        )) else {
+            unreachable!("built as a rec")
+        };
+        let term = unfold_rec(rec);
+
+        let mut machined = kernel();
+        declare(&mut machined);
+        let mut strategy = strategy_kernel();
+        declare(&mut strategy);
+
+        assert_eq!(
+            machined.reduce_forced(term.clone()),
+            strategy.reduce_forced(term.clone()),
+            "{label}: the machine and the strategy disagreed on {term}",
+        );
+    }
+}
