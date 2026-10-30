@@ -581,7 +581,12 @@ pub(super) fn aliased_sort_forgery() -> Program {
         [Term::prop()],
     );
 
-    let (two_name, held_name, mut decls) = clashing_index_decls(aliased);
+    clashing_index_forgery(aliased)
+}
+
+/// `held : Held(Two/b()) = Held/mk()` and `forged : False`, a match on it with no arm, `Two` declared at `carrier_sort`.
+pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
+    let (two_name, held_name, mut decls) = clashing_index_decls(carrier_sort);
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
     decls.insert(false_name, proposition(Vec::new()));

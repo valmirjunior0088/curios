@@ -38,6 +38,24 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
     );
 }
 
+/// The same route with `Two` declared at the literal `Prop`, which the inversion's tag test reads: irrelevance makes `Two/a()` and `Two/b()` one value, so `Held/mk()` is at `Held(Two/b())` and its arm cannot be excused.
+#[test]
+fn an_empty_elimination_where_a_propositions_two_constructors_differ_is_refused() {
+    let verdicts = fixture_verdicts(
+        &clashing_index_forgery(Term::prop()),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::MissingArm { .. })),
+        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+    );
+}
+
 #[test]
 fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
     let verdicts = fixture_verdicts(
