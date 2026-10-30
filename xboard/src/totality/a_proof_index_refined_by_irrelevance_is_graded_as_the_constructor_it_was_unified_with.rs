@@ -10,11 +10,11 @@ use {
 pub(super) const TICKET: Ticket = Ticket {
     title: "A proof index refined by irrelevance is graded as the constructor it was unified with",
     found_on: Date::new(2026, 10, 30),
-    status: Status::Open,
+    status: Status::Fixed,
     witnesses: &[Witness {
         what: "a recursion that hands its own proof back, graded below the index the proof's target refined",
         proof: Proof::Module(a_recursion_on_a_refined_proof_index),
-        expect: refused![kernel],
+        expect: refused![kernel: curios_cert::Error::NotDescending { .. }],
     }],
 };
 
