@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # The hunter's shell: the PreToolUse hook of `.claude/agents/hunter.md`, admitting the readers a hunt needs and the probes, builds, tests and reverts a hunter makes in its worktree, as `worktree.sh` beside it judges one, and refusing every other form. It judges the words bash would hand each program rather than the text, so a quoted flag is seen and a quoted `>` is no redirection; anything it cannot judge it refuses.
 set -euo pipefail
-trap 'echo "hunter guard: could not judge the command, so it is refused" >&2; exit 2' ERR
+verdict=''
+trap 'case $verdict in admitted) exit 0 ;; refused) exit 2 ;; *) echo "hunter guard: could not judge the command, so it is refused" >&2; exit 2 ;; esac' EXIT
 source "$(dirname "${BASH_SOURCE[0]}")/worktree.sh"
 
 refuse() {
     printf 'hunter guard: refused `%s`: %s. What a hunter may run is listed in .claude/agents/hunter/guard.sh.\n' "$1" "$2" >&2
+    verdict=refused
     exit 2
 }
 
@@ -159,6 +161,7 @@ judge() {
 
 command=$(jq -r '.tool_input.command // empty')
 if [[ -z $command ]]; then
+    verdict=admitted
     exit 0
 fi
 
@@ -307,3 +310,4 @@ while ((i < length)); do
     i=$((i + 1))
 done
 end_command
+verdict=admitted
