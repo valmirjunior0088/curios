@@ -866,6 +866,22 @@ impl<'s> Kernel<'s> {
         self.assumed = universes.constraints.clone();
     }
 
+    /// Run `judge` under `universes`' constraints in place of the item's, and put the item's back after.
+    ///
+    /// A level parameter is positional, so a term judged here reads the same spelling of a level as the item does and means another: nothing remembered on one side answers on the other, and every memo is discarded on the way in and on the way out.
+    pub(crate) fn under_universes<R>(
+        &mut self,
+        universes: &UniverseContext,
+        judge: impl FnOnce(&mut Self) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        let outer = std::mem::replace(&mut self.assumed, universes.constraints.clone());
+        self.memos.begin_declaration();
+        let judged = judge(self);
+        self.memos.begin_declaration();
+        self.assumed = outer;
+        judged
+    }
+
     /// Whether `lower ≤ upper` — structurally, or through the assumed constraints of the item being checked.
     pub(crate) fn level_leq(&self, lower: &Level, upper: &Level) -> bool {
         lower.structurally_leq(upper) || entails(&self.assumed, lower, upper)

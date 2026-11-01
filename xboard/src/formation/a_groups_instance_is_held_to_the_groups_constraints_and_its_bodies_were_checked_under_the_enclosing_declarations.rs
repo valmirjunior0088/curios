@@ -13,11 +13,11 @@ use {
 pub(super) const TICKET: Ticket = Ticket {
     title: "A group's instance is held to the group's constraints and its bodies were checked under the enclosing declaration's",
     found_on: Date::new(2026, 10, 30),
-    status: Status::Open,
+    status: Status::Fixed,
     witnesses: &[Witness {
         what: "Hurkens' paradox over the products of a group stating no constraint, instantiated at `{0, 0, 1}` inside a declaration that assumes `u + 1 ≤ w` and `v ≤ w`",
         proof: Proof::Module(a_group_checked_under_the_enclosing_constraints),
-        expect: refused![kernel],
+        expect: refused![kernel: curios_cert::Error::Mismatch { .. } in "/paradox"],
     }],
 };
 
