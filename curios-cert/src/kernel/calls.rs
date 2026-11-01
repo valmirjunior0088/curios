@@ -2,7 +2,7 @@
 //!
 //! Like the erased positions, this is the kernel's *output*, collected during the typing walk because that is the only place the answer is available. A group's members are assumed under fresh locals while its bodies are checked (`check_group`), so a recursive call, as the kernel types it, is an application whose spine head is one of those locals, and every such application the walk types is a call it records. What the walk types is every position it accepts, which is what makes the set fail closed where a separate traversal fails open: a position that traversal never visits contributes no edge, and a group with no edges is accepted.
 //!
-//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's solutions — the equations its case value and index inversion put in force, which the arm substitutes into its body exactly as they refine what it scrutinizes, save a proof binder's ([`Kernel::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the kernel's scope brackets: `Kernel::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
+//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, and nothing its index inversion solved ([`Kernel::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the kernel's scope brackets: `Kernel::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
 //!
 //! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one obligations (T) and (V) read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
 
@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{Error, Kernel},
-    crate::{bears_proof, decide, grade, member_arities, nonzero_by},
+    crate::{decide, grade, member_arities, nonzero_by, refined_by_arm},
     curios_analysis::{Call, SizeContext},
     curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
     curios_utilities::Keyed,
@@ -270,42 +270,17 @@ impl Kernel<'_> {
         self.enter_size(Some((*binder, value)), None, Vec::new())
     }
 
-    /// What an arm that scrutinizes `scrutinee` at `value` establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, and each other binder in `solutions` stands for what it was solved to.
+    /// What an arm that scrutinizes `scrutinee` at `value` establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, the arm's own spelling of the case.
     ///
-    /// The scrutinee is refined from `value` even when the solutions settle it too, because `value` is the arm's own spelling of the case — which a caller may spell as the size order reads it, where the solution carries the typing's.
-    ///
-    /// A binder that binds a proof stands for nothing it was solved to: the equation holds by irrelevance, which a proof of every shape satisfies, so reading it as the proof's shape grades a call below a proof that no reduction took apart.
-    pub(super) fn assume_arm(
-        &mut self,
-        scrutinee: &Term,
-        value: &Term,
-        solutions: &[(Free, Term)],
-    ) -> Result<(), Error> {
+    /// Nothing the arm's index inversion solved enters the size order, for the reason [`refined_by_arm`] states; what it solves still specializes the arm for typing, which `bind_solutions` binds.
+    pub(super) fn assume_arm(&mut self, scrutinee: &Term, value: &Term) -> Result<(), Error> {
         if !self.recording() {
             return Ok(());
         }
-        let scrutinee_binder = match &**scrutinee {
-            Subterm::Var(var) => var.as_free().cloned(),
-            _ => None,
-        };
-        for (binder, solved) in solutions {
-            if Some(binder) != scrutinee_binder.as_ref() && !self.solved_proof(binder)? {
-                self.refine_size(binder, solved)?;
-            }
-        }
-        if let Some(binder) = &scrutinee_binder {
-            self.refine_size(binder, &value.substitute(solutions))?;
+        if let Some(binder) = refined_by_arm(scrutinee) {
+            self.refine_size(&binder, value)?;
         }
         Ok(())
-    }
-
-    /// Whether a binder an arm solved binds a proof, read off the type it is assumed at.
-    fn solved_proof(&mut self, binder: &Free) -> Result<bool, Error> {
-        let type_ = self
-            .local_type(binder)
-            .cloned()
-            .expect("an arm solves only binders in scope");
-        bears_proof(self, &type_)
     }
 
     /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for.

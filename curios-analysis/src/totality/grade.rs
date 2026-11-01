@@ -26,6 +26,18 @@ fn readable(term: &Term) -> bool {
 /// Each nested `match` on a binder introduced by an outer arm adds one level — `raw_trimmed` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
 pub(super) const EXPAND_FUEL: usize = 16;
 
+/// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm, and for nothing where the scrutinee is an expression.
+///
+/// **An index inversion's solutions are no part of it.** A solution is an equation conversion concluded — [`solve_indices`](crate::solve_indices) is the one analysis that borrows a driver's conversion — and at a `Prop`-sorted type conversion is proof irrelevance, which every proof of a proposition satisfies. A target holding a proposition's constructor is therefore one spelling of the scrutinee among all of them, and a payload read below the binder through it grades below a value no reduction took apart. The size order reads what reduction took apart and nothing conversion concluded, which is the line [`Env::force`] already draws by reducing plainly.
+///
+/// Both drivers read it here, so the rule has one home. What each supplies for itself is the case's shape: the discovery walk builds one from the binders it minted, and the kernel reads the arm's own spelling of the case value.
+pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
+    match &**scrutinee {
+        Subterm::Var(var) => var.as_free().cloned(),
+        _ => None,
+    }
+}
+
 /// What the arms enclosing a position have established about the binders in scope: what each has been refined to, which are known nonzero, and which are constructor payloads.
 ///
 /// Built by whichever walk reaches the position — entered on the way into an arm and left on the way out, so knowledge never escapes the branch that established it — and read by [`grade`] at each call.

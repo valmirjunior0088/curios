@@ -160,8 +160,8 @@ fn check_arm(
             let mut assumed = Vec::new();
             let checked = kernel.tried(|kernel| {
                 assumed = assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
-                // What the call recorder grades under within the arm: the equations just put in force, and the payload binders — an application of one reads as the payload it came from.
-                kernel.assume_arm(scrutinee, &value, &solutions)?;
+                // What the call recorder grades under within the arm: the case the arm names, and the payload binders — an application of one reads as the payload it came from.
+                kernel.assume_arm(scrutinee, &value)?;
                 kernel.assume_payloads(binders)?;
 
                 let refs = payload.iter().collect::<Vec<_>>();

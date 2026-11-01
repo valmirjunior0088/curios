@@ -10,11 +10,11 @@ use {
 pub(super) const TICKET: Ticket = Ticket {
     title: "A proof's constructor inside an arm's solution is graded as structure",
     found_on: Date::new(2026, 10, 30),
-    status: Status::Open,
+    status: Status::Fixed,
     witnesses: &[Witness {
         what: "a recursion graded below a data binder through the proof its index solution holds",
         proof: Proof::Module(a_recursion_through_a_proofs_constructor),
-        expect: refused![kernel],
+        expect: refused![kernel: curios_cert::Error::NotDescending { .. }],
     }],
 };
 

@@ -300,10 +300,7 @@ impl<E: Env> Walk<'_, E> {
     ///
     /// Nothing is read ahead: an arm's guard, shape and binders are taken in the arm's own call, which is the ordering [`Walk::walk_term`] documents.
     fn walk_arms(&mut self, head: &Term, cases: &Cases) -> Result<(), E::Error> {
-        let scrutinee = match &**head {
-            Subterm::Var(var) => var.as_free().cloned(),
-            _ => None,
-        };
+        let scrutinee = refined_by_arm(head);
 
         match cases {
             // A boolean arm carries no binder, but when the scrutinee compares a binder against a literal the arm still settles whether that binder can be zero — which is what an arithmetic decrease on it needs. The scrutinee is re-read as a guard per arm, because what a guard establishes depends on which way it went.
