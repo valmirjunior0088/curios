@@ -432,3 +432,42 @@ fn a_vector_an_entry_is_handed_in_with_is_not_the_kernels() {
         "a family the kernel has filed no vector for must read `Mixed`, not the vector its entry was handed in with",
     );
 }
+
+/// Depth is bought with stack: a payload type that is a tower of negations five thousand deep is analysed on the default test-thread stack, where the walk descends into each arrow's domain and nothing between the levels is a loop.
+///
+/// What this guards is the shape `.claude/rules/rust.md` asks of every walk over data-shaped depth, and which `Sort::of` was brought to first. The tower holds no family of the analysed set, so the analysis has an answer to give — `Bad` reaches nothing and the fixpoint closes at once — and the only question is whether the walk survives to give it. Dying instead is no refusal, and the soundness board requires the implementation to fail closed.
+///
+/// Mutation-checked: with `Walk::walk`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts.
+#[test]
+fn a_tower_of_negations_is_analysed_on_the_default_stack() {
+    let mut kernel = kernel();
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = || Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let mut tower = false_type();
+    for level in 0..5_000 {
+        tower = Term::func_type([(Free::local(level, Some("x")), tower)], false_type());
+    }
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        false_name,
+        InductDecl {
+            constructors: Vec::new().into(),
+            ..single_payload(Term::type_ground(), Term::prop())
+        },
+    );
+    inducts.insert(bad_name, single_payload(tower, Term::type_ground()));
+    for (name, entry) in &inducts {
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
+    }
+
+    assert!(
+        positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new())).is_ok(),
+        "a payload that mentions no family of the analysed set is strictly positive at every depth",
+    );
+}

@@ -28,6 +28,7 @@ use {
         InstanceHead, Intrinsic, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope,
         Term, TupleType,
     },
+    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         hash::{Hash, Hasher},
@@ -665,7 +666,13 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Where `term` mentions this walk's targets, given that `term` itself sits at `polarity`.
+    ///
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Env::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn walk(&mut self, term: &Term, polarity: Polarity) {
+        recurse(|| self.walk_within(term, polarity));
+    }
+
+    fn walk_within(&mut self, term: &Term, polarity: Polarity) {
         // Nothing inside a position the enclosing former never inspects can occur at all — `Unused` composes to `Unused` however deep the walk would go.
         if polarity == Polarity::Unused {
             return;

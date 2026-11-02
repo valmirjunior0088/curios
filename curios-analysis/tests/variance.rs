@@ -509,3 +509,20 @@ fn a_level_still_open_is_reported_by_its_head() {
     assert!(found.holds(LevelHead::Meta(open)));
     assert!(!found.holds(LevelHead::Param(UniverseParam(0))));
 }
+
+// Depth is bought with stack: a payload under five thousand arrows holds the same `Type u` a shallow one holds, and the sweep must reach the bottom of the tower to say so on the default test-thread stack. A walk that dies there refuses nothing, which the soundness board does not allow of the implementation; one that stopped short would answer `*` and let two instances apart in `u` be one type. Mutation-checked: with `Walk::walk`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts.
+#[test]
+fn a_level_at_the_bottom_of_a_deep_payload_is_found_on_the_default_stack() {
+    let mut tower = Term::type_at(level(0));
+    for index in 400u32..5_400 {
+        tower = Term::func_type([(Free::local(u64::from(index), Some("x")), tower)], nat());
+    }
+
+    assert_eq!(
+        vector(
+            "Deep",
+            family(1, Vec::new(), Vec::new(), |_| vec![tower], Vec::new()),
+        ),
+        "=",
+    );
+}

@@ -17,6 +17,7 @@ use {
         Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
         Variance, Variant, universe_metas, universe_params,
     },
+    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         hash::{Hash, Hasher},
@@ -353,7 +354,12 @@ impl<E: Env> Walk<'_, E> {
         });
     }
 
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Env::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn walk(&mut self, term: &Term) {
+        recurse(|| self.walk_within(term));
+    }
+
+    fn walk_within(&mut self, term: &Term) {
         if !self.entered.insert(Entered {
             node: term.clone(),
             inside: self.forcing.clone(),
