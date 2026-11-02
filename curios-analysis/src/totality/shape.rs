@@ -18,7 +18,7 @@ use {
 pub(super) enum Tag {
     /// An inductive constructor, by tag alone.
     ///
-    /// The owning type is deliberately not part of the identity, because a freshly minted arm binder has no recorded type to read it from. Dropping it cannot manufacture a false decrease: every leaf of a shape is a binder identity minted by this very traversal, so two trees compare equal only when they name the same binders, and a same-named constructor of a different type would still have to reach the same binders to be mistaken for one.
+    /// The owning type is deliberately not part of the identity, because a freshly minted arm binder has no recorded type to read it from. Dropping it manufactures no false decrease, and what carries that is the order rather than the identity: a shape *is* the measure, so two values of one shape have one measure and a strict containment is a strict decrease whichever family a tag was declared in, a [`Shape::Atom`] leaf denoting one value wherever it stands and so holding the containment under every instantiation. The identities alone would not carry it, a closed leaf — a nullary constructor's, a literal's, a free monoid's identity — naming no binder at all.
     Variant(Atom),
     /// A nominal structure literal.
     Struct(Global),
