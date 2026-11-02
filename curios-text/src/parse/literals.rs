@@ -559,4 +559,4 @@ pub(super) fn parse_bool_intrinsic<'a>(state: ParserState<'a>) -> Parsed<'a, Ter
         .parse(state)
 }
 
-// Intrinsic types and operations are not surface syntax — they live in `/sys` (see `sys_module.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) are here.
+// Intrinsic types and operations are not surface syntax — they live in `/sys` (see `curios-prelude`'s `sys_module.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) are here.

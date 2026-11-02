@@ -29,7 +29,7 @@ impl Name {
         }
     }
 
-    pub(crate) fn new(is_abs: bool, qualifier: Qualifier) -> Self {
+    pub fn new(is_abs: bool, qualifier: Qualifier) -> Self {
         Self {
             span: None,
             leaf: None,
@@ -52,7 +52,7 @@ impl Name {
         self.leaf.as_ref().or(self.span.as_ref())
     }
 
-    pub(crate) fn is_abs(&self) -> bool {
+    pub fn is_abs(&self) -> bool {
         self.is_abs
     }
 
@@ -85,11 +85,11 @@ impl Name {
         }
     }
 
-    pub(crate) fn is_single(&self) -> bool {
+    pub fn is_single(&self) -> bool {
         self.qualifier.is_single()
     }
 
-    pub(crate) fn head(&self) -> &str {
+    pub fn head(&self) -> &str {
         self.qualifier.head()
     }
 

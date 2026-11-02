@@ -124,6 +124,53 @@ fn glob_does_not_import_subtree_private_bindings() {
     );
 }
 
+#[test]
+fn rejects_private_module_from_outside_its_declaring_subtree() {
+    assert!(
+        run_err(
+            r#"
+        pub mod Owner
+            mod Foo
+                pub let f : Type = Type;
+            end
+        end
+        pub mod Bar
+            use /Owner/Foo/{f};
+        end
+        Type
+    "#
+        )
+        .contains("`Foo` is private to `/Owner`")
+    );
+}
+
+// A private declaration written at the root belongs to the root's subtree, which is the whole program — so a sibling module may name it. The boundary is the declaring module, and the root declares no boundary above itself.
+#[test]
+fn allows_a_private_root_module_from_a_sibling() {
+    run(r#"
+        mod Foo
+            pub let f : Type = Type;
+        end
+        pub mod Bar
+            use /{Foo};
+        end
+        Type
+    "#);
+}
+
+#[test]
+fn allows_pub_root_module_via_absolute_path() {
+    run(r#"
+        pub mod Foo
+            pub let f : Type = Type;
+        end
+        pub mod Bar
+            use /{Foo};
+        end
+        Type
+    "#);
+}
+
 // === Interface audit =========================================================
 
 // The facade pattern: a module re-exports a name out of its own private child and then uses it in a public signature. The audit follows the re-export, so the name is as visible as the facade makes it.

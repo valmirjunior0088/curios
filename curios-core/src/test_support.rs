@@ -7,12 +7,12 @@
 use {
     crate::{
         Cases, ConceptDecl, Cost, Definition, DefinitionKind, Free, Global, InductDecl, Item,
-        Match, MatchResult, Module, Nominal, Program, RecItem, ReduceError, Reducer, StructDecl,
-        Subterm, Term, reduce_intrinsic,
+        Match, MatchResult, Minted, Module, Nominal, Program, RecItem, ReduceError, Reducer,
+        StructDecl, Subterm, Term, reduce_intrinsic,
     },
     curios_utilities::Qualifier,
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,
     },
 };
@@ -183,5 +183,23 @@ impl Reducer for Folding {
 
     fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
         fresh(hint)
+    }
+}
+
+/// The names a lowering filed as resolving to nothing, as the refusal they are: each rendered as elaboration reports it, a line apart, declaration by declaration in the order of their names, the entry's last. `Ok` where it filed none.
+pub fn unresolved(minted: &Minted) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    let filed = minted
+        .each()
+        .map(|(_, mints)| mints)
+        .filter(|mints| seen.insert(std::ptr::from_ref(*mints)))
+        .chain([&minted.entry])
+        .flat_map(|mints| mints.unbound.values())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    match filed.is_empty() {
+        true => Ok(()),
+        false => Err(filed.join("\n")),
     }
 }

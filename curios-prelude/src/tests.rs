@@ -1,12 +1,14 @@
 //! What the sources this crate elaborates must be true of, beyond elaborating.
 
 use {
-    crate::{test_support::*, with_prelude},
+    crate::{
+        std_module::{std_directory, std_source},
+        sys_module::{sys_module, sys_source},
+        with_prelude,
+    },
     curios_abi::HostOp,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},
-    curios_text::{
-        GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude, sys_module, sys_source,
-    },
+    curios_text::{GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude},
     std::{
         collections::BTreeSet,
         fs,

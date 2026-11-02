@@ -401,7 +401,7 @@ impl PartialEq for Module {
 
 impl Module {
     /// A module of `items` built rather than parsed, which lie nowhere.
-    pub(crate) fn built(items: Vec<TopItem>) -> Self {
+    pub fn built(items: Vec<TopItem>) -> Self {
         Self {
             items,
             spans: Vec::new(),

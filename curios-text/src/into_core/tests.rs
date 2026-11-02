@@ -13,7 +13,6 @@ mod ordering_tests;
 mod re_export_tests;
 mod scan_tests;
 mod shadowed_parameter_tests;
-mod sys_tests;
 mod universe_tests;
 mod unused_binder_tests;
 mod unused_declaration_tests;

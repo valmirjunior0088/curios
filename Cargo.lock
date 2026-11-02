@@ -866,6 +866,7 @@ dependencies = [
  "curios-elab",
  "curios-erase",
  "curios-native",
+ "curios-num",
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
@@ -903,7 +904,6 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-profile",
- "curios-unicode",
  "curios-utilities",
 ]
 

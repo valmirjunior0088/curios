@@ -3,7 +3,7 @@ name = "curios-prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios's fixed prelude: /std as authored, and the build that elaborates, certifies and erases it with /sys into the certified units every compilation starts from"
+description = "Curios's fixed prelude: /std as authored, the /sys roster, and the build that elaborates, certifies and erases the two into the certified units every compilation starts from"
 build = "build.rs"
 
 [lints]
@@ -22,7 +22,7 @@ profile = [
     "dep:curios-erase",
     "dep:curios-package",
 ]
-# `test_support`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+# `std_module`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = ["dep:curios-package"]
 
 # The program that is asked for the build's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `compile.rs` as a module.
@@ -32,6 +32,9 @@ path = "profile.rs"
 required-features = ["profile"]
 
 [dependencies]
+curios-abi = { workspace = true }
+curios-num = { workspace = true }
+curios-unicode = { workspace = true }
 curios-archive = { workspace = true }
 curios-core = { workspace = true }
 curios-document = { workspace = true }
@@ -39,7 +42,7 @@ curios-profile = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
 curios-utilities = { workspace = true }
-# For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `test_support` too.
+# For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `std_module` too.
 curios-cert = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
 curios-erase = { workspace = true, optional = true }
@@ -47,6 +50,9 @@ curios-package = { workspace = true, optional = true }
 
 # The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased, each root imaged as the certified unit the crate restores.
 [build-dependencies]
+curios-abi = { workspace = true }
+curios-num = { workspace = true }
+curios-unicode = { workspace = true }
 curios-archive = { workspace = true }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }

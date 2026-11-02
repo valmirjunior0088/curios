@@ -8,8 +8,8 @@
 
 use {
     super::{applied, fn_over, intrinsic, name, sort, type_, unit},
-    crate::{Intrinsic, Name, Subterm, Term},
     curios_core::{Operand, Produced},
+    curios_text::{Intrinsic, Name, Subterm, Term},
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
 };
 
@@ -21,7 +21,7 @@ pub(super) struct Projection {
 
 /// The parameter a bare name operand is, by position.
 fn parameter(params: &[&str], operand: &Term) -> Option<usize> {
-    match operand.as_subterm() {
+    match &**operand {
         Subterm::Name(name) if name.is_single() && !name.is_abs() => {
             params.iter().position(|param| *param == name.head())
         }

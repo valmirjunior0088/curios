@@ -51,7 +51,7 @@ fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, O
 
 /// The word a page shows on every declaration it adopts out of `prefix`, where there is one to show.
 ///
-/// Spelled here because `/sys` is this crate's own root — `sys_module` builds it — so the word for what it holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
+/// Spelled here because this crate holds the registry of the names the compiler knows in `/sys` (`registry.rs`), so the word for what that root holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
 fn chip(prefix: &Qualifier) -> Option<String> {
     // Compared as a qualifier, not as text: `join` writes a canonical identity, which is absolute, so the text `"sys"` would match nothing it is handed.
     match *prefix == Qualifier::from(["sys"]) {

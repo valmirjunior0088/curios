@@ -3,7 +3,7 @@ name = "curios-text"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios surface syntax: parser, formatter, printer, lints, module resolution, the /sys module and the registry of compiler-known names, and lowering to core"
+description = "The Curios surface syntax: parser, formatter, printer, lints, module resolution, the registry of compiler-known names, and lowering to core"
 
 [lints]
 workspace = true
@@ -17,7 +17,6 @@ curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 # The Unicode tables `/sys/unicode` bakes.
-curios-unicode = { workspace = true }
 curios-utilities = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }

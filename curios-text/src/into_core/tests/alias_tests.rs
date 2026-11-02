@@ -236,8 +236,3 @@ fn non_type_identity_alias_still_preserves_representation_provenance() {
         "unexpected error: {error}"
     );
 }
-
-#[test]
-fn standard_library_direct_type_aliases_pass_exposure_audit() {
-    lower_with_prelude("use /std/Str/{Valid}; Valid").unwrap();
-}

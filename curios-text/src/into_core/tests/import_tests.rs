@@ -427,3 +427,9 @@ fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
     );
     assert_eq!(in_scope(Some("/Outer/M/inner")), ["/Outer/N/h=N/h"]);
 }
+
+// Without a prelude in scope nothing claims `/std`, so the user's own `mod std` is an ordinary, unreserved entry-rooted module, not a collision.
+#[test]
+fn user_own_mod_std_without_prelude_is_not_a_collision() {
+    run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");
+}

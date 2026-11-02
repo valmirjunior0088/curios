@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::test_support::*,
+    crate::std_module::std_directory,
     curios_cert::{Error, Globals, certify_module, infer, recheck_module_verdicts_uncached},
     curios_core::{
         Bound, Cases, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Match, Nat,

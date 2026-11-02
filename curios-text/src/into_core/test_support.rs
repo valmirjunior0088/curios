@@ -3,12 +3,13 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::{Entrypoint, RootSource, sys_module},
+    crate::{Entrypoint, RootSource},
+    curios_core::test_support::unresolved,
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-        Qualifier, ReportSyntax, ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName,
+        Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
         SyntaxRegistry, TestSyntax, test_support::Temporary,
     },
     std::{fs, path::Path},
@@ -316,24 +317,6 @@ pub(super) fn run_err(src: &str) -> String {
     }
 }
 
-/// The names a lowering filed as resolving to nothing, as the refusal they are: each rendered as elaboration reports it, a line apart, declaration by declaration in the order of their names, the entry's last. `Ok` where it filed none.
-fn unresolved(minted: &curios_core::Minted) -> Result<(), String> {
-    let mut seen = std::collections::HashSet::new();
-    let filed = minted
-        .each()
-        .map(|(_, mints)| mints)
-        .filter(|mints| seen.insert(std::ptr::from_ref(*mints)))
-        .chain([&minted.entry])
-        .flat_map(|mints| mints.unbound.values())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-
-    match filed.is_empty() {
-        true => Ok(()),
-        false => Err(filed.join("\n")),
-    }
-}
-
 // A refusal the lowering raised, rendered as the reader sees it: the message and, where the error was placed, its snippet.
 pub(super) fn run_err_report(src: &str) -> String {
     super::into_core(
@@ -343,94 +326,6 @@ pub(super) fn run_err_report(src: &str) -> String {
     )
     .unwrap_err()
     .format()
-}
-
-// Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate. A name the lowering filed as resolving to nothing is an error here as one it raised is.
-pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
-    let modules = prelude_fixture();
-    let prepared =
-        super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
-    let lowered = super::into_core_with_prelude(
-        &src.parse::<Entrypoint>().unwrap(),
-        &fixture_loader(),
-        std::slice::from_ref(&&prepared),
-        syntax(),
-    )
-    .map_err(|error| error.to_string())?;
-
-    unresolved(&lowered.minted)
-}
-
-/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it. `Nat` is a module and a declaration at its root, as the library's own is, so a fixture that imports it writes the type bare.
-fn prelude_fixture() -> RootSource {
-    prelude_with("")
-}
-
-/// The `/std` of [`prelude_fixture`].
-const FIXTURE_STD: &str = r#"
-            pub mod Str
-                pub let Valid : Type = Type;
-            end
-            pub mod Nat
-                pub let Nat : Type = Type;
-                pub let add : Type = Type;
-            end
-            pub use Nat/{let Nat};
-            pub mod Bool
-                pub let Holds : Type = Type;
-                pub use /sys/Bool/{True};
-            end
-            pub mod Shape
-                pub concept Shape(A : Type) : pub Type {
-                    area(A, A) -> Type,
-                }
-            end
-            mod Hidden
-                pub use /sys/{Handle};
-            end
-"#;
-
-/// [`prelude_fixture`], its `/std` closing with `extra`.
-fn prelude_with(extra: &str) -> RootSource {
-    let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&SYNTAX));
-    modules.insert_root(
-        "std",
-        RootKind::Ordinary,
-        [FIXTURE_STD, extra].concat().parse().unwrap(),
-    );
-    // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` through the registry — so the scope has to hold whatever this fixture's registry points it at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
-    modules
-}
-
-/// The fixture's prelude with `extra` closing its `/std`, lowered as the one unit it is: the lens for what the prelude's own lowering refuses.
-pub(super) fn prepare_with(extra: &str) -> Result<(), String> {
-    super::prepare_prelude(&prelude_with(extra), &[], syntax())
-        .map(|_| ())
-        .map_err(|error| error.to_string())
-}
-
-/// [`lower_with_prelude`], with the entry seeing only `declared` of what the scope mounts — the lens for the undeclared-dependency refusal.
-pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String> {
-    let modules = prelude_fixture();
-    let prepared =
-        super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
-    let entrypoint = src.parse::<Entrypoint>().unwrap();
-    let loader = fixture_loader();
-
-    let unit = super::into_core_unit(
-        &super::UnitSource::entry(&entrypoint, &loader).seeing(
-            declared
-                .iter()
-                .map(|prefix| Qualifier::from([*prefix]))
-                .collect(),
-        ),
-        std::slice::from_ref(&&prepared),
-        syntax(),
-    )
-    .map_err(|error| error.to_string())?;
-
-    unresolved(unit.minted())
 }
 
 /// A directory of its own, removed however the test that holds it ends.

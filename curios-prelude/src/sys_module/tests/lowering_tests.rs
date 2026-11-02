@@ -1,8 +1,8 @@
 //! The internal root `/sys` is reachable only through the standard library, a unit reaches only the prefixes it declared, and a user module may not collide with the prelude's.
 
 use {
-    crate::into_core::test_support::*,
-    crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module},
+    crate::sys_module::{sys_module, test_support::*},
+    curios_text::{Intrinsic, LetSignature, SYNTAX, Subterm, Term, TopItem},
 };
 
 // `sys` is the trusted intrinsic substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
@@ -148,59 +148,6 @@ fn rejects_user_pub_mod_std_colliding_with_prelude_std() {
 fn rejects_user_private_mod_std_colliding_with_prelude_std() {
     let error = lower_with_prelude("mod std\n    let x : Type = Type;\nend\nType").unwrap_err();
     assert!(error.contains("std"), "unexpected error: {error}");
-}
-
-// Without a prelude in scope nothing claims `/std`, so the user's own `mod std` is an ordinary, unreserved entry-rooted module, not a collision.
-#[test]
-fn user_own_mod_std_without_prelude_is_not_a_collision() {
-    run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");
-}
-
-#[test]
-fn rejects_private_module_from_outside_its_declaring_subtree() {
-    assert!(
-        run_err(
-            r#"
-        pub mod Owner
-            mod Foo
-                pub let f : Type = Type;
-            end
-        end
-        pub mod Bar
-            use /Owner/Foo/{f};
-        end
-        Type
-    "#
-        )
-        .contains("`Foo` is private to `/Owner`")
-    );
-}
-
-// A private declaration written at the root belongs to the root's subtree, which is the whole program — so a sibling module may name it. The boundary is the declaring module, and the root declares no boundary above itself.
-#[test]
-fn allows_a_private_root_module_from_a_sibling() {
-    run(r#"
-        mod Foo
-            pub let f : Type = Type;
-        end
-        pub mod Bar
-            use /{Foo};
-        end
-        Type
-    "#);
-}
-
-#[test]
-fn allows_pub_root_module_via_absolute_path() {
-    run(r#"
-        pub mod Foo
-            pub let f : Type = Type;
-        end
-        pub mod Bar
-            use /{Foo};
-        end
-        Type
-    "#);
 }
 
 /// `/sys` offers no way out of `Io`: the effect module exports its carrier, its two monad operations and the two that suspend a description and advance one, each answering an `Io`, and no `/sys` function anywhere takes an `Io` to something that is not one.

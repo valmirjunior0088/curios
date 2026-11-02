@@ -4,7 +4,7 @@
 
 use {
     super::{Projection, intrinsic, name, projection},
-    crate::{
+    curios_text::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
         TopItem, TopLet, TopMod, TopUse, UseGroup,
     },
