@@ -4,7 +4,10 @@ use {
     super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
+    curios_core::{
+        Free, Global, InstanceHead, Intrinsic, Level, Many, Module, Nat, RecGroup, RecMemberScopes,
+        Scope, Term, UniverseContext,
+    },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
@@ -126,5 +129,81 @@ fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
         "the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
+    );
+}
+
+/// `let bad : Nat = <body>`, the one item of a module built by hand.
+fn bad_module(body: Term) -> Module {
+    Module {
+        items: vec![authored_partial(
+            &Global::Authored(Qualifier::from(["bad"])),
+            Term::intrinsic(Intrinsic::NatType),
+            body,
+        )]
+        .into(),
+        ..Module::default()
+    }
+}
+
+/// A universe instance of a member a group does not have is refused, not aborted on.
+///
+/// [`curios-cert`'s README](../../../README.md) states that reduction is total on arbitrary terms — a projection out of range among the shapes `whnf` goes stuck on rather than asserting — and that the counts no typing rule reads are checked where the declaration is consulted. `Term::rec_proj` relates its index to the group's length, but an instance of a member states the index on the node, where `Term::instance` relates it to nothing, so without the boundary check `RecGroup::item`'s `expect` is the first thing that reads it and the walk dies where the board requires a refusal.
+#[test]
+fn an_instance_of_a_member_a_group_does_not_have_is_refused() {
+    let f = member();
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(Many(1), &[&f], Term::intrinsic(Intrinsic::NatType)),
+        body: Scope::close(Many(1), &[&f], Term::free_var(&f)),
+    }])
+    .with_universe_context(UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    });
+    let module = bad_module(Term::instance(
+        InstanceHead::RecProj(group, 1),
+        vec![Level::zero()],
+    ));
+
+    assert!(
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        "the walk must refuse an instance of a member past the group's length",
+    );
+}
+
+/// A group whose member scopes bind more than its members is refused, not aborted on.
+///
+/// `RecGroup::new` takes its members without relating their scopes' arity to their number, and `member_type` and `member_body` open each scope over one term per member, so without the boundary check `Scope::open`'s assert is the first thing that reads either count. A `rec` group is a Core term a module built by hand carries, and the board requires the implementation to fail closed.
+#[test]
+fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
+    let (f, g) = (member(), Free::local(905, Some("g")));
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(Many(2), &[&f, &g], Term::intrinsic(Intrinsic::NatType)),
+        body: Scope::close(Many(2), &[&f, &g], Term::free_var(&f)),
+    }]);
+    let module = bad_module(Term::rec_proj(group, 0));
+
+    assert!(
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        "the walk must refuse a group whose member scopes and members disagree in number",
+    );
+}
+
+/// A projection past a tuple's components is refused, not aborted on.
+///
+/// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`. It is the control the two counts above are read against: one count of a hand-built term was checked before this commit and two were not.
+#[test]
+fn a_projection_past_a_tuples_components_is_refused() {
+    let module = bad_module(Term::proj(
+        Term::tuple([
+            Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        ]),
+        7,
+    ));
+
+    assert!(
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        "the walk must refuse a projection past the components of what it projects from",
     );
 }

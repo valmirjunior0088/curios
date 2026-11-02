@@ -153,6 +153,20 @@ pub(crate) fn check_group<R>(
         return Err(error);
     }
 
+    // Every member's scopes bind one assumption per member, which is what `member_type` and `member_body` open them over. No typing rule reads either count, so this is the boundary that checks them, and a term a caller built otherwise is refused here rather than asserted on where a scope is opened.
+    let members = group.length();
+    for member in group.iter() {
+        for binders in [member.type_.arity(), member.body.arity()] {
+            if binders != members {
+                return Err(Error::Arity {
+                    counted: Counted::GroupBinders,
+                    expected: members,
+                    actual: binders,
+                });
+            }
+        }
+    }
+
     kernel.scoped(|kernel| {
         // Signatures first, then bodies — and the two phases must read a sibling differently.
         //

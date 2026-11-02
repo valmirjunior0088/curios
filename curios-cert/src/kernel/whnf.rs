@@ -619,6 +619,11 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
             None => return Ok(Step::Stop(Term::instance(head, universes))),
         },
         InstanceHead::RecProj(group, index) => {
+            // An index no member answers is a shape a caller could hand this walk, and `Term::rec_proj` asserts on one, so it goes stuck here: reduction is total on arbitrary terms, and the typing that consults the group is what refuses it.
+            if *index >= group.length() {
+                return Ok(Step::Stop(Term::instance(head, universes)));
+            }
+
             return Ok(Step::Continue(Term::rec_proj(
                 group
                     .instantiate_universes(&universes)
