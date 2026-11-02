@@ -56,8 +56,8 @@ use {
         Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited, bytes_of,
         check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
         check_struct_decl, define_as_stated, free_locals_of, held_digest, open_quality,
-        positivity_vectors, read_digest, rewrite_universe_levels_scoped_shared, satisfiable,
-        universe_metas, variance_vectors,
+        positivity_vectors, read_digest, rewrite_universe_levels_scoped_shared, universe_metas,
+        universe_verdict, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
@@ -1714,19 +1714,4 @@ fn accept(
             reads.extend(read.clone());
         }
     }
-}
-
-/// What is wrong with a universe context the walk is about to assume, if anything.
-///
-/// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
-fn universe_verdict(context: &UniverseContext) -> Option<Error> {
-    curios_profile::profile!("universe_verdict");
-    if !context.is_closed() {
-        return Some(Error::UnclosedUniverses);
-    }
-    if !satisfiable(&context.constraints) {
-        return Some(Error::UnsatisfiableUniverses);
-    }
-
-    None
 }

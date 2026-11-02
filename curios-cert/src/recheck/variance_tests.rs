@@ -330,9 +330,9 @@ fn a_level_an_instance_of_a_parameter_carries_is_invariant() {
 }
 
 /// Whether `name` was refused for an instance whose levels do not satisfy the scheme they instantiate.
-fn refused_instance(verdicts: &[Verdict], name: Global) -> bool {
+fn unsatisfiable(verdicts: &[Verdict], name: Global) -> bool {
     verdicts.iter().any(|verdict| {
-        verdict.name == Some(name) && matches!(verdict.error, Error::UniverseInstance { .. })
+        verdict.name == Some(name) && matches!(verdict.error, Error::UnsatisfiableUniverses)
     })
 }
 
@@ -349,9 +349,9 @@ fn one_spelling_of_a_level_is_judged_again_under_a_groups_own_context() {
     }
 }
 
-// A group inside a term carries a universe context of its own, which `infer` assumes while it certifies the group and which the walk's universe verdict — closed and satisfiable, decided before anything is assumed — reaches at no registry entry and no definition. Carrying the loop `p + 1 ≤ p`, a set with no instance in the naturals, the group's own member is granted a body a rung above its declared type, which asks `p + 2 ≤ p` and is refused with nothing assumed. So the loop is assumed and does grant it, and what refuses the term is the instance alone: `check_instance` holds `[0]` to the group's constraints under the item's, where `0 + 1 ≤ 0` does not hold. An unsatisfiable set has no instance any satisfiable item can discharge, which is what keeps the gap this states out of a verdict.
+// A group inside a term carries a universe context of its own, which `infer` assumes while it certifies the group, and which `check_group` decides — closed and satisfiable — before any member is checked, as the walk decides a registry entry's and a definition's before assuming either. Carrying the loop `p + 1 ≤ p`, a set with no instance in the naturals, the group is refused where it stands and whatever its members say: the member granted a body a rung above its declared type, which the loop would license, and the honest member are refused alike, by the group's own context rather than by the instance `check_instance` would have held to it. Without the loop the members' own judgment is the whole of it, the raised body a mismatch and the honest one standing.
 #[test]
-fn a_groups_own_universe_context_is_assumed_and_only_its_instance_refuses_it() {
+fn a_groups_own_universe_context_is_decided_before_its_members_are_checked() {
     let loop_ = || {
         vec![cumulativity(
             Level::param(UniverseParam(0))
@@ -361,18 +361,15 @@ fn a_groups_own_universe_context_is_assumed_and_only_its_instance_refuses_it() {
         )]
     };
 
-    let (held, raised) = group_context_module(loop_(), true);
-    let verdicts = refusals(&raised);
-    assert!(refused_instance(&verdicts, held), "{verdicts:?}");
-    assert!(!mismatched(&verdicts, held), "{verdicts:?}");
+    for raised in [true, false] {
+        let (held, module) = group_context_module(loop_(), raised);
+        let verdicts = refusals(&module);
+        assert!(unsatisfiable(&verdicts, held), "{raised}: {verdicts:?}");
+    }
 
     let (held, plain) = group_context_module(Vec::new(), true);
     let verdicts = refusals(&plain);
     assert!(mismatched(&verdicts, held), "{verdicts:?}");
-
-    let (held, honest) = group_context_module(loop_(), false);
-    let verdicts = refusals(&honest);
-    assert!(refused_instance(&verdicts, held), "{verdicts:?}");
 
     let (_, bare) = group_context_module(Vec::new(), false);
     assert_eq!(refusals(&bare), Vec::new());

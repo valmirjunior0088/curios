@@ -23,7 +23,11 @@
 #[cfg(test)]
 mod tests;
 
-use {super::LevelModel, curios_core::UniverseConstraint};
+use {
+    super::LevelModel,
+    crate::Error,
+    curios_core::{UniverseConstraint, UniverseContext},
+};
 
 /// Whether some assignment of naturals to parameters satisfies every constraint.
 pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
@@ -40,4 +44,21 @@ pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
             return true;
         }
     }
+}
+
+/// What is wrong with a universe context a walk is about to assume, if anything.
+///
+/// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
+///
+/// Every context a walk assumes is decided here, wherever it is assumed from: a registry entry's and a definition's before `recheck_module_verdicts` judges anything, and a `rec` group's own where `check_group` opens it. An unsatisfiable set assumed anywhere is the same hypothesis set from which everything follows, so the clause is one function rather than one per place that assumes one.
+pub(crate) fn universe_verdict(context: &UniverseContext) -> Option<Error> {
+    curios_profile::profile!("universe_verdict");
+    if !context.is_closed() {
+        return Some(Error::UnclosedUniverses);
+    }
+    if !satisfiable(&context.constraints) {
+        return Some(Error::UnsatisfiableUniverses);
+    }
+
+    None
 }
