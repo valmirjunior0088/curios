@@ -65,7 +65,8 @@ impl Same {
             variances: made.variances == held.variances
                 && made.field_variances == held.field_variances
                 && made.parameter_field == held.parameter_field,
-            sort: match (&made.value_sort, &held.value_sort) {
+            // Read through the mark, as the body part is: a proof publishes neither, so neither part may be compared off the field alone (`curios_core::Definition::published`).
+            sort: match (made.published().1, held.published().1) {
                 (Some(made), Some(held)) => spelled_alike(made, held),
                 (made, held) => made.is_none() && held.is_none(),
             },
@@ -257,7 +258,7 @@ pub fn item_part_digest(
         Question::Sort(_) => {
             // A group's member files none.
             let sort = plain
-                .and_then(|definition| definition.value_sort.as_ref())
+                .and_then(|definition| definition.published().1)
                 .map(|sort| sharing.share(sort));
 
             sealed(curios_archive::to_bytes(&sort)).map(Some)

@@ -48,15 +48,17 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
     let place = places.place(name)?;
     match place {
         Place::Let(_) => match &module.items[place.item()] {
-            // The proof mark withholds the body and the sort that body inhabits together, as `define_as_stated` writes a proof: a reader that took one and not the other would hold the definition otherwise than the walk that judged it.
-            Item::Let(definition) => Some(Held {
-                type_: &definition.type_,
-                value: (!definition.proof).then_some(&definition.body),
-                value_sort: (!definition.proof)
-                    .then_some(definition.value_sort.as_ref())
-                    .flatten(),
-                universes: &definition.universe_context,
-            }),
+            // What a finished module publishes is `Definition::published`'s to say, the body and the sort that body inhabits going together because the mark withholds both, as `define_as_stated` writes a proof.
+            Item::Let(definition) => {
+                let (value, value_sort) = definition.published();
+
+                Some(Held {
+                    type_: &definition.type_,
+                    value,
+                    value_sort,
+                    universes: &definition.universe_context,
+                })
+            }
             Item::Rec(_) => unreachable!("a definition's place is a definition's"),
         },
         Place::Member { member, .. } => match &module.items[place.item()] {

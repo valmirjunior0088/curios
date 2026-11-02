@@ -389,9 +389,10 @@ impl<'s> Context<'s> {
                 self.define_published(&name, &definition.body, &definition.kind, definition.proof);
                 self.set_assumption_universe_context(&name, definition.universe_context.clone());
                 self.record_definition_variances(definition);
+                // The sort a value inhabits is published with the body, by the mark that withholds both (`curios_core::Definition::published`).
                 self.typing
                     .program
-                    .record_definition_value_sort(&definition.name, definition.value_sort.as_ref());
+                    .record_definition_value_sort(&definition.name, definition.published().1);
                 if self.is_witness_declaration(&definition.name) {
                     self.update_witness_scheme(
                         &definition.name,

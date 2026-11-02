@@ -108,13 +108,13 @@ impl<'a> Standing<'a> {
 
                 Some(Defined {
                     type_: &definition.type_,
-                    body: (!definition.proof).then_some(&definition.body),
+                    body: definition.published().0,
                     universe_context: &definition.universe_context,
                     totality: definition.totality,
                     variances: &definition.variances,
                     field_variances: &definition.field_variances,
                     parameter_field: definition.parameter_field,
-                    value_sort: definition.value_sort.as_ref(),
+                    value_sort: definition.published().1,
                     island: definition.island,
                 })
             }

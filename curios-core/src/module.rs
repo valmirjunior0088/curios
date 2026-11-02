@@ -958,6 +958,16 @@ pub fn former_spelling(
 }
 
 impl Definition {
+    /// What a finished module publishes of this definition: what its name unfolds to, and the sort that value inhabits where it states one.
+    ///
+    /// The two go together because [`Self::proof`] withholds both — a judgment that asks what a proof's name unfolds to is answered with nothing, and the sort of a value no judgment may read is nothing a judgment may read either. Stated here, where the mark is, so that the readers of a finished module ask one question and no two of them can pair the fields differently: `curios-cert`'s environment and its read-digest, and `curios-elab`'s scope, its publication and the comparison that decides whether a part came out as it was.
+    pub fn published(&self) -> (Option<&Term>, Option<&Term>) {
+        match self.proof {
+            true => (None, None),
+            false => (Some(&self.body), self.value_sort.as_ref()),
+        }
+    }
+
     /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry ([`former_spelling`]): declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels.
     ///
     /// **The one spelling of a former from an entry.** A former says nothing its entry does not: the lowering writes both from one telescope, and what an elaborated former holds beside its entry is measured against this (`std_former_derivation`).
