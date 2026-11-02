@@ -2,7 +2,7 @@
 
 A `[[foreign]]` row delivers a WebAssembly module to the native target and a JavaScript gateway to a browser ([A foreign row states a delivery for each target](../../design/tools/a-foreign-row-states-a-delivery-for-each-target.md)), and nothing else. A declaration a gateway answers has, natively, no answer but a module in another language — built freestanding, importing nothing, taking scalars and byte strings alone and answering at once (`curios-native/src/plugin.rs`, [Foreign calls past scalars and byte strings](../runtime/300-foreign-calls-past-scalars.md)). A row declared `-> List(Bytes)` or taking a `Handle` has no native stand-in at all. So a program that reaches a browser row is tested natively through a `.wasm` written for the purpose or not at all, and a package cannot give such a row a native answer in the language the rest of it is written in, though the language can state the answer's type exactly and the checkers can hold it to it. This revises the decision above, whose rationale makes a `.wasm` "standing in for a gateway" the way code that reaches a row is tested natively.
 
-It has no prerequisite in another specification; its "the same tests on both targets" check is [A browser test run is answered by whatever opens its page](305-a-browser-test-run-is-answered-by-whatever-opens-its-page.md)'s command. The next step is a ready delivery, the stages below.
+It has no prerequisite in another specification; its "the same tests on both targets" check is `curios test --target browser` ([`documentation/usage.md`](../../usage.md), "Serving the tests"). The next step is a ready delivery, the stages below.
 
 ## What is missing
 
@@ -100,7 +100,7 @@ One commit.
 
 ## Verification
 
-`cargo xtask workspace lint` and `cargo xtask workspace format`; the named `curios-package`, `curios-anf` and `curios` tests; `curios-prelude`'s corpus tests, since the link changes. Then the check this specification shares with [305](305-a-browser-test-run-is-answered-by-whatever-opens-its-page.md): one package whose row has a gateway and a Curios root, its tests passing under `curios test` and under `curios test --target browser`.
+`cargo xtask workspace lint` and `cargo xtask workspace format`; the named `curios-package`, `curios-anf` and `curios` tests; `curios-prelude`'s corpus tests, since the link changes. Then the check the two targets share: one package whose row has a gateway and a Curios root, its tests passing under `curios test` and under `curios test --target browser`.
 
 ## Retirement
 

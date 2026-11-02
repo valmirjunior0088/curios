@@ -1,6 +1,6 @@
 # curios-browser
 
-The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; what it is configured with, rendered from `curios-abi`; and the page a browser build of a program is, which `curios compile --target browser` writes. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. How a page is laid out is [A browser page is closed and laid out as its packages](../documentation/design/tools/a-browser-page-is-closed-and-laid-out-as-its-packages.md); build steps belong to `xtask`.
+The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; what it is configured with, rendered from `curios-abi`; the page a browser build of a program is, which `curios compile --target browser` writes; and the runner `curios test --target browser` answers at its root, with the wire its reports cross on. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. How a page is laid out is [A browser page is closed and laid out as its packages](../documentation/design/tools/a-browser-page-is-closed-and-laid-out-as-its-packages.md); build steps belong to `xtask`.
 
 ## Design
 
@@ -41,3 +41,19 @@ The Curios browser host: `harness.mjs`, which runs a compiled program under a Ja
 **Rationale.** The harness is JavaScript that no Rust test executes — `src/tests.rs` pins the wire names it spells and what it is configured with, not what it answers. Node runs the bundle on V8, one of the playground's engines, and its runner needs no package, so the step has no lock file.
 
 **Rejected.** A headless browser, a download and a driver for what the same engine already runs; a test framework from npm, an install for what `node:test` does.
+
+### A framed page posts to its parent
+
+**Decision.** When `globalThis.parent` is a window other than the page's own, the loader posts `{ type: "started" }` before the program runs and `{ type: "outcome", outcome }` after it ends, `outcome` what `start` resolves to with each stream whole, each with `"/"` as the target origin. The harness's `run` resolves `held` beside `exitCode` and `trap`: `true` or `false` where the entry answered a `Bool`, the i31 `0` or `1`, and `null` where it answered none — a program's unit, which is a struct, an exit, or a trap.
+
+**Rationale.** A test program's verdict is the word its entry answers, which the native runtime reads as `TestEnd` and nothing in a page could read before. A page cannot tell a test runner from any other parent, so the post is a contract of the page that any embedder may use; `"/"` names the caller's own origin without reading `location`, so no other origin is handed a program's output; and `started` before the run is what tells a parent a loader that never ran from one still running. A program's unit is no word, so reading it as `null` leaves every program's run as it was.
+
+**Rejected.** A wildcard target origin, which hands a program's output to any site that frames its page; a test mode in the loader, which cannot know the tests; the loader posting to a server; a trap on a return of no word, which every program's unit is; a second door beside `run`, where a test page is the ordinary page.
+
+### A test run is one runner over one page at a time
+
+**Decision.** `curios test --target browser` answers the run at its root with `runner()`: `templates/runner.html`, carrying the run's token, its first step and the page's argument key as one JSON block, and `src/runner.mjs` whole. The runner opens one iframe per test, one at a time in plan order, at `/index.html?arg=<index>`, the subject in hand's page; admits a message only from that iframe's window at its own origin; reports each outcome to the command with `POST /` as `Report` spells it, the streams in base64; shows what the command wrote, which `Reply` carries, and opens the step the reply names next; removes each iframe once its page has answered; and reports a page whose document loaded with no `started` posted as trapped, naming the loader. The command serves one subject's page at a time and switches with the subject's last report, and answers a report of any step but the one in hand with nothing, ignoring it.
+
+**Rationale.** A fresh iframe is a fresh realm — fresh instances of every gateway module — the browser's form of native's one instantiation per test, and one at a time keeps one main thread and one console in order. One page at a time needs no name per subject, which the library and the package's own `exe.crs` executable could not have, since they share one; the step in hand makes buffering reports needless and a second tab harmless; the reply carrying the lines keeps the page and the terminal one rendering; and a script in `src/` is one Biome formats and Node tests, where a template is not.
+
+**Rejected.** A name per subject, and the nested layout and claim check it needs; the server reading the query to tell the run from the page; every subject's page served at once; several iframes at once; a websocket, a dependency for a bounded, one-way report; a renderer of the lines in JavaScript; a timeout, since the page may be opened an hour later; a runner written as a file of the page.
