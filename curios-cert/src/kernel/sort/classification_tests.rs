@@ -375,3 +375,24 @@ fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
         "the group's `Prop` claim was trusted over the sort its member's application reduces to",
     );
 }
+
+/// Depth is bought with stack: a tower of negations five thousand deep is classified on the default test-thread stack, where the walk descends into a Π's domain to classify it and the memo is written only where each classification returns.
+///
+/// What this guards is the shape `.claude/rules/rust.md` asks of every walk over data-shaped depth. A sort walk that recursed natively would die on the segment it was entered on rather than refuse, and the soundness board requires the implementation to fail closed — a stack overflow is acceptable only where it refuses.
+///
+/// Mutation-checked: with `Sort::of`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts, which is a death and not a refusal.
+#[test]
+fn a_tower_of_negations_is_classified_on_the_default_stack() {
+    let mut kernel = kernel();
+    let falsehood = declare(&mut kernel, "False", Term::prop());
+
+    let mut tower = falsehood.clone();
+    for level in 0..5_000 {
+        tower = Term::func_type([(binder(level, "x"), tower)], falsehood.clone());
+    }
+
+    assert!(
+        matches!(Sort::of(&mut kernel, &tower), Ok(Sort::Prop(_))),
+        "a Π into a proposition is a proposition at every depth",
+    );
+}
