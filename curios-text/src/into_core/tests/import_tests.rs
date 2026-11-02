@@ -233,7 +233,7 @@ fn glob_imports_all_public_bindings() {
                 &global("/Foo/y"),
                 written_type(0),
                 written_type(1),
-                curios_core::Term::var(curios_core::Var::free(global("/Foo/x")))
+                curios_core::Term::written(global_name("/Foo/x"))
             )
         ),
     );

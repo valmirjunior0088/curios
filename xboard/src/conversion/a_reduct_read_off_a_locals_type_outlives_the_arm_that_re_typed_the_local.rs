@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nominal, Scope,
-        Telescope, Term, UniverseContext,
+        Telescope, Term, UniverseContext, Universes,
     },
     curios_text::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
@@ -77,7 +77,10 @@ fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
     .stating(at(Term::free_var(&decided)));
     let holds_read = || {
         Term::apply(
-            Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+            Term::instance(
+                Global::Authored(SYNTAX.proof.holds.qualifier()),
+                Universes::default(),
+            ),
             [read.clone()],
         )
     };

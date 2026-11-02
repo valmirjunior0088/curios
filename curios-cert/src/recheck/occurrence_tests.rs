@@ -203,7 +203,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let held = authored(
         &Global::Authored(Qualifier::from(["held"])),
         Term::apply(
-            Term::free_var(&Free::from(&former)),
+            Term::instance(former, Universes::default()),
             [
                 three.clone(),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),

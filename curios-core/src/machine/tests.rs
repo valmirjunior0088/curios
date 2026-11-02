@@ -54,7 +54,7 @@ impl ClosedHost for Host {
         self.definitions.get(name)
     }
 
-    fn closed_body_at(&self, name: &Free) -> Option<&Term> {
+    fn closed_body_at(&self, name: &Free, _: &Universes) -> Option<&Term> {
         self.definitions.get(name)
     }
 

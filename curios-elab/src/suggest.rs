@@ -20,7 +20,6 @@ use {
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
         Apply, Entrypoint, Free, Global, InductType, Item, StructEntry, StructType, Subterm, Term,
-        Var,
     },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
@@ -144,7 +143,7 @@ fn suggest_in_scope(
             break;
         }
         attempts += 1;
-        let head = Term::var(Var::free(Free::Global(name)));
+        let head = Term::written(name);
         // A candidate is a use of its declaration, so its type is read at an instance of its own, as an occurrence's is: the levels and the sorts the declaration leaves to a caller are the goal's to state. The instance goes with the attempt.
         let mark = context.solution_mark();
         let fit = match context.instantiate_assumption(&Free::Global(name), None) {
@@ -484,9 +483,8 @@ fn constructor_fits(
                                 })
                             })
                             .collect();
-                        let constructor = Term::var(Var::free(Free::Global(Global::Authored(
-                            family.with(&tag.as_string()),
-                        ))));
+                        let constructor =
+                            Term::written(Global::Authored(family.with(&tag.as_string())));
                         let built = Term::apply(constructor, payload);
                         // Inversion *refuses* positions it cannot decide (metavariable-headed or opaque indices), so `Solved` alone is not a fit. A fully-spelled candidate must survive the definitive gate — a sandboxed check against the goal — which is also what makes the paste-and-recheck promise a machine guarantee. A candidate with visible holes is an advisory refinement and rides on `Impossible` filtering alone.
                         if holes > 0 || verifies(context, &built, goal_type) {

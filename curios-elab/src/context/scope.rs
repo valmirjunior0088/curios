@@ -12,7 +12,7 @@ use {
     },
     curios_analysis::{reads_solved, records_case_equation},
     curios_core::{
-        Advance, DefinitionKind, Free, Global, HeadTag, RecGroup, Subterm, Term,
+        Advance, DefinitionKind, Free, Global, HeadTag, RecGroup, Subterm, Term, Universes,
         project_erased_universes,
     },
     curios_utilities::Plicity,
@@ -395,10 +395,15 @@ impl<'s> Context<'s> {
         }
     }
 
+    /// [`Frames::states_scheme`](super::Frames::states_scheme).
+    pub(crate) fn states_scheme(&self, name: &Free, universes: &Universes) -> bool {
+        self.typing.frames.states_scheme(name, universes)
+    }
+
     /// [`Frames::var_reduct_at`](super::Frames::var_reduct_at), and a need as [`Context::definition_body`] records one.
-    pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn var_reduct_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
         self.asks(name, Question::Body);
-        let reduct = self.typing.frames.var_reduct_at(name);
+        let reduct = self.typing.frames.var_reduct_at(name, universes);
         match reduct {
             Some(reduct) => self.opens(name, reduct),
             None => self.absent(name),

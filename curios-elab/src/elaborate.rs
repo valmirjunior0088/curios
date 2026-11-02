@@ -40,8 +40,9 @@ mod tests;
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
-        Ascribed, Free, Func, FuncType, Subterm, Term, Transient, Universes, Var, foreign_operands,
-        foreign_produced, former_spelling, instantiate_universes, intrinsic_former,
+        Ascribed, Extent, Free, Func, FuncType, Global, Subterm, Term, Transient, Universes,
+        foreign_operands, foreign_produced, former_spelling, instantiate_universes,
+        intrinsic_former,
     },
     curios_utilities::{Plicity, recurse},
     std::sync::Arc,
@@ -187,8 +188,19 @@ fn elaborate_subterm(
             let name = Free::Global(instance.name);
             let type_ = context
                 .instantiate_assumption_at(&name, &instance.universes, term.extent())?
-                .ok_or_else(|| context.unbound_variable(Term::free_var(&name)))?;
+                .ok_or_else(|| context.unbound_variable(term.clone()))?;
             (term.clone(), type_)
+        }
+        Subterm::Transient(Transient::Name(name)) => {
+            let Some((written, type_)) = reference(context, *name, term.extent())? else {
+                return Err(context.unbound_variable(term.clone()));
+            };
+            // The occurrence's extent moves onto what replaces it.
+            let rebuilt = match term.extent() {
+                Some(extent) => written.with_extent(extent),
+                None => written,
+            };
+            (rebuilt, type_)
         }
         Subterm::Intrinsic(intrinsic) => {
             return context.awaiting(|context| elaborate_intrinsic(context, term, intrinsic, mode));
@@ -202,30 +214,10 @@ fn elaborate_subterm(
         Subterm::Proj(proj) => elaborate_proj(context, proj)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
+        // A binder, which no instance is chosen for: only a declaration is generalized.
         Subterm::Var(var) => match context.instantiate_assumption(var.unwrap(), term.extent())? {
-            Some((type_, universes)) => {
-                let rebuilt =
-                    if let Some(former) = spelled_former(context, var, &type_, &universes)? {
-                        match term.extent() {
-                            Some(extent) => former.with_extent(extent),
-                            None => former,
-                        }
-                    } else if let Some(name) = var.as_free().and_then(Free::as_global)
-                        && !universes.is_empty()
-                    {
-                        // The occurrence's extent moves onto the instance that replaces it.
-                        let instance = Term::instance(*name, universes);
-                        match term.extent() {
-                            Some(extent) => instance.with_extent(extent),
-                            None => instance,
-                        }
-                    } else {
-                        // Only a declaration is generalized, so anything else stands at no instance.
-                        term.clone()
-                    };
-                (rebuilt, type_)
-            }
-            None => return Err(context.unbound_variable(Term::var(var.clone()))),
+            Some((type_, _)) => (term.clone(), type_),
+            None => return Err(context.unbound_variable(term.clone())),
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
@@ -266,21 +258,21 @@ fn elaborate_subterm(
 /// An intrinsic type former written by its name and applied in full, every argument explicit, or a closed one written bare, as the node it is ([`intrinsic_former`]): what elaboration reads in its place. Read before it is elaborated, so its operands are checked against the node's own signature and no level of its name's instance is minted: `/sys/List/List.{c}(Nat)` stands at `Type c` where `ListType(Nat)` stands at its operand's level, and an instance minted and then dropped would leave its levels to close on nothing. `None` for any other term.
 fn written_intrinsic_former(term: &Term) -> Option<Term> {
     let (head, operands) = match &**term {
-        Subterm::Var(var) => (var, Vec::new()),
+        Subterm::Transient(Transient::Name(name)) => (name, Vec::new()),
         Subterm::Apply(apply)
             if apply
                 .arguments
                 .iter()
                 .all(|argument| argument.plicity == Plicity::Explicit) =>
         {
-            let Subterm::Var(var) = &*apply.head else {
+            let Subterm::Transient(Transient::Name(name)) = &*apply.head else {
                 return None;
             };
-            (var, apply.params().cloned().collect())
+            (name, apply.params().cloned().collect())
         }
         _ => return None,
     };
-    let node = Term::intrinsic(intrinsic_former(head.as_free()?.as_global()?, &operands)?);
+    let node = Term::intrinsic(intrinsic_former(head, &operands)?);
 
     Some(match term.extent() {
         Some(extent) => node.with_extent(extent),
@@ -288,18 +280,33 @@ fn written_intrinsic_former(term: &Term) -> Option<Term> {
     })
 }
 
+/// What elaboration writes for the declaration `name`, beside its type: its instance at the levels chosen here, none where it is monomorphic, or the former it spells. `None` for a name nothing declares.
+pub fn reference(
+    context: &mut Context,
+    name: Global,
+    extent: Option<Extent>,
+) -> Result<Option<(Term, Term)>, Error> {
+    let Some((type_, universes)) = context.instantiate_assumption(&Free::Global(name), extent)?
+    else {
+        return Ok(None);
+    };
+    let written = match spelled_former(context, name, &type_, &universes)? {
+        Some(former) => former,
+        None => Term::instance(name, universes),
+    };
+
+    Ok(Some((written, type_)))
+}
+
 /// What a type former's name is elaborated to, at an occurrence instantiated at `universes` whose type is `type_`: a nominal former's body as its entry spells it ([`former_spelling`]) at those levels — its η-form, one lambda to a call, or the node where it takes nothing — and an intrinsic former that takes an operand, written bare, as the lambda over that former at the domain its name's type states. Applied over its call, either is made as what the call reduces to ([`curios_core::former_eta`]), so no elaborated term holds a former's name. `None` for a name that is no former's.
 ///
 /// The entry is read where the name's type already was, and no body is: a body read is a dependency the incremental record keeps.
 fn spelled_former(
     context: &mut Context,
-    var: &Var,
+    global: Global,
     type_: &Term,
     universes: &Universes,
 ) -> Result<Option<Term>, Error> {
-    let Some(global) = var.as_free().and_then(Free::as_global).copied() else {
-        return Ok(None);
-    };
     // Spelled where the entry stands, and nothing of it copied: a record's entry holds its fields, which its former does not read.
     let spelled = match (context.induct_decl(&global), context.struct_decl(&global)) {
         (Some(family), _) => Some(former_spelling(

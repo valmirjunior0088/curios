@@ -7,8 +7,8 @@ use {
         stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, One,
-        Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
+        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Instance, Level,
+        MetavarId, One, Probe, Scope, Subterm, Telescope, Term, Transient, WitnessOrigin,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -376,7 +376,8 @@ pub fn elaborate_apply(
         match &**term {
             Subterm::Var(var) => Some(*var.unwrap()),
             Subterm::Apply(apply) => innermost_reference(&apply.head),
-            Subterm::Instance(instance) => Some(Free::Global(instance.name)),
+            Subterm::Instance(Instance { name, .. })
+            | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
             _ => None,
         }
     }

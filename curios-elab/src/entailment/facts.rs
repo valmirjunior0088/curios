@@ -30,8 +30,9 @@ use {
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
     curios_core::{
-        Aligned, Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
-        Nat, Probe, StructType, Subterm, Term, TupleType,
+        Aligned, Apply, Cases, Extremum, Free, Global, InductType, Instance, Intrinsic,
+        LinearViews, Match, Nat, Probe, StructType, Subterm, Term, TupleType,
+        instantiate_universes,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -1685,6 +1686,17 @@ fn beneath(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> 
     {
         return Ok(context.var_reduct(name).cloned());
     }
+    if let Subterm::Instance(Instance { name, universes }) = &**stated {
+        let Some(value) = context
+            .var_reduct_at(&Free::Global(*name), universes)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        return Ok(Some(
+            instantiate_universes(&value, universes).map_err(Error::from)?,
+        ));
+    }
     open_until(context, stated, |term| match &**term {
         Subterm::Intrinsic(intrinsic) if is_node(intrinsic) => Some(term.clone()),
         _ => None,
@@ -2159,16 +2171,18 @@ enum Opened {
 
 /// `stated` opened a layer at a time by its heads alone, as a guard's resolved spelling is, until it is a call of the range check, a comparison or a conjunction: `None` where it becomes none of them. No operand is reduced, so what it names is spelled as the statement spells it — as an arm's key spells a guard.
 fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error> {
-    let check = global(context.syntax().entailment.in_range);
+    let check = Global::Authored(context.syntax().entailment.in_range.qualifier());
     open_until(context, stated, |term| match &**term {
-        Subterm::Apply(Apply { head, arguments }) if *head == check => match arguments.as_slice() {
-            [c, lo, hi] => Some(Some(Opened::Range(Range {
-                c: c.term.clone(),
-                lo: lo.term.clone(),
-                hi: hi.term.clone(),
-            }))),
-            _ => Some(None),
-        },
+        Subterm::Apply(Apply { head, arguments }) if names(head, check) => {
+            match arguments.as_slice() {
+                [c, lo, hi] => Some(Some(Opened::Range(Range {
+                    c: c.term.clone(),
+                    lo: lo.term.clone(),
+                    hi: hi.term.clone(),
+                }))),
+                _ => Some(None),
+            }
+        }
         Subterm::Intrinsic(Intrinsic::BoolAnd(first, second)) => {
             Some(Some(Opened::Conjunction(first.clone(), second.clone())))
         }
@@ -2182,14 +2196,21 @@ fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error>
 
 /// The decision `stated` holds, opened by its heads to `Holds(decision)` — a named proposition standing for one, to the `i < n` it was written as — or `None` where opening reaches no `Holds`.
 pub fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
-    let holds = global(context.syntax().proof.holds);
+    let holds = Global::Authored(context.syntax().proof.holds.qualifier());
     open_until(context, stated, |term| match &**term {
-        Subterm::Apply(Apply { head, arguments }) if *head == holds => match arguments.as_slice() {
-            [decision] => Some(decision.term.clone()),
-            _ => None,
-        },
+        Subterm::Apply(Apply { head, arguments }) if names(head, holds) => {
+            match arguments.as_slice() {
+                [decision] => Some(decision.term.clone()),
+                _ => None,
+            }
+        }
         _ => None,
     })
+}
+
+/// Whether `head` is `name` at any instance, as an elaborated statement writes a declaration.
+fn names(head: &Term, name: Global) -> bool {
+    matches!(&**head, Subterm::Instance(instance) if instance.name == name)
 }
 
 /// What `found` answers of `term` or of the first layer opening its heads reaches that it answers of, or `None` where opening stops first. Bounded as the resolved spelling is: each step opens one application layer.

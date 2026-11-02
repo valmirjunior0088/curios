@@ -41,7 +41,7 @@ use {
     },
     curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
-    curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
+    curios_core::{Cases, Global, LinearViews, Match, Probe, Subterm, Term},
     curios_utilities::SyntaxName,
 };
 
@@ -348,5 +348,5 @@ fn in_scope(context: &Context, names: &[SyntaxName]) -> bool {
 
 /// A reference to the global `name` spells.
 fn global(name: SyntaxName) -> Term {
-    Term::var(Var::free(Free::global(name.qualifier())))
+    Term::written(Global::Authored(name.qualifier()))
 }

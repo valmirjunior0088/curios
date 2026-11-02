@@ -2,7 +2,7 @@
 
 use {
     crate::Context,
-    curios_core::{Extent, Free, Global, Intrinsic, Term, Var, str_literal, syn_call},
+    curios_core::{Extent, Global, Intrinsic, Term, str_literal, syn_call},
 };
 
 /// One registered test as the synthesized tail schedules it: its name, and the extent of its authored body. Read off the lowered definition by `curios-pipeline`, since `Module::tests` records names alone.
@@ -24,7 +24,7 @@ pub fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) -> Term
         .iter()
         .map(|test| {
             let path = test.name.path();
-            let thunk = Term::var(Var::free(Free::from(&test.name)));
+            let thunk = Term::written(test.name);
 
             Term::tuple([str_literal(&syntax.string, path.as_bytes()), thunk])
         })

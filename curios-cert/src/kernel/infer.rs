@@ -427,9 +427,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         }),
 
         // A polymorphic declaration at a stated instance: its scheme, substituted. It is no call a group records, since a group's members are assumed under locals while its bodies are checked, and an instance names a declaration.
-        Subterm::Instance(_) => match synth_neutral(kernel, term)? {
+        Subterm::Instance(instance) => match synth_neutral(kernel, term)? {
             Some(type_) => Ok(type_),
-            None => Err(Error::Unclassified(term.clone())),
+            // An instance's type is its scheme's, so one with none names no declaration in scope.
+            None => Err(Error::Unbound(Free::Global(instance.name))),
         },
 
         // Elaboration-only syntax. Reaching a metavariable or any transient means a term arrived here before elaboration was finished with it.

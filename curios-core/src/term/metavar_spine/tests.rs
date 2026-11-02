@@ -34,7 +34,10 @@ fn a_spine_holds_the_facts_of_its_entries() {
             |_, _| false,
             |entry| {
                 (entry.newest_local() == Some(4) || entry.reach() > 0).then(|| {
-                    Term::free_var(&Free::Global(Global::Authored(Qualifier::from(["g"]))))
+                    Term::instance(
+                        Global::Authored(Qualifier::from(["g"])),
+                        Universes::default(),
+                    )
                 })
             },
         )
@@ -89,7 +92,10 @@ fn a_spine_holds_the_names_of_its_entries() {
     let g = Free::Global(Global::Authored(Qualifier::from(["g"])));
     let spine = MetavarSpine::from(vec![
         Term::free_var(&a),
-        Term::apply(Term::free_var(&g), [Term::free_var(&a)]),
+        Term::apply(
+            Term::instance(*g.as_global().expect("a declaration"), Universes::default()),
+            [Term::free_var(&a)],
+        ),
         Term::free_var(&b),
     ]);
     let names = |spine: &MetavarSpine| spine.free_vars().iter().copied().collect::<Vec<_>>();

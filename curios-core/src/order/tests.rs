@@ -21,7 +21,7 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
         body: Term::tuple(
             mentioned
                 .iter()
-                .map(|mentioned| Term::free_var(&Free::Global(authored(mentioned)))),
+                .map(|mentioned| Term::instance(authored(mentioned), Universes::default())),
         ),
     }))
 }

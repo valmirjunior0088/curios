@@ -347,7 +347,7 @@ impl Sort {
                 MatchResult::Ambient(goal) => Sort::from_universe(context, goal)?,
             },
             // A neutral type (a `Prop` hypothesis, or a stuck family application): its synthesized type is its sort.
-            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
+            Subterm::Var(_) | Subterm::Instance(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
                 match synth_neutral(context, binders, opened, &reduced)? {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => {
@@ -357,10 +357,6 @@ impl Sort {
                 }
             }
             Subterm::Sort(_, level) => Sort::type_at(level.succ().map_err(ReduceError::Universe)?),
-            Subterm::Instance(instance) => {
-                let name = Term::free_var(&Free::Global(instance.name));
-                Sort::of_under(context, binders, opened, &name)?
-            }
             // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. Its level is the one that sort states: the solution is held under it where it is committed, so a former over the metavariable is sized by a level that follows what the metavariable comes to. Read as zero, a list of an open element is small whatever the element is, and a level the list is handed to never learns the element's.
             Subterm::Metavar(metavar) => {
                 let result = context
@@ -457,7 +453,12 @@ impl Sort {
                 Some(name) => (*name, None),
                 None => return Ok(None),
             },
-            Subterm::Instance(Instance { name, universes }) => (*name, Some(universes)),
+            // An instance short of its scheme denotes none of the scheme's instances, and the sort read at it would hold the scheme's own parameters.
+            Subterm::Instance(Instance { name, universes })
+                if context.states_scheme(&Free::Global(*name), universes) =>
+            {
+                (*name, Some(universes))
+            }
             _ => return Ok(None),
         };
         let Some(sort) = context.definition_value_sort(&name) else {

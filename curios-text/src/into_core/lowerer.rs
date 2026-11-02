@@ -477,7 +477,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Term::func_marked(params, body))
     }
 
-    /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses.
+    /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses, through [`reference()`].
     pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Free, Error> {
         if name.is_abs() || !name.is_single() {
             // A path that names nothing refuses the declaration it is written in and no other, as a bare name does below: it lowers to the same binder nothing binds, and what failed is filed under it.
@@ -571,9 +571,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.term(&infix.left)?,
                 self.term(&infix.right)?,
             ),
-            Subterm::Name(name) => {
-                curios_core::Term::var(curios_core::Var::free(self.resolve_name(name)?))
-            }
+            Subterm::Name(name) => reference(self.resolve_name(name)?),
             Subterm::FuncType(ft) => self.func_type_under(&ft.params, || self.term(&ft.output))?,
             Subterm::Func(func) => {
                 self.abstract_value(&func.params, &self.mint_params(&func.params), &func.body)?
@@ -1582,5 +1580,13 @@ fn pattern_names(pattern: &Pattern) -> Vec<String> {
             .iter()
             .flat_map(|field| pattern_names(&field.value))
             .collect(),
+    }
+}
+
+/// The term a resolved name lowers to: a declaration as it is written, whose instance elaboration chooses, or the binder it is.
+pub(super) fn reference(resolved: curios_core::Free) -> curios_core::Term {
+    match resolved {
+        curios_core::Free::Global(name) => curios_core::Term::written(name),
+        local => curios_core::Term::var(curios_core::Var::free(local)),
     }
 }

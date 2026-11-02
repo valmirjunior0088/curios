@@ -12,7 +12,7 @@ fn named(path: &str) -> Global {
 }
 
 fn mention(path: &str) -> Term {
-    Term::free_var(&Free::from(&named(path)))
+    Term::instance(named(path), Universes::default())
 }
 
 fn nat() -> Term {

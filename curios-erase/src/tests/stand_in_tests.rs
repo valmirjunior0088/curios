@@ -55,10 +55,9 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     let globals = Globals::default();
     let (rechecked, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
-    let named = |path: &str| curios_core::Term::free_var(&global(path));
     kernel.read(|reader| {
-        assert_eq!(reader.head(&named("lemma")), Ok(named("lemma")));
-        assert_eq!(reader.head(&named("two")), Ok(nat_lit(2)));
+        assert_eq!(reader.head(&reference("lemma")), Ok(reference("lemma")));
+        assert_eq!(reader.head(&reference("two")), Ok(nat_lit(2)));
     });
 }
 
@@ -87,7 +86,7 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
         &ih,
         curios_core::Term::free_var(&ih),
     );
-    let bound = curios_core::Term::apply(curios_core::Term::free_var(&global("H")), [subject]);
+    let bound = curios_core::Term::apply(reference("H"), [subject]);
     let qed = curios_core::Term::variant(
         nominal("Top"),
         Vec::<curios_core::Term>::new(),
@@ -117,7 +116,7 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
         definition(
             "head",
             nat_type,
-            curios_core::Term::apply(curios_core::Term::free_var(&global("need")), [qed]),
+            curios_core::Term::apply(reference("need"), [qed]),
         ),
     ];
     let mut induct_decls = BTreeMap::new();
@@ -181,7 +180,7 @@ fn stand_in(
     ));
     let mut program = module(
         items,
-        curios_core::Term::apply(curios_core::Term::free_var(&global("need")), [witness]),
+        curios_core::Term::apply(reference("need"), [witness]),
     );
     program.module = curios_core::test_support::declaring(
         program.module,
@@ -243,7 +242,7 @@ fn a_slot_typed_by_a_definition_of_a_function_type_holds_a_function_stand_in() {
         ),
     );
     let (witness, top) = top_everywhere();
-    let slot = curios_core::Term::apply(curios_core::Term::free_var(&global("Each")), [top]);
+    let slot = curios_core::Term::apply(reference("Each"), [top]);
 
     let (erased, handed) = stand_in(vec![each], slot, witness);
     assert_eq!(arity(&erased, handed), Some(1));
@@ -286,7 +285,7 @@ fn a_slot_typed_by_a_match_with_a_function_arm_holds_a_function_stand_in() {
     );
     let (witness, top) = top_everywhere();
     let slot = curios_core::Term::apply(
-        curios_core::Term::free_var(&global("Pick")),
+        reference("Pick"),
         [
             curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
             top,

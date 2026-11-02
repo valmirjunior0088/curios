@@ -771,8 +771,12 @@ pub fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
         };
         // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
         if let Some(name) = context.rec_slot_name(id) {
-            // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine.
-            solutions.insert(id, (entry.telescope().clone(), Term::free_var(name)));
+            // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine. A top-level member is spelled at no levels, which the group's stamp fills with its own instance.
+            let member = match name.as_global() {
+                Some(name) => Term::instance(*name, Universes::default()),
+                None => Term::free_var(name),
+            };
+            solutions.insert(id, (entry.telescope().clone(), member));
             continue;
         }
         pending.extend(solution.metavars());

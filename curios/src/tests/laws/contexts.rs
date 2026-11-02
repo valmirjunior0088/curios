@@ -6,7 +6,7 @@
 
 use {
     super::*,
-    curios_core::{Bound, Carrier, Cases, Free, Global, Item, Match, Subterm, Term, Visit},
+    curios_core::{Bound, Carrier, Cases, Global, Item, Match, Subterm, Term, Universes, Visit},
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{Qualifier, recurse},
@@ -532,7 +532,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
                 _ => None,
             })
             .unwrap_or_else(|| panic!("the program defines {}", name.faithful()));
-        let marker = Term::free_var(&Free::from(&named(marked(context).1.to_owned())));
+        let marker = Term::instance(named(marked(context).1.to_owned()), Universes::default());
 
         let mut parents = Vec::new();
         parents_of(body, &marker, &mut parents);

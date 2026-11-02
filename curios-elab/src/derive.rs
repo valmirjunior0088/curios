@@ -511,7 +511,9 @@ fn witness_call(
             .count(),
         _ => 0,
     };
-    let method = Term::free_var(&wrapper);
+    let method = Term::written(Global::Authored(
+        field.concept.qualifier().with(field.field),
+    ));
     let arguments = (0..parameters)
         .map(|_| (Plicity::Implicit, Term::hole(context.mint_metavar())))
         .chain(std::iter::once((Plicity::Witness, goal)))
@@ -967,7 +969,7 @@ fn order(
                         compared,
                     )],
                     Some(Term::apply(
-                        Term::free_var(&Free::global(row.eq.qualifier())),
+                        Term::written(Global::Authored(row.eq.qualifier())),
                         Vec::<Term>::new(),
                     )),
                 ));

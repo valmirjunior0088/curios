@@ -9,11 +9,11 @@ use {
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope, Term,
-        WitnessKey, WitnessOrigin,
+        Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
+        Telescope, Term, Transient, WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
-    curios_utilities::{InfixOp, Plicity},
+    curios_utilities::{InfixOp, Plicity, recurse},
     std::collections::BTreeMap,
 };
 
@@ -107,18 +107,12 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             })
             .collect::<Vec<_>>();
 
-        for (label, (type_, _)) in labels.iter().zip(items.iter()) {
-            context.assume(label, type_);
-        }
-
+        // In scope from its own signature on, at the type it elaborated to, as `elaborate_module_rec` brings a member in: a signature reads the members written before it.
         let mut types_elaborated = Vec::with_capacity(items.len());
-        for (type_, _) in &items {
-            types_elaborated.push(check_is_sort(context, type_)?.0);
-        }
-
-        // Upgrade the assumptions to the *rebuilt* signatures before any body is checked: a lowered (under-applied) type reaching the reducer would open a telescope at the wrong arity.
-        for (label, type_) in labels.iter().zip(&types_elaborated) {
-            context.reassume(label, type_);
+        for (label, (type_, _)) in labels.iter().zip(&items) {
+            let type_ = check_is_sort(context, type_)?.0;
+            context.assume(label, &type_);
+            types_elaborated.push(type_);
         }
 
         // A group is read two ways while its bodies are checked, as the kernel's `check_group` reads one. A member named in a body stands for nothing: its name is defined as its protected slot, and no unfolding of the name reaches it (`Context::unless_member`). A signature — the type a body is checked at and a member is assumed at — reads the group through the slots, each filled with its member's body read the same way, so a signature unfolds a member as the folded group does, and one reading a later member parks on its unsolved slot.
@@ -426,9 +420,7 @@ fn character_value(context: &Context, character: char) -> Term {
     let syntax = context.syntax();
     let code: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(character as u32))).into();
     let valid = Term::apply(
-        Term::var(curios_core::Var::free(curios_core::Free::global(
-            syntax.proof.true_qed.qualifier(),
-        ))),
+        Term::written(Global::Authored(syntax.proof.true_qed.qualifier())),
         Vec::<Term>::new(),
     );
     Term::struct_(
@@ -634,7 +626,7 @@ pub fn elaborate_bang(
         return Err(Error::bang_region_not_a_monad(region, owner).at_opt(term.extent()));
     };
     let witness = sequencing_witness(context, &monad, region, owner, term)?;
-    let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
+    let head = Term::written(Global::Authored(context.syntax().monad.bind.qualifier()));
     let arguments = [(Plicity::Implicit, monad)]
         .into_iter()
         .chain(witness.map(|witness| (Plicity::Witness, witness)))
@@ -761,7 +753,9 @@ fn abstracted_monad(
 /// `action` wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own extent, or `fallback`, so the report anchors where the action was written.
 fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> Term {
     let field = context.syntax().lift.lift;
-    let wrapper = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
+    let wrapper = Term::written(Global::Authored(
+        field.concept.qualifier().with(field.field),
+    ));
     let wrapped = Term::apply(wrapper, vec![action.clone()]);
     match action.extent().or(fallback) {
         Some(extent) => Term::placed(extent, wrapped),
@@ -789,7 +783,10 @@ pub fn lift_on_check(
     term: &Term,
     expected: &Term,
 ) -> Result<Option<Term>, Error> {
-    if !matches!(&**term, Subterm::Var(_) | Subterm::Apply(_)) {
+    if !matches!(
+        &**term,
+        Subterm::Var(_) | Subterm::Transient(Transient::Name(_)) | Subterm::Apply(_)
+    ) {
         return Ok(None);
     }
     let region = reduce_with(context, expected)?;
@@ -903,6 +900,13 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<Mo
                 };
                 return declared_result_shape(context, &declared, &explicit);
             }
+            Subterm::Transient(Transient::Name(name))
+            | Subterm::Instance(Instance { name, .. }) => {
+                let Some(declared) = context.assumption(&Free::Global(*name)).cloned() else {
+                    return Ok(None);
+                };
+                return declared_result_shape(context, &declared, &explicit);
+            }
             _ => return Ok(None),
         }
     }
@@ -936,9 +940,13 @@ fn declared_result_shape(
         while let Some((_, binder_type)) = cursor.entry() {
             let explicit = matches!(plicities.get(cursor.args().len()), Some(Plicity::Explicit));
             // A settled argument is read in, so a result computed from it — `Fmt/print`'s from its format string — reduces to what the call answers; any other stands as a fresh binder.
-            match explicit.then(|| here.next()).flatten() {
-                Some(arg) if settled(arg) => cursor.advance(arg.clone()),
-                _ => {
+            let read = match explicit.then(|| here.next()).flatten() {
+                Some(arg) => settled(context, arg)?,
+                None => None,
+            };
+            match read {
+                Some(arg) => cursor.advance(arg),
+                None => {
                     cursor.advance_fresh(|hint| context.fresh(hint));
                 }
             }
@@ -999,13 +1007,38 @@ fn declared_result_shape(
     }))
 }
 
-/// Whether `arg`, read before it is elaborated, is already a term the reducer reads as it stands: no index loose, no local, no metavariable, no level one and no transient node — a literal, or a closed call written whole.
-fn settled(arg: &Term) -> bool {
-    arg.closed()
-        && !arg.has_local_free()
-        && !arg.has_metavar()
-        && !arg.has_universe_meta()
-        && !arg.has_transient()
+/// What `arg`, read before it is elaborated, is read in as where it is settled — a literal, or a closed call written whole: no index loose, no local, no metavariable, no level one and no elaboration-only node but a written name. It is read in as what elaboration makes of it, where that holds no metavariable or level one either. Elaborated as an oracle elaborates a candidate and undone after: nothing parks inside an oracle, so elaborating such a term writes solutions and level constraints alone, which the rollback takes back.
+fn settled(context: &mut Context, arg: &Term) -> Result<Option<Term>, Error> {
+    if !arg.closed()
+        || arg.has_local_free()
+        || arg.has_metavar()
+        || arg.has_universe_meta()
+        || writes_beyond_names(arg)
+    {
+        return Ok(None);
+    }
+    let mark = context.solution_mark();
+    let elaborated = context
+        .with_oracle(|context| elaborate(context, arg, Mode::Infer))
+        .probed();
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+
+    Ok(elaborated?
+        .map(|(term, _)| term)
+        .filter(|term| !term.has_metavar() && !term.has_universe_meta()))
+}
+
+/// Whether `term` holds an elaboration-only node other than a written name.
+fn writes_beyond_names(term: &Term) -> bool {
+    match &**term {
+        Subterm::Transient(Transient::Name(_)) => false,
+        Subterm::Transient(_) => true,
+        subterm => {
+            Bound::has_transient(term)
+                && recurse(|| subterm.any_child_term(&mut writes_beyond_names))
+        }
+    }
 }
 
 /// The key `base`, a binder of the declared telescope, is fixed at by the explicit arguments: the first explicit parameter whose declared type applies `base` takes its argument's head, and one whose declared type is a nominal application with `base` in a context slot takes the key its argument's shape has there. `None` where no argument settles it.

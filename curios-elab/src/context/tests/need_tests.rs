@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_core::{
         ConceptDecl, Free, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
-        UniverseContext, WitnessKey,
+        UniverseContext, Universes, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -163,7 +163,11 @@ fn a_body_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
     context.attempt(&[&b]);
-    assert!(context.var_reduct_at(&name).is_none());
+    assert!(
+        context
+            .var_reduct_at(&name, &Universes::default())
+            .is_none()
+    );
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
     // Its own body, and one that is missing for good once its declaration has finished, are no read of another.

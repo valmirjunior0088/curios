@@ -872,7 +872,9 @@ impl RecItem {
         let names = self
             .definitions
             .iter()
-            .map(|definition| Term::free_var(&Free::from(&definition.name)))
+            .map(|definition| {
+                Term::instance(definition.name, self.universe_context.identity_instance())
+            })
             .collect::<Vec<_>>();
         let name_refs = names.iter().collect::<Vec<_>>();
 

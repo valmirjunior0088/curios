@@ -184,7 +184,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             [],
         ),
         entry: curios_core::Entrypoint {
-            body: curios_core::Term::free_var(&global("six")),
+            body: reference("six"),
             type_: None,
         },
     };
@@ -361,7 +361,7 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
         nat_lit(5),
     )];
     let body = curios_core::Term::nat_match(
-        curios_core::Term::free_var(&global("n")),
+        reference("n"),
         None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
@@ -399,7 +399,7 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
         nat_lit(5),
     )];
     let body = curios_core::Term::nat_match(
-        curios_core::Term::free_var(&global("n")),
+        reference("n"),
         None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
@@ -447,7 +447,7 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
         }),
     )];
     let body = curios_core::Term::list_match(
-        curios_core::Term::free_var(&global("xs")),
+        reference("xs"),
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
@@ -542,8 +542,7 @@ fn an_effectful_scrutinee_is_erased_once() {
     let pred = fresh(Some("pred"));
     let ih = fresh(Some("ih"));
     // The peel path re-derives Core terms from the head (`n - 1`); an effectful compound head must still evaluate exactly once, through the alias.
-    let io_read =
-        curios_core::Term::apply(curios_core::Term::free_var(&global("read")), [nat_lit(0)]);
+    let io_read = curios_core::Term::apply(reference("read"), [nat_lit(0)]);
     let items = vec![definition(
         "read",
         curios_core::Term::func_type(

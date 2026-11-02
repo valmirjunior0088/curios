@@ -19,7 +19,7 @@ fn item(path: &[&str], kind: DefinitionKind) -> Item {
         parameter_field: None,
         value_sort: None,
         type_: Term::type_ground(),
-        body: Term::free_var(&Free::from(&name)),
+        body: Term::instance(name, Universes::default()),
     }))
 }
 

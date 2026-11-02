@@ -148,9 +148,7 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
             }
             curios_core::Subterm::Apply(apply) => head_of(&apply.head),
             curios_core::Subterm::Instance(instance) => Some(instance.name),
-            curios_core::Subterm::Var(var) => {
-                var.as_free().and_then(|free| free.as_global()).cloned()
-            }
+            curios_core::Subterm::Transient(curios_core::Transient::Name(name)) => Some(*name),
             curios_core::Subterm::StructType(struct_type) => Some(struct_type.name),
             _ => None,
         }
@@ -199,11 +197,8 @@ pub(crate) struct AliasEdge {
 
 /// The alias `let_` is, where its body is one.
 fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
-    // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test, not a leading-`/` test on the spelling.
     let direct = let_.body.direct_type_alias_target(&let_.type_);
-    let target = *direct
-        .or_else(|| let_.body.transparent_alias_target())
-        .and_then(curios_core::Free::as_global)?;
+    let target = direct.or_else(|| let_.body.transparent_alias_target())?;
 
     Some(AliasEdge {
         target,

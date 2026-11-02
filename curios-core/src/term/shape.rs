@@ -69,6 +69,8 @@ pub enum Transient {
     Derive,
     /// A match as it is written; consumed by `elaborate_matrix`, which compiles its patterns into the single-level [`Match`] forms.
     Matrix(Matrix),
+    /// A declaration named as it is written, before an instance of it is chosen; consumed by `elaborate`, which writes it as an [`Instance`] at the levels it chooses, none where the declaration is monomorphic.
+    Name(Global),
 }
 
 impl Transient {
@@ -76,7 +78,7 @@ impl Transient {
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         let (children, matrix) = match self {
             Transient::Infix(Infix { left, right, .. }) => ([Some(left), Some(right)], None),
-            Transient::NumLit(_) | Transient::Derive => ([None, None], None),
+            Transient::NumLit(_) | Transient::Derive | Transient::Name(_) => ([None, None], None),
             Transient::Bang(Bang {
                 action,
                 continuation,
@@ -100,6 +102,7 @@ impl Transient {
             }),
             Transient::NumLit(num_lit) => Transient::NumLit(num_lit.clone()),
             Transient::Derive => Transient::Derive,
+            Transient::Name(name) => Transient::Name(*name),
             Transient::Bang(Bang {
                 action,
                 continuation,
@@ -842,7 +845,7 @@ impl Metavar {
     }
 }
 
-/// An internal, occurrence-specific instantiation of a universe-polymorphic declaration: its name at the levels, and the qualities, this occurrence chose.
+/// A reference to a declaration at the levels, and the qualities, this occurrence chose: none where the declaration is monomorphic, so every reference to a declaration an elaborated term holds is one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Instance {

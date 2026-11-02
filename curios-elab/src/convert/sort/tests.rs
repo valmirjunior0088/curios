@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term, Universes},
     curios_utilities::Qualifier,
 };
 
@@ -138,7 +138,8 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     context.assume(&proposition, &Term::prop());
 
     let mut declare = |path: &str, sort: Term| {
-        let name = Free::from(&Global::Authored(Qualifier::from([path])));
+        let declared = Global::Authored(Qualifier::from([path]));
+        let name = Free::Global(declared);
         context.assume(
             &name,
             &Term::func_type([(Free::local(80, Some("n")), nat_type.clone())], sort),
@@ -152,7 +153,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
             None,
         );
 
-        name
+        Term::instance(declared, Universes::default())
     };
     let into_prop = declare("F", Term::prop());
     let into_type = declare("G", Term::type_ground());
@@ -166,7 +167,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     assert_eq!(
         Sort::of(
             &mut context,
-            &Term::apply(Term::free_var(&into_prop), [unaffordable.clone()])
+            &Term::apply(into_prop.clone(), [unaffordable.clone()])
         )
         .expect("classifies"),
         Sort::prop_at(Level::zero()),
@@ -174,7 +175,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     assert!(
         Sort::of(
             &mut context,
-            &Term::apply(Term::free_var(&into_type), [unaffordable])
+            &Term::apply(into_type.clone(), [unaffordable])
         )
         .is_err(),
         "the argument was not run",

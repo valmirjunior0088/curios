@@ -30,30 +30,32 @@ fn items_leave_the_lowering_as_they_are_written() {
     );
 }
 
-// A definition that names itself is the recursive group of one the kernel needs it to be — read off its body, never declared — so the reference is bound rather than left free.
+// A definition that names itself is the recursive group of one the kernel needs it to be, read off its body and never declared.
 #[test]
-fn a_definition_that_names_itself_lowers_to_a_bound_group_of_one() {
-    assert!(
-        run(r#"
+fn a_definition_that_names_itself_lowers_to_a_group_of_one() {
+    assert_eq!(
+        closed_group(
+            r#"
             let f : (n : Type) -> Type = (n) => f(n);
             Type
-        "#)
-        .free_vars()
-        .is_empty()
+            "#
+        ),
+        Some(vec!["/f".to_string()])
     );
 }
 
-// A declared group binds every member's name in every member, whichever module each reference spells.
+// A declared group is one item whose members name one another, whichever module each reference spells.
 #[test]
-fn a_declared_group_binds_its_members_in_one_item() {
-    assert!(
-        run(r#"
+fn a_declared_group_is_one_item() {
+    assert_eq!(
+        closed_group(
+            r#"
             pub let f : Type = g
             and g : Type = f;
             Type
-        "#)
-        .free_vars()
-        .is_empty()
+            "#
+        ),
+        Some(vec!["/f".to_string(), "/g".to_string()])
     );
 }
 

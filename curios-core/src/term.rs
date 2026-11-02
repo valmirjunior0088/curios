@@ -444,20 +444,19 @@ impl Term {
                 fields: stamp(&struct_.fields, names, self_reference, universes),
                 entries: struct_.entries.clone(),
             }),
+            // A self-reference elaborated before the declaration's parameters existed stands at no instance: still free, it takes the declaration's own, and bound, its group's binder captures it as it stands. An instance chosen at the occurrence is kept.
             Subterm::Instance(instance) if names.contains(&instance.name) => {
-                return Some(self.clone());
-            }
-            Subterm::Var(var)
                 if self_reference == SelfReference::Free
-                    && let Some(name) = var.as_free().and_then(Free::as_global)
-                    && names.contains(name) =>
-            {
-                // The occurrence's extent moves onto the instance that replaces it.
-                let stamped = Term::instance(*name, universes.clone());
-                return Some(match self.extent() {
-                    Some(extent) => stamped.with_extent(extent),
-                    None => stamped,
-                });
+                    && instance.universes.is_empty()
+                    && !universes.is_empty()
+                {
+                    let stamped = Term::instance(instance.name, universes.clone());
+                    return Some(match self.extent() {
+                        Some(extent) => stamped.with_extent(extent),
+                        None => stamped,
+                    });
+                }
+                return Some(self.clone());
             }
             _ => return None,
         };
@@ -486,7 +485,8 @@ impl Term {
     pub fn head_name(&self) -> Option<Free> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
-            Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
+            Subterm::Instance(Instance { name, .. })
+            | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
             Subterm::Var(var) => var.as_free().copied(),
             _ => None,
         }
@@ -698,7 +698,8 @@ impl Term {
     pub fn head_key(&self) -> Option<HeadTag> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
-            Subterm::Instance(Instance { name, .. }) => Some(HeadTag::Name(Free::Global(*name))),
+            Subterm::Instance(Instance { name, .. })
+            | Subterm::Transient(Transient::Name(name)) => Some(HeadTag::Name(Free::Global(*name))),
             Subterm::Var(var) => var.as_free().copied().map(HeadTag::Name),
             // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key could be registered but never looked up, and an operator-spelled scrutinee would lose its arm refinement where the equivalent `Nat/le(a, b)` keeps it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
@@ -726,10 +727,10 @@ impl Term {
         }
     }
 
-    /// Return the canonical target when this term is a straightforward transparent alias body: either a single free variable or its eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage interface audit uses this after name resolution to preserve representation provenance; computed bodies are not classified as aliases.
-    pub fn transparent_alias_target(&self) -> Option<&Free> {
+    /// Return the canonical target when this term is a straightforward transparent alias body: either a declaration's written name or its eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage interface audit uses this after name resolution to preserve representation provenance; computed bodies are not classified as aliases.
+    pub fn transparent_alias_target(&self) -> Option<Global> {
         match self.look() {
-            Subterm::Var(var) => var.as_free(),
+            Subterm::Transient(Transient::Name(name)) => Some(*name),
             Subterm::Func(Func { telescope, .. }) => {
                 // Read the eta-expansion under its binders instead of opening it: the parameters are exactly the innermost de Bruijn indices there, counting outwards, so the shape is decided without minting probe binders that would have to be proven not to collide with the body's own.
                 let arity = telescope.len();
@@ -743,7 +744,7 @@ impl Term {
                     });
 
                 eta.then(|| match &**head {
-                    Subterm::Var(target) => target.as_free(),
+                    Subterm::Transient(Transient::Name(target)) => Some(*target),
                     _ => None,
                 })
                 .flatten()
@@ -816,14 +817,17 @@ impl Term {
         Self::var(Var::free(*name))
     }
 
-    /// The declaration `name` at occurrence-specific levels — the shape elaboration mints for every occurrence of a universe-polymorphic declaration, and the bare name where there are none. The result is without a position; a call site holding the occurrence lifts its extent onto it.
+    /// The declaration `name` at occurrence-specific levels, none where it is monomorphic — the shape elaboration writes for every reference to a declaration. The result is without a position; a call site holding the occurrence lifts its extent onto it.
     pub fn instance(name: Global, universes: impl Into<Universes>) -> Self {
-        let universes = universes.into();
-        if universes.is_empty() {
-            Self::free_var(&Free::Global(name))
-        } else {
-            Self::from(Subterm::Instance(Instance { name, universes }))
-        }
+        Self::from(Subterm::Instance(Instance {
+            name,
+            universes: universes.into(),
+        }))
+    }
+
+    /// The declaration `name` as it is written, before elaboration chooses its instance ([`Transient::Name`]).
+    pub fn written(name: Global) -> Self {
+        Self::from(Subterm::Transient(Transient::Name(name)))
     }
 
     /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.
@@ -2793,7 +2797,8 @@ impl Term {
                 }
                 let named = match &**term {
                     Subterm::Var(var) => var.as_free().copied(),
-                    Subterm::Instance(instance) => Some(Free::Global(instance.name)),
+                    Subterm::Instance(Instance { name, .. })
+                    | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
                     _ => None,
                 };
                 if let Some(name) = named
@@ -2834,7 +2839,7 @@ impl Term {
         ))
     }
 
-    /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
+    /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A solved declaration's instance is replaced whole, whatever its levels, as a capture binds one ([`Subterm::traverse`]). A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
     ///
     /// **A variable in a metavariable's spine is left standing.** A traversal asks a bare variable there of the variable hook alone ([`Subterm::traverse`]), which this walk answers nothing through, so `?m[x]` substituted at `x` is `?m[x]` still, and still names `x`. `Scope::close` followed by `open` reaches the spine, and is the same term only where no solved name stands in one. The elaborator's zonk rests on the spine being left: it materializes a metavariable's solution, and each element of its spine, by a walk of its own at every occurrence, and with a term in a spine it walks that term once for each path to it (`zonk_solved_term_metas`, in `curios-elab`).
     ///
@@ -2855,12 +2860,15 @@ impl Term {
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
-                if let Subterm::Var(var) = &**term
-                    && let Some(name) = var.as_free()
-                {
-                    let at = solutions.partition_point(|(solved, _)| solved < name);
+                let named = match &**term {
+                    Subterm::Var(var) => var.as_free().copied(),
+                    Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
+                    _ => None,
+                };
+                if let Some(name) = named {
+                    let at = solutions.partition_point(|(solved, _)| *solved < name);
                     if let Some((solved, value)) = solutions.get(at)
-                        && solved == name
+                        && *solved == name
                     {
                         return Some(value.clone());
                     }

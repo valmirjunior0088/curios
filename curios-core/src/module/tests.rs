@@ -18,7 +18,7 @@ fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         parameter_field: None,
         value_sort: None,
         type_: Term::type_ground(),
-        body: Term::free_var(&Free::from(&global)),
+        body: Term::instance(global, Universes::default()),
     }
 }
 
@@ -45,7 +45,10 @@ fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
     let opened = rec.definitions();
     assert_eq!(
         opened[0].body,
-        Term::free_var(&Free::global(Qualifier::from(["loop"])))
+        Term::instance(
+            Global::Authored(Qualifier::from(["loop"])),
+            Universes::default()
+        )
     );
 }
 
@@ -205,12 +208,13 @@ fn a_stored_unit_may_not_declare_a_witness_under_its_place() {
 /// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Module::witnesses` and deliberately not through the position walk.
 #[test]
 fn a_stored_unit_may_name_a_witness_another_mount_declared() {
-    let mut module = stored(Term::free_var(&Free::Global(Global::Witness(
-        WitnessId::Unspelled {
+    let mut module = stored(Term::instance(
+        Global::Witness(WitnessId::Unspelled {
             module: Qualifier::from(["theirs", "Shape"]),
             place: 3,
-        },
-    ))));
+        }),
+        Universes::default(),
+    ));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
 
     assert_eq!(validate_stored_identities(&module), Ok(()));
@@ -219,9 +223,10 @@ fn a_stored_unit_may_name_a_witness_another_mount_declared() {
 /// The control. A free *global* is how one definition names another and is in every stored unit there has ever been, so a check that refused it would refuse the prelude — which is what makes this the test that the refusals above are aimed at something narrower than "a free variable".
 #[test]
 fn a_stored_unit_may_carry_a_global_it_names() {
-    let module = stored(Term::free_var(&Free::global(Qualifier::from([
-        "elsewhere",
-    ]))));
+    let module = stored(Term::instance(
+        Global::Authored(Qualifier::from(["elsewhere"])),
+        Universes::default(),
+    ));
 
     assert_eq!(validate_stored_identities(&module), Ok(()));
 }
@@ -359,7 +364,7 @@ fn boxed(mut former: Definition) -> Definition {
         arity: Telescope::done(Telescope::build(
             [(
                 Free::local(0, Some("value")),
-                Term::free_var(&Free::Global(authored("Payload"))),
+                Term::instance(authored("Payload"), Universes::default()),
             )],
             (),
         )),
@@ -423,7 +428,7 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
     reading.body = Term::tuple(
         mentioned
             .iter()
-            .map(|mentioned| Term::free_var(&Free::Global(authored(mentioned)))),
+            .map(|mentioned| Term::instance(authored(mentioned), Universes::default())),
     );
 
     Item::Let(Box::new(reading))

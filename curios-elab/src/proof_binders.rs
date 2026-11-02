@@ -122,7 +122,9 @@ pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> 
             let members = rec
                 .definitions
                 .iter()
-                .map(|definition| Term::free_var(&Free::from(&definition.name)))
+                .map(|definition| {
+                    Term::instance(definition.name, rec.universe_context.identity_instance())
+                })
                 .collect::<Vec<_>>();
             let mut refusal = None;
             let group = rec.group.map_members(|body| {

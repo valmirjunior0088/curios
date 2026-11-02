@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Module, Nat, Reads, Term},
+    curios_core::{Free, Global, Intrinsic, Module, Nat, Reads, Term, Universes},
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
@@ -25,7 +25,7 @@ fn reading_module() -> Module {
             authored(&global("alias"), Term::type_ground(), nat()),
             authored(
                 &global("three"),
-                Term::free_var(&Free::from(&global("alias"))),
+                Term::instance(global("alias"), Universes::default()),
                 literal(3),
             ),
             authored(
@@ -37,7 +37,7 @@ fn reading_module() -> Module {
                 &global("five"),
                 nat(),
                 Term::apply(
-                    Term::free_var(&Free::from(&global("identity"))),
+                    Term::instance(global("identity"), Universes::default()),
                     [literal(5)],
                 ),
             ),

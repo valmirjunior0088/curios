@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
+    curios_core::{Cost, Exhaustion, Free, Global, Intrinsic, Reducer, Term, Universes},
     curios_utilities::Qualifier,
 };
 
@@ -386,17 +386,17 @@ fn a_local_free_term_is_never_refined() {
 fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
     let sequence = |kernel: &mut Kernel| {
         // A global, as a top-level definition is: a name `binder` mints is a local, and a term mentioning one is local-bearing however closed it reads.
-        let konst = Free::global(Qualifier::from(["konst"]));
+        let konst = Global::Authored(Qualifier::from(["konst"]));
         let x = binder(3, "x");
         kernel
             .define(
-                &konst,
+                &Free::Global(konst),
                 &Term::func_type([(x, nat_type())], nat_type()),
                 &Term::func([(x, nat_type())], nat(7)),
                 &monomorphic(),
             )
             .expect("a name is declared once");
-        let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
+        let closed = Term::apply(Term::instance(konst, Universes::default()), [nat(1)]);
 
         let before = whnf(kernel, closed.clone());
         let inside = kernel.scoped(|kernel| {
@@ -556,11 +556,11 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
 #[test]
 fn a_restated_equation_naming_no_local_is_not_recorded() {
     let n = binder(1, "n");
-    let g = Free::global(Qualifier::from(["g"]));
+    let g = Global::Authored(Qualifier::from(["g"]));
     let x = binder(3, "x");
     let guard = |argument: Term| {
         Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(Term::free_var(&g), [argument]),
+            Term::apply(Term::instance(g, Universes::default()), [argument]),
             nat(5),
         ))
     };
@@ -569,7 +569,10 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
 
     let mut kernel = kernel();
     kernel.assume(&n, &nat_type());
-    kernel.assume(&g, &Term::func_type([(x, nat_type())], nat_type()));
+    kernel.assume(
+        &Free::Global(g),
+        &Term::func_type([(x, nat_type())], nat_type()),
+    );
 
     kernel.scoped(|kernel| {
         kernel

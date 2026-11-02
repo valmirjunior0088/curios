@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Certification, Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item,
-        Level, Nat, Places, Telescope, Term, Totality, UniverseContext,
+        Level, Nat, Places, Telescope, Term, Totality, UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeMap,
@@ -372,7 +372,7 @@ fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
     let module = collision_module(
         vec![authored(
             &three,
-            Term::free_var(&Free::from(&alias)),
+            Term::instance(alias, Universes::default()),
             Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
         )],
         BTreeMap::new(),
@@ -427,7 +427,7 @@ fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
     let alias = Global::Authored(Qualifier::from(["alias"]));
     let indexed = Global::Authored(Qualifier::from(["Idx"]));
     let coerce = Global::Authored(Qualifier::from(["coerce"]));
-    let alias_type = || Term::free_var(&Free::from(&alias));
+    let alias_type = || Term::instance(alias, Universes::default());
     let (left, right) = (Free::local(70, Some("x")), Free::local(71, Some("y")));
     let carried = Free::local(72, Some("v"));
     let at = |index: &Free| Term::induct_type(indexed, Vec::<Term>::new(), [Term::free_var(index)]);

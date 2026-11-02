@@ -405,7 +405,9 @@ fn one_definition_by_its_spines(
                 }),
             ) => {
                 left == right
-                    && kernel.value_at(&Free::Global(*left)).is_some()
+                    && kernel
+                        .value_at(&Free::Global(*left), left_universes)
+                        .is_some()
                     && kernel.universes_eq(left_universes, right_universes)
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {
@@ -795,13 +797,8 @@ fn structural(
                 name: right,
                 universes: right_universes,
             }),
-        ) => Ok(kernel.universes_eq(left_universes, right_universes)
-            && ground(
-                kernel,
-                pairs,
-                &Term::free_var(&Free::Global(*left)),
-                &Term::free_var(&Free::Global(*right)),
-            )?),
+            // Forced, so each is stuck: one declaration at one instance.
+        ) => Ok(left == right && kernel.universes_eq(left_universes, right_universes)),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {

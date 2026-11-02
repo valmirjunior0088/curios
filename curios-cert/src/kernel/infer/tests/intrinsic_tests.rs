@@ -6,6 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
+        Universes,
     },
     curios_num::Integer,
     curios_utilities::Qualifier,
@@ -14,10 +15,10 @@ use {
 #[test]
 fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     let mut kernel = kernel();
-    let holds = Free::global(SYNTAX.proof.holds.qualifier());
+    let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
     kernel
         .declare(
-            &holds,
+            &Free::Global(holds),
             &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
             &UniverseContext::default(),
         )
@@ -26,7 +27,7 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     kernel.assume(
         &proof,
         &Term::apply(
-            Term::free_var(&holds),
+            Term::instance(holds, Universes::default()),
             vec![Term::intrinsic(Intrinsic::Bool(true))],
         ),
     );
@@ -75,10 +76,10 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let mut kernel = kernel();
     let int_type = Term::intrinsic(Intrinsic::IntType);
 
-    let holds = Free::global(SYNTAX.proof.holds.qualifier());
+    let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
     kernel
         .declare(
-            &holds,
+            &Free::Global(holds),
             &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
             &UniverseContext::default(),
         )
@@ -91,7 +92,7 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     kernel.assume(
         &ok,
         &Term::apply(
-            Term::free_var(&holds),
+            Term::instance(holds, Universes::default()),
             vec![Term::intrinsic(Intrinsic::IntLe(
                 Term::intrinsic(Intrinsic::Int(Integer::from(0))),
                 Term::free_var(&x),

@@ -17,7 +17,10 @@ fn bad() -> Global {
 }
 
 fn false_type() -> Term {
-    Term::free_var(&Free::global(SYNTAX.proof.false_type.qualifier()))
+    Term::instance(
+        Global::Authored(SYNTAX.proof.false_type.qualifier()),
+        Universes::default(),
+    )
 }
 
 fn nat_type() -> Term {
@@ -31,7 +34,10 @@ fn nat(value: usize) -> Term {
 /// `Holds(0 < count)`.
 fn positive(count: Term) -> Term {
     Term::apply(
-        Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+        Term::instance(
+            Global::Authored(SYNTAX.proof.holds.qualifier()),
+            Universes::default(),
+        ),
         [Term::intrinsic(Intrinsic::NatLt(nat(0), count))],
     )
 }

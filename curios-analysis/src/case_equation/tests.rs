@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_core::{Free, Intrinsic, Nat, Term},
+    curios_core::{Free, Global, Intrinsic, Nat, Term, Universes},
     curios_utilities::Qualifier,
 };
 
@@ -41,11 +41,14 @@ fn a_number_or_a_truth_value_holds_no_type_and_a_list_or_a_value_of_no_known_car
 
 #[test]
 fn a_top_level_name_carries_none() {
-    let flag = Free::global(Qualifier::from(["flag"]));
+    let flag = Global::Authored(Qualifier::from(["flag"]));
 
-    assert!(!records_case_equation(&Term::free_var(&flag)));
+    assert!(!records_case_equation(&Term::instance(
+        flag,
+        Universes::default()
+    )));
     assert!(!records_case_equation(&Term::proj(
-        Term::free_var(&flag),
+        Term::instance(flag, Universes::default()),
         0
     )));
 }

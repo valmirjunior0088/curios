@@ -60,8 +60,7 @@ fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_anf::Module {
         curios_core::Term::func_type([(n, nat.clone())], result_type.clone()),
         curios_core::Term::func([(n, nat.clone())], result),
     )];
-    let call =
-        curios_core::Term::apply(curios_core::Term::free_var(&global("callee")), [nat_lit(4)]);
+    let call = curios_core::Term::apply(reference("callee"), [nat_lit(4)]);
     let body = match binder {
         Binder::Let => {
             let bound = fresh(Some("bound"));
@@ -94,10 +93,7 @@ fn identity_arena(stamp: curios_core::Totality) -> ErasedProgram {
         unreachable!("the fixture declares a definition");
     };
     declared.totality = stamp;
-    let body = curios_core::Term::apply(
-        curios_core::Term::free_var(&global("identity")),
-        [nat_lit(4)],
-    );
+    let body = curios_core::Term::apply(reference("identity"), [nat_lit(4)]);
 
     let program = zonked(&stating(&module(items, body), nat));
     let globals = Globals::default();
@@ -241,10 +237,7 @@ fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit)
                 definition(
                     "stepped",
                     nat,
-                    curios_core::Term::apply(
-                        curios_core::Term::free_var(&global("step")),
-                        [nat_lit(4)],
-                    ),
+                    curios_core::Term::apply(reference("step"), [nat_lit(4)]),
                 ),
             ],
             nat_lit(0),
@@ -342,11 +335,7 @@ fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUn
         &module(
             vec![
                 definition("callee", nat.clone(), nat_lit(callee)),
-                definition(
-                    "caller",
-                    nat,
-                    curios_core::Term::free_var(&global("callee")),
-                ),
+                definition("caller", nat, reference("callee")),
             ],
             nat_lit(0),
         )

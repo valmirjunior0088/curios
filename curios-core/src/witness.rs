@@ -14,7 +14,8 @@ mod tests;
 
 use {
     crate::{
-        Declared, Free, Func, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType,
+        Declared, Free, Func, Global, Intrinsic, Spelling, Subterm, Telescope, Term, Transient,
+        TupleType,
     },
     curios_utilities::{Plicity, Qualifier, Table, intern},
     std::{
@@ -427,7 +428,7 @@ impl Keying<'_> {
             Subterm::Apply(apply) => {
                 self.applied(&apply.head, applied + apply.arguments.len(), seen)
             }
-            Subterm::Var(_) | Subterm::Instance(_) => {
+            Subterm::Var(_) | Subterm::Instance(_) | Subterm::Transient(Transient::Name(_)) => {
                 let name = named(term)?;
                 match (self.written)(&name) {
                     Written::Former => Some(HeadKey::Nominal(name)),
@@ -519,7 +520,7 @@ fn terminal(type_: &Term) -> &Term {
 /// The top-level name `term` is, the universes it is instantiated at left aside.
 fn named(term: &Term) -> Option<Global> {
     match &**term {
-        Subterm::Var(_) | Subterm::Instance(_) => {
+        Subterm::Var(_) | Subterm::Instance(_) | Subterm::Transient(Transient::Name(_)) => {
             term.head_name().and_then(|free| free.as_global().copied())
         }
         _ => None,

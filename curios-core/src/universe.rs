@@ -575,6 +575,12 @@ impl UniverseContext {
         self.parameter_count + self.quality_count
     }
 
+    /// Whether `universes` states this scheme whole: a level for each parameter and a sort for each one the declaration leaves. Only such an instance denotes one of the scheme's instances; one short of it, read at a body or a sort, would read the scheme's own parameters as its reader's.
+    pub fn stated_by(&self, universes: &Universes) -> bool {
+        universes.levels.len() == self.parameter_count
+            && universes.qualities.len() == self.quality_count
+    }
+
     /// Whether this context mentions only what it declares: no constraint level naming a parameter past `parameter_count`, and none holding a metavariable.
     ///
     /// A context is closed. Universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still name, and elaboration is over by the time anything asks. A constraint naming a parameter past the count is not a stronger hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become — while a constraint carrying a metavariable is elaboration residue a zonked module cannot contain. Both are refused rather than interpreted.

@@ -36,8 +36,8 @@ use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, eta_head,
-        instantiate_universes, project_literal, reduce_intrinsic,
+        RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes,
+        eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -54,8 +54,8 @@ pub trait ClosedHost: Reducer {
     /// What `name` unfolds to through a bare occurrence. A universe-polymorphic definition is withheld, exactly as the host's own delta withholds it.
     fn closed_body(&self, name: &Free) -> Option<&Term>;
 
-    /// What `name` unfolds to at a stated universe instance — the one position a polymorphic definition may be unfolded from.
-    fn closed_body_at(&self, name: &Free) -> Option<&Term>;
+    /// What `name` unfolds to at the stated universe instance `universes` — the one position a polymorphic definition may be unfolded from, and only where the instance states its scheme whole ([`UniverseContext::stated_by`](crate::UniverseContext::stated_by)).
+    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term>;
 
     /// The payload the one arm of a closed match binds, read off the instance the match states ([`Cases::stated`]) with the scrutinee unevaluated: the payload of `tag`, where `stated` is an instance of a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine reads no declaration, which is why this is the host's.
     fn stated_payload(
@@ -636,7 +636,10 @@ impl Machine {
             Subterm::Instance(instance) => {
                 let universes = instance.universes;
                 let name = instance.name;
-                let Some(reduct) = host.closed_body_at(&Free::Global(name)).cloned() else {
+                let Some(reduct) = host
+                    .closed_body_at(&Free::Global(name), &universes)
+                    .cloned()
+                else {
                     return Ok(Step::Value(Term::instance(name, universes)));
                 };
                 // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
@@ -792,6 +795,7 @@ impl Machine {
                     &*value,
                     Subterm::Match(_)
                         | Subterm::Var(_)
+                        | Subterm::Instance(_)
                         | Subterm::Metavar(_)
                         | Subterm::Proj(_)
                         | Subterm::Apply(_)
@@ -893,7 +897,13 @@ impl Machine {
             let demand = args.item_demand;
             args.next += 1;
             let written = args.written.get(args.next - 1).copied().unwrap_or(false);
-            if args.catch && (written || matches!(&*next, Subterm::Var(_))) {
+            // A declaration at no instance is a name as a variable is; one at levels is evaluated, which is what tells two instances of a family apart in a level.
+            let named = match &*next {
+                Subterm::Var(_) => true,
+                Subterm::Instance(instance) => instance.universes.is_empty(),
+                _ => false,
+            };
+            if args.catch && (written || named) {
                 args.done.push(next);
                 continue;
             }

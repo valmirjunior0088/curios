@@ -5,7 +5,8 @@ use {
     crate::*,
     curios_analysis::{Erased, test_support::*},
     curios_core::{
-        Atom, Free, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term, test_support::*,
+        Atom, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term, Universes,
+        test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -179,7 +180,7 @@ fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
             authored(
                 &Global::Authored(Qualifier::from(["corollary"])),
                 vouched,
-                Term::free_var(&Free::from(&lemma)),
+                Term::instance(lemma, Universes::default()),
             ),
         ],
         BTreeMap::from([(vouched_name, declaration)]),

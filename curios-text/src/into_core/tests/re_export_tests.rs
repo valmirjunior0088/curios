@@ -109,7 +109,7 @@ fn pub_use_exposes_qualifier() {
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_core::Term::written(global_name("/Foo/Bar/f"))
         ),
     );
 }
@@ -153,7 +153,7 @@ fn use_of_pub_use_path_resolves_through_alias() {
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_core::Term::written(global_name("/Foo/Bar/f"))
         ),
     );
 }
@@ -179,7 +179,7 @@ fn chained_pub_use_re_exports_transitively() {
             &global("/A/X/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/A/X/f")))
+            curios_core::Term::written(global_name("/A/X/f"))
         ),
     );
 }
@@ -206,7 +206,7 @@ fn chained_re_export_resolves_out_of_order() {
             &global("/C/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/C/x")))
+            curios_core::Term::written(global_name("/C/x"))
         ),
     );
 }
@@ -274,7 +274,7 @@ fn deep_facade_traversal_through_re_exported_module() {
             &global("/B/M/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/B/M/x")))
+            curios_core::Term::written(global_name("/B/M/x"))
         ),
     );
 }
@@ -297,7 +297,7 @@ fn re_exports_from_own_private_child() {
             &global("/Facade/Impl/helper"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Facade/Impl/helper")))
+            curios_core::Term::written(global_name("/Facade/Impl/helper"))
         ),
     );
 }

@@ -1,7 +1,7 @@
 use {
     super::*,
     curios_analysis::test_support::*,
-    curios_core::{DefinitionKind, Free, Intrinsic, UniverseContext},
+    curios_core::{DefinitionKind, Intrinsic, UniverseContext, Universes},
     curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
@@ -43,7 +43,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         parameter_field: None,
         value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
-        body: Term::free_var(&Free::from(&name(mentions))),
+        body: Term::instance(name(mentions), Universes::default()),
     }))
 }
 

@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, Nominal, Scope,
-        Telescope, Term, UniverseContext,
+        Telescope, Term, UniverseContext, Universes,
     },
     curios_text::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
@@ -159,7 +159,10 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
     let qed = || Term::variant(truth, Vec::<Term>::new(), "qed", Vec::<Term>::new());
     let holds = |decision: Term| {
         Term::apply(
-            Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+            Term::instance(
+                Global::Authored(SYNTAX.proof.holds.qualifier()),
+                Universes::default(),
+            ),
             [decision],
         )
     };
@@ -291,7 +294,10 @@ fn a_guard_settled_where_its_operands_are_one(
     let qed = || Term::variant(truth, Vec::<Term>::new(), "qed", Vec::<Term>::new());
     let holds = |decision: Term| {
         Term::apply(
-            Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+            Term::instance(
+                Global::Authored(SYNTAX.proof.holds.qualifier()),
+                Universes::default(),
+            ),
             [decision],
         )
     };

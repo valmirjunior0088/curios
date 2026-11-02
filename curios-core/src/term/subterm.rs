@@ -539,7 +539,7 @@ impl Subterm {
                     .is_some_and(|universes| !universes.is_empty())
                     || self.any_child_term(&mut |term| term.has_universe_data())
             }
-            Subterm::Instance(_) => true,
+            Subterm::Instance(Instance { universes, .. }) => !universes.is_empty(),
             Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
             | Subterm::StructType(StructType { universes, .. })
@@ -558,8 +558,10 @@ impl Subterm {
         {
             return Frees::single(*name);
         }
-        // An instance's global is its own identity exactly as a bare `Var`'s name is, and it has no child terms to union.
-        if let Subterm::Instance(Instance { name, .. }) = self {
+        // A declaration's name is its own identity exactly as a bare `Var`'s is, and neither an instance nor a written name has child terms to union.
+        if let Subterm::Instance(Instance { name, .. })
+        | Subterm::Transient(Transient::Name(name)) = self
+        {
             return Frees::single(Free::Global(*name));
         }
         if let Subterm::Metavar(Metavar { spine, .. }) = self {
@@ -769,11 +771,6 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 tail: visit.visit_scope(tail),
             }),
-            // Erasure unwraps to the global's own spelling, which takes the ordinary `Var` route through the hook.
-            Subterm::Instance(Instance { name, .. }) if visit.erases_universes() => {
-                let var = Var::free(Free::Global(*name));
-                visit.call(&var).unwrap_or(Subterm::Var(var))
-            }
             // The global goes through the hook as a bare occurrence of it would. Another global renames the instance; anything else replaces it whole, as it replaces the bare occurrence, since only a declaration has levels to instantiate.
             Subterm::Instance(Instance { name, universes }) => {
                 let name = match visit.call(&Var::free(Free::Global(*name))) {

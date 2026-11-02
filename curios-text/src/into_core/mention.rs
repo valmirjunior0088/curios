@@ -231,8 +231,9 @@ impl Text<'_> {
             |(walked, names), node| {
                 if let Some(extent) = node.extent()
                     && (extent.anchor, extent.stamp) == self.key
-                    && let curios_core::Subterm::Var(var) = &**node
-                    && let Some(name) = var.as_free().and_then(|free| free.as_global())
+                    && let curios_core::Subterm::Transient(curios_core::Transient::Name(name))
+                    | curios_core::Subterm::Instance(curios_core::Instance { name, .. }) =
+                        &**node
                 {
                     names.insert((extent.start, extent.end, *name));
                 }

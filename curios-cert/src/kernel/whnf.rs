@@ -34,7 +34,8 @@ use {
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj,
-        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
+        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var, Variant,
+        Visit,
     },
     curios_utilities::recurse,
 };
@@ -53,8 +54,8 @@ impl ClosedHost for Kernel<'_> {
         stated_payload(self, stated, tag)
     }
 
-    fn closed_body_at(&self, name: &Free) -> Option<&Term> {
-        self.value_at(name)
+    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        self.value_at(name, universes)
     }
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
@@ -612,7 +613,7 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
 fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
     let Instance { name, universes } = instance;
 
-    let reduct = match kernel.value_at(&Free::Global(name)).cloned() {
+    let reduct = match kernel.value_at(&Free::Global(name), &universes).cloned() {
         Some(reduct) => reduct,
         None => return Ok(Step::Stop(Term::instance(name, universes))),
     };

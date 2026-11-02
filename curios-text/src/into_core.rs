@@ -1635,9 +1635,9 @@ fn process_items(
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
                 let output = curios_core::Term::apply(
-                    curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
+                    curios_core::Term::written(curios_core::Global::Authored(
                         context.syntax().test.test_type.qualifier(),
-                    ))),
+                    )),
                     [curios_core::Term::tuple_type_unit()],
                 );
                 // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test({})` so `Test/main` can hold it unforced and run only the one it selected.

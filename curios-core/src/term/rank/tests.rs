@@ -12,7 +12,10 @@ fn local(index: u64) -> Term {
 }
 
 fn global(name: &str) -> Term {
-    Term::free_var(&Free::global(Qualifier::from([name])))
+    Term::instance(
+        Global::Authored(Qualifier::from([name])),
+        Universes::default(),
+    )
 }
 
 fn call(arguments: impl IntoIterator<Item = Term>) -> Term {

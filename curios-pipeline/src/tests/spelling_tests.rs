@@ -5,7 +5,8 @@
 use {
     super::test_support::*,
     curios_core::{
-        Enter, Global, IntrinsicForm, Item, Subterm, Term, intrinsic_form, intrinsic_global,
+        Enter, Global, IntrinsicForm, Item, Subterm, Term, Transient, intrinsic_form,
+        intrinsic_global,
     },
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, into_core_with_prelude, spell},
@@ -72,7 +73,7 @@ struct Counted {
 /// The declaration a lowered body names, where the body is a name and nothing else.
 fn named(body: &Term) -> Option<Global> {
     match &**body {
-        Subterm::Var(var) => var.as_free()?.as_global().copied(),
+        Subterm::Transient(Transient::Name(name)) => Some(*name),
         _ => None,
     }
 }

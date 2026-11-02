@@ -878,7 +878,14 @@ impl Rename {
 }
 
 fn label_terms(binders: &[Free]) -> Vec<Term> {
-    binders.iter().map(Term::free_var).collect()
+    binders
+        .iter()
+        .map(|binder| match binder.as_global() {
+            // A group bound under its members' own names opens to an occurrence of each, as a reference to it is written.
+            Some(name) => Term::instance(*name, Universes::default()),
+            None => Term::free_var(binder),
+        })
+        .collect()
 }
 
 /// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`].
@@ -1180,7 +1187,7 @@ fn former_doc(former: FormerEta, frame: Frame) -> Printer {
         FormerEta::Intrinsic(name) => pure(frame.spelling.intrinsic_symbol(name)),
         FormerEta::Nominal(name, prefix, arity) => {
             let marks = frame.spelling.nominal_marks(&name, arity);
-            let reference = Term::var(Var::free(Free::Global(name)));
+            let reference = Term::instance(name, Universes::default());
             let term = if prefix.is_empty() {
                 reference
             } else {
@@ -2068,7 +2075,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             }
         }
         Subterm::Instance(instance) => flat([
-            sub(Term::free_var(&Free::Global(instance.name)), frame),
+            pure(frame.spelling.label(&Free::Global(instance.name))),
             pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
@@ -2542,6 +2549,9 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         ]),
         // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
         Subterm::Transient(Transient::Derive) => pure("derive"),
+        Subterm::Transient(Transient::Name(name)) => {
+            pure(frame.spelling.label(&Free::Global(name)))
+        }
         // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds.
         Subterm::Transient(Transient::Matrix(Matrix { head, motive, rows })) => {
             // The motive's binders are opened ahead of the scrutinee's, as a compiled match's are, and the arms' after both.

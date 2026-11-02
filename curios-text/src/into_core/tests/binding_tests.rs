@@ -13,7 +13,7 @@ fn single_let_binding() {
             &global("/x"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/x")))
+            curios_core::Term::written(global_name("/x"))
         ),
     );
 }
@@ -31,7 +31,7 @@ fn nested_module_binding_reference() {
             &global("/Foo/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/f")))
+            curios_core::Term::written(global_name("/Foo/f"))
         ),
     );
 }
@@ -49,7 +49,7 @@ fn module_named_after_type_resolves_by_qualified_path() {
             &global("/Nat/double"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Nat/double")))
+            curios_core::Term::written(global_name("/Nat/double"))
         ),
     );
 }
@@ -70,7 +70,7 @@ fn use_shorthand_resolves_qualifier() {
             &global("/Foo/Bar/f"),
             written_type(0),
             written_type(1),
-            curios_core::Term::var(curios_core::Var::free(global("/Foo/Bar/f")))
+            curios_core::Term::written(global_name("/Foo/Bar/f"))
         ),
     );
 }
@@ -112,11 +112,15 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
 // A local binding is in scope of its own value: one that names itself lowers to a core `rec`, and a lone binding that does not stays the plain `let` it always was.
 #[test]
 fn a_local_binding_that_names_itself_lowers_to_a_rec() {
-    let lowered = run(r#"
-        let f(n : Type) -> Type = f(n);
-        f
-    "#);
-    assert!(lowered.mentions_rec() && lowered.free_vars().is_empty());
+    assert_eq!(
+        closed_group(
+            r#"
+            let f(n : Type) -> Type = f(n);
+            f
+            "#
+        ),
+        Some(vec!["/f".to_string()])
+    );
     assert!(
         !run(r#"
             let x : Type = Type;
@@ -126,15 +130,19 @@ fn a_local_binding_that_names_itself_lowers_to_a_rec() {
     );
 }
 
-// A local `let … and …;` group is one core `rec`, its members bound in one another.
+// A local `let … and …;` group is one core `rec`, whose members' bodies name one another.
 #[test]
 fn a_local_group_lowers_to_one_rec() {
-    let lowered = run(r#"
-        let a(x : Type) -> Type = b(x)
-        and b(x : Type) -> Type = a(x);
-        a
-    "#);
-    assert!(lowered.mentions_rec() && lowered.free_vars().is_empty());
+    assert_eq!(
+        closed_group(
+            r#"
+            let a(x : Type) -> Type = b(x)
+            and b(x : Type) -> Type = a(x);
+            a
+            "#
+        ),
+        Some(vec!["/a".to_string(), "/b".to_string()])
+    );
 }
 
 // The three shapes a recursive binding cannot take, each refused by name: no type, a pattern binder, an action.
@@ -184,7 +192,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
     let expected_type = curios_core::Term::func_type(
         [] as [(curios_core::Free, curios_core::Term); 0],
         curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
+            curios_core::Term::written(global_name("std/Test/Test")),
             [curios_core::Term::tuple_type_unit()],
         ),
     );
@@ -273,7 +281,7 @@ fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     assert_eq!(
         *func_type.telescope.terminal(),
         curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
+            curios_core::Term::written(global_name("std/Test/Test")),
             [curios_core::Term::tuple_type_unit()]
         )
     );

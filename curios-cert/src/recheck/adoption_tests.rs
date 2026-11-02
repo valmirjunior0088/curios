@@ -7,7 +7,7 @@ use {
     curios_core::{
         Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
         Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
-        Variance,
+        Universes, Variance,
     },
     curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
@@ -37,7 +37,7 @@ fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
             authored(&global("alias"), Term::type_ground(), alias),
             authored(
                 &global("three"),
-                Term::free_var(&Free::from(&global("alias"))),
+                Term::instance(global("alias"), Universes::default()),
                 literal(3),
             ),
             authored(
@@ -49,7 +49,7 @@ fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
                 &global("five"),
                 nat(),
                 Term::apply(
-                    Term::free_var(&Free::from(&global("identity"))),
+                    Term::instance(global("identity"), Universes::default()),
                     [literal(5)],
                 ),
             ),
@@ -310,7 +310,7 @@ fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
         authored(
             &global("alias"),
             Term::type_ground(),
-            Term::free_var(&Free::from(&global("five"))),
+            Term::instance(global("five"), Universes::default()),
         ),
     );
 
@@ -384,9 +384,16 @@ fn chained_module(partial: bool) -> Module {
             stamped(
                 "middle",
                 nat(),
-                Term::apply(Term::free_var(&Free::from(&global("base"))), [literal(1)]),
+                Term::apply(
+                    Term::instance(global("base"), Universes::default()),
+                    [literal(1)],
+                ),
             ),
-            stamped("top", nat(), Term::free_var(&Free::from(&global("middle")))),
+            stamped(
+                "top",
+                nat(),
+                Term::instance(global("middle"), Universes::default()),
+            ),
             authored(&global("apart"), nat(), literal(7)),
         ]
         .into(),
@@ -540,7 +547,7 @@ fn proving_module(proof: Term, marked: bool) -> Module {
             authored(
                 &global("corollary"),
                 vouched(),
-                Term::free_var(&Free::from(&global("lemma"))),
+                Term::instance(global("lemma"), Universes::default()),
             ),
         ],
         BTreeMap::from([(vouched_name, declaration)]),
@@ -674,7 +681,7 @@ fn edited_five() -> Module {
         &global("five"),
         nat(),
         Term::apply(
-            Term::free_var(&Free::from(&global("identity"))),
+            Term::instance(global("identity"), Universes::default()),
             [literal(6)],
         ),
     );
@@ -750,7 +757,7 @@ fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
 /// `G`'s declared type is `Type 5` in every version, so cumulativity admits an `H` body at any level up to 5; what moves between versions is the *value* sort `H`'s body reaches, which `G` republishes.
 fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Module {
     let x = Free::local(10, Some("x"));
-    let g = Term::free_var(&Free::from(&global("G")));
+    let g = Term::instance(global("G"), Universes::default());
 
     Module {
         mounts: Vec::new(),
@@ -759,7 +766,7 @@ fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Mo
             aliased(
                 &global("G"),
                 type_at(5),
-                Term::free_var(&Free::from(&global("H"))),
+                Term::instance(global("H"), Universes::default()),
                 g_value_sort,
             ),
             authored(
@@ -810,7 +817,7 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
         aliased(
             &global("G"),
             type_at(5),
-            Term::free_var(&Free::from(&global("H"))),
+            Term::instance(global("H"), Universes::default()),
             type_at(5),
         ),
     );
@@ -847,7 +854,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
         vec![authored_proof(
             &loop_name,
             absurd.clone(),
-            Term::free_var(&Free::from(&loop_name)),
+            Term::instance(loop_name, Universes::default()),
         )],
         BTreeMap::from([(absurd_name, proposition(Vec::new()))]),
     );
@@ -859,7 +866,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
             tests: Vec::new(),
         },
         entry: Entrypoint {
-            body: Term::free_var(&Free::from(&loop_name)),
+            body: Term::instance(loop_name, Universes::default()),
             type_: Some(absurd.clone()),
         },
     };
@@ -916,13 +923,13 @@ fn chained_sort_module(h_body: Term, h: Term, k: Term, l: Term) -> Module {
             aliased(
                 &global("K"),
                 type_at(5),
-                Term::free_var(&Free::from(&global("H"))),
+                Term::instance(global("H"), Universes::default()),
                 k,
             ),
             aliased(
                 &global("L"),
                 type_at(5),
-                Term::free_var(&Free::from(&global("K"))),
+                Term::instance(global("K"), Universes::default()),
                 l,
             ),
         ]
@@ -953,7 +960,7 @@ fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_i
         aliased(
             &global("K"),
             type_at(5),
-            Term::free_var(&Free::from(&global("H"))),
+            Term::instance(global("H"), Universes::default()),
             type_at(5),
         ),
     );
@@ -992,7 +999,7 @@ fn later_alias(sort: Term) -> Module {
         items: vec![aliased(
             &global("M"),
             type_at(5),
-            Term::free_var(&Free::from(&global("L"))),
+            Term::instance(global("L"), Universes::default()),
             sort,
         )]
         .into(),
@@ -1028,7 +1035,7 @@ fn a_later_walk_refuses_an_alias_publishing_a_sort_its_value_does_not_inhabit() 
 ///
 /// The arm's index inversion would refine `X`, an outer binder assumed at `Type 0`, to `L`, and keeps the refinement only where the judge holds `Sort::of(L)` below `Type 0` (`curios_analysis::invert`'s `fits_its_variable`). Kept, the arm's goal is `L`, which `Type 3` inhabits; dropped, the goal stays the abstract `X` and nothing does.
 fn refining_module(body: Term) -> Module {
-    refining_module_at(Term::free_var(&Free::from(&global("L"))), body)
+    refining_module_at(Term::instance(global("L"), Universes::default()), body)
 }
 
 /// [`refining_module_at`] with the variable assumed at `Type 0`.
@@ -1158,7 +1165,7 @@ fn applying_module() -> Module {
         &global("g"),
         type_at(4),
         Term::apply(
-            Term::free_var(&Free::from(&global("f"))),
+            Term::instance(global("f"), Universes::default()),
             [
                 type_at(4),
                 Term::variant(global("Big"), Vec::<Term>::new(), "big", Vec::<Term>::new()),

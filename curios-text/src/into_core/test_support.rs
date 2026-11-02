@@ -12,7 +12,7 @@ use {
         Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
         SyntaxRegistry, TestSyntax, test_support::*,
     },
-    std::{fs, path::Path},
+    std::{collections::BTreeSet, fs, path::Path},
 };
 
 pub(super) const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -216,6 +216,35 @@ pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     .unwrap();
 
     program.module
+}
+
+/// The members of the one item `src` lowers to, where it is a recursive group whose bodies name no declaration but its own members: `None` where it is anything else.
+pub(super) fn closed_group(src: &str) -> Option<Vec<String>> {
+    let module = lowered_module(src);
+    let [curios_core::Item::Rec(group)] = &module.items.iter().collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    let definitions = group.definitions();
+    let members = definitions
+        .iter()
+        .map(|definition| definition.name)
+        .collect::<BTreeSet<_>>();
+
+    definitions
+        .iter()
+        .all(|definition| {
+            definition
+                .body
+                .free_vars()
+                .iter()
+                .all(|name| name.as_global().is_some_and(|name| members.contains(name)))
+        })
+        .then(|| {
+            definitions
+                .iter()
+                .map(|definition| definition.name.faithful().to_string())
+                .collect()
+        })
 }
 
 pub(super) fn written_type(id: usize) -> curios_core::Term {

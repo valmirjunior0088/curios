@@ -7,7 +7,7 @@ use {
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
         Module, Nat, Nominal, RecGroup, RecItem, RecMemberScopes, ReduceError, Scope, Telescope,
-        Term, UniverseContext, UniverseParam, Variance,
+        Term, UniverseContext, UniverseParam, Universes, Variance,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -41,7 +41,7 @@ fn spent_item_beside_an_aliased_payload() -> Module {
                 Telescope::build(
                     [(
                         Free::local(931, Some("x")),
-                        Term::free_var(&Free::from(&alias)),
+                        Term::instance(alias, Universes::default()),
                     )],
                     Vec::new(),
                 ),
@@ -67,7 +67,7 @@ fn spent_item_beside_an_aliased_payload() -> Module {
             authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
             authored(
                 &spent(),
-                Term::free_var(&Free::from(&spin)),
+                Term::instance(spin, Universes::default()),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             ),
             // The family's former is the module's last item, so its entry is judged once `spent` has been.

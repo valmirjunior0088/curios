@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Apply, Atom, Bound, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
-        MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext, UniverseParam,
+        MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -333,7 +333,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
     );
 
     // In one context, so the bare name's stuck reduct is remembered before the instance is asked: the cache's universe-erased door equates the two spellings and may serve neither for the other.
-    let raw = Term::free_var(&Free::Global(poly));
+    let raw = Term::instance(poly, Universes::default());
     assert_eq!(reduce(&mut context, raw.clone()), Ok(raw));
     assert_eq!(
         reduce(&mut context, Term::instance(poly, vec![Level::constant(3)])),

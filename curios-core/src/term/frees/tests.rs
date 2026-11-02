@@ -97,7 +97,11 @@ fn any_of_several_names_is_answered_by_their_oldest_local_first() {
 
     assert!(!Term::free_var(&older).mentions_any(&Names::new([newer, newest])));
     assert!(Term::free_var(&newer).mentions_any(&Names::new([newer, newest])));
-    assert!(Term::free_var(&global).mentions_any(&Names::new([global, newest])));
+    let declared = Term::instance(
+        *global.as_global().expect("a declaration"),
+        Universes::default(),
+    );
+    assert!(declared.mentions_any(&Names::new([global, newest])));
     assert!(!Term::free_var(&older).mentions_any(&Names::new([global, newest])));
     assert!(!Term::free_var(&older).mentions_any(&Names::new([])));
 }

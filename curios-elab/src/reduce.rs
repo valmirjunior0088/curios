@@ -35,8 +35,8 @@ use {
         Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
         Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Quality,
         Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Var, Variant,
-        Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
+        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Var,
+        Variant, Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
         project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
         weak_head_value,
     },
@@ -64,8 +64,8 @@ impl ClosedHost for Context<'_> {
         })
     }
 
-    fn closed_body_at(&self, name: &Free) -> Option<&Term> {
-        self.var_reduct_at(name)
+    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        self.var_reduct_at(name, universes)
     }
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
@@ -362,7 +362,11 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
             other => {
                 let neutral = matches!(
                     other,
-                    Subterm::Match(_) | Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Proj(_)
+                    Subterm::Match(_)
+                        | Subterm::Var(_)
+                        | Subterm::Instance(_)
+                        | Subterm::Metavar(_)
+                        | Subterm::Proj(_)
                 );
                 let reduct: Term = other.into();
 
@@ -810,7 +814,10 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, ReduceError> {
     let Instance { name, universes } = instance;
 
-    let reduct = match context.var_reduct_at(&Free::Global(name)).cloned() {
+    let reduct = match context
+        .var_reduct_at(&Free::Global(name), &universes)
+        .cloned()
+    {
         Some(reduct) => reduct,
         None => return Ok(Reduce::Break(Term::instance(name, universes))),
     };

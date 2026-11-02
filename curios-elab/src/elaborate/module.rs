@@ -510,7 +510,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     context.sweep_parked()?;
     // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
     let body = match context.is_witness_declaration(&def.name) {
-        true => own_methods_read(context, &name, &zonk_solved_term_metas(context, &body)),
+        true => own_methods_read(context, def.name, &zonk_solved_term_metas(context, &body)),
         false => body,
     };
 
@@ -598,14 +598,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .map(|def| Free::from(&def.name))
         .collect::<Vec<_>>();
-    for (def, name) in defs.iter().zip(&names) {
-        context.assume(name, &def.type_);
-    }
 
     let mut types = Vec::with_capacity(defs.len());
     // Each struct former's parameters, at the levels typing read them at, as `elaborate_module_let` reads a lone one's.
     let mut parameters = Vec::with_capacity(defs.len());
-    for def in &defs {
+    for (def, name) in defs.iter().zip(&names) {
         check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
@@ -613,13 +610,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             true => check_former_type(context, &def.type_)?,
             false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
         };
+        // In scope from its own signature on, at the type it elaborated to: a signature reads the members written before it, and no type is judged before it is elaborated.
+        context.assume(name, &type_);
         types.push(type_);
         parameters.push(levels);
-    }
-
-    // Upgrade the assumptions to the *rebuilt* signatures before any body is checked (see `elaborate_rec`): a lowered (under-applied) type must not leak into later reduction. The lowered forms were only needed above, while the signatures checked each other.
-    for (name, type_) in names.iter().zip(&types) {
-        context.reassume(name, type_);
     }
 
     // A `satisfy … and …` group registers every member's signature before any body elaborates, as `elaborate_module_let` does for one witness: the bodies resolve through one another's entries, and through their own.

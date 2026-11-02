@@ -23,7 +23,7 @@ use {
     crate::Baseline,
     curios_core::{
         Certification, Free, Global, InductDecl, Item, Module, Place, Places, Polarity, StructDecl,
-        Term, Totality, UniverseContext, Variance,
+        Term, Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -645,8 +645,15 @@ impl<'s> Environment<'s> {
     }
 
     /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
-    pub(super) fn value_at(&self, name: &Free) -> Option<&Term> {
+    /// The value `name` was defined at, under its own universe parameters: what a definition is, read as an analysis of the scheme reads it rather than at an occurrence.
+    pub(super) fn body(&self, name: &Free) -> Option<&Term> {
         self.held(name).and_then(|held| held.value)
+    }
+
+    pub(super) fn value_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        self.held(name)
+            .filter(|held| held.universes.stated_by(universes))
+            .and_then(|held| held.value)
     }
 
     /// The sort `name`'s value inhabits through a bare occurrence, where it states one: a definition with universe parameters is withheld, as its value is.
@@ -656,8 +663,10 @@ impl<'s> Environment<'s> {
             .and_then(|held| held.value_sort)
     }
 
-    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one.
-    pub(super) fn value_sort_at(&self, name: &Free) -> Option<&Term> {
-        self.held(name).and_then(|held| held.value_sort)
+    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one: an instance short of the scheme is withheld, as its value is.
+    pub(super) fn value_sort_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        self.held(name)
+            .filter(|held| held.universes.stated_by(universes))
+            .and_then(|held| held.value_sort)
     }
 }

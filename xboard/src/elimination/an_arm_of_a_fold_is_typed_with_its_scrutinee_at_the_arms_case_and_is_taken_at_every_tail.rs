@@ -1,6 +1,6 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, false_type, refused},
-    curios_core::{Free, Global, Intrinsic, Module, Nat, Term},
+    curios_core::{Free, Global, Intrinsic, Module, Nat, Term, Universes},
     curios_text::SYNTAX,
 };
 
@@ -97,7 +97,10 @@ fn an_identity_arm_typed_at_zero() -> (Module, Term) {
 
     let two = || Term::intrinsic(Intrinsic::Nat(Nat::new(2usize)));
     let holds = Term::apply(
-        Term::free_var(&Free::global(SYNTAX.proof.holds.qualifier())),
+        Term::instance(
+            Global::Authored(SYNTAX.proof.holds.qualifier()),
+            Universes::default(),
+        ),
         [Term::intrinsic(Intrinsic::NatEql(
             Term::free_var(&n),
             two(),

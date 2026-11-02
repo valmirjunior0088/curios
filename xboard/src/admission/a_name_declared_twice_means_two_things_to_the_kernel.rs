@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_name, false_type, refused},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Module,
-        Nominal, Telescope, Term, Totality, UniverseContext,
+        Nominal, Telescope, Term, Totality, UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -92,7 +92,7 @@ fn a_statement_declared_twice() -> (Module, Term) {
     let statement = Global::Authored(Qualifier::from(["p"]));
     let theorem = Global::Authored(Qualifier::from(["thm"]));
     let holds_type = Term::induct_type(holds, Vec::<Term>::new(), Vec::<Term>::new());
-    let named = |name: &Global| Term::free_var(&Free::from(name));
+    let named = |name: &Global| Term::instance(*name, Universes::default());
 
     let module = Module {
         items: vec![

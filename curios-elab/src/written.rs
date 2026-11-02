@@ -9,14 +9,14 @@
 use {
     crate::{
         Binders, Context, Entailed, InductCase, Opened, Outcome, Resolution, convert_outcome,
-        entail, enter_induct_case, is_prop, reduce_with, refine_head, resolve_witness,
+        entail, enter_induct_case, is_prop, reduce_with, reference, refine_head, resolve_witness,
         synth_neutral, trivially_inhabited, zonk_solved_term_metas,
     },
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
         MatchResult, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
-        Transient, TupleType, Var, Visit, WitnessOrigin,
+        Transient, TupleType, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     curios_utilities::{Plicity, recurse},
@@ -49,7 +49,10 @@ struct Writing {
 
 impl Writing {
     fn term(&mut self, context: &mut Context, term: &Term) -> Term {
-        if matches!(&**term, Subterm::Var(_) | Subterm::Sort(..)) {
+        if matches!(
+            &**term,
+            Subterm::Var(_) | Subterm::Instance(_) | Subterm::Sort(..)
+        ) {
             return term.clone();
         }
         let closed = term.closed();
@@ -117,7 +120,8 @@ impl Writing {
                     .collect::<Vec<_>>();
                 let opened = self.released(head);
                 let filled = self.filled_again(context, &members, |context| {
-                    parameters_of(context, &as_named(&opened))
+                    let named = as_named(context, &opened)?;
+                    parameters_of(context, &named)
                 });
                 let head = self.term(context, head);
                 let arguments = arguments
@@ -416,7 +420,7 @@ impl Writing {
                 plicity: Plicity::Witness,
             }))
             .collect::<Vec<_>>();
-        let reference = Term::var(Var::free(Free::Global(wrapper)));
+        let reference = Term::written(wrapper);
         let own = arguments.map(|arguments| {
             arguments
                 .iter()
@@ -963,16 +967,16 @@ impl Writing {
     }
 }
 
-/// `head` as a program names it: a reference at levels of its own, as a name is read where it is written, and not at the instance elaboration settled for it.
-fn as_named(head: &Term) -> Term {
-    match &**head {
-        Subterm::Instance(Instance { name, .. }) => Term::free_var(&Free::Global(*name)),
+/// `head` as a program names it: each declaration it calls referenced as elaboration references one written there, at levels of its own, and not at the instance elaboration settled for it. `None` where a name it calls declares nothing here.
+fn as_named(context: &mut Context, head: &Term) -> Option<Term> {
+    Some(match &**head {
+        Subterm::Instance(Instance { name, .. }) => reference(context, *name, None).ok()??.0,
         Subterm::Apply(Apply { head, arguments }) => Term::from(Subterm::Apply(Apply {
-            head: as_named(head),
+            head: as_named(context, head)?,
             arguments: arguments.clone(),
         })),
         _ => head.clone(),
-    }
+    })
 }
 
 /// The parameters of the function `head` is, `head` standing where the context stands: `None` where its type cannot be synthesized or is no function's.

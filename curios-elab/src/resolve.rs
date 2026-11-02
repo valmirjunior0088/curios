@@ -20,8 +20,8 @@ use {
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
-        ImplicitOrigin, Instance, Metavar, MetavarId, StructType, Subterm, Term, UniverseContext,
-        Universes, WitnessKey, WitnessOrigin,
+        ImplicitOrigin, Instance, Metavar, MetavarId, StructType, Subterm, Term, Transient,
+        UniverseContext, Universes, WitnessKey, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxName},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -140,7 +140,7 @@ fn diagnose_need(context: &mut Reporting, goal: &Term, site: Option<&Extent>) ->
 
 /// The global `name` is, as a term a report spells by its reader's imports.
 fn global(name: SyntaxName) -> Term {
-    Term::free_var(&Free::global(name.qualifier()))
+    Term::written(Global::Authored(name.qualifier()))
 }
 
 /// When `goal` is the registry's `Add` at `/std/Str`, the two functions that join text, for the report to name: `+` is no operator of text.
@@ -284,11 +284,13 @@ pub fn written_monad(type_: &Term) -> Option<Term> {
     })
 }
 
-/// The name `head` is, at a universe instance or not.
+/// The name `head` is: a binder, or a declaration as it is written or at the instance elaboration chose.
 fn named(head: &Term) -> Option<Free> {
     match &**head {
         Subterm::Var(var) => var.as_free().copied(),
-        Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
+        Subterm::Instance(Instance { name, .. }) | Subterm::Transient(Transient::Name(name)) => {
+            Some(Free::Global(*name))
+        }
         _ => None,
     }
 }
@@ -676,6 +678,9 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
         Subterm::Var(var) => context
             .instantiate_assumption(var.unwrap(), None)?
             .map(|(type_, _)| type_)
+            .ok_or_else(|| context.unbound_variable(node.clone())),
+        Subterm::Instance(Instance { name, universes }) => context
+            .instantiate_assumption_at(&Free::Global(*name), universes, None)?
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
             let head_type = node_type(context, &proj.head)?;
@@ -1258,10 +1263,7 @@ pub fn check_concept_registry(context: &Context) -> Result<(), Error> {
     for (name, concept) in concepts {
         for target in &concept.supers {
             if context.registered_concept(target).is_none() {
-                return Err(Error::unknown_superclass(
-                    *name,
-                    Term::free_var(&Free::Global(*target)),
-                ));
+                return Err(Error::unknown_superclass(*name, Term::written(*target)));
             }
         }
     }

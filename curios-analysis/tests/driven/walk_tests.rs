@@ -117,7 +117,7 @@ impl Specimen {
 const FORMS: &[&str] = &[
     "a leaf",
     "a metavariable",
-    "a universe instance of a variable",
+    "an instance of a declaration",
     "a transient",
     "an intrinsic",
     "a foreign call",
@@ -148,13 +148,13 @@ fn forms(term: &Term) -> Vec<&'static str> {
     match &**term {
         Subterm::Sort(..) | Subterm::Var(_) => vec!["a leaf"],
         Subterm::Metavar(_) => vec!["a metavariable"],
-        Subterm::Instance(_) => vec!["a universe instance of a variable"],
+        Subterm::Instance(_) => vec!["an instance of a declaration"],
         Subterm::Transient(transient) => vec![match transient {
             Transient::Infix(_)
             | Transient::Bang(_)
             | Transient::Ascribed(_)
             | Transient::Matrix(_) => "a transient",
-            Transient::NumLit(_) | Transient::Derive => "a leaf",
+            Transient::NumLit(_) | Transient::Derive | Transient::Name(_) => "a leaf",
         }],
         Subterm::Intrinsic(_) => vec!["an intrinsic"],
         Subterm::Foreign(..) => vec!["a foreign call"],
@@ -744,7 +744,7 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
     for (label, actual, solved) in [
-        ("a bare name", Term::free_var(&Free::Global(n)), None),
+        ("a bare name", Term::instance(n, Universes::default()), None),
         ("a name at an instance", instance, None),
         ("a literal", literal.clone(), Some(literal)),
     ] {

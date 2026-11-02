@@ -25,7 +25,7 @@ use {
         locals_outside_spines, read_outside_spines,
     },
     curios_core::{
-        Free, Global, HeadTag, RecGroup, Term, UniverseContext, project_erased_universes,
+        Free, Global, HeadTag, RecGroup, Term, UniverseContext, Universes, project_erased_universes,
     },
     curios_utilities::Keyed,
     std::{
@@ -627,17 +627,31 @@ impl<'s> Frames<'s> {
     /// A polymorphic definition's stored body is scoped by its universe context: its parameter levels are not meaningful at an occurrence until elaboration has rebuilt that occurrence as an `Instance`. Letting a raw variable unfold would leak those bound parameters into the ambient solver. The explicit-instance reducer uses [`Frames::var_reduct_at`] after it has the occurrence's level arguments.
     pub fn var_reduct(&self, name: &Free) -> Option<&Term> {
         let is_polymorphic = self
-            .binding(name)
-            .map(|binding| &binding.universes)
-            .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
+            .scheme(name)
             .is_some_and(|context| context.parameter_count != 0);
         (!is_polymorphic)
             .then(|| self.raw_var_reduct(name))
             .flatten()
     }
 
-    pub fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
-        self.raw_var_reduct(name)
+    /// What `name` unfolds to at the universe instance `universes`, where that instance states its scheme ([`Frames::states_scheme`]). An instance short of its scheme denotes none of the scheme's instances, and unfolding it would leak the scheme's parameters as [`Frames::var_reduct`] says a bare variable would.
+    pub fn var_reduct_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        self.states_scheme(name, universes)
+            .then(|| self.raw_var_reduct(name))
+            .flatten()
+    }
+
+    /// Whether `universes` states the scheme `name` is bound under whole ([`UniverseContext::stated_by`]), a name bound under none by an instance stating nothing: what an instance must do to be read at `name`'s body or sort.
+    pub fn states_scheme(&self, name: &Free, universes: &Universes) -> bool {
+        self.scheme(name)
+            .map_or(universes.is_empty(), |scheme| scheme.stated_by(universes))
+    }
+
+    /// The universe scheme `name` is bound under: its binding's, or that of the definition in scope.
+    fn scheme(&self, name: &Free) -> Option<&UniverseContext> {
+        self.binding(name)
+            .map(|binding| &binding.universes)
+            .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
     }
 
     /// The entry a projection's counterfactual match-arm refinement is registered under, from the frames no settlement withholds.

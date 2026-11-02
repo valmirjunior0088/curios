@@ -4,7 +4,7 @@ use {
     super::{test_support::*, *},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Reducer, Scope,
-        Subterm, Telescope, Term, UniverseContext,
+        Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_num::Binary,
     curios_utilities::{Plicity, Qualifier},
@@ -13,15 +13,15 @@ use {
 /// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. A machine that evaluates every beta argument and substitutes its value would inline a function-valued global's definition once per occurrence — and a web of definitions each naming the one before it twice would come back as a graph whose tree is `2^n`. The strategy substitutes the argument as written, so the two reducts would differ here, and this fixture is the one that sees it.
 #[test]
 fn the_closed_machine_keeps_a_global_argument_as_a_name() {
-    let g = Free::global(Qualifier::from(["g"]));
-    let twice = Free::global(Qualifier::from(["twice"]));
+    let g = Global::Authored(Qualifier::from(["g"]));
+    let twice = Global::Authored(Qualifier::from(["twice"]));
     let (x, f) = (binder(0, "x"), binder(1, "f"));
     let unary = Term::func_type([(x, nat_type())], nat_type());
 
     let define = |kernel: &mut Kernel| {
         kernel
             .define(
-                &g,
+                &Free::Global(g),
                 &unary,
                 &Term::func(
                     [(x, nat_type())],
@@ -32,7 +32,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
             .expect("a name is declared once");
         kernel
             .define(
-                &twice,
+                &Free::Global(twice),
                 &Term::func_type([(f, unary.clone())], unary.clone()),
                 &Term::func(
                     [(f, unary.clone())],
@@ -49,7 +49,10 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
             .expect("a name is declared once");
     };
 
-    let term = Term::apply(Term::free_var(&twice), [Term::free_var(&g)]);
+    let term = Term::apply(
+        Term::instance(twice, Universes::default()),
+        [Term::instance(g, Universes::default())],
+    );
 
     let mut machined = kernel();
     define(&mut machined);
@@ -63,7 +66,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
         "the machine and the strategy agree on the function handed back"
     );
     assert!(
-        reduct.mentions_free(&g),
+        reduct.mentions_free(&Free::Global(g)),
         "the argument survives as the name it was passed as:\n{reduct}"
     );
 }
@@ -72,7 +75,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
 #[test]
 fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     let g = Global::Authored(Qualifier::from(["g"]));
-    let twice = Free::global(Qualifier::from(["twice"]));
+    let twice = Global::Authored(Qualifier::from(["twice"]));
     let (x, f) = (binder(0, "x"), binder(1, "f"));
     let unary = Term::func_type([(x, nat_type())], nat_type());
 
@@ -90,7 +93,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
             .expect("a name is declared once");
         kernel
             .define(
-                &twice,
+                &Free::Global(twice),
                 &Term::func_type([(f, unary.clone())], unary.clone()),
                 &Term::func(
                     [(f, unary.clone())],
@@ -109,7 +112,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
 
     let passed = |plicity: Plicity| {
         Term::apply_marked(
-            Term::free_var(&twice),
+            Term::instance(twice, Universes::default()),
             [(plicity, Term::instance(g, vec![Level::zero()]))],
         )
     };
@@ -588,7 +591,7 @@ fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
 /// The differential's case of a recursive step that applies a head outside the group to the folded call: `member(3)` with `member(n) = match n | 0 => 0 | pred => g(member(pred))` and `g` opaque. The strategy's `force` keeps the folded spelling wherever the reduct still names the member, and the machine's guard reads the stuck application as neutral the same way, so both hand back `member(3)` rather than one of them `g(member(2))`. Asked apart from the loop above because `g` needs a declaration in both kernels.
 #[test]
 fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
-    let g = Free::global(Qualifier::from(["g"]));
+    let g = Global::Authored(Qualifier::from(["g"]));
     let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
     let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
     let unary = Term::func_type([(x, nat_type())], nat_type());
@@ -602,7 +605,7 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
             &pred,
             &hypothesis,
             Term::apply(
-                Term::free_var(&g),
+                Term::instance(g, Universes::default()),
                 [Term::apply(
                     Term::free_var(&member),
                     [Term::free_var(&pred)],
@@ -620,11 +623,11 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
 
     let mut machined = kernel();
     machined
-        .declare(&g, &unary, &monomorphic())
+        .declare(&Free::Global(g), &unary, &monomorphic())
         .expect("declared once");
     let mut strategy = strategy_kernel();
     strategy
-        .declare(&g, &unary, &monomorphic())
+        .declare(&Free::Global(g), &unary, &monomorphic())
         .expect("declared once");
 
     assert_eq!(
@@ -637,22 +640,25 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
 /// The restuck call under heads the opaque one is reached through: a transparent `wrap(x) = g(x)` the machine opens to the opaque `g`, an intrinsic over the stuck call, `g(member(pred)) + 1`, and the stuck call as an argument of a second, `g(g(member(pred)))`. Each is one value however it is spelled, so the machine and the strategy hand back one forced form.
 #[test]
 fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_does() {
-    let g = Free::global(Qualifier::from(["g"]));
-    let wrap = Free::global(Qualifier::from(["wrap"]));
+    let g = Global::Authored(Qualifier::from(["g"]));
+    let wrap = Global::Authored(Qualifier::from(["wrap"]));
     let (n, motive_b, x) = (binder(0, "n"), binder(1, "m"), binder(5, "x"));
     let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
     let unary = Term::func_type([(x, nat_type())], nat_type());
     let declare = |kernel: &mut Kernel| {
         kernel
-            .declare(&g, &unary, &monomorphic())
+            .declare(&Free::Global(g), &unary, &monomorphic())
             .expect("declared once");
         kernel
             .define(
-                &wrap,
+                &Free::Global(wrap),
                 &unary,
                 &Term::func(
                     [(x, nat_type())],
-                    Term::apply(Term::free_var(&g), [Term::free_var(&x)]),
+                    Term::apply(
+                        Term::instance(g, Universes::default()),
+                        [Term::free_var(&x)],
+                    ),
                 ),
                 &monomorphic(),
             )
@@ -660,19 +666,25 @@ fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_
     };
     let call = || Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
     let steps: [(&str, Term); 3] = [
-        ("wrap", Term::apply(Term::free_var(&wrap), [call()])),
+        (
+            "wrap",
+            Term::apply(Term::instance(wrap, Universes::default()), [call()]),
+        ),
         (
             "plus one",
             Term::intrinsic(Intrinsic::nat_add(
-                Term::apply(Term::free_var(&g), [call()]),
+                Term::apply(Term::instance(g, Universes::default()), [call()]),
                 nat(1),
             )),
         ),
         (
             "twice",
             Term::apply(
-                Term::free_var(&g),
-                [Term::apply(Term::free_var(&g), [call()])],
+                Term::instance(g, Universes::default()),
+                [Term::apply(
+                    Term::instance(g, Universes::default()),
+                    [call()],
+                )],
             ),
         ),
     ];

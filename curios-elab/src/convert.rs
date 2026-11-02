@@ -3050,17 +3050,10 @@ impl Convert {
                     context.same_quality_at(this_quality, that_quality, self.extent)
                         && Self::join_levels(context, &this, &that)?
                 }
+                // Reduced, so each is stuck: one declaration at one instance.
                 (Subterm::Instance(this), Subterm::Instance(that)) => {
-                    if !Self::compare_universes(context, &this.universes, &that.universes)? {
-                        false
-                    } else {
-                        self.enqueue(
-                            type_,
-                            Term::free_var(&Free::Global(this.name)),
-                            Term::free_var(&Free::Global(that.name)),
-                        );
-                        true
-                    }
+                    this.name == that.name
+                        && Self::compare_universes(context, &this.universes, &that.universes)?
                 }
                 // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their motives and case tables are syntactically identical — then the two are instances of one source match and the scrutinee problem is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee problem would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
                 (Subterm::Match(this), Subterm::Match(that))

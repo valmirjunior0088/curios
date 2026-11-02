@@ -6,7 +6,7 @@ use {
     curios_analysis::Erased,
     curios_core::{
         Free, Intrinsic, Level, Many, Nat, RecGroup, RecMemberScopes, Scope, Term, UniverseContext,
-        UniverseParam,
+        UniverseParam, Universes,
     },
 };
 
@@ -249,9 +249,9 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
 //
 // `Sort::of` answers `Prop` for an application of a declaration that lands there before it reduces anything, and takes no other head's word. The fixtures below hold the answer, that nothing is run for it, and what it declines.
 
-/// `name: (Nat) -> sort`, defined as a function that decides something of its argument before it answers `body` either way: applied, it is no type former, and reducing the application evaluates the argument.
-fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Free {
-    let name = Free::from(&nominal(path));
+/// `name: (Nat) -> sort`, defined as a function that decides something of its argument before it answers `body` either way: applied, it is no type former, and reducing the application evaluates the argument. Answered as a term names it.
+fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Term {
+    let name = nominal(path);
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let n = binder(81, "n");
     let decided = Term::intrinsic(Intrinsic::nat_lt(
@@ -261,7 +261,7 @@ fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Fre
 
     kernel
         .define(
-            &name,
+            &Free::Global(name),
             &Term::func_type([(binder(80, "n"), nat_type.clone())], sort.clone()),
             &Term::func(
                 [(n, nat_type)],
@@ -271,7 +271,7 @@ fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Fre
         )
         .expect("a name is declared once");
 
-    name
+    Term::instance(name, Universes::default())
 }
 
 /// An argument no budget this file's kernels hold could reduce: a tower of powers, which the family's application would evaluate before it applied.
@@ -290,7 +290,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
     let family = define_family(&mut kernel, "F", Term::prop(), proposition);
-    let applied = Term::apply(Term::free_var(&family), [unaffordable()]);
+    let applied = Term::apply(family.clone(), [unaffordable()]);
 
     assert_eq!(
         Sort::of(&mut kernel, &applied),
@@ -308,15 +308,11 @@ fn an_application_of_a_declaration_into_type_is_classified_by_its_reduct() {
 
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
     assert_eq!(
-        Sort::of(&mut kernel, &Term::apply(Term::free_var(&family), [three])),
+        Sort::of(&mut kernel, &Term::apply(family.clone(), [three])),
         Ok(Sort::Type(Level::zero())),
     );
     assert!(
-        Sort::of(
-            &mut kernel,
-            &Term::apply(Term::free_var(&family), [unaffordable()])
-        )
-        .is_err(),
+        Sort::of(&mut kernel, &Term::apply(family.clone(), [unaffordable()])).is_err(),
         "the argument was not run",
     );
 }

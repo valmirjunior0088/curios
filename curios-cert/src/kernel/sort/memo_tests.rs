@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{Erased, test_support::*},
-    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext},
+    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
 };
 
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
@@ -167,10 +167,10 @@ fn family_over_a_proof(kernel: &mut Kernel) -> (Term, Term) {
     let proposition = declare(kernel, "P", Term::prop());
     let other = declare(kernel, "Q", Term::prop());
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let g = Free::from(&nominal("g"));
+    let g = nominal("g");
     kernel
         .declare(
-            &g,
+            &Free::Global(g),
             &Term::func_type([(binder(90, "x"), proposition.clone())], nat_type.clone()),
             &UniverseContext::default(),
         )
@@ -179,7 +179,10 @@ fn family_over_a_proof(kernel: &mut Kernel) -> (Term, Term) {
     kernel.assume(&p, &proposition);
     let guard = |proof: &Free| {
         Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(Term::free_var(&g), [Term::free_var(proof)]),
+            Term::apply(
+                Term::instance(g, Universes::default()),
+                [Term::free_var(proof)],
+            ),
             Term::intrinsic(Intrinsic::Nat(Nat::new(10usize))),
         ))
     };

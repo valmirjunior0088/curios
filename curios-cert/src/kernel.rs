@@ -560,7 +560,7 @@ impl Env for Kernel<'_> {
     }
 
     fn unfold(&self, name: &Free) -> Option<&Term> {
-        self.value_at(name)
+        self.body(name)
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
@@ -1463,12 +1463,20 @@ impl<'s> Kernel<'s> {
         self.globals.value(name)
     }
 
-    /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
-    pub(crate) fn value_at(&self, name: &Free) -> Option<&Term> {
+    /// The value `name` was defined at, under its own universe parameters, noted as read: what a definition is to an analysis of its scheme, which asks what the body names and reads no level of it.
+    pub(crate) fn body(&self, name: &Free) -> Option<&Term> {
         if let Some(global) = name.as_global() {
             self.reads.body(global);
         }
-        self.globals.value_at(name)
+        self.globals.body(name)
+    }
+
+    /// What `name` unfolds to at the stated universe instance `universes`, which is the one position a polymorphic definition may be unfolded from, and only where the instance states its scheme whole ([`UniverseContext::stated_by`]).
+    pub(crate) fn value_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+        if let Some(global) = name.as_global() {
+            self.reads.body(global);
+        }
+        self.globals.value_at(name, universes)
     }
 
     /// The sort `name`'s value inhabits through a bare occurrence, where it states one ([`curios_core::Definition::value_sort`]): a read of its body, of which the sort is a fact. A definition with universe parameters is withheld.
@@ -1480,11 +1488,11 @@ impl<'s> Kernel<'s> {
     }
 
     /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one.
-    pub(crate) fn value_sort_at(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn value_sort_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
         if let Some(global) = name.as_global() {
             self.reads.body(global);
         }
-        self.globals.value_sort_at(name)
+        self.globals.value_sort_at(name, universes)
     }
 
     /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.

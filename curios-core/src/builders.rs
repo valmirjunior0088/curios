@@ -4,18 +4,17 @@
 
 use {
     super::{
-        Apply, Ascribed, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, Matrix,
+        Apply, Ascribed, Bang, Func, FuncType, Global, Infix, Intrinsic, Level, Many, Matrix,
         NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
-        Var,
     },
     curios_num::{Binary, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
 };
 
-/// A registered function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
+/// A registered function or constructor, written and applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names, whose instance elaboration chooses.
 pub fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term {
     Term::apply(
-        Term::var(Var::free(Free::global(name.qualifier()))),
+        Term::written(Global::Authored(name.qualifier())),
         args.into_iter().collect::<Vec<_>>(),
     )
 }
@@ -195,10 +194,10 @@ impl Intrinsic {
 
 /// Constructors for [`Term`] shapes no judgment ever builds.
 impl Term {
-    /// Return the absolute free-variable head of a direct type-family alias.
+    /// Return the declaration a direct type-family alias's head names, as it is written.
     ///
     /// The declared type must structurally end in a literal [`Subterm::Sort`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
-    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
+    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<Global> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
                 Subterm::Sort(..) => true,
@@ -209,15 +208,15 @@ impl Term {
             }
         }
 
-        fn application_head(term: &Term) -> Option<&Free> {
+        fn application_head(term: &Term) -> Option<Global> {
             match &**term {
                 Subterm::Apply(Apply { head, .. }) => application_head(head),
-                Subterm::Var(var) => var.as_free(),
+                Subterm::Transient(Transient::Name(name)) => Some(*name),
                 _ => None,
             }
         }
 
-        fn direct_head(term: &Term) -> Option<&Free> {
+        fn direct_head(term: &Term) -> Option<Global> {
             match &**term {
                 Subterm::Func(Func { telescope, .. }) => direct_head(telescope.terminal()),
                 _ => application_head(term),
@@ -227,7 +226,6 @@ impl Term {
         ends_in_literal_sort(declared_type)
             .then(|| direct_head(self))
             .flatten()
-            .filter(|target| !target.is_local())
     }
 
     /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.

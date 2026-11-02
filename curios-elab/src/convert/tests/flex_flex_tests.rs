@@ -3,7 +3,9 @@
 use {
     crate::convert::test_support::*,
     crate::*,
-    curios_core::{DefinitionKind, Free, Intrinsic, MetavarId, MetavarOrigin, Subterm, Term},
+    curios_core::{
+        DefinitionKind, Free, Intrinsic, MetavarId, MetavarOrigin, Subterm, Term, Universes,
+    },
 };
 
 #[test]
@@ -79,10 +81,10 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
 
 /// `flat(?0)` against `flat(1)`, where `flat` forgets its argument: the two are equal whatever `?0` is, and their spines agree at `?0 := 1`.
 fn two_calls_of_a_definition_that_forgets_its_argument(context: &mut Context) -> Problem {
-    let flat = Free::from(&nominal("flat"));
+    let flat = nominal("flat");
     let argument = context.fresh(Some("n"));
     context.define_assuming(
-        &flat,
+        &Free::Global(flat),
         &Term::func_type([(argument, nat_type())], nat_type()),
         &Term::func([(argument, nat_type())], nat(0)),
         Some(&DefinitionKind::Authored),
@@ -91,8 +93,8 @@ fn two_calls_of_a_definition_that_forgets_its_argument(context: &mut Context) ->
 
     Problem {
         type_: nat_type(),
-        this: Term::apply(Term::free_var(&flat), [Term::hole(0)]),
-        that: Term::apply(Term::free_var(&flat), [nat(1)]),
+        this: Term::apply(Term::instance(flat, Universes::default()), [Term::hole(0)]),
+        that: Term::apply(Term::instance(flat, Universes::default()), [nat(1)]),
         binders: Binders::default(),
         pairs: Pairs::default(),
         relation: Relation::Equal,

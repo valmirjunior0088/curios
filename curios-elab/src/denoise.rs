@@ -11,7 +11,7 @@ use {
     super::Context,
     crate::DefinedGroup,
     curios_core::{
-        Apply, Bound, Enter, Free, Func, Global, Quality, Rec, RecGroup, Subterm, Term, Var, Visit,
+        Apply, Bound, Enter, Func, Global, Quality, Rec, RecGroup, Subterm, Term, Universes, Visit,
         instantiate_qualities,
     },
     std::{collections::HashSet, rc::Rc},
@@ -139,10 +139,15 @@ pub fn named_members(context: &Context, term: &Term) -> Term {
 
 /// The terms naming `group`'s members, in member order: each member's global where the base frame defines the group itself, and none otherwise.
 fn members_named(context: &Context, group: &RecGroup) -> Option<Vec<Term>> {
-    let named = |name: &Global| Var::free(Free::Global(*name));
     let names = context.member_names(group)?;
 
-    Some(names.iter().map(|name| Term::var(named(name))).collect())
+    // A member named inside the declaration that defines its group stands at no instance, as any self-reference does until the declaration's parameters are stamped on it.
+    Some(
+        names
+            .iter()
+            .map(|name| Term::instance(*name, Universes::default()))
+            .collect(),
+    )
 }
 
 fn named_with(table: &Rc<Vec<(RecGroup, Vec<Term>)>>, term: &Term) -> Term {
@@ -185,7 +190,7 @@ fn refold_node(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Option<
     }
     let members = names
         .iter()
-        .map(|name| Term::var(Var::free(Free::Global(*name))))
+        .map(|name| Term::instance(*name, Universes::default()))
         .collect::<Vec<_>>();
     let refs = members.iter().collect::<Vec<_>>();
     Some(refold_with(table, &tail.open(&refs)))

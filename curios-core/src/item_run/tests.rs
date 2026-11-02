@@ -32,7 +32,10 @@ fn items() -> Vec<Item> {
         item("second", shared()),
         item(
             "third",
-            Term::free_var(&Free::Global(Global::Authored(Qualifier::from(["first"])))),
+            Term::instance(
+                Global::Authored(Qualifier::from(["first"])),
+                Universes::default(),
+            ),
         ),
     ]
 }

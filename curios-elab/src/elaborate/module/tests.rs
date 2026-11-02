@@ -5,7 +5,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Module, Nat,
-        Telescope, Term, Totality, UniverseContext, test_support::*,
+        Telescope, Term, Totality, UniverseContext, Universes, test_support::*,
     },
     curios_utilities::Qualifier,
     std::{collections::BTreeSet, rc::Rc},
@@ -32,7 +32,7 @@ fn boolean(value: bool) -> Term {
 }
 
 fn mention(path: &str) -> Term {
-    Term::free_var(&Free::from(&nominal(path)))
+    Term::written(nominal(path))
 }
 
 fn let_item(path: &str, type_: Term, body: Term) -> Item {
@@ -248,7 +248,11 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
 
     let (same, two) = (Free::from(&nominal("same")), Free::from(&nominal("two")));
     assert!(context.definition_body(&same).is_none());
-    assert!(context.var_reduct_at(&same).is_none());
+    assert!(
+        context
+            .var_reduct_at(&same, &Universes::default())
+            .is_none()
+    );
     assert!(context.definition_body(&two).is_some());
 
     let scope = Established::over(&[&elaborated]);

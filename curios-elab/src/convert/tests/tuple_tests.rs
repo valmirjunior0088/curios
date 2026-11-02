@@ -4,8 +4,8 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_core::{
-        Cases, Exhaustion, Free, InductDecl, Intrinsic, Match, MatchResult, MetavarId, StructDecl,
-        StructType, Subterm, Telescope, Term, UniverseContext, Universes,
+        Cases, Exhaustion, Free, Global, InductDecl, Intrinsic, Match, MatchResult, MetavarId,
+        StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -442,7 +442,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
             )
             .unwrap();
         let family = Term::induct_type(nominal("F"), Vec::<Term>::new(), Vec::<Term>::new());
-        let h = Free::global(Qualifier::from(["h"]));
+        let h = Global::Authored(Qualifier::from(["h"]));
         let e = context.fresh(Some("e"));
         let (p, q) = (context.fresh(Some("p")), context.fresh(Some("q")));
         context.assume(&p, &family);
@@ -459,12 +459,17 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
             },
         }));
         context.define_assuming(
-            &h,
+            &Free::Global(h),
             &Term::func_type([(e, family.clone())], nat_type()),
             &Term::func([(e, family.clone())], eliminated),
             None,
         );
-        let call = |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)]);
+        let call = |proof: &Free| {
+            Term::apply(
+                Term::instance(h, Universes::default()),
+                [Term::free_var(proof)],
+            )
+        };
 
         context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
         context.solve_metavar(MetavarId(0), call(&p));

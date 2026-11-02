@@ -312,7 +312,8 @@ fn a_struct_reaches_itself_where_its_declaration_names_it_through_whatever_struc
         }))
     };
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0u64)));
-    let spelled = |path: &str| Term::apply(Term::free_var(&Free::Global(named(path))), [zero()]);
+    let spelled =
+        |path: &str| Term::apply(Term::instance(named(path), Universes::default()), [zero()]);
 
     declare_struct_over_a_number(&mut kernel, "Plain", vec![Term::tuple_type_unit()]);
     declare_struct_over_a_number(&mut kernel, "Own", vec![at("Own", zero())]);

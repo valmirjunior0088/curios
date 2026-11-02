@@ -222,7 +222,7 @@ fn published(kernel: &mut Kernel, type_: &Term) -> Result<Option<Sort>, Error> {
     }
     let sort = match universes {
         None => kernel.value_sort(&name).cloned(),
-        Some(universes) => match kernel.value_sort_at(&name) {
+        Some(universes) => match kernel.value_sort_at(&name, universes) {
             Some(sort) => Some(instantiate_universes(sort, universes)?),
             None => None,
         },

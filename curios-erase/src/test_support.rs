@@ -96,6 +96,15 @@ pub fn global(path: &str) -> curios_core::Free {
     curios_core::Free::global(Qualifier::from([path]))
 }
 
+/// A reference to the top-level definition `path` names, at no levels: what elaboration leaves for one generalized over none. Fixture-only.
+#[cfg(test)]
+pub fn reference(path: &str) -> curios_core::Term {
+    curios_core::Term::instance(
+        curios_core::Global::Authored(Qualifier::from([path])),
+        curios_core::Universes::default(),
+    )
+}
+
 #[cfg(test)]
 pub fn nat_lit(n: usize) -> curios_core::Term {
     curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(n)))

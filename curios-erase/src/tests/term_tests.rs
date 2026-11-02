@@ -125,7 +125,7 @@ fn a_nat_spine_over_a_variable_erases_to_one_addition() {
     )];
     let body = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Succ(
         3u32.into(),
-        curios_core::Term::free_var(&global("x")),
+        reference("x"),
     )));
     let erased = erase(
         &module(items, body),
@@ -149,7 +149,7 @@ fn items_erase_in_the_order_the_module_stores_them() {
             "a",
             curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
             curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
-                curios_core::Term::free_var(&global("b")),
+                reference("b"),
                 nat_lit(1),
             )),
         ),
@@ -159,7 +159,7 @@ fn items_erase_in_the_order_the_module_stores_them() {
             nat_lit(2),
         ),
     ];
-    let mut program = module(items, curios_core::Term::free_var(&global("a")));
+    let mut program = module(items, reference("a"));
     program.module = program.module.ordered();
     let erased = erase(
         &program,
@@ -344,7 +344,7 @@ fn a_function_erases_with_a_parameter_for_each_binder_and_no_captures() {
         ),
     )];
     let body = curios_core::Term::apply(
-        curios_core::Term::free_var(&global("id")),
+        reference("id"),
         [
             curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
             nat_lit(4),
@@ -420,10 +420,7 @@ fn a_capturing_closure_stores_no_capture_list() {
             curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         ),
     );
-    let erased = erase(
-        &module(items, curios_core::Term::free_var(&global("make"))),
-        expected,
-    );
+    let erased = erase(&module(items, reference("make")), expected);
 
     assert!(
         bound(&erased).any(|rhs| matches!(
@@ -569,14 +566,11 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
                     x,
                     curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
                 )],
-                curios_core::Term::apply(
-                    curios_core::Term::free_var(&global("go")),
-                    [curios_core::Term::free_var(&x)],
-                ),
+                curios_core::Term::apply(reference("go"), [curios_core::Term::free_var(&x)]),
             ),
         },
     ]))];
-    let body = curios_core::Term::apply(curios_core::Term::free_var(&global("go")), [nat_lit(1)]);
+    let body = curios_core::Term::apply(reference("go"), [nat_lit(1)]);
     let erased = erase(
         &module(items, body),
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),

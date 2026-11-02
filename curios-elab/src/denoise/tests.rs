@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term},
+    curios_core::{Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term, Universes},
     curios_utilities::Qualifier,
     std::rc::Rc,
 };
@@ -92,7 +92,10 @@ fn a_group_two_names_define_is_named_by_the_one_reduction_opened() {
         assert!(context.var_reduct(&name("first")).is_some());
         assert_eq!(
             super::named_members(&context, &Term::rec_proj(group, 0)),
-            Term::free_var(&name("first")),
+            Term::instance(
+                Global::Authored(Qualifier::from(["first"])),
+                Universes::default()
+            ),
             "defined in the order {order:?}",
         );
     }

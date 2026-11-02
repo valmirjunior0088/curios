@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_core::{
         CalleeId, DefinitionKind, Free, Intrinsic, Level, MetavarId, MetavarOrigin, Subterm, Term,
-        WitnessOrigin,
+        Universes, WitnessOrigin,
     },
 };
 
@@ -296,7 +296,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
 // A slot met against a dictionary's name is solved to the name, whatever minted it: the rigid side as written passes every check, and committed reduced the slot would spell the structure of methods out wherever it stands.
 #[test]
 fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
-    let dictionary = Free::from(&nominal("dictionary"));
+    let dictionary = nominal("dictionary");
     let methods = || Term::tuple([nat(1), nat(2)]);
     let solved = |origin: MetavarOrigin| {
         let mut context = context();
@@ -305,7 +305,7 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
             (context.fresh(Some("second")), nat_type()),
         ]);
         context.define_assuming(
-            &dictionary,
+            &Free::Global(dictionary),
             &type_,
             &methods(),
             Some(&DefinitionKind::Authored),
@@ -313,7 +313,12 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
         context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
         let slot = Term::metavar_birthed(0, origin, Vec::new());
         assert_eq!(
-            convert(&mut context, &type_, &slot, &Term::free_var(&dictionary)),
+            convert(
+                &mut context,
+                &type_,
+                &slot,
+                &Term::instance(dictionary, Universes::default())
+            ),
             Ok(true)
         );
 
@@ -324,10 +329,13 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
         role: Some("key".into()),
     });
 
-    assert_eq!(solved(premise), Some(Term::free_var(&dictionary)));
+    assert_eq!(
+        solved(premise),
+        Some(Term::instance(dictionary, Universes::default()))
+    );
     assert_eq!(
         solved(MetavarOrigin::Hole),
-        Some(Term::free_var(&dictionary))
+        Some(Term::instance(dictionary, Universes::default()))
     );
 }
 
@@ -335,11 +343,11 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
 #[test]
 fn a_solution_met_through_a_solved_metavariable_keeps_the_name_it_spells() {
     let mut context = context();
-    let flat = Free::from(&nominal("flat"));
+    let flat = nominal("flat");
     let argument = context.fresh(Some("n"));
     let type_ = Term::func_type([(argument, nat_type())], nat_type());
     context.define_assuming(
-        &flat,
+        &Free::Global(flat),
         &type_,
         &Term::func([(argument, nat_type())], nat(0)),
         Some(&DefinitionKind::Authored),
@@ -347,7 +355,7 @@ fn a_solution_met_through_a_solved_metavariable_keeps_the_name_it_spells() {
     context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
     context.birth_metavar(MetavarId(1), Vec::new(), type_.clone());
 
-    let name = Term::free_var(&flat);
+    let name = Term::instance(flat, Universes::default());
     assert_eq!(
         convert(&mut context, &type_, &Term::hole(0), &name),
         Ok(true)

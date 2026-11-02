@@ -1,10 +1,12 @@
 use {
-    super::insert_auto_argument,
+    super::{insert_auto_argument, reference},
     crate::{
         Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with,
         stuck_on_metavar,
     },
-    curios_core::{CalleeId, Free, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term},
+    curios_core::{
+        CalleeId, Free, Global, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term, Transient,
+    },
     curios_utilities::Plicity,
 };
 
@@ -101,10 +103,12 @@ pub fn waits_as_reference(
     term: &Term,
     expected: &Term,
 ) -> Result<bool, Error> {
-    let Subterm::Var(var) = &**term else {
-        return Ok(false);
+    let name = match &**term {
+        Subterm::Var(var) => *var.unwrap(),
+        Subterm::Transient(Transient::Name(name)) => Free::Global(*name),
+        _ => return Ok(false),
     };
-    let Some(type_) = context.assumption(var.unwrap()).cloned() else {
+    let Some(type_) = context.assumption(&name).cloned() else {
         return Ok(false);
     };
     let hidden = match &*reduce_with(context, &type_)? {
@@ -132,7 +136,10 @@ pub fn insert_implicits_on_check(
     type_: Term,
     expected: &Term,
 ) -> Result<(Term, Term), Error> {
-    if !matches!(&**term, Subterm::Var(_) | Subterm::Proj(_)) {
+    if !matches!(
+        &**term,
+        Subterm::Var(_) | Subterm::Transient(Transient::Name(_)) | Subterm::Proj(_)
+    ) {
         return Ok((rebuilt, type_));
     }
 
@@ -159,6 +166,7 @@ pub fn insert_implicits_on_check(
     let ift = ift.clone();
     let func_label = match &**term {
         Subterm::Var(var) => CalleeId::Function(*var.unwrap()),
+        Subterm::Instance(instance) => CalleeId::Function(Free::Global(instance.name)),
         _ => CalleeId::Anonymous,
     };
 
@@ -231,12 +239,14 @@ pub fn trivially_inhabited(
         return Ok((reduced, None));
     };
 
-    let inhabitant = (induct.name == curios_core::Global::Authored(truth)).then(|| {
-        Term::apply(
-            Term::var(curios_core::Var::free(Free::global(qed))),
-            Vec::<Term>::new(),
-        )
-    });
+    if induct.name != Global::Authored(truth) {
+        return Ok((reduced, None));
+    }
 
-    Ok((reduced, inhabitant))
+    // Referenced as elaboration writes any occurrence of it, so it stands at the instance elaboration chooses.
+    let qed = Global::Authored(qed);
+    let (head, _) = reference(context, qed, None)?
+        .ok_or_else(|| context.unbound_variable(Term::written(qed)))?;
+
+    Ok((reduced, Some(Term::apply(head, Vec::<Term>::new()))))
 }

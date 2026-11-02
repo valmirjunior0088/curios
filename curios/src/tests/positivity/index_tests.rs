@@ -45,7 +45,7 @@ fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() 
     assert_eq!(run(source), b"equated");
 }
 
-// The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is kinding rather than positivity: `x : Foo` needs `Foo` to be a type, and `Foo` is a family until it is applied to the very index this declaration is introducing. The elaborator refuses it before the positivity pass runs at all, which is what makes skipping the position safe rather than lucky.
+// The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is not positivity: a declaration is in scope from its own signature on and never inside it, so the elaborator refuses the name before the positivity pass runs at all, and were it in scope kinding would refuse it, `x : Foo` needing `Foo` to be a type where `Foo` is a family until it is applied to the very index this declaration is introducing. That is what makes skipping the position safe rather than lucky.
 #[test]
 fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
     rejected_by(
@@ -55,7 +55,7 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
 
         /std/print("unreachable")
         "#,
-        "type mismatch",
+        "`Foo` is not in scope",
     );
 }
 

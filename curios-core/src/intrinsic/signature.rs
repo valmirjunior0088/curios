@@ -20,7 +20,7 @@
 
 use {
     super::Intrinsic,
-    crate::{Free, Global, Nat, Subterm, Term, Universes, Var},
+    crate::{Global, Nat, Subterm, Term, Universes},
     curios_num::{Floating, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
@@ -108,7 +108,10 @@ impl Intrinsic {
         let unit = Term::tuple_type_unit;
 
         let decided = |slot: SyntaxName, args: Vec<Term>| {
-            Term::apply(Term::var(Var::free(Free::global(slot.qualifier()))), args)
+            Term::apply(
+                Term::instance(Global::Authored(slot.qualifier()), Universes::default()),
+                args,
+            )
         };
 
         // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. Named propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes`, and `Flt`'s `Finite` and `NonNeg` — would each be a comparison or a conjunction of two under the same reflection, and naming them would make the `/sys` roster reference a root above it.

@@ -9,8 +9,8 @@ use {
     curios_anf::lower_to_cps,
     curios_cert::{Globals, Kernel, Verdict, certify_module, certify_program},
     curios_core::{
-        Anchors, Consumption, Free, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program,
-        Rec, Row, Subterm, Term, Transient, Zonked,
+        Anchors, Consumption, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec,
+        Row, Subterm, Term, Transient, Zonked,
     },
     curios_elab::{
         Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
@@ -417,7 +417,7 @@ fn state(entry: &mut curios_core::Entrypoint, tail: &EntryTail, syntax: &SyntaxR
         EntryTail::False => {
             let empty = Global::Authored(syntax.proof.false_type.qualifier());
 
-            entry.type_ = Some(Term::free_var(&Free::from(&empty)));
+            entry.type_ = Some(Term::written(empty));
         }
         EntryTail::Test { .. } => {}
     }
@@ -461,8 +461,9 @@ fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
         Subterm::Metavar(metavar) if matches!(metavar.origin, MetavarOrigin::Goal) => term.clone(),
         _ => {
             let field = syntax.program.execute;
-            let execute =
-                Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
+            let execute = Term::written(Global::Authored(
+                field.concept.qualifier().with(field.field),
+            ));
 
             Term::apply(execute, vec![term.clone()])
         }

@@ -143,7 +143,7 @@ fn taking_only(name: &Global, sort: Term) -> Item {
 fn holding_through(only: &Global) -> (Global, InductDecl) {
     let (carrier, held) = (Free::local(23, Some("A")), Free::local(24, Some("x")));
     let payload = Term::apply(
-        Term::free_var(&Free::from(only)),
+        Term::instance(*only, Universes::default()),
         [Term::free_var(&carrier)],
     );
 
@@ -376,7 +376,7 @@ fn a_refusal_at_one_sort_restates_the_declaration_at_it() {
     );
 }
 
-/// An occurrence states as many sorts as its declaration leaves, each `Prop` or `Type`: one stating none denotes no instance, one stating too few is short of what the type is read at, and one stating a parameter would be judged at a sort that is neither.
+/// An occurrence states as many sorts as its declaration leaves, each `Prop` or `Type`: one stating none or too few is short of what the type is read at, and one stating a parameter would be judged at a sort that is neither.
 #[test]
 fn an_occurrence_states_every_sort_its_declaration_leaves() {
     let id = named("id");
@@ -409,10 +409,19 @@ fn an_occurrence_states_every_sort_its_declaration_leaves() {
                 authored(
                     &named("user"),
                     nat(),
-                    Term::apply(Term::free_var(&Free::from(&id)), [nat(), zero()]),
+                    Term::apply(Term::instance(id, Universes::default()), [nat(), zero()]),
                 ),
             ],
-            |error| matches!(error, Error::MissingUniverseInstance { .. }),
+            |error| {
+                matches!(
+                    error,
+                    Error::Arity {
+                        counted: Counted::Sorts,
+                        expected: 1,
+                        actual: 0,
+                    }
+                )
+            },
         ),
         (
             "one sort stated of two",
@@ -720,7 +729,7 @@ fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
         Term::func(
             binders(),
             Term::apply(
-                Term::free_var(&Free::from(&spin)),
+                Term::instance(spin, Universes::default()),
                 [Term::free_var(&carrier), Term::free_var(&count)],
             ),
         ),

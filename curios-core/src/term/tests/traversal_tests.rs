@@ -152,7 +152,10 @@ fn has_local_free_flags_locals_not_globals() {
     let binder_1 = Free::local(1, Some("c#1"));
     let binder_2 = Free::local(2, Some("x#9"));
     fn global(path: [&str; 2]) -> Term {
-        Term::free_var(&Free::global(Qualifier::from(path)))
+        Term::instance(
+            Global::Authored(Qualifier::from(path)),
+            Universes::default(),
+        )
     }
 
     // A local is a discriminant, not a spelling: what makes a free variable context-dependent — the only kind that can invalidate an elaboration-cache entry across frames — is that a scope opened it.
@@ -161,10 +164,13 @@ fn has_local_free_flags_locals_not_globals() {
 
     // A compiler-generated *global* is not context dependent and must not set the bit. A search for a marker character would misfire on every term mentioning a witness spelled `witness#N`, silently disabling the elaboration caches; the bit is a discriminant, so no spelling can.
     assert!(
-        !Term::free_var(&Free::Global(Global::Witness(WitnessId::Unspelled {
-            module: Qualifier::from(["std"]),
-            place: 0
-        })))
+        !Term::instance(
+            Global::Witness(WitnessId::Unspelled {
+                module: Qualifier::from(["std"]),
+                place: 0
+            }),
+            Universes::default()
+        )
         .has_local_free()
     );
     assert!(!global(["std", "Nat"]).has_local_free());
@@ -518,12 +524,18 @@ fn the_first_picked_name_is_the_first_written() {
     let zeta = Free::global(Qualifier::from(["zeta"]));
     let alpha = Free::global(Qualifier::from(["alpha"]));
     let f = Free::global(Qualifier::from(["F"]));
+    let named = |name: &Free| {
+        Term::instance(
+            *name.as_global().expect("a declaration"),
+            Universes::default(),
+        )
+    };
     let applied = |first: &Free, second: &Free| {
         Term::apply(
-            Term::free_var(&f),
+            named(&f),
             [
-                Term::apply(Term::free_var(first), [Term::type_ground()]),
-                Term::apply(Term::free_var(second), [Term::type_ground()]),
+                Term::apply(named(first), [Term::type_ground()]),
+                Term::apply(named(second), [Term::type_ground()]),
             ],
         )
     };

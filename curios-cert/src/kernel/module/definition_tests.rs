@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext},
+    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
 };
 
 /// A definition marked a proof is checked as any other and brought into scope with nothing to unfold to: its body is its own check's to read, and no judgment's after it. Left unmarked, the same definition unfolds.
@@ -102,7 +102,10 @@ fn a_definition_stating_its_value_a_level_below_the_one_it_inhabits_is_refused()
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::list_type(Term::free_var(&lemma())))
+            &Term::intrinsic(Intrinsic::list_type(Term::instance(
+                *lemma().as_global().expect("a declaration"),
+                Universes::default()
+            )))
         ),
         Ok(Term::type_at(one)),
     );

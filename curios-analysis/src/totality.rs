@@ -36,9 +36,9 @@ mod tests;
 use {
     crate::Env,
     curios_core::{
-        Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Instance,
-        Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Intrinsic, Let,
+        Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -421,7 +421,9 @@ impl<E: Env> Walk<'_, E> {
 
         match &**term {
             // Nothing here can contain a call.
-            Subterm::Sort(..) | Subterm::Var(_) | Subterm::Metavar(_) => Ok(()),
+            Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) | Subterm::Metavar(_) => {
+                Ok(())
+            }
 
             // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
             Subterm::Rec(_)
@@ -471,10 +473,6 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Tuple(Tuple { fields, .. }) => self.walks(fields),
 
             Subterm::Proj(Proj { head, .. }) => self.walk_term(head),
-
-            Subterm::Instance(Instance { name, .. }) => {
-                self.walk_term(&Term::free_var(&Free::Global(*name)))
-            }
 
             Subterm::InductType(InductType {
                 params, indices, ..
@@ -575,7 +573,6 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
                 arguments = prefix;
                 head = apply.head.clone();
             }
-            Subterm::Instance(Instance { name, .. }) => head = Term::free_var(&Free::Global(*name)),
             _ => return (head, arguments),
         }
     }

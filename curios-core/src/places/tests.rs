@@ -15,7 +15,7 @@ fn definition(name: &str) -> Definition {
         parameter_field: None,
         value_sort: None,
         type_: Term::type_ground(),
-        body: Term::free_var(&Free::from(&global)),
+        body: Term::instance(global, Universes::default()),
     }
 }
 

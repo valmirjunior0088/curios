@@ -9,7 +9,7 @@ use {
         Many, Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
         RecMemberScopes, ReduceError, Scope, StructDecl, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseParam, test_support::*,
+        UniverseError, UniverseMetaId, UniverseParam, Universes, test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -478,11 +478,11 @@ fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
 
 /// An occurrence of a universe-polymorphic definition that states no instance is refused rather than typed at the scheme's own type, which would discharge nothing.
 ///
-/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Kernel::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through an `Instance` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as an `Instance` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Kernel::type_of` applies the same rule to the type: handing the definition's stored type back whole would hand back the scheme's parameters with it.
+/// An occurrence stating no level of a universe scheme denotes none of its instances. `curios-elab` never builds one, writing every reference to a declaration at the instance it chooses, and the kernel neither unfolds one — `Kernel::value_at` withholds the body of an instance short of its scheme, as `curios-elab`'s `Frames::var_reduct_at` does, for the reason that one states: unfolding it "would leak the scheme's parameters" — nor types it, refusing its instance's arity: handing the stored type back whole would hand back the scheme's parameters with it.
 ///
 /// Two things would follow from that, and the second is what this asserts. The scheme's parameters are *captured* — `A`'s `Type v` is read as the ambient item's `v`, so a level belonging to one scheme becomes a level the using item quantifies over, which is the collapse at the neighbouring position. And `check_instance` would never run, so the scheme's own constraints would be discharged by nothing. `A` here is well formed only where `u + 1 <= v`, and the second case below is that same occurrence with its instance stated, refused for exactly that reason — so the two cases differ in nothing but whether dropping the instance also drops the rule.
 ///
-/// Reachable from no surface program, since the elaborator rebuilds every such occurrence before the kernel is asked, which is why this belongs here.
+/// Reachable from no surface program, since the elaborator states every occurrence's instance before the kernel is asked, which is why this belongs here.
 ///
 /// The control is [`an_occurrence_stating_its_universe_instance_is_still_accepted`], and it holds the two spellings the rule must keep: an instance that does discharge the constraint, and a bare occurrence of a *monomorphic* definition, which is how every definition with no universe parameters is written.
 #[test]
@@ -490,7 +490,11 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
     let (bare, instance) = scheme_occurrences();
 
     for (label, body, refusal) in [
-        ("the bare occurrence", bare, "states no universe instance"),
+        (
+            "the bare occurrence",
+            bare,
+            "universe levels: expected 2, found 0",
+        ),
         (
             "the same occurrence with its instance stated",
             instance,
@@ -511,7 +515,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
 
 /// The control: an occurrence that *states* its instance stays accepted, and so does a bare occurrence of a monomorphic definition.
 ///
-/// The first half is what stops the witness above being closed by over-refusal — a rule refusing every occurrence of a universe scheme would pass it and take universe polymorphism with it. The second half is the larger one, and it is why the rule reads the scheme's *width* rather than the occurrence's shape: a bare `Var` is how every definition with no universe parameters is written, so refusing bare occurrences as a class would refuse the standard library rather than this fixture. The scheme is also checked standing alone, since `A` must remain well formed for the witness's refusals to be about its use.
+/// The first half is what stops the witness above being closed by over-refusal — a rule refusing every occurrence of a universe scheme would pass it and take universe polymorphism with it. The second half is the larger one, and it is why the rule reads the scheme's *width* rather than the occurrence's shape: an occurrence at no levels is how every definition with no universe parameters is written, so refusing bare occurrences as a class would refuse the standard library rather than this fixture. The scheme is also checked standing alone, since `A` must remain well formed for the witness's refusals to be about its use.
 #[test]
 fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     let (_, instance) = scheme_occurrences();
@@ -550,7 +554,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             authored(
                 &Global::Authored(Qualifier::from(["echo"])),
                 Term::intrinsic(Intrinsic::NatType),
-                Term::free_var(&Free::from(&zero)),
+                Term::instance(zero, Universes::default()),
             ),
         ]
         .into(),

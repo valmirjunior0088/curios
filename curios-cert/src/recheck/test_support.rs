@@ -167,7 +167,8 @@ pub(super) fn forgery() -> Program {
             ),
         ),
     );
-    let unboxed = |carried: Term| Term::apply(Term::free_var(&Free::from(&unbox_name)), [carried]);
+    let unboxed =
+        |carried: Term| Term::apply(Term::instance(unbox_name, Universes::default()), [carried]);
 
     // boxes_equal : (A : Type 0, B : Type 0) -> Eq(Box, mk(A), mk(B)) = refl(mk(A))
     let boxes_equal_name = Global::Authored(Qualifier::from(["boxes_equal"]));
@@ -213,7 +214,7 @@ pub(super) fn forgery() -> Program {
             [(source, type_0.clone()), (target, type_0.clone())],
             Term::induct_match_scoped_marked(
                 Term::apply(
-                    Term::free_var(&Free::from(&boxes_equal_name)),
+                    Term::instance(boxes_equal_name, Universes::default()),
                     [Term::free_var(&source), Term::free_var(&target)],
                 ),
                 Scope::close(
@@ -260,7 +261,7 @@ pub(super) fn forgery() -> Program {
             Term::apply(
                 Term::induct_match_scoped_marked(
                     Term::apply(
-                        Term::free_var(&Free::from(&types_equal_name)),
+                        Term::instance(types_equal_name, Universes::default()),
                         [Term::free_var(&from), Term::free_var(&into)],
                     ),
                     Scope::close(
@@ -292,7 +293,7 @@ pub(super) fn forgery() -> Program {
         &forged_name,
         false_type.clone(),
         Term::apply(
-            Term::free_var(&Free::from(&cast_name)),
+            Term::instance(cast_name, Universes::default()),
             [
                 Term::tuple_type_unit(),
                 false_type.clone(),
@@ -319,7 +320,7 @@ pub(super) fn forgery() -> Program {
         ),
         // The program as a whole is closed, at type `False`.
         entry: Entrypoint {
-            body: Term::free_var(&Free::from(&forged_name)),
+            body: Term::instance(forged_name, Universes::default()),
             type_: Some(false_type),
         },
     }
@@ -359,7 +360,10 @@ pub(super) fn selection_module(body: Term) -> Program {
             [],
         ),
         entry: Entrypoint {
-            body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
+            body: Term::instance(
+                Global::Authored(Qualifier::from(["bad"])),
+                Universes::default(),
+            ),
             type_: Some(absurd),
         },
     }
@@ -616,7 +620,7 @@ pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
         &forged_name,
         false_type.clone(),
         Term::induct_match_scoped_marked(
-            Term::free_var(&Free::from(&held_value)),
+            Term::instance(held_value, Universes::default()),
             Scope::close(
                 Many(2),
                 &[&Free::local(702, Some("t")), &Free::local(703, Some("h"))],
@@ -640,7 +644,7 @@ pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
             [],
         ),
         entry: Entrypoint {
-            body: Term::free_var(&Free::from(&forged_name)),
+            body: Term::instance(forged_name, Universes::default()),
             type_: Some(false_type),
         },
     }
@@ -741,7 +745,7 @@ pub(super) fn sole_arm_forgery() -> Program {
         ),
         entry: Entrypoint {
             body: Term::apply(
-                Term::free_var(&Free::from(&forged_name)),
+                Term::instance(forged_name, Universes::default()),
                 [Term::variant(
                     pin_name,
                     Vec::<Term>::new(),
@@ -1630,7 +1634,10 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     );
     let under_applied = authored(
         &Global::Authored(Qualifier::from(["held"])),
-        Term::apply(Term::free_var(&Free::from(&former)), [three.clone()]),
+        Term::apply(
+            Term::instance(former, Universes::default()),
+            [three.clone()],
+        ),
         three.clone(),
     );
 
@@ -1732,7 +1739,7 @@ pub(super) fn marked_apply_module(mark: Plicity) -> Module {
             authored(
                 &Global::Authored(Qualifier::from(["held"])),
                 Term::apply_marked(
-                    Term::free_var(&Free::from(&former)),
+                    Term::instance(former, Universes::default()),
                     [(mark, three.clone())],
                 ),
                 three,
@@ -1841,7 +1848,7 @@ pub(super) fn forwarding_module(declared: Plicity) -> Module {
             authored(
                 &by_name,
                 typed(declared, 953),
-                Term::free_var(&Free::from(&g)),
+                Term::instance(g, Universes::default()),
             ),
             authored(&by_literal, typed(declared, 954), lambda(955, 956)),
         ]
@@ -1944,9 +1951,10 @@ pub(super) fn proof_at_an_argument_module(reaching: bool) -> Module {
                 )],
                 qed(),
             ),
-            [Term::free_var(&Free::from(&Global::Authored(
-                Qualifier::from(["reaches"]),
-            )))],
+            [Term::instance(
+                Global::Authored(Qualifier::from(["reaches"])),
+                Universes::default(),
+            )],
         ),
         false => qed(),
     };
@@ -2000,7 +2008,7 @@ pub(super) fn proof_typed_nullary_group() -> Module {
                 parameter_field: None,
                 value_sort: None,
                 type_: Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
-                body: Term::free_var(&Free::from(&bad)),
+                body: Term::instance(bad, Universes::default()),
             }]))]
             .into(),
             witnesses: BTreeSet::new(),
@@ -2018,8 +2026,12 @@ pub(super) fn two_sinks_module(first: &str, second: &str) -> Module {
     let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = Term::intrinsic(Intrinsic::NatType);
     let function = || Term::func_type([(Free::local(928, Some("n")), nat.clone())], nat.clone());
-    let named =
-        |name: &str| Term::free_var(&Free::from(&Global::Authored(Qualifier::from([name]))));
+    let named = |name: &str| {
+        Term::instance(
+            Global::Authored(Qualifier::from([name])),
+            Universes::default(),
+        )
+    };
     let held = authored(
         &Global::Authored(Qualifier::from(["held"])),
         vouched,
@@ -2057,14 +2069,17 @@ pub(super) fn two_sinks_module(first: &str, second: &str) -> Module {
 pub(super) fn reaching_definition(totality: Totality) -> Item {
     let m = Free::local(923, Some("m"));
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let sink = Free::from(&Global::Authored(Qualifier::from(["sink"])));
+    let sink = Global::Authored(Qualifier::from(["sink"]));
 
     let item = authored(
         &Global::Authored(Qualifier::from(["reaches"])),
         Term::func_type([(Free::local(924, Some("m")), nat.clone())], nat.clone()),
         Term::func(
             [(m, nat)],
-            Term::apply(Term::free_var(&sink), [Term::free_var(&m)]),
+            Term::apply(
+                Term::instance(sink, Universes::default()),
+                [Term::free_var(&m)],
+            ),
         ),
     );
 
@@ -2127,9 +2142,10 @@ pub(super) fn held_proof() -> Item {
                     [Term::tuple(Vec::<Term>::new())],
                 ),
             ),
-            [Term::free_var(&Free::from(&Global::Authored(
-                Qualifier::from(["reaches"]),
-            )))],
+            [Term::instance(
+                Global::Authored(Qualifier::from(["reaches"])),
+                Universes::default(),
+            )],
         ),
     )
 }
@@ -2404,7 +2420,7 @@ pub(super) fn index_forgery() -> Module {
         &cast_name,
         Term::func_type([(carried, held_at(nat(0)))], held_at(nat(1))),
         Term::induct_match_scoped_marked(
-            Term::free_var(&Free::from(&forged_name)),
+            Term::instance(forged_name, Universes::default()),
             Scope::close(
                 Many(3),
                 &[&motive_left, &motive_right, &motive_proof],
@@ -2430,7 +2446,7 @@ pub(super) fn index_forgery() -> Module {
     let held_value = authored(
         &held_value_name,
         held_at(nat(1)),
-        Term::apply(Term::free_var(&Free::from(&cast_name)), [yes]),
+        Term::apply(Term::instance(cast_name, Universes::default()), [yes]),
     );
 
     // boom : False = match held : (n, w) => False end
@@ -2441,7 +2457,7 @@ pub(super) fn index_forgery() -> Module {
         &boom_name,
         false_type.clone(),
         Term::induct_match_scoped_marked(
-            Term::free_var(&Free::from(&held_value_name)),
+            Term::instance(held_value_name, Universes::default()),
             Scope::close(Many(2), &[&boom_index, &boom_scrutinee], false_type.clone()),
             Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
             None,
@@ -2663,7 +2679,7 @@ pub(super) fn computed_field_forgery() -> Module {
         &cast_name,
         Term::func_type([(carried, held_at(nat(0)))], held_at(nat(1))),
         Term::induct_match_scoped_marked(
-            Term::free_var(&Free::from(&forged_name)),
+            Term::instance(forged_name, Universes::default()),
             Scope::close(
                 Many(3),
                 &[&motive_left, &motive_right, &motive_proof],
@@ -2703,7 +2719,7 @@ pub(super) fn computed_field_forgery() -> Module {
     let held_value = authored(
         &held_value_name,
         held_at(nat(1)),
-        Term::apply(Term::free_var(&Free::from(&cast_name)), [yes]),
+        Term::apply(Term::instance(cast_name, Universes::default()), [yes]),
     );
 
     // boom : False = match held : (n, w) => False end
@@ -2713,7 +2729,7 @@ pub(super) fn computed_field_forgery() -> Module {
         &Global::Authored(Qualifier::from(["boom"])),
         false_type.clone(),
         Term::induct_match_scoped_marked(
-            Term::free_var(&Free::from(&held_value_name)),
+            Term::instance(held_value_name, Universes::default()),
             Scope::close(Many(2), &[&boom_index, &boom_scrutinee], false_type.clone()),
             Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
             None,
@@ -2816,7 +2832,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
 /// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
 pub(super) fn scheme_occurrences() -> (Term, Term) {
     let name = Global::Authored(Qualifier::from(["A"]));
-    let bare = Term::free_var(&Free::Global(name));
+    let bare = Term::instance(name, Universes::default());
     let instance = Term::instance(
         name,
         vec![
@@ -3076,7 +3092,7 @@ pub(super) fn reader() -> Item {
     authored(
         &reader_name(),
         Term::intrinsic(Intrinsic::NatType),
-        Term::free_var(&Free::from(&shadowed_name())),
+        Term::instance(shadowed_name(), Universes::default()),
     )
 }
 
@@ -3169,7 +3185,7 @@ pub(super) fn statement_declared(twice: bool) -> Program {
     let theorem = Global::Authored(Qualifier::from(["thm"]));
     let holds = Term::induct_type(holds_name, Vec::<Term>::new(), Vec::<Term>::new());
     let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let named = |name: &Global| Term::free_var(&Free::from(name));
+    let named = |name: &Global| Term::instance(*name, Universes::default());
 
     let refuted = authored(
         &statement_name(),

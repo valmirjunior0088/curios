@@ -4,14 +4,15 @@
 
 use {
     crate::Context,
-    curios_core::{Advance, Free, Func, Struct, Subterm, Term},
+    curios_core::{Advance, Free, Func, Global, Struct, Subterm, Term, Universes},
 };
 
 /// `body`, the zonked body of the witness `name`, with every read of one of its own methods that does not itself mention `name` replaced by that method's term.
 ///
 /// Rewritten to a fixed point, since a method cleared of the name is one the others may then read. A body that is no concept literal under its parameters, and one that reads no such method, is returned as it stands.
-pub fn own_methods_read(context: &mut Context, name: &Free, body: &Term) -> Term {
-    if !body.mentions_free(name) {
+pub fn own_methods_read(context: &mut Context, name: Global, body: &Term) -> Term {
+    let free = Free::Global(name);
+    if !body.mentions_free(&free) {
         return body.clone();
     }
 
@@ -33,10 +34,12 @@ pub fn own_methods_read(context: &mut Context, name: &Free, body: &Term) -> Term
         return body.clone();
     };
 
+    // A self-reference stands at no instance until the declaration's parameters are stamped on it.
+    let reference = Term::instance(name, Universes::default());
     let itself = match binders.is_empty() {
-        true => Term::free_var(name),
+        true => reference,
         false => Term::apply_marked(
-            Term::free_var(name),
+            reference,
             binders
                 .iter()
                 .map(|(mark, binder, _)| (*mark, Term::free_var(binder))),
@@ -48,12 +51,12 @@ pub fn own_methods_read(context: &mut Context, name: &Free, body: &Term) -> Term
     while cleared {
         cleared = false;
         for index in 0..fields.len() {
-            if fields[index].mentions_free(name) {
+            if fields[index].mentions_free(&free) {
                 continue;
             }
             let read = Term::proj_struct(itself.clone(), node.name, index);
             let method = fields[index].clone();
-            for field in fields.iter_mut().filter(|field| field.mentions_free(name)) {
+            for field in fields.iter_mut().filter(|field| field.mentions_free(&free)) {
                 let rewritten = field.replace_term(&read, &method);
                 cleared |= rewritten != *field;
                 *field = rewritten;

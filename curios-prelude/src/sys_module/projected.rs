@@ -47,14 +47,16 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
                 .ok()?,
         ),
         curios_core::Subterm::Var(var) => {
-            let free = var.as_free()?;
-
-            match free.local_index() {
-                Some(index) => name(params.get(usize::try_from(index).ok()?)?),
-                None => match free.as_global()? {
-                    curios_core::Global::Authored(qualifier) => absolute(qualifier),
-                    curios_core::Global::Witness(_) => return None,
-                },
+            let index = var.as_free()?.local_index()?;
+            name(params.get(usize::try_from(index).ok()?)?)
+        }
+        // The table states a declaration at no instance: the surface has none to write.
+        curios_core::Subterm::Instance(curios_core::Instance { name, universes })
+            if universes.is_empty() =>
+        {
+            match name {
+                curios_core::Global::Authored(qualifier) => absolute(qualifier),
+                curios_core::Global::Witness(_) => return None,
             }
         }
         curios_core::Subterm::Apply(apply) => {
@@ -103,12 +105,9 @@ pub(super) fn projection(
     let holds = curios_core::Global::Authored(syntax.proof.holds.qualifier());
     // A proof is implicit: what a bound is stated in is `Holds` over a decision.
     let proof = |demanded: &curios_core::Term| match &**demanded {
-        curios_core::Subterm::Apply(apply) => match &*apply.head {
-            curios_core::Subterm::Var(var) => {
-                var.as_free().and_then(curios_core::Free::as_global) == Some(&holds)
-            }
-            _ => false,
-        },
+        curios_core::Subterm::Apply(apply) => {
+            matches!(&*apply.head, curios_core::Subterm::Instance(instance) if instance.name == holds)
+        }
         _ => false,
     };
 
