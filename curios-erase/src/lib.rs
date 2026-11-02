@@ -51,15 +51,7 @@ mod evaluated;
 use evaluated::*;
 
 #[cfg(test)]
-mod cost_tests;
-#[cfg(test)]
-mod data_tests;
-#[cfg(test)]
-mod evaluation_tests;
-#[cfg(test)]
-mod stand_in_tests;
-#[cfg(test)]
-mod term_tests;
+mod tests;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_erase::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]
