@@ -9,9 +9,10 @@ mod tests;
 
 use {
     super::Context,
+    crate::DefinedGroup,
     curios_core::{
-        Apply, Bound, Enter, Free, Func, Global, InstanceHead, Quality, Rec, RecGroup, Subterm,
-        Term, Var, Visit,
+        Apply, Bound, Enter, Free, Func, Global, Quality, Rec, RecGroup, Subterm, Term, Var, Visit,
+        instantiate_qualities,
     },
     std::{collections::HashSet, rc::Rc},
 };
@@ -31,11 +32,19 @@ pub fn refold_recs(context: &Context, term: &Term) -> Term {
         context
             .rec_definitions()
             .into_iter()
-            .flat_map(|(group, names)| {
-                Quality::assignments(group.universes().quality_count).map(move |sorts| {
+            .flat_map(|defined| {
+                let DefinedGroup {
+                    group,
+                    names,
+                    universe_context,
+                } = defined;
+
+                Quality::assignments(universe_context.quality_count).map(move |sorts| {
                     let opened = match sorts.is_empty() {
                         true => group.projected(),
-                        false => group.at_qualities(&sorts).projected(),
+                        false => group
+                            .map_members(|body| instantiate_qualities(body, &sorts))
+                            .projected(),
                     };
                     (opened, names.clone())
                 })
@@ -92,7 +101,7 @@ pub fn contract_redexes(term: &Term) -> Term {
 ///
 /// Reduction opens a name to its group to see whether a call computes, and a call that does not compute stays headed by the group. Committed so, a solution holds a copy of the callee: re-validating it elaborates the callee's every member again, the kernel is handed the copy, and a copy that elaboration rebuilt under another spelling of one of its goals is another term to conversion, which unfolds the two side by side. The name is what the author wrote, and reduction opens it to the same group again.
 ///
-/// Exact, where [`refold_recs`] is display's: a group is recognized by reduction's own record of the name it opened it from in the declaration in progress ([`Context::member_names`]), and an instance of a universe-polymorphic one by its record of having opened that instance ([`Context::instance_of`]), so the names are the definitions the declaration unfolded and the levels a member is named at are the ones it was opened at, none read back off the copy. A group neither records — a local `rec`, a group no name of this declaration's unfolded to — stands as it was.
+/// Exact, where [`refold_recs`] is display's: a group is recognized by reduction's own record of the name it opened it from in the declaration in progress ([`Context::member_names`]), so the names are the definitions the declaration unfolded, none read back off the copy. A group neither records — a local `rec`, a group no name of this declaration's unfolded to — stands as it was.
 pub fn named_members(context: &Context, term: &Term) -> Term {
     if !term.mentions_rec() {
         return term.clone();
@@ -128,22 +137,12 @@ pub fn named_members(context: &Context, term: &Term) -> Term {
     named_with(&Rc::new(groups), term)
 }
 
-/// The terms naming `group`'s members, in member order: each member's global where the base frame defines the group itself, and that global at the instance's levels where `group` is an instance reduction opened.
+/// The terms naming `group`'s members, in member order: each member's global where the base frame defines the group itself, and none otherwise.
 fn members_named(context: &Context, group: &RecGroup) -> Option<Vec<Term>> {
     let named = |name: &Global| Var::free(Free::Global(*name));
-    if group.universes().width() == 0
-        && let Some(names) = context.member_names(group)
-    {
-        return Some(names.iter().map(|name| Term::var(named(name))).collect());
-    }
-    let (scheme, levels) = context.instance_of(group)?;
-    let names = context.member_names(scheme)?;
-    Some(
-        names
-            .iter()
-            .map(|name| Term::instance(InstanceHead::Var(named(name)), levels.clone()))
-            .collect(),
-    )
+    let names = context.member_names(group)?;
+
+    Some(names.iter().map(|name| Term::var(named(name))).collect())
 }
 
 fn named_with(table: &Rc<Vec<(RecGroup, Vec<Term>)>>, term: &Term) -> Term {

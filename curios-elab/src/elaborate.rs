@@ -194,15 +194,6 @@ fn elaborate_subterm(
         }
         Subterm::Instance(instance) => {
             let type_ = match &instance.head {
-                InstanceHead::RecProj(group, index) => {
-                    context
-                        .universes_mut()
-                        .instantiate_at(group.universe_context(), &instance.universes, None)
-                        .map_err(Error::from)?;
-
-                    instantiate_universes_scoped(&group.member_type(*index), &instance.universes)
-                        .map_err(Error::from)?
-                }
                 InstanceHead::Var(var) => context
                     .instantiate_assumption_at(var.unwrap(), &instance.universes, term.extent())?
                     .ok_or_else(|| context.unbound_variable(instance.head.to_term()))?,

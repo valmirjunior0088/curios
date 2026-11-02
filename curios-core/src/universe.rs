@@ -626,39 +626,6 @@ impl UniverseContext {
                 .collect(),
         }
     }
-
-    pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
-        Self {
-            parameter_count: self.parameter_count,
-            quality_count: self.quality_count,
-            constraints: self
-                .constraints
-                .iter()
-                .map(|constraint| UniverseConstraint {
-                    lower: map(&constraint.lower),
-                    upper: map(&constraint.upper),
-                    origin: constraint.origin.clone(),
-                })
-                .collect(),
-        }
-    }
-}
-
-/// One value under a shared universe context.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub(crate) struct UniverseScheme<T> {
-    pub(crate) context: UniverseContext,
-    pub(crate) value: T,
-}
-
-impl<T> UniverseScheme<T> {
-    pub(crate) fn monomorphic(value: T) -> Self {
-        Self {
-            context: UniverseContext::empty(),
-            value,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

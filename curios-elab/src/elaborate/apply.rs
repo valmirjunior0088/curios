@@ -378,7 +378,6 @@ pub fn elaborate_apply(
             Subterm::Apply(apply) => innermost_reference(&apply.head),
             Subterm::Instance(instance) => match &instance.head {
                 InstanceHead::Var(var) => Some(*var.unwrap()),
-                InstanceHead::RecProj(..) => None,
             },
             _ => None,
         }

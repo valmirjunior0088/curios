@@ -448,17 +448,11 @@ impl<'s> Lowering<'s> {
             | curios_core::Subterm::TupleType(_)
             | curios_core::Subterm::InductType(_)
             | curios_core::Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
-            // An instance is its head at the sorts it states: a level carries nothing at run time, and a declaration that leaves sorts open is bound at each of them apart. A group's member reads its group, which leaves no sort of its own.
+            // An instance is its head at the sorts it states: a level carries nothing at run time, and a declaration that leaves sorts open is bound at each of them apart.
             curios_core::Subterm::Instance(instance) => match &instance.head {
                 curios_core::InstanceHead::Var(var) => {
                     self.erase_name(var.unwrap(), Sorts::of(&instance.universes.qualities))
                 }
-                curios_core::InstanceHead::RecProj(group, index) => self.walk(
-                    context,
-                    &curios_core::Term::rec_proj(group.clone(), *index),
-                    expected,
-                    hint,
-                ),
             },
             curios_core::Subterm::Var(var) => self.erase_name(var.unwrap(), Sorts::NONE),
             curios_core::Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
@@ -899,7 +893,7 @@ fn left_open(item: &curios_core::Item) -> usize {
 fn universe_context(item: &curios_core::Item) -> &curios_core::UniverseContext {
     match item {
         curios_core::Item::Let(definition) => &definition.universe_context,
-        curios_core::Item::Rec(rec) => rec.group.universe_context(),
+        curios_core::Item::Rec(rec) => &rec.universe_context,
     }
 }
 
@@ -922,10 +916,15 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
 
             curios_core::Item::Let(Box::new(at))
         }
-        curios_core::Item::Rec(rec) => curios_core::Item::Rec(curios_core::RecItem {
-            definitions: rec.definitions.clone(),
-            group: rec.group.at_qualities(&qualities),
-        }),
+        curios_core::Item::Rec(rec) => {
+            let mut at = curios_core::RecItem::clone(rec);
+            at.group = rec
+                .group
+                .map_members(|body| curios_core::instantiate_qualities(body, &qualities));
+            at.universe_context.quality_count = 0;
+
+            curios_core::Item::Rec(at)
+        }
     })
 }
 

@@ -5,6 +5,7 @@ mod test_support;
 
 use {
     super::{Bracket, ByValue, DefEntry, KeptWindow},
+    crate::DefinedGroup,
     crate::{
         Context, DeadArm, HeldFrames, Question, RegionOwner, ScrutineeEntry, hold_at_one_instance,
         key_spelling, shallow_scrutinee, zonk_solved_term_metas,
@@ -151,7 +152,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::rec_definitions`](super::Frames::rec_definitions): every top-level `rec` group defined so far, with its members' names.
-    pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+    pub(crate) fn rec_definitions(&self) -> Vec<DefinedGroup> {
         self.typing.frames.rec_definitions()
     }
 

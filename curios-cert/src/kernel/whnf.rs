@@ -618,31 +618,12 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
             Some(reduct) => reduct,
             None => return Ok(Step::Stop(Term::instance(head, universes))),
         },
-        InstanceHead::RecProj(group, index) => {
-            // An index no member answers is a shape a caller could hand this walk, and `Term::rec_proj` asserts on one, so it goes stuck here: reduction is total on arbitrary terms, and the typing that consults the group is what refuses it.
-            if *index >= group.length() {
-                return Ok(Step::Stop(Term::instance(head, universes)));
-            }
-
-            return Ok(Step::Continue(Term::rec_proj(
-                group
-                    .instantiate_universes(&universes)
-                    .map_err(ReduceError::Universe)?,
-                *index,
-            )));
-        }
     };
 
-    // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
-    Ok(Step::Continue(match reduct.as_rec_proj() {
-        Some((group, index)) => Term::rec_proj(
-            group
-                .instantiate_universes(&universes)
-                .map_err(ReduceError::Universe)?,
-            index,
-        ),
-        None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
-    }))
+    // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
+    Ok(Step::Continue(
+        instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
+    ))
 }
 
 /// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where the algebra decides nothing.

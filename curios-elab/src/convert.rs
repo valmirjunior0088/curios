@@ -964,11 +964,6 @@ impl Convert {
         this: &Rec,
         that: &Rec,
     ) -> Result<Outcome, ReduceError> {
-        if this.group.universe_context().width() != 0 || that.group.universe_context().width() != 0
-        {
-            return Ok(Outcome::Mismatch(None));
-        }
-
         let mark = context.solution_mark();
         let mut run = Self::under(binders.clone(), pairs.clone(), None);
         let outcome = match run.compare_rec(context, this.clone(), that.clone())? {

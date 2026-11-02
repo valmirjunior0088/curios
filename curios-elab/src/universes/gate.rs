@@ -26,11 +26,9 @@ fn validate_bound_universes<B: Bound>(
     let error = Rc::clone(&nested_error);
     let mut visit = Visit::rewriting_universes_shared(
         |_, _| None,
-        Box::new(move |_, term| {
-            let contexts: Vec<&UniverseContext> = match &**term {
-                Subterm::Rec(rec) => vec![rec.group.universe_context()],
-                _ => Vec::new(),
-            };
+        Box::new(move |_, _term| {
+            // A group carries no context of its own, so a term holds none to validate: every context a module states is a declaration's or a registry entry's, which the walk below reads.
+            let contexts: Vec<&UniverseContext> = Vec::new();
             for context in contexts {
                 if error.borrow().is_none()
                     && let Err(found) = universe_context_validate(context)
@@ -108,12 +106,6 @@ fn validate_instance_arities<B: Bound>(
             };
             let invalid = match &**term {
                 Subterm::Instance(instance) => match &instance.head {
-                    InstanceHead::RecProj(group, _) => mismatch(
-                        "recursive instance",
-                        "<local rec>",
-                        group.universe_context().parameter_count,
-                        instance.universes.levels.len(),
-                    ),
                     InstanceHead::Var(var) => {
                         var.as_free().and_then(Free::as_global).and_then(|name| {
                             definitions.get(name).and_then(|expected| {
@@ -192,7 +184,7 @@ impl Schemes {
                     (Place::Let(_), Item::Let(definition)) => {
                         definition.universe_context.parameter_count
                     }
-                    (_, Item::Rec(rec)) => rec.group.universe_context().parameter_count,
+                    (_, Item::Rec(rec)) => rec.universe_context.parameter_count,
                     (Place::Member { .. }, Item::Let(_)) => {
                         unreachable!("a member's place is a group's")
                     }
@@ -260,13 +252,7 @@ fn definition_schemes(
         Item::Rec(rec) => rec
             .definitions
             .iter()
-            .map(|definition| {
-                (
-                    definition.name,
-                    &definition.kind,
-                    rec.group.universe_context(),
-                )
-            })
+            .map(|definition| (definition.name, &definition.kind, &rec.universe_context))
             .collect(),
     })
 }
@@ -279,7 +265,7 @@ fn scheme_in<'a>(item: &'a Item, name: &Global) -> Option<&'a UniverseContext> {
             .definitions
             .iter()
             .any(|definition| definition.name == *name)
-            .then(|| rec.group.universe_context()),
+            .then_some(&rec.universe_context),
     }
 }
 

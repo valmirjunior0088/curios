@@ -57,6 +57,10 @@ pub(crate) enum Proof {
     /// A module built by hand and the term it closes with, put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
     Module(fn() -> (Module, Term)),
     /// A module built by hand and the term it closes with, put to the kernel over an environment built by hand: the prelude, and beside it the [`Mounting`] this proof states. For a rule that answers about a unit in scope rather than about anything the judged module spells.
+    #[allow(
+        dead_code,
+        reason = "Only a flaw about what the kernel believes of a unit in scope constructs it, and while the board holds none it is constructed nowhere — as `Status::Open` is while every flaw found is fixed."
+    )]
     Mounted(fn() -> (Mounting, Module, Term)),
 }
 

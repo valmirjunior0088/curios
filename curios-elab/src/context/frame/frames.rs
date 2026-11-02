@@ -18,6 +18,7 @@ use {
         Binding, ByValue, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry,
         ScrutineeEntry, Settled, Spelling, at, refined_through, refinements_within, stand,
     },
+    crate::DefinedGroup,
     crate::{
         BirthTelescope, DeadArm, Defined, InScope,
         context::{Footing, SharedSpine, Window},
@@ -566,7 +567,7 @@ impl<'s> Frames<'s> {
     }
 
     /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
-    pub fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+    pub fn rec_definitions(&self) -> Vec<DefinedGroup> {
         self.read_scope();
         let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();
         let definitions = self
@@ -596,7 +597,17 @@ impl<'s> Frames<'s> {
             .into_iter()
             .filter_map(|(group, names)| {
                 let names = names.into_iter().collect::<Option<Vec<_>>>()?;
-                Some((group, names))
+                // The context a group's members' levels mean is the declaration's, which every member of it was assumed under.
+                let universe_context = names
+                    .first()
+                    .and_then(|name| self.assumption_universe_context(&Free::Global(*name)))
+                    .unwrap_or_default();
+
+                Some(DefinedGroup {
+                    group,
+                    names,
+                    universe_context,
+                })
             })
             .chain(self.scope.into_iter().flat_map(|scope| scope.groups()))
             .collect()

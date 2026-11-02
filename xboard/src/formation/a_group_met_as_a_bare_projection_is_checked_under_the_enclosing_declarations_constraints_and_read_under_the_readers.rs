@@ -13,19 +13,21 @@ use {
 pub(super) const TICKET: Ticket = Ticket {
     title: "A group met as a bare projection is checked under the enclosing declaration's constraints and read under the reader's",
     found_on: Date::new(2026, 11, 2),
-    status: Status::Open,
+    status: Status::Fixed,
     witnesses: &[Witness {
         what: "Hurkens' paradox over the products of a record a group's one member computes, licensed by `carrier@{u, v, w, x | u + 1 ≤ w, v ≤ w, v + 1 ≤ x, w + 1 ≤ x}` and read in `paradox@{u, v, w, x | u ≤ 0, w ≤ 0, 1 ≤ v}`",
         proof: Proof::Module(a_bare_group_read_under_the_readers_constraints),
-        expect: refused![kernel],
+        expect: refused![kernel: curios_cert::Error::Mismatch { .. } in "paradox"],
     }],
 };
 
 /// A group of one member whose body is the record of the four products Hurkens' paradox needs, declared inside `carrier` and projected inside `paradox`.
 ///
-/// The group states four levels of its own and no constraint, and the member's terms spell `param 0 .. param 3`. `check_group` reads those as the *enclosing item's*, so the carrier's constraints — `u + 1 ≤ w`, `v ≤ w` — license a product over `Type u` at `Type w` and a product over a set at `Type v` at `Type w`, exactly as a declaration's cumulativity should. `instantiate_universes_scoped` reads the same four as the *group's own*, so an instance of the carrier shadows them and the record arrives in the reader spelled in the reader's parameters, under the reader's constraints — `u ≤ 0`, `w ≤ 0`, `1 ≤ v` — which license nothing of the kind: there the four products quantify over `Type 0` and stand at `Type 0`, the impredicative ones Hurkens' paradox needs, over which it closes with `False`.
+/// The member's terms spell `param 0 .. param 3`, which are the carrier's: `check_group` reads them as the enclosing item's, so the carrier's constraints — `u + 1 ≤ w`, `v ≤ w` — license a product over `Type u` at `Type w` and a product over a set at `Type v` at `Type w`, exactly as a declaration's cumulativity should.
 ///
-/// Nothing re-certifies the group on the reading side. `synth_neutral` instantiates the carrier's scheme, which *is* the bare projection, and `infer`'s projection rule reduces that to the record and reads the field type off it — a reduction, not a judgment — so the member's body is read at the reader's spelling of levels it was never checked at.
+/// This was admitted while a group bound universe parameters of its own. The four were then read two ways — as the item's by `check_group`, and as the group's by every scope walk, which shadowed them — so an instance of the carrier left the record's field types spelled in the *reader's* parameters, under the reader's constraints, `u ≤ 0` and `w ≤ 0`, where the four products quantify over `Type 0` and stand at `Type 0`. Those are the impredicative products the paradox needs, and nothing re-certified the group on the reading side: `synth_neutral` instantiated the carrier's scheme, which *is* the bare projection, and `infer`'s projection rule reduced that to the record and read the field type off it, a reduction and not a judgment.
+///
+/// A group binds no universe now, so the four are the carrier's under every reader and an instance substitutes them with every other level the carrier binds. The reader's `Type 0` claim meets a product that inhabits `Type 1`, and the comparison refuses it.
 fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
     let (u, v, w, x) = (
         Level::param(UniverseParam(0)),
@@ -73,12 +75,7 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
     let group = RecGroup::new(vec![RecMemberScopes {
         type_: Scope::close(Many(1), &members, Term::type_at(x.clone())),
         body: Scope::close(Many(1), &members, products_type),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 4,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
+    }]);
     let carrier_type = Term::rec_proj(group, 0);
 
     // The four products themselves, checked against the record's field types under the carrier's constraints.

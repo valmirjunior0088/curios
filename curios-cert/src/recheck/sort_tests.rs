@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
-        Module, Nat, Quality, QualityParam, Rec, RecItem, Scope, StructDecl, Subterm, Telescope,
-        Term, UniverseContext, UniverseParam, Universes, test_support::declaring,
+        Module, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
+        UniverseContext, UniverseParam, Universes, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -592,29 +592,6 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
 
     let verdicts = verdicts(&module);
     assert!(verdicts.is_empty(), "{verdicts:?}");
-}
-
-/// A group inside a term binds no sort: a quality parameter there is the enclosing declaration's, so a group whose own context leaves one is refused where it is judged.
-#[test]
-fn a_group_inside_a_term_leaves_no_sort_to_a_caller() {
-    let member = Free::local(18, Some("m"));
-    let built = Term::rec([(member, nat(), zero())], Term::free_var(&member));
-    let Subterm::Rec(Rec { group, tail }) = &*built else {
-        panic!("a `rec` is built as one");
-    };
-    let local = Term::from(Subterm::Rec(Rec {
-        group: group.clone().with_universe_context(leaving(1)),
-        tail: tail.clone(),
-    }));
-
-    let verdicts = verdicts(&module(vec![authored(&named("user"), nat(), local)], []));
-
-    assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::GroupLeavesSort)),
-        "{verdicts:?}",
-    );
 }
 
 /// A declaration is judged at two to the count of the sorts it leaves, so the count is bounded.

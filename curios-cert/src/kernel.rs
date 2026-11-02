@@ -143,8 +143,6 @@ pub enum Error {
         sorts: Vec<Quality>,
         refusal: Box<Error>,
     },
-    /// A recursive group judged while its own context leaves a sort to a caller: one standing inside a term, where a quality parameter is the enclosing declaration's. A top-level group is judged at each assignment of its sorts, where it leaves none.
-    GroupLeavesSort,
     /// A declaration leaving more sorts to its caller than [`UniverseContext::QUALITY_LIMIT`]: judging it at every assignment is two to that count judgments.
     TooManySorts { stated: usize },
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
@@ -350,9 +348,6 @@ impl fmt::Display for Displayed<'_> {
                 formatter.write_str(": ")?;
                 Displayed(refusal, Rc::clone(spelling), None).fmt(formatter)
             }
-            Error::GroupLeavesSort => formatter.write_str(
-                "a recursive group inside a term leaves a sort to its caller, which a top-level declaration alone does",
-            ),
             Error::TooManySorts { stated } => write!(
                 formatter,
                 "this declaration leaves {stated} sorts to its caller, past the {} one declaration may",
@@ -867,22 +862,6 @@ impl<'s> Kernel<'s> {
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Kernel::restore_budget`], this is a declaration-boundary reset.
     pub fn assume_universes(&mut self, universes: &UniverseContext) {
         self.assumed = universes.constraints.clone();
-    }
-
-    /// Run `judge` under `universes`' constraints in place of the item's, and put the item's back after.
-    ///
-    /// A level parameter is positional, so a term judged here reads the same spelling of a level as the item does and means another: nothing remembered on one side answers on the other, and every memo is discarded on the way in and on the way out.
-    pub(crate) fn under_universes<R>(
-        &mut self,
-        universes: &UniverseContext,
-        judge: impl FnOnce(&mut Self) -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        let outer = std::mem::replace(&mut self.assumed, universes.constraints.clone());
-        self.memos.begin_declaration();
-        let judged = judge(self);
-        self.memos.begin_declaration();
-        self.assumed = outer;
-        judged
     }
 
     /// Whether `lower ≤ upper` — structurally, or through the assumed constraints of the item being checked.

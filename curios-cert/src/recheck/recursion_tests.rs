@@ -5,8 +5,7 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, InstanceHead, Intrinsic, Level, Many, Module, Nat, RecGroup, RecMemberScopes,
-        Scope, Term, UniverseContext,
+        Free, Global, Intrinsic, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, Term,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -143,32 +142,6 @@ fn bad_module(body: Term) -> Module {
         .into(),
         ..Module::default()
     }
-}
-
-/// A universe instance of a member a group does not have is refused, not aborted on.
-///
-/// [`curios-cert`'s README](../../../README.md) states that reduction is total on arbitrary terms — a projection out of range among the shapes `whnf` goes stuck on rather than asserting — and that the counts no typing rule reads are checked where the declaration is consulted. `Term::rec_proj` relates its index to the group's length, but an instance of a member states the index on the node, where `Term::instance` relates it to nothing, so without the boundary check `RecGroup::item`'s `expect` is the first thing that reads it and the walk dies where the board requires a refusal.
-#[test]
-fn an_instance_of_a_member_a_group_does_not_have_is_refused() {
-    let f = member();
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&f], Term::intrinsic(Intrinsic::NatType)),
-        body: Scope::close(Many(1), &[&f], Term::free_var(&f)),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
-    let module = bad_module(Term::instance(
-        InstanceHead::RecProj(group, 1),
-        vec![Level::zero()],
-    ));
-
-    assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the walk must refuse an instance of a member past the group's length",
-    );
 }
 
 /// A group whose member scopes bind more than its members is refused, not aborted on.

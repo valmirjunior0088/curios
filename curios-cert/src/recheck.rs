@@ -772,7 +772,7 @@ fn verdicts_within<'s>(
                     .iter()
                     .map(|definition| (Free::from(&definition.name), definition.proof))
                     .collect::<Vec<_>>();
-                let universes = rec.group.universe_context().clone();
+                let universes = rec.universe_context.clone();
 
                 let outcome = check_rec_group(kernel, &members, &rec.group, &universes);
 
@@ -1425,7 +1425,7 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
             vec![(definition.name, definition.totality)]
         }
         Item::Rec(rec) => {
-            let universes = rec.group.universe_context().clone();
+            let universes = rec.universe_context.clone();
             for (member, definition) in rec.definitions.iter().enumerate() {
                 defined(
                     &definition.name,

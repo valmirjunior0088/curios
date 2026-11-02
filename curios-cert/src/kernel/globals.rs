@@ -69,7 +69,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
                     type_,
                     value: (!rec.definitions[member as usize].proof).then_some(body),
                     value_sort: None,
-                    universes: rec.group.universe_context(),
+                    universes: &rec.universe_context,
                 })
             }
             Item::Let(_) => unreachable!("a member's place is a group's"),

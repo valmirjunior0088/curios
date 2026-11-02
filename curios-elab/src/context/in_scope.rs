@@ -15,6 +15,16 @@ use {
     std::fmt::Debug,
 };
 
+/// One recursive group a unit in scope declares: the group, the names its members are defined under in member order, and the universe context its declaration states.
+///
+/// The context is the item's and not the group's, because that is whose parameters a member's levels are ([`curios_core::RecGroup`]): a reader that opens a group at an assignment of sorts, or names its members again, asks the declaration.
+#[derive(Debug, Clone)]
+pub struct DefinedGroup {
+    pub group: RecGroup,
+    pub names: Vec<Global>,
+    pub universe_context: UniverseContext,
+}
+
 /// One definition of a unit in scope, as a declaration reads it: every part a reference into the unit that holds it.
 #[derive(Debug, Clone, Copy)]
 pub struct Defined<'a> {
@@ -90,7 +100,7 @@ pub trait InScope: Debug {
     fn witnesses(&self) -> Vec<(Global, WitnessKey, Global)>;
 
     /// Every recursive group the units in scope declare, each with its members' names in member order: what a report folds a group's unfolding back to.
-    fn groups(&self) -> Vec<(RecGroup, Vec<Global>)>;
+    fn groups(&self) -> Vec<DefinedGroup>;
 
     /// The names a unit in scope defines `group`'s members under, in member order.
     fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>>;

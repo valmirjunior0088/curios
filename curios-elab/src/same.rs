@@ -221,7 +221,7 @@ pub fn item_part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                rec.group.universe_context().inequalities(),
+                rec.universe_context.inequalities(),
                 members,
             )))
         }
@@ -330,9 +330,9 @@ fn spelled_alike(this: &Term, that: &Term) -> bool {
     this.equal_modulo_metas(that, &mut MetaRenaming::default())
 }
 
-/// Whether two groups are one as a unit stores them: one scheme, and each member's type and body spelled alike.
+/// Whether two groups are one as a unit stores them: one declared context, and each member's type and body spelled alike.
 fn groups_alike(this: &RecItem, that: &RecItem) -> bool {
-    this.group.universe_context() == that.group.universe_context()
+    this.universe_context == that.universe_context
         && this.group.iter().len() == that.group.iter().len()
         && this
             .group

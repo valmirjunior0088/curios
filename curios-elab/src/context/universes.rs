@@ -6,31 +6,14 @@ use {
         stamp_if_moved, zonk_universe_levels_scoped,
     },
     curios_core::{
-        Bound, Extent, Free, Global, InductDecl, InductInstance, Level, Quality, RecGroup,
-        ReduceError, StructDecl, StructInstance, Term, UniverseContext, UniverseError,
-        UniverseMetaId, Universes, instantiate_universes_scoped,
+        Bound, Extent, Free, Global, InductDecl, InductInstance, Level, Quality, StructDecl,
+        StructInstance, Term, UniverseContext, UniverseError, UniverseMetaId, Universes,
+        instantiate_universes_scoped,
     },
     std::collections::BTreeSet,
 };
 
 impl<'s> Context<'s> {
-    /// `group` at `universes`, remembered as that instance of it for the declaration in progress and read back by [`Context::instance_of`]. An instance holds its levels substituted through every member, so a copy does not say which instance of which group it is, and a term that names a group's members again ([`named_members`](crate::named_members)) knows one by this record alone. So this is the one way an instance is opened here: by the reducer where it unfolds a name, by the closed machine through its host, by the neutral typer where it reads a member's type, and by the reduction table where it serves a reduct at another spelling's levels ([`Caches::reduction_get`](super::Caches::reduction_get)).
-    pub(crate) fn opened_instance(
-        &mut self,
-        group: &RecGroup,
-        universes: &Universes,
-    ) -> Result<RecGroup, ReduceError> {
-        self.typing
-            .caches
-            .opened_instance(group, universes)
-            .map_err(ReduceError::Universe)
-    }
-
-    /// The group `instance` was opened from and the instance it was opened at, where it was opened in the declaration in progress.
-    pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
-        self.typing.caches.instance_get(instance)
-    }
-
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.
     pub(crate) fn universe_metas_in(&self, term: &Term) -> BTreeSet<UniverseMetaId> {
         let mut universes = BTreeSet::new();

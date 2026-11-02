@@ -133,17 +133,11 @@ pub(super) enum Former {
 }
 
 impl Former {
-    /// `value : type_`, generalized over `scheme`, in this spelling.
-    fn spell(self, member: Free, type_: &Term, value: Term, scheme: &UniverseContext) -> Term {
+    /// `value : type_` in this spelling. A group binds no universe, so a projected former's levels are the declaration's and the scheme it is generalized over is the declaration's own.
+    fn spell(self, member: Free, type_: &Term, value: Term) -> Term {
         match self {
             Former::Projected => {
-                let projection =
-                    Term::rec([(member, type_.clone(), value)], Term::free_var(&member));
-                let (group, index) = projection
-                    .as_rec_proj()
-                    .expect("a group whose tail is one of its members");
-
-                Term::rec_proj(group.clone().with_universe_context(scheme.clone()), index)
+                Term::rec([(member, type_.clone(), value)], Term::free_var(&member))
             }
             Former::Plain => value,
         }
@@ -204,7 +198,7 @@ pub(super) fn declare_wrap(
             Vec::<Term>::new(),
         ),
     );
-    let value = former.spell(binder(87, "Wrap"), &type_, value, &scheme);
+    let value = former.spell(binder(87, "Wrap"), &type_, value);
     kernel
         .define(&Free::from(&name), &type_, &value, &scheme)
         .expect("a name is declared once");
@@ -253,7 +247,7 @@ pub(super) fn declare_leaf(
         Vec::<Term>::new(),
         Vec::<Term>::new(),
     );
-    let value = former.spell(binder(86, "Leaf"), &type_, node, &scheme);
+    let value = former.spell(binder(86, "Leaf"), &type_, node);
     kernel
         .define(&Free::from(&name), &type_, &value, &scheme)
         .expect("a name is declared once");

@@ -368,34 +368,11 @@ fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
     );
 }
 
-/// A recursive group that binds its own universe parameter and the same group binding none erase alike and are apart under every reading: the walk reads a group's universe context in its node, where erasure drops it.
+/// A metavariable's answer is one level wherever it stands: the same parameter inside a group as outside it.
+///
+/// A group binds no universe ([`curios_core::RecGroup`]), so no binder stands between a term and the declaration whose parameters its levels are, and an answer substituted into both positions is shifted by nothing. A group that bound its own would have made the inner occurrence read the parameter after it — the second reading of one index that `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
 #[test]
-fn level_differences_set_groups_apart_in_their_universe_context() {
-    let member = |term: Term| Scope::constant(Many(1), term);
-    let group = |parameter_count| {
-        Term::rec_proj(
-            RecGroup::new(vec![RecMemberScopes {
-                type_: member(Term::type_at(Level::param(UniverseParam(0)))),
-                body: member(Term::type_at(Level::param(UniverseParam(0)))),
-            }])
-            .with_universe_context(UniverseContext {
-                parameter_count,
-                quality_count: 0,
-                constraints: Vec::new(),
-            }),
-            0,
-        )
-    };
-    let (own, none) = (group(1), group(0));
-
-    assert_eq!(own.erased_universes(), none.erased_universes());
-    assert_eq!(own.level_differences(&none, |_| false, &()), None);
-    assert_eq!(own.level_differences(&none, |_| false, &PairingSorts), None);
-}
-
-/// A metavariable's answer is stated at universe-binder depth zero and lands shifted past the binders above each occurrence: `?0` answered by the declaration's first parameter is that parameter outside a group binding one of its own, and the parameter after the group's inside it.
-#[test]
-fn a_universe_metavariable_answer_is_shifted_past_the_binders_above_it() {
+fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
     let meta = UniverseMetaId(0);
     let member = |term: Term| Scope::constant(Many(1), term);
     let at = |outside: Level, inside: Level| {
@@ -405,12 +382,7 @@ fn a_universe_metavariable_answer_is_shifted_past_the_binders_above_it() {
                 RecGroup::new(vec![RecMemberScopes {
                     type_: member(Term::type_at(inside.clone())),
                     body: member(Term::type_at(inside)),
-                }])
-                .with_universe_context(UniverseContext {
-                    parameter_count: 1,
-                    quality_count: 0,
-                    constraints: Vec::new(),
-                }),
+                }]),
                 0,
             ),
         ])
@@ -420,13 +392,13 @@ fn a_universe_metavariable_answer_is_shifted_past_the_binders_above_it() {
         substitute_universe_metas_scoped(&at(Level::meta(meta), Level::meta(meta)), move |found| {
             Ok((found == meta).then(|| Level::param(UniverseParam(0))))
         })
-        .expect("shifting a parameter by one cannot overflow");
+        .expect("substituting a parameter cannot overflow");
 
     assert_eq!(
         substituted,
         at(
             Level::param(UniverseParam(0)),
-            Level::param(UniverseParam(1))
+            Level::param(UniverseParam(0))
         )
     );
 }
@@ -504,9 +476,9 @@ fn equality_up_to_a_wildcard_ignores_only_the_wildcard_positions() {
     );
 }
 
-/// A term holds a group where a `Rec` node stands in it or a universe instance is taken of a member, at any depth, and nowhere else: a member's instance carries its group as its head, with no `Rec` node among its children.
+/// A term holds a group where a `Rec` node stands in it, at any depth, and nowhere else. There is one spelling: a group binds no universe, so no instance is taken of a member and `InstanceHead` names none.
 #[test]
-fn a_term_holds_a_group_where_a_rec_or_a_members_instance_stands() {
+fn a_term_holds_a_group_where_a_rec_node_stands() {
     let f = Free::local(0, Some("f"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let rec = Term::rec(
@@ -516,38 +488,29 @@ fn a_term_holds_a_group_where_a_rec_or_a_members_instance_stands() {
     let Subterm::Rec(Rec { group, .. }) = &*rec else {
         panic!("the fixture changed shape");
     };
-    let instance: Term = Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group.clone(), 0),
-        universes: Universes::default(),
-    })
-    .into();
+    let projection = Term::rec_proj(group.clone(), 0);
 
     assert!(rec.has_group());
-    assert!(instance.has_group());
-    assert!(Term::tuple([nat.clone(), Term::apply(instance, [nat.clone()])]).has_group());
+    assert!(projection.has_group());
+    assert!(Term::tuple([nat.clone(), Term::apply(projection, [nat.clone()])]).has_group());
     assert!(!Term::tuple([nat.clone(), Term::free_var(&f)]).has_group());
     assert!(!nat.has_group());
 }
 
-/// A parameter a group's own universe binder binds is the group's, and one above it is the enclosing scheme's, read back at its own index.
+/// Every parameter a term spells is read at its own index, inside a group as outside it: a group binds no universe, so no index is shifted by one standing above it.
 #[test]
-fn universe_params_are_read_at_the_depth_of_the_binders_above_them() {
+fn universe_params_are_read_at_their_own_index() {
     let level = |index| Level::param(UniverseParam(index));
     let member = |term: Term| Scope::constant(Many(1), term);
     let group = RecGroup::new(vec![RecMemberScopes {
         type_: member(Term::type_at(level(0))),
         body: member(Term::type_at(level(2))),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
+    }]);
     let term = Term::tuple([Term::type_at(level(3)), Term::rec_proj(group, 0)]);
 
     assert_eq!(
         universe_params(&term),
-        BTreeSet::from([UniverseParam(1), UniverseParam(3)]),
+        BTreeSet::from([UniverseParam(0), UniverseParam(2), UniverseParam(3)]),
     );
 }
 

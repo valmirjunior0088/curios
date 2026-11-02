@@ -20,9 +20,9 @@ use {
     crate::{EveryPosition, Sort, UniverseSolver, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{
-        AsideAnswers, Bound, ClosedMemo, Enter, Free, Global, Level, LevelHead, Quality,
-        QualityMetaId, Rec, RecGroup, Sharing, Subterm, Term, UniverseError, UniverseMetaId,
-        Universes, lasting, rewrite_universe_qualities, substitute_universe_metas_scoped,
+        AsideAnswers, Bound, ClosedMemo, Free, Global, Level, LevelHead, Quality, QualityMetaId,
+        RecGroup, Sharing, Term, UniverseMetaId, lasting, rewrite_universe_qualities,
+        substitute_universe_metas_scoped,
     },
     curios_utilities::{Entropy, Keyed},
     std::{
@@ -134,8 +134,6 @@ pub struct Caches {
     same: [HashMap<(Term, Term), bool>; 2],
     /// The stamps `sorts` and `same` were filled under.
     sorts_at: ElaborationStamp,
-    /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
-    instances: HashMap<Keyed<RecGroup>, (RecGroup, Universes)>,
     /// Each top-level `rec` group reduction has opened by unfolding a name in the declaration in progress, beside the first name it was opened from: what a term the declaration commits names a stuck call on it by ([`named_members`](crate::named_members)). It lives one declaration, as the instances do. Behind a cell because a name is unfolded through a shared reference.
     opened: RefCell<HashMap<Keyed<RecGroup>, Global>>,
     elaboration: HashMap<Keyed<ElaborationKey>, (Term, Term)>,
@@ -313,7 +311,7 @@ impl Caches {
 
     /// The remembered reduct of `term`, as plain reduction took it where `plain` and as a judgment's did otherwise.
     ///
-    /// A reduct served through the second door holds the instances reduction opened for the stored spelling, each carried to the asking spelling's levels. They are the instances reduction would have opened for the asking one, and are opened as those ([`Caches::opened_instance`]): a term that names a group's members again knows an instance by that record alone, so one served unrecorded would stand in a solution as a copy of its group. A hit whose instances do not open is declined, as one whose levels do not map is.
+    /// A hit through the second door is served at the asking spelling's levels and sorts, and is declined where the stored spelling's do not map onto them ([`AcrossUniverses`]).
     ///
     /// A spelling holding a term metavariable, and one whose stored reduct holds one, is answered by the exact table alone: a solution can hold a universe metavariable the key holds too, which carrying would move in the key and not in the solution ([`AcrossUniverses`]).
     pub fn reduction_get(&mut self, term: &Term, plain: bool) -> Option<Term> {
@@ -343,50 +341,10 @@ impl Caches {
         let adapted = (!term.has_metavar() && !reduct.has_metavar())
             .then(|| AcrossUniverses::between(&key, term))
             .flatten()
-            .and_then(|across| Some((across.carried(&reduct)?, across)));
+            .and_then(|across| across.carried(&reduct));
         curios_profile::sample!("reduction::across_levels", u64::from(adapted.is_some()));
-        let (adapted, across) = adapted?;
-        for (group, universes) in self.instances_carried(&reduct, &across)? {
-            self.opened_instance(&group, &universes).ok()?;
-        }
 
-        Some(adapted)
-    }
-
-    /// Each instance `reduct` holds that reduction opened, as the group it instantiates and the universes it stands at carried across `across`: the instances the asking spelling's reduct holds in their place. `None` where the universes of one do not carry.
-    fn instances_carried(
-        &self,
-        reduct: &Term,
-        across: &AcrossUniverses,
-    ) -> Option<Vec<(RecGroup, Universes)>> {
-        if !reduct.mentions_rec() {
-            return Some(Vec::new());
-        }
-        // A node is entered once, and an instance not at all: its members name one another by position.
-        let mut found = (HashSet::new(), Some(Vec::new()));
-        reduct.walk(
-            &mut found,
-            |(seen, carried), node| {
-                if !seen.insert(node.clone()) {
-                    return Enter::Skip(());
-                }
-                let Subterm::Rec(Rec { group, .. }) = &**node else {
-                    return Enter::Descend;
-                };
-                let Some((scheme, universes)) = self.instances.get(&Keyed::new(group.clone()))
-                else {
-                    return Enter::Descend;
-                };
-                match (carried.as_mut(), across.carried_universes(universes)) {
-                    (Some(carried), Some(universes)) => carried.push((scheme.clone(), universes)),
-                    _ => *carried = None,
-                }
-                Enter::Skip(())
-            },
-            |_, _, _| (),
-        );
-
-        found.1
+        adapted
     }
 
     /// The closed machine's memo for the reduction `plain` names.
@@ -585,7 +543,6 @@ impl Caches {
         self.keys = Sharing::new();
         self.note_redefinition();
         self.proofs.clear();
-        self.instances.clear();
         self.opened.get_mut().clear();
         self.classifications.clear();
         self.clear_reductions();
@@ -597,21 +554,6 @@ impl Caches {
             }
             window.kernel_spellings.clear();
         }
-    }
-
-    /// `group` at `universes`, remembered as that instance of it: the one way an instance is opened, so that every one a term comes to hold is known for the instance it is.
-    pub fn opened_instance(
-        &mut self,
-        group: &RecGroup,
-        universes: &Universes,
-    ) -> Result<RecGroup, UniverseError> {
-        let instance = group.instantiate_universes(universes)?;
-        self.instances.insert(
-            Keyed::new(instance.clone()),
-            (group.clone(), universes.clone()),
-        );
-
-        Ok(instance)
     }
 
     /// `group` opened by unfolding `name`, kept where no name opened it before in the declaration in progress.
@@ -628,11 +570,6 @@ impl Caches {
             .borrow()
             .get(&Keyed::new(group.clone()))
             .copied()
-    }
-
-    /// The group `instance` was opened from and the instance it was opened at, where reduction opened it in the declaration in progress.
-    pub fn instance_get(&self, instance: &RecGroup) -> Option<&(RecGroup, Universes)> {
-        self.instances.get(&Keyed::new(instance.clone()))
     }
 
     pub fn elaboration_get(
@@ -967,17 +904,6 @@ impl AcrossUniverses {
         (across.carried(key)? == *query).then_some(across)
     }
 
-    /// `level`, stated at the stored spelling and at universe-binder depth zero, as the asking one states it.
-    fn level(
-        levels: &HashMap<UniverseMetaId, Level>,
-        level: &Level,
-    ) -> Result<Level, UniverseError> {
-        level.substitute(|head| match head {
-            LevelHead::Meta(meta) => levels.get(&meta).cloned(),
-            LevelHead::Param(_) => None,
-        })
-    }
-
     /// `quality`, stated at the stored spelling, as the asking one states it.
     fn quality(sorts: &HashMap<QualityMetaId, Quality>, quality: &Quality) -> Quality {
         match quality {
@@ -1005,23 +931,6 @@ impl AcrossUniverses {
             Ok::<_, Infallible>(Self::quality(&sorts, quality))
         })
         .ok()
-    }
-
-    /// `universes`, an instance stated at the stored spelling's universes, at the asking spelling's.
-    fn carried_universes(&self, universes: &Universes) -> Option<Universes> {
-        Some(Universes {
-            levels: universes
-                .levels
-                .iter()
-                .map(|level| Self::level(&self.levels, level))
-                .collect::<Result<_, _>>()
-                .ok()?,
-            qualities: universes
-                .qualities
-                .iter()
-                .map(|quality| Self::quality(&self.sorts, quality))
-                .collect(),
-        })
     }
 }
 

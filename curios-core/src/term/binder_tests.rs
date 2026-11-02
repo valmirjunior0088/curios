@@ -294,32 +294,9 @@ fn closing_and_opening_a_variable_headed_instance_round_trips() {
     assert_eq!(scope.open(&[&Term::free_var(&f)]), instance);
 }
 
-#[test]
-fn opening_substitutes_a_projection_into_a_member_headed_instance() {
-    let f = Free::local(40, Some("f"));
-    let instance = Term::instance_of(&f, vec![Level::zero()]);
-    let scope = Scope::close(Many(1), &[&f], instance);
-
-    let rec = Term::rec(
-        vec![(f, Term::type_ground(), Term::type_ground())],
-        Term::free_var(&f),
-    );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
-        panic!("the fixture changed shape");
-    };
-
-    let opened = scope.open(&[&Term::rec_proj(group.clone(), 0)]);
-    let Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(opened_group, 0),
-        ..
-    }) = &*opened
-    else {
-        panic!("the projection did not re-enter the typed head: {opened}");
-    };
-    assert_eq!(opened_group, group);
-}
-
-/// The seam's total answer for the one replacement no elaborated term produces: a binder no scheme governs substituted by an arbitrary value. The instance dissolves to the replacement — the levels-inert reading the kernel's sort fixtures pin for local heads — because a reducer that promises totality on arbitrary terms may not abort here.
+/// The seam's total answer for every replacement that is not a head shape: a binder no scheme governs substituted by an arbitrary value, a group's member projection among them. The instance dissolves to the replacement — the levels-inert reading the kernel's sort fixtures pin for local heads — because a reducer that promises totality on arbitrary terms may not abort here.
+///
+/// A projection was once the one replacement that re-entered the typed head, when a head could name a member. It cannot: a group binds no universe, so there is no scheme for an instance of a member to satisfy ([`curios_core::InstanceHead`]).
 #[test]
 fn a_replacement_that_is_not_a_head_shape_dissolves_the_instance() {
     let f = Free::local(42, Some("f"));

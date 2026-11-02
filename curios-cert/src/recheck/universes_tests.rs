@@ -146,10 +146,8 @@ type AssumedFrom<'a> = (
 ///
 /// - an `induct` registry entry's, assumed by `check_induct_decl` through `at_every_sort`;
 /// - a `struct` registry entry's, assumed by `check_struct_decl` the same way;
-/// - a top-level `rec` group's, assumed by `check_rec_group`;
-/// - an in-term group's, reached as a bare member projection, which `infer`'s `Rec` rule certifies through `check_group`;
-/// - a definition's that leaves a sort to its caller, where `at_every_sort` assumes it once per assignment;
-/// - the entrypoint's, whose closing term holds the group, the entry itself standing under no scheme.
+/// - a top-level `rec` group's, assumed by `check_rec_group`, which is the item's and not the group's: a group carries no context of its own, so a `rec` inside a term is no position at all and the entrypoint's closing term states none either.
+/// - a definition's that leaves a sort to its caller, where `at_every_sort` assumes it once per assignment.
 ///
 /// The control is each fixture with an empty constraint set, which stands.
 #[test]
@@ -185,21 +183,6 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
         type_,
         body,
     };
-    let bare = |constraints: Vec<UniverseConstraint>| {
-        let member = Free::local(701, Some("m"));
-        let members = [&member];
-        let group = RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, Term::intrinsic(Intrinsic::NatType)),
-            body: Scope::close(
-                Many(1),
-                &members,
-                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            ),
-        }])
-        .with_universe_context(context(constraints, 0));
-
-        Term::rec_proj(group, 0)
-    };
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let program = |items: Vec<Item>, body: Term| Program {
@@ -224,7 +207,7 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
         },
     };
 
-    let entry_sites: [AssumedFrom<'_>; 6] = [
+    let entry_sites: [AssumedFrom<'_>; 4] = [
         ("an `induct` registry entry", Some(family), &|constraints| {
             declared(
                 Vec::new(),
@@ -272,16 +255,6 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
                 zero(),
             )
         }),
-        ("a bare member projection", Some(held), &|constraints| {
-            program(
-                vec![Item::Let(Box::new(definition(
-                    context(Vec::new(), 0),
-                    nat(),
-                    bare(constraints),
-                )))],
-                zero(),
-            )
-        }),
         (
             "a definition leaving a sort open",
             Some(held),
@@ -296,9 +269,6 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
                 )
             },
         ),
-        ("the entrypoint's closing term", None, &|constraints| {
-            program(Vec::new(), bare(constraints))
-        }),
     ];
 
     for (label, refused, build) in entry_sites {
@@ -315,98 +285,6 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
             "{label}: the same fixture stating no constraint was refused",
         );
     }
-}
-
-/// The level a bare member projection claims after its definition is instantiated is the level the group's own check was held to.
-///
-/// `instantiate_universes_scoped` enters the group's universe scope, so a level the member spells at an index at or above the group's own parameter count is the *enclosing* declaration's, shifted down by that count. `check_group` reads the member's levels raw against the constraints the kernel holds assumed, which are the enclosing item's at their own indices. Below, the group declares one parameter and its member spells `param 1`, so the two readings are one slot apart: the member's sort check asks `8 ≤ param 1` of the item, which grants it, and instantiation reads the same spelling as the item's `param 0`.
-///
-/// What that would buy is a concrete collapse rather than a free level: `held.{0, 8}` discharges `8 ≤ 8` and stands at `Type 8`, while the member it unfolds to claims `Type 0` and is `Type 7`, a dweller of `Type 8`. `hold_value_sort` is where such a claim would be written down — a definition's stated value sort is read by `Sort::of` at every occurrence with nothing run — so the fixture states `Type 0` and asks whether the walk holds it.
-///
-/// What refuses it is that the claim is never asked for. `Sort::of` forces the value before it classifies anything, and a projection's declared member type is read only by `sort_of_neutral`, for a projection that *survives* forcing; this one does not, since its member's body is a sort. So the value is classified as the `Type 7` it reduces to, and the stated sort is refused against that: `ValueSort { stated: Type 0, reached: Type 8 }`. A member whose body did not reduce to a head would leave the projection standing and the claim read — and one whose declared type yields a sort is a member erasure deletes, which `check_group`'s local gate refuses unless the group descends.
-#[test]
-fn a_bare_projections_claimed_level_survives_its_definitions_instance() {
-    let shifted = Level::param(UniverseParam(1));
-    let seven = Level::constant(7);
-    let held = Global::Authored(Qualifier::from(["held"]));
-    let collapse = Global::Authored(Qualifier::from(["collapse"]));
-    let member = Free::local(702, Some("m"));
-    let members = [&member];
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &members, Term::type_at(shifted.clone())),
-        body: Scope::close(Many(1), &members, Term::type_at(seven)),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
-    // A `let` around the projection, so unfolding takes `instantiate_universes_scoped` rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
-    let wrapped = Term::let_(
-        &Free::local(703, Some("w")),
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        Term::rec_proj(group, 0),
-    );
-    let definition = |name: Global,
-                      universe_context: UniverseContext,
-                      type_: Term,
-                      body: Term,
-                      value_sort: Option<Term>| {
-        Item::Let(Box::new(Definition {
-            name,
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            totality: Totality::Total,
-            proof: false,
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
-            value_sort,
-            type_,
-            body,
-        }))
-    };
-    let eight = Level::constant(8);
-
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![
-            definition(
-                held,
-                UniverseContext {
-                    parameter_count: 2,
-                    quality_count: 0,
-                    constraints: vec![UniverseConstraint {
-                        lower: eight.clone(),
-                        upper: shifted.clone(),
-                        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-                    }],
-                },
-                Term::type_at(shifted),
-                wrapped,
-                None,
-            ),
-            definition(
-                collapse,
-                UniverseContext::empty(),
-                Term::type_at(eight.clone()),
-                Term::instance_of(&Free::from(&held), vec![Level::zero(), eight]),
-                Some(Term::type_at(Level::zero())),
-            ),
-        ]
-        .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
-
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
-    assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(collapse)
-            && matches!(verdict.error, Error::ValueSort { .. })),
-        "a `Type 7` was written down as inhabiting `Type 0`: {verdicts:?}",
-    );
 }
 
 /// A sort whose quality is open, in the two positions the boundary pass walks: a metavariable elaboration left, and a parameter no context binds.
@@ -759,5 +637,507 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the declared type reduces through the dissolving instance to `Nat`, which `5` inhabits",
+    );
+}
+
+/// A definition whose declared type is a bare `rec` projection is read at the levels its own instance states.
+///
+/// `carrier@{p} : rec m : Type (p + 2) = Type (p + 1) end.0 = Type p`: the declared type is a projection whose member's body is `Type (p + 1)`, so a reader stating `carrier@{5}` is owed that type at `p := 5`, which forces `Type 6`. Claiming it at `Type 1` is a mismatch.
+///
+/// This is site one of the four `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` was admitted through. While a group bound universe parameters of its own, `p` inside the member scopes was the *group's* parameter, an instance of the declaration substituted nothing there, and the projection reduced under the reader's own `p` — `p ≤ 0`, stated below — so `Type 1` was admitted with no verdict. That half is unrepresentable here: it needed a universe context on the group, which [`RecGroup`] no longer carries. What stands is the refusal, with the honest claim as its control.
+#[test]
+fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let carrier = Global::Authored(Qualifier::from(["carrier"]));
+    let reads = Global::Authored(Qualifier::from(["reads"]));
+    let m = Free::local(760, Some("m"));
+    let members = [&m];
+    let projection = Term::rec_proj(
+        RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, Term::type_at(plus_two)),
+            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
+        }]),
+        0,
+    );
+    let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
+        Item::Let(Box::new(Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_,
+            body,
+        }))
+    };
+    // The reader's own parameter 0 is pinned at zero: the level the shadowed reading handed the projection, and the one the instance's `5` must now override.
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: p.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let module = |claimed: Level| Module {
+        mounts: Vec::new(),
+        items: vec![
+            definition(
+                carrier,
+                UniverseContext {
+                    parameter_count: 1,
+                    quality_count: 0,
+                    constraints: Vec::new(),
+                },
+                projection.clone(),
+                Term::type_at(p.clone()),
+            ),
+            definition(
+                reads,
+                readers_context.clone(),
+                Term::type_at(claimed),
+                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(Level::constant(1)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(reads)
+            && matches!(verdict.error, Error::Mismatch { .. })),
+        "a member's type was read at the reader's levels rather than at the instance's: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(Level::constant(6)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the same reader claiming the level the instance states was refused",
+    );
+}
+
+/// A top-level `rec` group's member type is read at the levels the occurrence's instance states.
+///
+/// `rec carrier@{p} : Type (p + 1) = Type p end` with an occurrence stating `carrier@{5}` is owed `Type 6`, so claiming it at `Type 1` is a mismatch.
+///
+/// This is the kernel's half of site two of `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs`, and unlike the three fixtures beside it this one discriminates nothing: `infer`'s `Rec` arm binds each member at `member_type` positionally, under the item's own constraints, which is the reading the fix keeps — the module below is refused the same way before the group stopped binding universes and after. What carried the cause at this site was the *elaborator's* export, `Places::member`, which paired `group.member_type(index)` with a term carrying the group and so handed an occurrence a type with the group's binder still over it; no surface syntax states a universe argument, so that spelling was reachable only from inside elaboration. It is closed by the group carrying no context to open. This fixture is here to hold the kernel's positional reading still, since the fix's correctness rests on it being the only one.
+#[test]
+fn an_exported_member_type_is_read_at_the_occurrences_instance() {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let carrier = Global::Authored(Qualifier::from(["carrier"]));
+    let reads = Global::Authored(Qualifier::from(["reads"]));
+    let carriers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    };
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: p.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let definition =
+        |name: Global, universe_context: UniverseContext, type_: Term, body: Term| Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_,
+            body,
+        };
+    let module = |claimed: Level| Module {
+        mounts: Vec::new(),
+        items: vec![
+            Item::Rec(RecItem::new(vec![definition(
+                carrier,
+                carriers_context.clone(),
+                Term::type_at(plus_one.clone()),
+                Term::type_at(p.clone()),
+            )])),
+            Item::Let(Box::new(definition(
+                reads,
+                readers_context.clone(),
+                Term::type_at(claimed),
+                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+            ))),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(Level::constant(1)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(reads)
+            && matches!(verdict.error, Error::Mismatch { .. })),
+        "an exported member type was read at the reader's levels: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(Level::constant(6)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the same occurrence claiming the level its instance states was refused",
+    );
+}
+
+/// A definition's stored body is read at the levels its own instance states, the group it carries included.
+///
+/// `carrier@{p} : Type (p + 2) = rec m : Type (p + 2) = Type (p + 1) end.0` stores the projection as its *value*. A reader whose declared type is `carrier@{5}` forces that value — the definition unfolds, the projection reduces — and is owed `Type 6`, so its body must be a type below level six: `Type 5` inhabits it and `Type 6` does not.
+///
+/// This is site four. The findings entry this fixture replaces held that the route stopped here, on the ground that shadowing leaves the group's levels free in the reading item; that is the attack rather than the stopper, because the reader's own constraints are the reader's to choose. While the group bound its own, this body reduced to `Type (p + 1)` at the reader's `p ≤ 0` — `Type 1` — so `Type 0` inhabited it and `Type 5` did not: both of the assertions below stood the other way round.
+#[test]
+fn a_stored_body_is_forced_at_its_instances_levels() {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let carrier = Global::Authored(Qualifier::from(["carrier"]));
+    let reads = Global::Authored(Qualifier::from(["reads"]));
+    let m = Free::local(770, Some("m"));
+    let members = [&m];
+    let projection = Term::rec_proj(
+        RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
+            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
+        }]),
+        0,
+    );
+    let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
+        Item::Let(Box::new(Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_,
+            body,
+        }))
+    };
+    // A `let` around the projection, so unfolding takes the general substitution rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
+    let stored = Term::let_(
+        &Free::local(771, Some("w")),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        projection.clone(),
+    );
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: p.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let module = |inhabitant: Level| Module {
+        mounts: Vec::new(),
+        items: vec![
+            definition(
+                carrier,
+                UniverseContext {
+                    parameter_count: 1,
+                    quality_count: 0,
+                    constraints: Vec::new(),
+                },
+                Term::type_at(plus_two.clone()),
+                stored.clone(),
+            ),
+            definition(
+                reads,
+                readers_context.clone(),
+                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Term::type_at(inhabitant),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(Level::constant(6)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(reads)
+            && matches!(verdict.error, Error::Mismatch { .. })),
+        "a stored body was forced at the reader's levels rather than at the instance's: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(Level::constant(5)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the inhabitant the instance's levels admit was refused",
+    );
+}
+
+/// A definition's published value sort is the sort its value has at its own instance's levels, so the shadowed reading cannot be laundered into a believed fact.
+///
+/// `hold_value_sort` computes a definition's reached sort as `Sort::of` of its value, and `Sort::of`'s `published` arm then hands that stated sort to every later reader with nothing run and no `check_instance`. That is what makes this position worse than the four sites it stands beside: each of those is a lie a reader has to reach for, while this one becomes a fact recorded on the definition.
+///
+/// `carrier@{p} : Type (p + 2) = let w : Nat = 0 in rec m : Type (p + 2) = Type (p + 1) end.0` has the value `Type 6` at `p := 5`, whose sort is `Type 7`. While the group bound its own levels the value reduced to `Type (q + 1)` under the reader's `q ≤ 0` — `Type 1` — and `Type 2` was the sort admitted.
+///
+/// Beside this, `Judge::sort_below` through `curios-analysis`'s `fits_its_variable` is the cause's other consumer of a level, which a hand-written indexed family, match and inversion would reach; a `False` through it is another witness of the same ticket rather than a second one, and no fixture is built for it here.
+#[test]
+fn a_published_value_sort_is_the_sort_its_instance_reaches() {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let carrier = Global::Authored(Qualifier::from(["carrier"]));
+    let published = Global::Authored(Qualifier::from(["published"]));
+    let m = Free::local(780, Some("m"));
+    let members = [&m];
+    let projection = Term::rec_proj(
+        RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
+            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
+        }]),
+        0,
+    );
+    // A `let` around the projection, so unfolding takes the general substitution rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
+    let stored = Term::let_(
+        &Free::local(781, Some("w")),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        projection,
+    );
+    let definition = |name: Global,
+                      universe_context: UniverseContext,
+                      type_: Term,
+                      body: Term,
+                      value_sort: Option<Term>| {
+        Item::Let(Box::new(Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort,
+            type_,
+            body,
+        }))
+    };
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: p.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let module = |stated: Level| Module {
+        mounts: Vec::new(),
+        items: vec![
+            definition(
+                carrier,
+                UniverseContext {
+                    parameter_count: 1,
+                    quality_count: 0,
+                    constraints: Vec::new(),
+                },
+                Term::type_at(plus_two.clone()),
+                stored.clone(),
+                None,
+            ),
+            definition(
+                published,
+                readers_context.clone(),
+                Term::type_at(Level::constant(7)),
+                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Some(Term::type_at(stated)),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(Level::constant(2)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(published)
+                && matches!(verdict.error, Error::ValueSort { .. })),
+        "a definition published the sort the shadowed reading gave its value: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(Level::constant(7)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the sort the value has at its instance's levels was refused",
+    );
+}
+
+/// A registry entry's field type is read at the levels the occurrence's instance states.
+///
+/// `struct R@{p} : Type (p + 2) { f : rec m : Type (p + 2) = Type (p + 1) end.0 }` has its field typed once, positionally, under the declaration's own constraints (`check_signature`), and `infer`'s projection rule then reads that field type at the occurrence's instance: `R.{5}{Type 0}.f` is owed `Type 6`, so claiming it at `Type 1` is a mismatch.
+///
+/// This is site three, and by the same code path it stands for the entry's arity, its result sort, its parameter telescope, its constructor telescopes and its index targets, each of which `check_signature` types the same way. The field's value is `Type 0`, which inhabits the field type under either reading, so the reader's claim is all that moves: while the group bound its own levels the field type arrived as `Type (q + 1)` under the reader's `q ≤ 0`, and `Type 1` was what the projection answered.
+#[test]
+fn a_registry_field_type_is_read_at_the_occurrences_instance() {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let record = Global::Authored(Qualifier::from(["R"]));
+    let reads = Global::Authored(Qualifier::from(["reads"]));
+    let m = Free::local(790, Some("m"));
+    let members = [&m];
+    let projection = Term::rec_proj(
+        RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
+            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
+        }]),
+        0,
+    );
+    let declaration = StructDecl {
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(791, Some("f")), projection)],
+            (),
+        )),
+        result_sort: Term::type_at(plus_two),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: p.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let module = |claimed: Level| {
+        declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![Item::Let(Box::new(Definition {
+                    name: reads,
+                    kind: DefinitionKind::Authored,
+                    universe_context: readers_context.clone(),
+                    island: Qualifier::default(),
+                    totality: Totality::Total,
+                    proof: false,
+                    variances: Vec::new(),
+                    field_variances: Vec::new(),
+                    parameter_field: None,
+                    value_sort: None,
+                    type_: Term::type_at(claimed),
+                    body: Term::proj_struct(
+                        Term::struct_at(
+                            record,
+                            vec![Level::constant(5)],
+                            Vec::<Term>::new(),
+                            [Term::type_at(Level::zero())],
+                        ),
+                        record,
+                        0,
+                    ),
+                }))]
+                .into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
+            [],
+            [(record, declaration.clone())],
+            [],
+        )
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(Level::constant(1)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(reads)
+            && matches!(verdict.error, Error::Mismatch { .. })),
+        "a registry field type was read at the reader's levels: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(Level::constant(6)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the field type at the occurrence's instance was refused",
     );
 }

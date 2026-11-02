@@ -1950,20 +1950,11 @@ impl Term {
         Some(opened)
     }
 
-    /// The family this term is the bare former of, with the instance it stands at: a projection of an `induct`'s group applied to nothing, which is how reduction spells the family's name, the group's levels substituted in or the projection held at an instance. `None` for every other term.
+    /// The family this term is the bare former of, with the instance it stands at: a projection of an `induct`'s group applied to nothing, which is how reduction spells the family's name, the group's levels substituted in. `None` for every other term.
     ///
     /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
     pub fn bare_former(&self) -> Option<(&Global, &Universes)> {
-        let (group, index, instance) = match self.look() {
-            Subterm::Instance(Instance {
-                head: InstanceHead::RecProj(group, index),
-                universes,
-            }) => (group, *index, Some(universes)),
-            subterm => {
-                let (group, index) = subterm.as_rec_proj()?;
-                (group, index, None)
-            }
-        };
+        let (group, index) = self.as_rec_proj()?;
 
         let mut binds = 0;
         let mut peeked = group.iter().nth(index)?.body.body();
@@ -1978,7 +1969,7 @@ impl Term {
             return None;
         };
 
-        (binds > 0).then_some((name, instance.unwrap_or(universes)))
+        (binds > 0).then_some((name, universes))
     }
 
     /// Whether this is a projection of a former short of its full application: bare, or applied to fewer spines than its member's body binds, which eta would supply before either side is read.
@@ -2339,28 +2330,10 @@ fn held_twice(term: &Term) -> bool {
     Rc::strong_count(&term.inner) > 2
 }
 
-/// Whether `node`'s children are `consed`'s, pair by pair the same allocation, and each held under no extent, and a group it carries states its constraints under none: a node consing would rebuild into a copy of itself.
+/// Whether `node`'s children are `consed`'s, pair by pair the same allocation, and each held under no extent: a node consing would rebuild into a copy of itself.
+///
+/// Every part of a `Rec` node is a child — each member's type and body, and the tail — since a group carries no data of its own ([`RecGroup`]), so this comparison reaches all of it and no constraint of a group's is read here.
 fn holds_as_consed(node: &Subterm, consed: &Subterm) -> bool {
-    // A group's constraints are the node's own data and no child of it.
-    let group = match node {
-        Subterm::Rec(rec) => Some(&rec.group),
-        Subterm::Instance(Instance {
-            head: InstanceHead::RecProj(group, _),
-            ..
-        }) => Some(group),
-        _ => None,
-    };
-    let placed = group.is_some_and(|group| {
-        group
-            .universe_context()
-            .constraints
-            .iter()
-            .any(|constraint| constraint.origin.extent.is_some())
-    });
-    if placed {
-        return false;
-    }
-
     let mut children = Vec::new();
     let positioned = node.any_child_term(&mut |child| {
         children.push(Rc::as_ptr(&child.inner));

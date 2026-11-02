@@ -21,7 +21,7 @@ mod walk_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::{hold_proof, instantiate_qualities, universe_verdict, yields_a_sort},
+    crate::{hold_proof, instantiate_qualities, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, Quality, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
         Totality, UniverseContext,
@@ -143,16 +143,7 @@ pub(crate) fn check_group<R>(
     group: &RecGroup,
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
-    // A group is judged at one assignment of its declaration's sorts, where it leaves none, or inside a term, where a quality parameter is the enclosing declaration's: one that leaves a sort here would have it read as that declaration's.
-    if group.universe_context().quality_count != 0 {
-        return Err(Error::GroupLeavesSort);
-    }
-
-    // A group carries a universe context of its own, which the walk assumes while it checks the members below, so it is decided here as `recheck_module_verdicts` decides a registry entry's and a definition's before assuming either. An unsatisfiable set is a hypothesis set from which everything follows, so what is left of the discipline afterwards is whatever the instance happens to be refused by.
-    if let Some(error) = universe_verdict(group.universe_context()) {
-        return Err(error);
-    }
-
+    // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `recheck_module_verdicts` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
     // Every member's scopes bind one assumption per member, which is what `member_type` and `member_body` open them over. No typing rule reads either count, so this is the boundary that checks them, and a term a caller built otherwise is refused here rather than asserted on where a scope is opened.
     let members = group.length();
     for member in group.iter() {
@@ -253,7 +244,8 @@ pub(crate) fn check_rec_group(
         let group = match sorts.is_empty() {
             true => group,
             false => {
-                at = group.at_qualities(sorts);
+                // A member's quality parameters are the declaration's, so an assignment reaches them as it reaches every other term of the item.
+                at = group.map_members(|body| instantiate_qualities(body, sorts));
                 &at
             }
         };

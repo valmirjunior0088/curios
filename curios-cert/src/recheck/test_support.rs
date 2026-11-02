@@ -9,9 +9,9 @@ use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Instance, InstanceHead, Intrinsic, Item, Level, Many, Module, Nat,
-        Nominal, Places, Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl,
-        StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
+        Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
+        Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
         test_support::declaring,
     },
@@ -4240,51 +4240,6 @@ pub(super) fn lowered_sort_module(variances: Vec<Variance>) -> (Global, Module) 
     (name, module)
 }
 
-/// `held : Type <n> = rec m.{p | constraints} : <type> = <body> end.0.{0}` — a group inside a term, projected at one instance, carrying a universe context of its own.
-///
-/// `raised` puts the member's body a rung above its declared type, so checking it asks `p + 2 ≤ p`, which only a looping hypothesis set could grant; without it the member stands and the fixture is sound. `recheck_module_verdicts` decides the context of every registry entry and every definition before it assumes any, an unsatisfiable set being a hypothesis set from which level questions stop being answered by the hierarchy; a group inside a term is reached by no such clause, and its context is what `infer` assumes while it certifies the group.
-pub(super) fn group_context_module(
-    constraints: Vec<UniverseConstraint>,
-    raised: bool,
-) -> (Global, Module) {
-    let name = Global::Authored(Qualifier::from(["held"]));
-    let level = Level::param(UniverseParam(0));
-    let above = level.succ().expect("a parameter has a successor");
-    let member = Free::local(80, Some("m"));
-    let members = [&member];
-    let scoped = |term: Term| Scope::close(Many(1), &members, term);
-    let (declared, defined) = match raised {
-        true => (level, above),
-        false => (above, level),
-    };
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: scoped(Term::type_at(declared)),
-        body: scoped(Term::type_at(defined)),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints,
-    });
-    let projected = Term::from(Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group, 0),
-        universes: vec![Level::zero()].into(),
-    }));
-    // The member's declared type at the instance `[0]`, which is what the definition states.
-    let at_zero = match raised {
-        true => Term::type_at(Level::zero()),
-        false => Term::type_at(Level::constant(1)),
-    };
-
-    let module = module_of(
-        vec![authored(&name, at_zero, projected)],
-        BTreeMap::new(),
-        BTreeMap::new(),
-    );
-
-    (name, module)
-}
-
 /// `struct Through.{u}(A : Type u) { held : A.{u} }`, carried with `variances`, beside `coerce` between `Through.{from}(Nat)` and `Through.{to}(Nat)`; with `bare` the field is the plain `A`.
 ///
 /// An instance whose head is a local states no scheme: `synth_neutral` hands back the binder's own type and the levels say nothing, `check_instance` is reached at no local, so the field is `A` to every judgment and the two instances have the same inhabitants whatever the level. There is no family whose vector could answer for such a head, and the walk reads an instance that survived forcing as a bare or partly applied former and marks every level it carries — the refusing answer, which costs the sound conversion and admits nothing.
@@ -4333,80 +4288,6 @@ pub(super) fn through_instance_module(
     );
 
     (name, module)
-}
-
-/// `shared : {a : Type p1, b : Type p1} = {Type p0, rec m.{q0, q1} : Type q1 = Type q0 end.0.{p0, p1}}` under `held@{p0, p1 | p0 + 1 ≤ p1}`, the two components in the order `group_first` names.
-///
-/// One spelling, two meanings: the component outside the group and the group's own member are the term `Type (param 0)` checked at `Type (param 1)`, which the item's constraints grant and the group's empty context does not. A level parameter is positional, so the group's check reads the item's spelling of a level and means another, and what keeps the item's answer from standing for the group's is that `Kernel::under_universes` discards every memo on the way in and on the way out. The group states no constraint, so `check_instance` discharges nothing and the instance stands: the member's own judgment is the whole of what refuses the term.
-pub(super) fn shared_level_spelling_module(
-    with_group: bool,
-    group_first: bool,
-) -> (Global, Module) {
-    let name = Global::Authored(Qualifier::from(["shared"]));
-    let (below, above) = (
-        Level::param(UniverseParam(0)),
-        Level::param(UniverseParam(1)),
-    );
-    let member = Free::local(92, Some("m"));
-    let members = [&member];
-    let scoped = |term: Term| Scope::close(Many(1), &members, term);
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: scoped(Term::type_at(above.clone())),
-        body: scoped(Term::type_at(below.clone())),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
-    let projected = Term::from(Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group, 0),
-        universes: vec![below.clone(), above.clone()].into(),
-    }));
-    let plain = Term::type_at(below.clone());
-    let judged = match with_group {
-        true => projected,
-        false => plain.clone(),
-    };
-    let fields = match group_first {
-        true => [judged, plain],
-        false => [plain, judged],
-    };
-    let type_ = Term::tuple_type([
-        (Free::local(93, Some("a")), Term::type_at(above.clone())),
-        (Free::local(94, Some("b")), Term::type_at(above.clone())),
-    ]);
-
-    let item = Item::Let(Box::new(Definition {
-        universe_context: UniverseContext {
-            parameter_count: 2,
-            quality_count: 0,
-            constraints: vec![cumulativity(
-                below.succ().expect("a parameter has a successor"),
-                above,
-            )],
-        },
-        type_,
-        body: Term::tuple(fields),
-        ..match authored(&name, Term::type_ground(), Term::type_ground()) {
-            Item::Let(definition) => *definition,
-            _ => unreachable!("`authored` builds a `let`"),
-        }
-    }));
-
-    (
-        name,
-        module_of(vec![item], BTreeMap::new(), BTreeMap::new()),
-    )
-}
-
-/// `lower ≤ upper` as a declaration states one.
-pub(super) fn cumulativity(lower: Level, upper: Level) -> UniverseConstraint {
-    UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    }
 }
 
 pub(super) trait Walked {

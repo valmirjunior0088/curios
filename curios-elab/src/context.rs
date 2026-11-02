@@ -356,7 +356,7 @@ impl<'s> Context<'s> {
                     Ok((
                         definition.name,
                         zonk(self, &rec.group.member_type(index))?,
-                        rec.group.universe_context().clone(),
+                        rec.universe_context.clone(),
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
@@ -406,10 +406,7 @@ impl<'s> Context<'s> {
                     let name = Free::from(&definition.name);
                     let type_ = rec.group.member_type(index);
                     self.reassume(&name, &type_);
-                    self.set_assumption_universe_context(
-                        &name,
-                        rec.group.universe_context().clone(),
-                    );
+                    self.set_assumption_universe_context(&name, rec.universe_context.clone());
                     self.define_published(
                         &name,
                         &Term::rec_proj(rec.group.clone(), index),
@@ -419,7 +416,7 @@ impl<'s> Context<'s> {
                     if self.is_witness_declaration(&definition.name) {
                         self.update_witness_scheme(
                             &definition.name,
-                            rec.group.universe_context().clone(),
+                            rec.universe_context.clone(),
                             type_,
                         );
                     }

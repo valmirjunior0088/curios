@@ -280,7 +280,7 @@ impl<'f> Unifier<'f> {
         }
     }
 
-    /// Depth is bought with stack, as every walk over data-shaped depth buys it: this walk, [`Walk::unify_node`] and [`Walk::unify_all`] descend a pair of index terms one level per constructor or tuple layer, forcing both sides at each, and nothing between the levels is a loop or a charge. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: this walk, `unify_node` and `unify_all` descend a pair of index terms one level per constructor or tuple layer, forcing both sides at each, and nothing between the levels is a loop or a charge. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn unify_index<J: Judge>(
         &mut self,
         judge: &mut J,

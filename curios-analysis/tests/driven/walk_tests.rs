@@ -118,7 +118,6 @@ const FORMS: &[&str] = &[
     "a leaf",
     "a metavariable",
     "a universe instance of a variable",
-    "a universe instance of a projected group",
     "a transient",
     "an intrinsic",
     "a foreign call",
@@ -151,7 +150,6 @@ fn forms(term: &Term) -> Vec<&'static str> {
         Subterm::Metavar(_) => vec!["a metavariable"],
         Subterm::Instance(Instance { head, .. }) => vec![match head {
             InstanceHead::Var(_) => "a universe instance of a variable",
-            InstanceHead::RecProj(..) => "a universe instance of a projected group",
         }],
         Subterm::Transient(transient) => vec![match transient {
             Transient::Infix(_)
@@ -203,7 +201,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
 ///
 /// **What that does and does not hold.** A term-bearing field added to a form whose specimen is a struct literal is a compile error at that literal, and the marker that repairs it is planted with no further edit. `Func`, `FuncType`, `TupleType`, `Let` and `Rec` are built through `Term`'s constructors, their fields being private, so a field added behind one of those is held only by whoever extends the constructor.
 ///
-/// **The whitelist is three mechanisms.** A `Metavar`'s spine, which the elaborator's strict zonk refuses before this pass runs. A group member's declared type, under both spellings a group is reached by — a nested `Rec` and a universe instance's projection head. And the one the fold cannot show, because it is not a child position but a peel: `Member::of` takes the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, _, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
+/// **The whitelist is three mechanisms.** A `Metavar`'s spine, which the elaborator's strict zonk refuses before this pass runs. A group member's declared type, in the one spelling a group is reached by, a nested `Rec`. And the one the fold cannot show, because it is not a child position but a peel: `Member::of` takes the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, _, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
 ///
 /// All three are type positions, and the argument that they are safe is the audit's: a call in one is consumed by β or read only by typing, never reduced, and an edge the engine misses is dangerous only where it can complete a reduction cycle. That argument is not what this test checks.
 #[test]
@@ -211,12 +209,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     let name = || Global::Authored(Qualifier::from(["N"]));
     let binder = |index: u32| Free::local(500 + u64::from(index), None);
     let call = || Term::free_var(&planted());
-    let group_of = |rec: &Term| {
-        let Subterm::Rec(Rec { group, .. }) = &**rec else {
-            panic!("the fixture changed shape");
-        };
-        group.clone()
-    };
     let matching = |markers: &mut Markers, cases: Cases| -> Term {
         Subterm::Match(Match {
             head: markers.visited(),
@@ -241,21 +233,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 id: MetavarId::from(0usize),
                 spine: MetavarSpine::from(vec![markers.unvisited("a metavariable's spine")]),
                 origin: MetavarOrigin::Hole,
-            })
-            .into()
-        }),
-        Specimen::of(&mut markers, |markers| {
-            let rec = Term::rec(
-                vec![(
-                    binder(90),
-                    markers.unvisited("a projected group's member type"),
-                    markers.visited(),
-                )],
-                Term::free_var(&binder(90)),
-            );
-            Subterm::Instance(Instance {
-                head: InstanceHead::RecProj(group_of(&rec), 0),
-                universes: Universes::default(),
             })
             .into()
         }),

@@ -4,8 +4,8 @@ use {
     super::test_support::{context, nat, nominal},
     crate::*,
     curios_core::{
-        Free, Intrinsic, Level, Many, MetavarId, Quality, QualityMetaId, QualityParam, RecGroup,
-        RecMemberScopes, Scope, Term, UniverseContext, UniverseMetaId, UniverseParam, Universes,
+        Free, Intrinsic, Level, MetavarId, Quality, QualityMetaId, QualityParam, Term,
+        UniverseContext, UniverseMetaId, UniverseParam, Universes,
     },
 };
 
@@ -334,47 +334,6 @@ fn a_ground_sort_at_another_position_is_reduced_afresh() {
             applied(&first, Level::zero(), Level::meta(UniverseMetaId(8)))
         ),
         Ok(Term::type_ground())
-    );
-}
-
-/// A recursive group that binds its own universe parameter and the same group binding none, whose `u` is the enclosing declaration's, erase alike and list the same levels; a walk over levels alone served the first's reduct for the second. Read over the pair they are apart in their universe context, and the second is reduced as itself.
-#[test]
-fn a_group_binding_its_own_levels_answers_no_group_binding_none() {
-    let mut context = context();
-    let first = first_of(&mut context);
-    let member = |term: Term| Scope::constant(Many(1), term);
-    let group = |parameter_count| {
-        Term::rec_proj(
-            RecGroup::new(vec![RecMemberScopes {
-                type_: member(Term::type_at(Level::param(UniverseParam(0)))),
-                body: member(Term::type_at(Level::param(UniverseParam(0)))),
-            }])
-            .with_universe_context(UniverseContext {
-                parameter_count,
-                quality_count: 0,
-                constraints: Vec::new(),
-            }),
-            0,
-        )
-    };
-    // Under a pair, so that the reduct holds the group as it stands.
-    let applied = |parameter_count| {
-        Term::apply(
-            first.clone(),
-            [
-                Term::tuple([group(parameter_count), nat(0)]),
-                Term::type_ground(),
-            ],
-        )
-    };
-
-    assert_eq!(
-        reduce(&mut context, applied(1)),
-        Ok(Term::tuple([group(1), nat(0)]))
-    );
-    assert_eq!(
-        reduce(&mut context, applied(0)),
-        Ok(Term::tuple([group(0), nat(0)]))
     );
 }
 

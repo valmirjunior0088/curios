@@ -4,9 +4,9 @@ use {
     super::test_support::*,
     crate::{Error, check, check_definition, infer},
     curios_core::{
-        Atom, Global, InductDecl, InductParam, Instance, InstanceHead, Intrinsic, Level, Many,
-        RecGroup, RecMemberScopes, Scope, Subterm, Telescope, Term, UniverseConstraint,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
+        Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseParam,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -211,62 +211,6 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
         infer(&mut kernel, &at(vec![Level::zero(), Level::zero()])),
         Err(Error::UniverseInstance { .. }),
     ));
-}
-
-/// A group's instance certifies the group under the group's own constraints, whatever the item assumes: `small : Type w = Type u` under `u + 1 ≤ w` stands at `{0, 1}` inside an item that assumes nothing.
-#[test]
-fn a_groups_instance_certifies_the_group_under_the_groups_constraints() {
-    let u = Level::param(UniverseParam(0));
-    let w = Level::param(UniverseParam(1));
-    let small = binder(1, "small");
-    let scoped = |term: Term| Scope::close(Many(1), &[&small], term);
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: scoped(Term::type_at(w.clone())),
-        body: scoped(Term::type_at(u.clone())),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: u.succ().expect("level has a successor"),
-            upper: w,
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-        }],
-    });
-    let instance = Term::from(Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group, 0),
-        universes: vec![Level::zero(), one()].into(),
-    }));
-
-    assert_eq!(infer(&mut kernel(), &instance), Ok(Term::type_at(one())));
-}
-
-/// A group's instance naming a local of the item is refused: the local is typed at the item's levels, and the group is certified under its own.
-#[test]
-fn a_groups_instance_naming_a_local_of_the_item_is_refused() {
-    let (carried, member) = (binder(0, "X"), binder(1, "member"));
-    let scoped = |term: Term| Scope::close(Many(1), &[&member], term);
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: scoped(Term::type_ground()),
-        body: scoped(Term::free_var(&carried)),
-    }])
-    .with_universe_context(UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    });
-    let instance = Term::from(Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group, 0),
-        universes: vec![Level::zero()].into(),
-    }));
-
-    assert_eq!(
-        infer(
-            &mut kernel(),
-            &Term::func([(carried, Term::type_ground())], instance)
-        ),
-        Err(Error::Unbound(carried)),
-    );
 }
 
 /// The two-line route to `False`: a recursive proof assumed at its own type. Erasure deletes proofs, so a proof-typed `rec` member must descend — and `f = f` has a self-call that decreases on nothing.

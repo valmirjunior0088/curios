@@ -422,13 +422,6 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
         Subterm::Instance(Instance { head, universes }) => match head {
-            InstanceHead::RecProj(group, index) => {
-                kernel.check_instance(group.universes(), universes)?;
-                let group = group.instantiate_universes(universes)?;
-
-                Ok(Some(group.member_type(*index)))
-            }
-
             InstanceHead::Var(var) => {
                 let name = var.unwrap();
 

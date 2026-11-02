@@ -437,7 +437,7 @@ fn one_definition_by_its_spines(
 ///
 /// **It is the congruence of a binder.** Two groups whose members convert under one set of binders are one group, as two lambdas whose bodies convert under one binder are one function. A member is an opaque local while the groups are compared, so none is unfolded and nothing recurs: the rule is sound alone, and a pair it does not hold is left to the rules after it, which unfold. Two calls of the pair reach it through their heads, which [`structural`] compares before their spines.
 ///
-/// Groups are matched by position, which is what makes one index of two a pair, and only where neither binds a universe of its own: a level under a group's binder is no level of the declaration the comparison is judged in.
+/// Groups are matched by position, which is what makes one index of two a pair. A group binds no universe, so both sides' members spell the levels of the declaration this comparison is judged in and the congruence reads them as it reads any other pair of terms — which is why no width is consulted here, where one once refused the pair outright.
 fn two_groups(
     kernel: &mut Kernel,
     pairs: &mut Pairs,
@@ -449,11 +449,7 @@ fn two_groups(
     else {
         return Ok(false);
     };
-    if left_index != right_index
-        || left.length() != right.length()
-        || left.universe_context().width() != 0
-        || right.universe_context().width() != 0
-    {
+    if left_index != right_index || left.length() != right.length() {
         return Ok(false);
     }
     let (left, right) = (left.clone(), right.clone());

@@ -66,7 +66,7 @@ impl Lowering<'_> {
         rec: &curios_core::RecItem,
     ) -> Result<(), Error> {
         let universes = curios_core::Universes {
-            levels: (0..rec.group.universe_context().parameter_count)
+            levels: (0..rec.universe_context.parameter_count)
                 .map(|param| curios_core::Level::param(curios_core::UniverseParam(param)))
                 .collect(),
             qualities: self.own.1.qualities(),

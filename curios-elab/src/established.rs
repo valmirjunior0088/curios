@@ -10,6 +10,7 @@
 
 use {
     super::{Defined, Error, InScope, Question, part_digest},
+    crate::DefinedGroup,
     curios_core::{
         ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
         StructDecl, WitnessKey,
@@ -126,7 +127,7 @@ impl<'a> Standing<'a> {
                 Some(Defined {
                     type_,
                     body: (!definition.proof).then_some(body),
-                    universe_context: rec.group.universe_context(),
+                    universe_context: &rec.universe_context,
                     totality: definition.totality,
                     // A group's member files no vector where it is published, so it answers none here.
                     variances: &[],
@@ -173,8 +174,8 @@ impl<'a> Standing<'a> {
             .copied()
     }
 
-    /// Each group this unit answers for, with its members' names in member order.
-    fn groups(&self) -> impl Iterator<Item = (RecGroup, Vec<Global>)> + '_ {
+    /// Each group this unit answers for, with its members' names in member order and the context its declaration states.
+    fn groups(&self) -> impl Iterator<Item = DefinedGroup> + '_ {
         let items = &self.module.items;
 
         items
@@ -187,7 +188,11 @@ impl<'a> Standing<'a> {
                     names
                         .iter()
                         .all(|name| self.answers(name))
-                        .then(|| (rec.group.clone(), names))
+                        .then(|| DefinedGroup {
+                            group: rec.group.clone(),
+                            names,
+                            universe_context: rec.universe_context.clone(),
+                        })
                 }
                 Item::Let(_) => None,
             })
@@ -430,7 +435,7 @@ impl InScope for Established<'_> {
             .collect()
     }
 
-    fn groups(&self) -> Vec<(RecGroup, Vec<Global>)> {
+    fn groups(&self) -> Vec<DefinedGroup> {
         self.units.iter().flat_map(Standing::groups).collect()
     }
 

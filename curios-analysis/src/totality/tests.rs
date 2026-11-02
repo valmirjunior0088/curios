@@ -5,8 +5,7 @@
 use {
     super::*,
     curios_core::{
-        Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Polarity, Rec, StructDecl,
-        Subterm, Term, Universes,
+        Atom, Free, Global, InductDecl, Intrinsic, Polarity, Rec, StructDecl, Subterm, Term,
     },
     curios_num::Binary,
 };
@@ -604,21 +603,4 @@ fn a_walked_value_is_forgotten_past_its_tail() {
     ]);
 
     assert_eq!(calls_in(&group, n, &body), 3);
-}
-
-/// A member called at a universe instance is a call like any other: the instance's head is the member, with no `Rec` node standing in the term, and a walk that passed it over would miss the call.
-///
-/// Mutation-checked: with a term read as holding a group only where a `Rec` node stands, the call is passed over.
-#[test]
-fn a_call_at_a_universe_instance_is_found() {
-    let n = Free::local(2, Some("n"));
-    let (group, _) = member(Term::free_var(&n));
-    let instance: Term = Subterm::Instance(Instance {
-        head: InstanceHead::RecProj(group.clone(), 0),
-        universes: Universes::default(),
-    })
-    .into();
-    let body = Term::tuple([Term::apply(instance, [Term::free_var(&n)])]);
-
-    assert_eq!(calls_in(&group, n, &body), 1);
 }

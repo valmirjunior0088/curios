@@ -44,10 +44,10 @@ use {
     },
     crate::{foreign_signature, hold_proof, spine},
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
-        InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
-        Quality, Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality,
-        Tuple, TupleType, Variant,
+        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance, Intrinsic,
+        Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer,
+        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
+        Variant,
     },
     curios_num::{Binary, Natural},
     curios_utilities::recurse,
@@ -100,11 +100,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
     // A recursive group is read by value: its verdict and its members' are filed under the group, and the obligations look them up from recorded positions, which are by value.
     let by_value;
     let term = match &**term {
-        Subterm::Rec(_)
-        | Subterm::Instance(Instance {
-            head: InstanceHead::RecProj(..),
-            ..
-        }) => {
+        Subterm::Rec(_) => {
             by_value = kernel.by_value(term);
             &by_value
         }
@@ -451,27 +447,6 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         Subterm::Instance(Instance { head, .. }) => {
             if !spine_head && let Some(free) = head.head_name() {
                 kernel.record_call(free, &[])?;
-            }
-
-            // `synth_neutral` reads a projection's type off the group it carries, which is a lookup and must stay one — so the group is certified *here*, before the read, at the generic spelling the instance was taken from. Skipping this would leave the instance spelling as a way to type a member of a group nothing checked.
-            //
-            // The generic spelling's levels are the group's, so it is certified under the group's constraints, which `synth_neutral` holds the instance to, and not under the item's, which read the same parameters as the item's own. A local of the item is typed at the item's levels, so a group naming one is refused rather than read under the group's.
-            if let InstanceHead::RecProj(group, index) = head {
-                if let Some(local) = term.free_vars().locals().next() {
-                    return Err(Error::Unbound(*local));
-                }
-                // The member an instance selects is stated on the node, where `Term::rec_proj` relates its own index to the group and this one is related to nothing, so the count is checked here, at the boundary that consults the group.
-                if *index >= group.length() {
-                    return Err(Error::Arity {
-                        counted: Counted::GroupBinders,
-                        expected: group.length(),
-                        actual: index.saturating_add(1),
-                    });
-                }
-                let group = group.clone();
-                kernel.under_universes(group.universe_context(), |kernel| {
-                    check_group(kernel, &group, |_, _| Ok(()))
-                })?;
             }
 
             match synth_neutral(kernel, term)? {

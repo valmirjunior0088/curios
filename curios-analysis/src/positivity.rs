@@ -534,7 +534,7 @@ struct Walk<'a, E: Env> {
 
 /// The `rec` member `term` is a folded call to, if it is one: the node [`Term::rec_proj`] builds, standing bare or under any number of applications.
 ///
-/// These are exactly the shapes [`curios_core::RecGroup::member_body`] substitutes for a recursive occurrence, so they are the shapes a cycle in the walk is built from. The relation is [`Term::spine_rec_proj`]'s and is asked of it rather than spelled again here: a member whose result is a function, applied past its own parameters, stands under two applications and not one, which a reader of an application's immediate head would take for a neutral no demand ever unfolds. A head that has yet to unfold to one — a definition's name, a group with a computed tail — carries no key and forces unguarded.
+/// These are exactly the shapes [`curios_core::RecGroup::member_body`] substitutes for a recursive occurrence, so they are the shapes a cycle in the walk is built from. The relation is [`curios_core::Subterm::spine_rec_proj`]'s and is asked of it rather than spelled again here: a member whose result is a function, applied past its own parameters, stands under two applications and not one, which a reader of an application's immediate head would take for a neutral no demand ever unfolds. A head that has yet to unfold to one — a definition's name, a group with a computed tail — carries no key and forces unguarded.
 pub(crate) fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
     term.spine_rec_proj()
         .map(|(group, index)| (group.clone(), index))
@@ -758,7 +758,6 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Proj(_)
             | Subterm::Let(_)
             | Subterm::Rec(_)
-            | Subterm::Instance(_)
             | Subterm::Metavar(_)
             | Subterm::Transient(_) => self.opaque(&term),
         }

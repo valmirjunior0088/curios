@@ -1304,14 +1304,6 @@ where
         self.term_depth -= amount;
     }
 
-    pub(crate) fn enter_universe_scope(&mut self, amount: usize) {
-        self.universe_depth += amount;
-    }
-
-    pub(crate) fn leave_universe_scope(&mut self, amount: usize) {
-        self.universe_depth -= amount;
-    }
-
     /// Invoke the underlying visit callback on a variable at the current depth.
     pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
         (self.visit)(self.term_depth, var)
@@ -1369,11 +1361,6 @@ where
             }
             _ => *quality,
         }
-    }
-
-    /// Whether this walk states every quality parameter it meets, and so leaves a recursive group it passes none to bind ([`Qualities::Stated`]).
-    pub(crate) fn states_qualities(&self) -> bool {
-        matches!(self.mode, Mode::RewritingLevels(_, Qualities::Stated(_)))
     }
 
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {

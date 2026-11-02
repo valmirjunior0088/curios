@@ -36,7 +36,7 @@ use {
         InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe,
         Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, Universes, Var, Variant, Visit, accelerable, eta_head,
+        UniverseConstraintOrigin, Var, Variant, Visit, accelerable, eta_head,
         instantiate_universes_scoped, probe_spellings, project_erased_universes, project_literal,
         reduce_closed, reduce_intrinsic, weak_head_value,
     },
@@ -70,14 +70,6 @@ impl ClosedHost for Context<'_> {
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
         self.closed_memo_mut()
-    }
-
-    fn opened_instance(
-        &mut self,
-        group: &RecGroup,
-        universes: &Universes,
-    ) -> Result<RecGroup, ReduceError> {
-        Context::opened_instance(self, group, universes)
     }
 }
 
@@ -823,19 +815,12 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
             Some(reduct) => reduct,
             None => return Ok(Reduce::Break(Term::instance(head, universes))),
         },
-        InstanceHead::RecProj(group, index) => {
-            return Ok(Reduce::Continue(Term::rec_proj(
-                context.opened_instance(group, &universes)?,
-                *index,
-            )));
-        }
     };
 
-    // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
-    let reduct = match reduct.as_rec_proj() {
-        Some((group, index)) => Term::rec_proj(context.opened_instance(group, &universes)?, index),
-        None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
-    };
+    // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
+    let reduct =
+        instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?;
+
     Ok(Reduce::Continue(reduct))
 }
 
@@ -1708,14 +1693,7 @@ fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
             })
     ) && matches!(
         &**applied_head(reduced),
-        Subterm::Rec(_)
-            | Subterm::Match(_)
-            | Subterm::Func(_)
-            | Subterm::Let(_)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::RecProj(..),
-                ..
-            })
+        Subterm::Rec(_) | Subterm::Match(_) | Subterm::Func(_) | Subterm::Let(_)
     )
 }
 

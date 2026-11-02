@@ -4,10 +4,8 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, MetavarSpine, Quality,
-        Scope, Subterm, Telescope, Term, Three, Two, UniverseContext, UniverseError,
-        UniverseScheme, Universes, Var, Visit, instantiate_qualities, instantiate_universes_scoped,
-        project_erased_universes,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, MetavarSpine, Scope,
+        Subterm, Telescope, Term, Three, Two, Universes, Var, Visit, project_erased_universes,
     },
     curios_num::Natural,
     curios_utilities::{InfixOp, Mint, Plicity, Sign},
@@ -651,16 +649,18 @@ pub struct RecMemberScopes {
 }
 
 /// The shared knot of a mutually-recursive group. Every member type and body is scoped over the full group. `Rc` sharing is an implementation detail; equality and hashing remain structural through the scoped items.
+///
+/// **A group binds no universe.** Its members' level and quality parameters are the enclosing declaration's, positionally, so an instance of that declaration substitutes them with every other level it binds and every reader of a member reads one thing. A group that bound its own would be a second reading of the same index — the one the kernel admitted Hurkens' paradox through, `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` — since a scope walk shadows what a positional reader substitutes. `check_group` therefore checks a member's terms as written, under the constraints the declaration holding the group assumed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct RecGroup {
-    scheme: UniverseScheme<Rc<Vec<RecMemberScopes>>>,
+    members: Rc<Vec<RecMemberScopes>>,
 }
 
 impl RecGroup {
     pub fn new(items: Vec<RecMemberScopes>) -> Self {
         Self {
-            scheme: UniverseScheme::monomorphic(Rc::new(items)),
+            members: Rc::new(items),
         }
     }
 
@@ -669,44 +669,30 @@ impl RecGroup {
     /// The bodies stay closed throughout. Terms under a scope carry loose de Bruijn indices, and two structurally identical such terms — indices included — denote the same thing at the same depth, so canonicalizing them together is sound without opening.
     pub fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
         Self {
-            scheme: UniverseScheme {
-                context: self.scheme.context.clone(),
-                value: Rc::new(
-                    self.iter()
-                        .map(|member| RecMemberScopes {
-                            type_: member.type_.map_body(&mut map),
-                            body: member.body.map_body(&mut map),
-                        })
-                        .collect(),
-                ),
-            },
+            members: Rc::new(
+                self.iter()
+                    .map(|member| RecMemberScopes {
+                        type_: member.type_.map_body(&mut map),
+                        body: member.body.map_body(&mut map),
+                    })
+                    .collect(),
+            ),
         }
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
-        self.scheme.value.iter()
+        self.members.iter()
     }
 
     fn item(&self, index: usize) -> &RecMemberScopes {
-        self.scheme
-            .value
+        self.members
             .get(index)
             .expect("recursive member index in bounds")
     }
 
-    pub fn universe_context(&self) -> &UniverseContext {
-        &self.scheme.context
-    }
-
-    /// This group with universe data projected out of every member and its context cleared — the shape under which a generalized group and any instance of it are one group, which is what lets a diagnostic recognize an unfolded `rec` as the definition it came from.
+    /// This group with universe data projected out of every member — the shape under which a group and the same group at an instance's levels are one group, which is what lets a diagnostic recognize an unfolded `rec` as the definition it came from.
     pub fn projected(&self) -> Self {
         self.map_members(project_erased_universes)
-            .with_universe_context(UniverseContext::empty())
-    }
-
-    pub fn with_universe_context(mut self, universe_context: UniverseContext) -> Self {
-        self.scheme.context = universe_context;
-        self
     }
 
     pub fn length(&self) -> usize {
@@ -732,101 +718,19 @@ impl RecGroup {
         self.item(index).body.open(&refs)
     }
 
-    /// The universe scheme this group was generalized under — what an instance must satisfy.
-    pub fn universes(&self) -> &UniverseContext {
-        &self.scheme.context
-    }
-
-    pub fn instantiate_universes(&self, arguments: &Universes) -> Result<Self, UniverseError> {
-        if arguments.levels.len() != self.scheme.context.parameter_count {
-            return Err(UniverseError::InstanceArity {
-                expected: self.scheme.context.parameter_count,
-                got: arguments.levels.len(),
-            });
-        }
-        if arguments.qualities.len() != self.scheme.context.quality_count {
-            return Err(UniverseError::QualityArity {
-                expected: self.scheme.context.quality_count,
-                got: arguments.qualities.len(),
-            });
-        }
-        Ok(Self {
-            scheme: UniverseScheme {
-                value: self
-                    .iter()
-                    .map(|member| {
-                        Ok(RecMemberScopes {
-                            type_: member.type_.try_map_body(|body| {
-                                instantiate_universes_scoped(body, arguments)
-                            })?,
-                            body: member.body.try_map_body(|body| {
-                                instantiate_universes_scoped(body, arguments)
-                            })?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, UniverseError>>()?
-                    .into(),
-                context: UniverseContext::empty(),
-            },
-        })
-    }
-
-    /// This group at one assignment of the sorts its context leaves to a caller: every member read at `qualities`, its level parameters its own still, and no sort left.
-    pub fn at_qualities(&self, qualities: &[Quality]) -> Self {
-        let mut context = self.scheme.context.clone();
-        context.quality_count = 0;
-
-        Self {
-            scheme: UniverseScheme {
-                value: self
-                    .iter()
-                    .map(|member| RecMemberScopes {
-                        type_: member
-                            .type_
-                            .map_body(|body| instantiate_qualities(body, qualities)),
-                        body: member
-                            .body
-                            .map_body(|body| instantiate_qualities(body, qualities)),
-                    })
-                    .collect::<Vec<_>>()
-                    .into(),
-                context,
-            },
-        }
-    }
-
     pub(super) fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        let universe_arity = self.scheme.context.parameter_count;
-        visit.enter_universe_scope(universe_arity);
-        let mut result = Self::new(
+        // No universe scope is entered: a member's level and quality parameters are the enclosing declaration's, so a walk that substitutes the declaration's parameters substitutes a member's with them. Entering one here would shadow exactly what every positional reader of a member reads.
+        Self::new(
             self.iter()
                 .map(|member| RecMemberScopes {
                     type_: visit.visit_scope(&member.type_),
                     body: visit.visit_scope(&member.body),
                 })
                 .collect(),
-        );
-        result.scheme.context = if visit.erases_universes() {
-            UniverseContext::empty()
-        } else {
-            let mut context = self
-                .scheme
-                .context
-                .map_levels(|level| visit.visit_level(level));
-            // A walk that states every quality parameter has stated this group's with the rest.
-            if visit.states_qualities() {
-                context.quality_count = 0;
-            }
-            if visit.conses() {
-                context = context.unplaced();
-            }
-            context
-        };
-        visit.leave_universe_scope(universe_arity);
-        result
+        )
     }
 
     pub(super) fn reach(&self) -> usize {
@@ -946,38 +850,35 @@ pub struct Instance {
     pub universes: Universes,
 }
 
-/// The two shapes that denote a universe-polymorphic binding: a not-yet-reduced reference to one, or a projection out of a recursive group. Typed rather than held as a general term so an ill-formed head is unrepresentable; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
+/// The shape that denotes a universe-polymorphic binding: a not-yet-reduced reference to one. Typed rather than held as a general term so an ill-formed head is unrepresentable; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
+///
+/// A projection out of a recursive group is no such shape. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; a head that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum InstanceHead {
     Var(Var),
-    RecProj(RecGroup, usize),
 }
 
 impl InstanceHead {
-    /// This head spelled as the term it abbreviates: the variable itself, or the ordinary `Rec` node whose tail selects the member (see [`Term::rec_proj`]). The spelling is without a position; an occurrence's extent lives on the wrapping instance term.
+    /// This head spelled as the term it abbreviates. The spelling is without a position; an occurrence's extent lives on the wrapping instance term.
     pub fn to_term(&self) -> Term {
         match self {
             InstanceHead::Var(var) => Term::var(var.clone()),
-            InstanceHead::RecProj(group, index) => Term::rec_proj(group.clone(), *index),
         }
     }
 
-    /// The free name a variable head references, mirroring `Term::head_name`: a projection head names no free variable, exactly as the `Rec` it abbreviates does.
+    /// The free name a variable head references, mirroring `Term::head_name`.
     pub fn head_name(&self) -> Option<&Free> {
         match self {
             InstanceHead::Var(var) => var.as_free(),
-            InstanceHead::RecProj(..) => None,
         }
     }
 
-    /// Classify a term as a head, when it has one of the two head shapes. This is the seam a substitution crosses: replacing a bound variable head with a group projection — the one replacement rec unfolding performs — re-enters the typed representation here.
+    /// Classify a term as a head, where it has the head shape.
     pub fn from_subterm(subterm: &Subterm) -> Option<Self> {
         match subterm {
             Subterm::Var(var) => Some(InstanceHead::Var(var.clone())),
-            _ => subterm
-                .as_rec_proj()
-                .map(|(group, index)| InstanceHead::RecProj(group.clone(), index)),
+            _ => None,
         }
     }
 }

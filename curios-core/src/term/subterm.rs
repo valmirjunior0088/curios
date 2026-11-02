@@ -8,7 +8,7 @@ use {
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat,
         Proj, Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple,
-        TupleType, UniverseContext, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
+        TupleType, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
@@ -101,25 +101,15 @@ impl Subterm {
         pred: &mut impl FnMut(UniverseMetaId) -> bool,
     ) -> bool {
         let mut level_matches = |level: &Level| level.metas().any(&mut *pred);
-        let context_matches =
-            |context: &UniverseContext, level_matches: &mut dyn FnMut(&Level) -> bool| {
-                context.constraints.iter().any(|constraint| {
-                    level_matches(&constraint.lower) || level_matches(&constraint.upper)
-                })
-            };
         match self {
             Subterm::Sort(_, level) => level_matches(level),
             Subterm::Intrinsic(intrinsic) => intrinsic
                 .result_universes()
                 .is_some_and(|universes| universes.levels.iter().any(level_matches)),
-            // A projection head's group context is this node's own data, the head being typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
             Subterm::Instance(Instance { head, universes }) => {
                 universes.levels.iter().any(&mut level_matches)
                     || match head {
                         InstanceHead::Var(_) => false,
-                        InstanceHead::RecProj(group, _) => {
-                            context_matches(group.universe_context(), &mut level_matches)
-                        }
                     }
             }
             Subterm::InductType(InductType { universes, .. })
@@ -128,9 +118,7 @@ impl Subterm {
             | Subterm::Struct(Struct { universes, .. }) => {
                 universes.levels.iter().any(level_matches)
             }
-            Subterm::Rec(Rec { group, .. }) => {
-                context_matches(group.universe_context(), &mut level_matches)
-            }
+            // A group binds no universe, so a `Rec` node holds no context of its own: the levels its members spell are the enclosing declaration's, and the walk meets them in the member terms its scopes hold.
             _ => false,
         }
     }
@@ -180,12 +168,6 @@ impl Subterm {
             Subterm::Sort(..) | Subterm::Var(_) => {}
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => {}
-                InstanceHead::RecProj(group, _) => {
-                    for member in group.iter() {
-                        member.type_.body().collect_construction_names(names);
-                        member.body.body().collect_construction_names(names);
-                    }
-                }
             },
             Subterm::Transient(transient) => {
                 transient
@@ -359,9 +341,6 @@ impl Subterm {
             // A variable head is this node's own data, like `Var`'s identity; a projection head's children are its group's scope bodies, exactly `Rec`'s minus the tail (a projection's tail is a bare member variable, which contributes to no child predicate).
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => false,
-                InstanceHead::RecProj(group, _) => group
-                    .iter()
-                    .any(|member| pred(member.type_.body()) || pred(member.body.body())),
             },
             Subterm::Transient(transient) => {
                 let mut children = transient.subterms();
@@ -467,11 +446,7 @@ impl Subterm {
     /// Whether a recursive group occurs in this subterm, as a `Rec` node or as the member a universe instance is taken of — the uncached spelling of [`Term::has_group`], which supplies the per-node memoization.
     pub(crate) fn has_group(&self) -> bool {
         match self {
-            Subterm::Rec(_)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::RecProj(..),
-                ..
-            }) => true,
+            Subterm::Rec(_) => true,
             Subterm::Metavar(Metavar { spine, .. }) => spine.has_group(),
             _ => self.any_child_term(&mut |t| t.has_group()),
         }
@@ -585,10 +560,6 @@ impl Subterm {
             | Subterm::StructType(StructType { universes, .. })
             | Subterm::Struct(Struct { universes, .. }) => {
                 !universes.is_empty() || self.any_child_term(&mut |term| term.has_universe_data())
-            }
-            Subterm::Rec(Rec { group, .. }) => {
-                group.universe_context() != &UniverseContext::empty()
-                    || self.any_child_term(&mut |term| term.has_universe_data())
             }
             Subterm::Metavar(Metavar { spine, .. }) => spine.has_universe_data(),
             _ => self.any_child_term(&mut |term| term.has_universe_data()),
@@ -819,9 +790,6 @@ impl Bound for Subterm {
                 InstanceHead::Var(var) => {
                     visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone()))
                 }
-                InstanceHead::RecProj(group, index) => {
-                    (*Term::rec_proj(group.traverse(visit), *index)).clone()
-                }
             },
             Subterm::Instance(Instance { head, universes }) => {
                 let head = match head {
@@ -833,9 +801,6 @@ impl Bound for Subterm {
                             None => return replacement,
                         },
                     },
-                    InstanceHead::RecProj(group, index) => {
-                        InstanceHead::RecProj(group.traverse(visit), *index)
-                    }
                 };
                 Subterm::Instance(Instance {
                     head,
@@ -888,7 +853,6 @@ impl Bound for Subterm {
                     Some(index) => index + 1,
                     None => 0,
                 },
-                InstanceHead::RecProj(group, _) => group.reach(),
             },
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,

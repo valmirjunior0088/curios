@@ -356,14 +356,9 @@ impl<'a> Zonk<'a> {
             }
             Subterm::Var(var) => Subterm::Var(var.clone()),
             Subterm::Instance(instance) => Subterm::Instance(Instance {
-                // A variable head holds nothing to zonk; a projection head's group is zonked through the term it abbreviates and re-classified — a zonked projection is still a projection.
+                // A variable head holds nothing to zonk.
                 head: match &instance.head {
                     InstanceHead::Var(var) => InstanceHead::Var(var.clone()),
-                    head @ InstanceHead::RecProj(..) => {
-                        let zonked = self.zonk_term(&head.to_term())?;
-                        InstanceHead::from_subterm(&zonked)
-                            .expect("zonking a projection head yields a projection")
-                    }
                 },
                 universes: self.zonk_universes(&instance.universes)?,
             }),
@@ -551,8 +546,7 @@ impl<'a> Zonk<'a> {
                             })
                         })
                         .collect::<Result<_, Error>>()?,
-                )
-                .with_universe_context(group.universe_context().clone()),
+                ),
                 tail: tail.try_map_body(|b| self.zonk_term(b))?,
             }),
 
