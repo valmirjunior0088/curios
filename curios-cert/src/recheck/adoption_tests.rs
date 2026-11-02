@@ -10,6 +10,7 @@ use {
     curios_core::{
         Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
         Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
+        Variance,
     },
     curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
@@ -906,5 +907,462 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotTotal { .. })),
         "the control stopped refusing: an honest Partial must refuse the looping proof: {refused:?}",
+    );
+}
+
+/// Three aliases in a chain, each stating the sort its value inhabits: `H : Type 5 = h_body` stating `h`, `K : Type 5 = H` stating `k`, and `L : Type 5 = K` stating `l`.
+///
+/// `hold_value_sort` checks `L`'s stated sort against `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so `L`'s verdict is a function of `K`'s `value_sort` and of nothing else about `K`.
+fn chained_sort_module(h_body: Term, h: Term, k: Term, l: Term) -> Module {
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            aliased(&global("H"), type_at(5), h_body, h),
+            aliased(
+                &global("K"),
+                type_at(5),
+                Term::free_var(&Free::from(&global("H"))),
+                k,
+            ),
+            aliased(
+                &global("L"),
+                type_at(5),
+                Term::free_var(&Free::from(&global("K"))),
+                l,
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
+/// A level alone does gate a verdict: `hold_value_sort` refuses a stated sort the value does not inhabit, and the value's sort is read off a published one the read-digest leaves out.
+#[test]
+fn a_reader_of_a_moved_value_sorts_level_is_adopted_where_a_whole_compile_refuses_it() {
+    let baseline = versioned(chained_sort_module(
+        nat(),
+        type_at(0),
+        type_at(0),
+        type_at(0),
+    ));
+    let certification = walked(&baseline).certification;
+    // `H`'s body moves `Nat` -> `Type 4`, so its value sort moves `Type 0` -> `Type 5`, and `K` republishes it. `L` is untouched: its terms, `K`'s type and `K`'s body term all stand.
+    let edited = replaced(
+        &replaced(
+            &baseline,
+            "H",
+            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
+        ),
+        "K",
+        aliased(
+            &global("K"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("H"))),
+            type_at(5),
+        ),
+    );
+
+    let whole = walked_whole(&edited);
+    assert!(
+        whole
+            .verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("L"))
+                && matches!(verdict.error, Error::ValueSort { .. })),
+        "a whole compile of the edited module refuses L for the sort it states: {:?}",
+        whole.verdicts,
+    );
+
+    let over = walked_over(&edited, &baseline, &certification);
+    assert_eq!(
+        over.verdicts,
+        Vec::new(),
+        "L is adopted over the baseline and the module is admitted",
+    );
+}
+
+/// [`walked`] without its assertion, for a module a whole walk refuses.
+fn walked_whole(module: &Module) -> Rechecked {
+    fixture_certified(module, BUDGET, &Globals::default(), SYNTAX)
+}
+
+/// The module whose `L` publishes `Type 0` for a value that unfolds to `Type 4`, and the record the warm walk filed for it: what a later compilation finds in scope.
+fn warm_unit() -> (Module, Certification) {
+    let baseline = versioned(chained_sort_module(
+        nat(),
+        type_at(0),
+        type_at(0),
+        type_at(0),
+    ));
+    let certification = walked(&baseline).certification;
+    let edited = replaced(
+        &replaced(
+            &baseline,
+            "H",
+            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
+        ),
+        "K",
+        aliased(
+            &global("K"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("H"))),
+            type_at(5),
+        ),
+    );
+    let over = walked_over(&edited, &baseline, &certification);
+    assert_eq!(over.verdicts, Vec::new(), "the warm walk admits the unit");
+    assert!(
+        over.certification.covers(&edited),
+        "and files a record covering every declaration it holds",
+    );
+
+    (edited, over.certification)
+}
+
+/// `M : Type 5 = L` stating `sort`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
+fn later_alias(sort: Term) -> Module {
+    Module {
+        mounts: Vec::new(),
+        items: vec![aliased(
+            &global("M"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("L"))),
+            sort,
+        )]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
+/// The lie escapes the walk that adopted it: a whole walk with the warm unit in scope reads `L`'s published sort with nothing run and admits an alias stating it, where the same walk over an honest unit refuses.
+#[test]
+fn a_published_sort_a_warm_walk_filed_is_believed_by_a_later_whole_walk() {
+    let (warm, record) = warm_unit();
+    let scope = AlreadyJudged::with(&warm, &record);
+    let admitted =
+        fixture_certified(&later_alias(type_at(0)), BUDGET, &scope.globals(), SYNTAX).verdicts;
+    assert_eq!(
+        admitted,
+        Vec::new(),
+        "a whole walk admits M publishing Type 0 for a value whose sort is Type 5: {admitted:?}",
+    );
+
+    // The control: the same unit with `L` publishing the sort its value inhabits.
+    let honest = replaced(
+        &warm,
+        "L",
+        aliased(
+            &global("L"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("K"))),
+            type_at(5),
+        ),
+    );
+    let honest_record = walked(&honest).certification;
+    let honest_scope = AlreadyJudged::with(&honest, &honest_record);
+    let refused = fixture_certified(
+        &later_alias(type_at(0)),
+        BUDGET,
+        &honest_scope.globals(),
+        SYNTAX,
+    )
+    .verdicts;
+    assert!(
+        refused
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::ValueSort { .. })),
+        "the control refuses the same alias: {refused:?}",
+    );
+}
+
+/// `Big : (T: Type 5) -> Type 6` with one constructor aiming at `L`, and `f(X: Type 0, b: Big(X)) -> X = match b at X | big() => Type 3 end`.
+///
+/// The arm's index inversion would refine `X`, an outer binder assumed at `Type 0`, to `L`, and keeps the refinement only where the judge holds `Sort::of(L)` below `Type 0` (`curios_analysis::invert`'s `fits_its_variable`). Kept, the arm's goal is `L`, which `Type 3` inhabits; dropped, the goal stays the abstract `X` and nothing does.
+fn refining_module(body: Term) -> Module {
+    refining_module_at(Term::free_var(&Free::from(&global("L"))), body)
+}
+
+/// [`refining_module_at`] with the variable assumed at `Type 0`.
+fn refining_module_at(target: Term, body: Term) -> Module {
+    refining_module_assumed(target, type_at(0), body)
+}
+
+/// [`refining_module`] with `target` as the index the constructor aims at and `assumed` as the sort the outer variable is assumed at.
+fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
+    use curios_core::{
+        Atom, Cases, InductArm, InductDecl, InductParam, Many, Scope, Telescope, UniverseContext,
+        test_support::{declaring, match_ambient},
+    };
+
+    let family = global("Big");
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(902, Some("i")), type_at(5))],
+            (),
+        )),
+        constructors: vec![(
+            Atom::from("big"),
+            InductParam::new(Telescope::done(vec![target]), Vec::new()),
+        )]
+        .into(),
+        result_sort: Term::type_at(Level::constant(6)),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let x = Free::local(910, Some("X"));
+    let b = Free::local(911, Some("b"));
+    let at = Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&x)]);
+    let cases = Cases::Induct {
+        cases: vec![(
+            Atom::from("big"),
+            InductArm::new(Scope::close(Many(0), &[], body), Vec::new()),
+        )],
+        default: None,
+        stated: None,
+    };
+    let binders = [(x, assumed), (b, at.clone())];
+    let item = authored(
+        &global("f"),
+        Term::func_type(binders.clone(), Term::free_var(&x)),
+        Term::func(
+            binders,
+            match_ambient(Term::free_var(&b), Term::free_var(&x), cases),
+        ),
+    );
+
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![item].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
+}
+
+/// The one gate that reads a published level and could admit a term — an index refinement the published sort makes `fits_its_variable` keep — reaches no closed term: the arm is behind a hypothesis the sort the variable is assumed at leaves uninhabited, and the arm's goal, which the publication cannot move, is the case's own target.
+#[test]
+fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
+    let (warm, record) = warm_unit();
+    let honest = replaced(
+        &warm,
+        "L",
+        aliased(
+            &global("L"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("K"))),
+            type_at(5),
+        ),
+    );
+    let honest_record = walked(&honest).certification;
+    let verdicts = |module: Module, lying: bool| match lying {
+        true => {
+            let scope = AlreadyJudged::with(&warm, &record);
+            fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts
+        }
+        false => {
+            let scope = AlreadyJudged::with(&honest, &honest_record);
+            fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts
+        }
+    };
+
+    // The arm's body is typed, so what the goal is decides: a body the refined goal does not admit is refused.
+    for lying in [true, false] {
+        let bogus = verdicts(refining_module(literal(0)), lying);
+        assert!(
+            !bogus.is_empty(),
+            "the arm's body is typed (lying: {lying}): {bogus:?}",
+        );
+    }
+
+    // The refinement is kept whatever the publication says: `Type 3` inhabits the refined goal on both sides.
+    for lying in [true, false] {
+        assert_eq!(
+            verdicts(refining_module(type_at(3)), lying),
+            Vec::new(),
+            "the arm is admitted (lying: {lying})",
+        );
+    }
+
+    // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `MatchResult::at` opens the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
+    for assumed in [0, 1, 5] {
+        assert_eq!(
+            walked_whole(&refining_module_assumed(
+                type_at(4),
+                type_at(assumed),
+                type_at(3)
+            ))
+            .verdicts,
+            Vec::new(),
+            "the goal is the target with the variable assumed at Type {assumed}",
+        );
+        assert!(
+            !walked_whole(&refining_module_assumed(
+                type_at(4),
+                type_at(assumed),
+                literal(0)
+            ))
+            .verdicts
+            .is_empty(),
+            "and a body the target does not admit is refused at Type {assumed}",
+        );
+    }
+
+    // The refusal that stops the route: the arm is reachable only through a value of the family at the target, and the target does not inhabit the sort the variable is assumed at, which `subsumes` decides off the declared type and not off any publication.
+    let applied = walked_whole(&applying_module()).verdicts;
+    assert!(
+        applied
+            .iter()
+            .any(|verdict| verdict.name == Some(global("g"))
+                && matches!(verdict.error, Error::Mismatch { .. })),
+        "nothing closed reaches the arm: {applied:?}",
+    );
+}
+
+/// [`refining_module_at`]'s family and function, with `g : Type 4 = f(Type 4, Big/big())` beside them: the one call the arm is reachable through.
+fn applying_module() -> Module {
+    let module = refining_module_at(type_at(4), type_at(3));
+    let mut items = module.items.clone();
+    items.push(authored(
+        &global("g"),
+        type_at(4),
+        Term::apply(
+            Term::free_var(&Free::from(&global("f"))),
+            [
+                type_at(4),
+                Term::variant(global("Big"), Vec::<Term>::new(), "big", Vec::<Term>::new()),
+            ],
+        ),
+    ));
+
+    Module { items, ..module }
+}
+
+/// The digest a stage outside the certifier asks a part by ([`part_digest`]) folds a unit's classification in whatever the record covers, where the certifier's own ([`read_digest`]) reads a classification only off a record that covers its unit, as [`Globals::partial`] does.
+#[test]
+fn a_part_digest_folds_a_classification_the_certifiers_own_declines_to_read() {
+    use crate::{part_digest, read_digest};
+
+    let module = written();
+    let places = Places::of(&module);
+    // A record naming one of the unit's four definitions: it covers nothing, so a walk classifies the unit's items from their terms.
+    let partial = Certification::of(
+        [(
+            global("five"),
+            Certified {
+                totality: Totality::Partial,
+                reads: Reads::default(),
+            },
+        )],
+        [],
+        [],
+        [],
+    );
+    assert!(
+        !partial.covers(&module),
+        "a record naming fewer definitions than its unit holds covers it",
+    );
+    let mut globals = Globals::default();
+    globals.mount(&module, &places, &partial);
+
+    let digest = |verdict| {
+        held_digest(&module, &places, &global("five"), verdict, false).expect("the part digests")
+    };
+    assert_eq!(
+        read_digest(&globals, &global("five"), false).expect("the part digests"),
+        digest((false, None, None)),
+        "the certifier's own digest reads the name as classified by no record",
+    );
+    assert_eq!(
+        part_digest(&module, &places, &partial, &global("five"), false).expect("the part digests"),
+        digest((true, None, None)),
+        "where the digest a stage asks a part by folds the record's entry in unasked",
+    );
+}
+
+/// `induct Levelled.{u} : Type.{u + 1} | mk(x: Type.{u}) end`, whose entry carries `variances`: a payload's type mentions the level, so the walk computes it invariant.
+fn varied_family(variances: Vec<Variance>) -> Module {
+    use curios_core::{
+        Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::declaring,
+    };
+    use curios_utilities::Plicity;
+
+    let family = global("Levelled");
+    let level = Level::param(UniverseParam(0));
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build(
+                    [(Free::local(930, Some("x")), Term::type_at(level.clone()))],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(level.checked_add(1).expect("level admits the offset")),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances,
+    };
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
+}
+
+/// The one check a judged item gets that an adopted one does not: `accept` refuses a carried variance vector claiming an irrelevance the walk denies, and `induct_alike` reads no carried vector, so the item is the baseline's and the walk adopts it.
+///
+/// What the adopted vector buys is nothing a judgment reads: the vector the kernel files for the entry is the baseline's, which the walk computed over the same telescopes, so every comparison of two instances reads the truthful one and the carried lie is the elaborator of a later unit's to be refused by.
+#[test]
+fn a_carried_variance_the_walk_denies_is_refused_where_the_item_is_judged_and_not_where_it_is_adopted()
+ {
+    let truthful = versioned(varied_family(vec![Variance::Invariant]));
+    let certification = walked(&truthful).certification;
+    let claimed = versioned(varied_family(vec![Variance::Irrelevant]));
+
+    let whole = walked_whole(&claimed);
+    assert!(
+        whole
+            .verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
+        "a whole walk refuses the carried irrelevance: {:?}",
+        whole.verdicts,
+    );
+
+    let over = walked_over(&claimed, &truthful, &certification);
+    assert_eq!(
+        over.verdicts,
+        Vec::new(),
+        "and the walk over the baseline adopts the item without the check",
+    );
+    assert_eq!(
+        over.certification.variances(&global("Levelled")),
+        Some([Variance::Invariant].as_slice()),
+        "while the vector it files, which every judgment reads, is the one the baseline's walk computed",
     );
 }

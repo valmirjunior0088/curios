@@ -3,10 +3,42 @@
 use {
     super::test_support::{declare, kernel},
     curios_analysis::{Invert, another_case, invert_indices, solve_indices},
-    curios_core::{Free, Global, Intrinsic, Nat, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Nat, Term},
     curios_utilities::Qualifier,
     std::slice,
 };
+
+/// The bound `fits_its_variable` states, put to the function that states it: an outer variable assumed at a sort keeps a target only where the judge holds the target's own sort below that sort.
+///
+/// The target is the literal `Type 4`, whose sort every reader computes as `Type 5`. Assumed at `Type 5` the variable holds it; assumed at `Type 0` it does not, and the solution is the one the rule says is dropped.
+#[test]
+fn an_outer_variable_at_a_sort_keeps_only_a_target_its_sort_holds() {
+    let target = Term::type_at(Level::constant(4));
+
+    for (label, assumed, held) in [
+        ("the target's sort below the variable's", 5, true),
+        ("above the variable's", 0, false),
+    ] {
+        let mut kernel = kernel();
+        let variable = Free::local(900, Some("X"));
+        kernel.assume(&variable, &Term::type_at(Level::constant(assumed)));
+
+        let Invert::Solved(solutions) = solve_indices(
+            &mut kernel,
+            &[Term::free_var(&variable)],
+            slice::from_ref(&target),
+            &[],
+        )
+        .expect("the kernel answers") else {
+            panic!("{label}: a reachable case was reported unreachable");
+        };
+
+        match held {
+            true => assert_eq!(solutions, vec![(variable, target.clone())], "{label}"),
+            false => assert!(solutions.is_empty(), "{label}: {solutions:?}"),
+        }
+    }
+}
 
 /// The deletion rule (Goguen–McBride–McKinna) decides a binder forced in two index positions by *convertibility*, and this is the direction no program reaches.
 ///
