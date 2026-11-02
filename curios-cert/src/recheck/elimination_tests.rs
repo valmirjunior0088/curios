@@ -589,3 +589,98 @@ fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
         "an arm at its constructor's arity is held to nothing about its arity: {verdicts:?}",
     );
 }
+
+/// `induct Fixed : (i : Type 7) -> Type 8 | mk : Fixed(Type 3) end` beside `read : (V : <own>, h : Fixed(V)) -> V = (V, h) => match h : (i, s) => V | mk => Type 2 end`.
+///
+/// The one caller of `Judge::sort_below` is `curios_analysis`'s `fits_its_variable`, which keeps an index refinement of an *outer* variable only where the judge holds the target below the variable's own type. An outer variable is checked at its index's type by subsumption, so `V` may stand at a sort below `Type 7` while the target `Type 3` is typed at `Type 7`, and the arm's body inhabits `V` exactly where the refinement `V := Type 3` is kept. With `own` the index's own sort the refinement fits and the arm stands; with `own` a sort the target does not inhabit, a kept refinement would read `Type 3 : Type 0` — type in type, off a binder, with nothing to reduce.
+///
+/// Mutation-checked: with `fits_its_variable` returning `Ok(true)` unconditionally, the `Type 0` module is admitted with no verdict at all, so the bound is the whole of what refuses it.
+fn refined_variable_module(own: Level) -> Module {
+    let family = Global::Authored(Qualifier::from(["Fixed"]));
+    let index = Free::local(960, Some("i"));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(index, Term::type_at(Level::constant(7)))],
+            (),
+        )),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::done(vec![Term::type_at(Level::constant(3))]),
+                Vec::new(),
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(Level::constant(8)),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let outer = Free::local(961, Some("V"));
+    let subject = Free::local(962, Some("h"));
+    let at = |argument: Term| {
+        Term::induct_type_at(family, Vec::<Level>::new(), Vec::<Term>::new(), [argument])
+    };
+    let read = Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        Scope::close(
+            Many(2),
+            &[&Free::local(963, Some("i")), &Free::local(964, Some("s"))],
+            Term::free_var(&outer),
+        ),
+        vec![("mk", Vec::new(), Term::type_at(Level::constant(2)))],
+        None,
+    );
+    let binders = |own: Level| {
+        [
+            (outer, Term::type_at(own)),
+            (subject, at(Term::free_var(&outer))),
+        ]
+    };
+
+    declaring(
+        Module {
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["read"])),
+                Term::func_type(binders(own.clone()), Term::free_var(&outer)),
+                Term::func(binders(own), read),
+            )]
+            .into(),
+            ..Module::default()
+        },
+        [(family, declaration)],
+        [],
+        [],
+    )
+}
+
+/// An index refinement is kept only where its target inhabits the variable's own type, so an arm reads an outer variable as it stands wherever the bound does not hold.
+#[test]
+fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
+    let fitting = fixture_verdicts(
+        &refined_variable_module(Level::constant(7)),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        fitting.is_empty(),
+        "a refinement whose target inhabits the variable's own type was dropped: {fitting:?}",
+    );
+
+    let collapsing = fixture_verdicts(
+        &refined_variable_module(Level::zero()),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        collapsing
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        "a `Type 3` was refined into a variable of type `Type 0`: {collapsing:?}",
+    );
+}

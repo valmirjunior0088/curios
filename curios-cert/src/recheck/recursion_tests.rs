@@ -207,3 +207,53 @@ fn a_projection_past_a_tuples_components_is_refused() {
         "the walk must refuse a projection past the components of what it projects from",
     );
 }
+
+/// `held : (y : (Type 1) -> Type 1) -> Type 1 = (y) => rec m : Type 1 = y(m) end.0`: the one shape whose projection survives forcing with its declared type a sort.
+///
+/// `Sort::of` reads a member's declared type only through `sort_of_neutral`, which `reduce_forced` reaches only for a projection `force` left standing — and `force` keeps the folded spelling exactly where the member's body reduces to a neutral *mentioning the group*, which is what the opaque head `y` makes of `y(m)`. The mention is the group's only call, recorded with no arguments and graded unknown, so the group does not descend; and the member's declared type yields a sort, so `check_group`'s local gate is owed a descent. The two halves are the same self-mention, which is why nothing escapes both: `yields_a_sort` peels arrows and projects tuple fields, so an applied or a projected member is inside the gate too.
+fn surviving_projection_module() -> Module {
+    let sort = Term::type_at(Level::zero().succ().expect("a level has a successor"));
+    let opaque = Free::local(950, Some("y"));
+    let member = Free::local(951, Some("m"));
+    let members = [&member];
+    let group = Term::rec_proj(
+        RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, sort.clone()),
+            body: Scope::close(
+                Many(1),
+                &members,
+                Term::apply(Term::free_var(&opaque), [Term::free_var(&member)]),
+            ),
+        }]),
+        0,
+    );
+    let opaque_type = Term::func_type([(Free::local(952, Some("t")), sort.clone())], sort.clone());
+
+    Module {
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["held"])),
+            Term::func_type([(opaque, opaque_type.clone())], sort),
+            Term::func([(opaque, opaque_type)], group),
+        )]
+        .into(),
+        ..Module::default()
+    }
+}
+
+/// A member whose declared type is a sort cannot both keep its folded spelling under forcing and descend.
+#[test]
+fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
+    let verdicts = fixture_verdicts(
+        &surviving_projection_module(),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        "a group whose member names itself where erasure deletes it was admitted: {verdicts:?}",
+    );
+}
