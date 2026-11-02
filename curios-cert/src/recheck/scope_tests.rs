@@ -4,7 +4,10 @@ use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Certification, Free, Global, Intrinsic, Level, Nat, Places, Term},
+    curios_core::{
+        Certification, Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item,
+        Level, Nat, Places, Telescope, Term, Totality, UniverseContext,
+    },
     curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
@@ -394,4 +397,91 @@ fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
         ),
         "a mounted definition marked a proof was unfolded: {verdicts:?}",
     );
+}
+
+/// `alias : Type = Nat`, as a unit in scope holds it, with `sort` as the sort its value inhabits and `proof` as its mark.
+fn alias_holding(alias: &Global, proof: bool, sort: Option<Term>) -> Item {
+    Item::Let(Box::new(Definition {
+        name: *alias,
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof,
+        value_sort: sort,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        type_: Term::type_ground(),
+        body: Term::intrinsic(Intrinsic::NatType),
+    }))
+}
+
+/// A definition's mark withholds the sort its value inhabits with its body, as `define_as_stated` writes the two together: a reader that took one and not the other would hold a definition in scope otherwise than the walk that judged it.
+///
+/// `alias : Type = Nat` carries `Prop 0` as the sort its value inhabits, which a walk over its unit refuses as `ValueSort` — the lie that makes the reading visible, since of an honest statement the published sort is the one reduction reaches anyway. Published, it makes `alias` a proposition to the irrelevance gate (`declared_into_prop`), and `coerce : (x : alias, y : alias, v : Idx(y)) -> Idx(x) = (x, y, v) => v` is admitted, two inhabitants of `Nat` being one. Marked a proof, the definition publishes no sort, so `alias` reads at `Type 0` and the coercion is the `Mismatch` it should be — as it is where the unit states no sort at all.
+///
+/// Mutation-checked: with `held` publishing a marked definition's `value_sort` all the same, the marked arm is admitted and this test fails.
+#[test]
+fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
+    let alias = Global::Authored(Qualifier::from(["alias"]));
+    let indexed = Global::Authored(Qualifier::from(["Idx"]));
+    let coerce = Global::Authored(Qualifier::from(["coerce"]));
+    let alias_type = || Term::free_var(&Free::from(&alias));
+    let (left, right) = (Free::local(70, Some("x")), Free::local(71, Some("y")));
+    let carried = Free::local(72, Some("v"));
+    let at = |index: &Free| Term::induct_type(indexed, Vec::<Term>::new(), [Term::free_var(index)]);
+
+    // `induct Idx : (i : alias) -> Type 0 end` — no constructor, since the coercion needs the comparison of two indices and no inhabitant.
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(73, Some("i")), alias_type())],
+            (),
+        )),
+        constructors: Vec::new().into(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let parameters = [
+        (left, alias_type()),
+        (right, alias_type()),
+        (carried, at(&right)),
+    ];
+    let module = collision_module(
+        vec![authored(
+            &coerce,
+            Term::func_type(parameters.clone(), at(&left)),
+            Term::func(parameters, Term::free_var(&carried)),
+        )],
+        BTreeMap::from([(indexed, declaration)]),
+    );
+    let mounted = |item: Item| {
+        let unit = collision_module(vec![item], BTreeMap::new());
+
+        fixture_verdicts(&module, 1_000_000, &already_judged(&unit).globals(), SYNTAX)
+    };
+
+    assert_eq!(
+        mounted(alias_holding(&alias, false, Some(Term::prop()))),
+        Vec::new(),
+    );
+
+    for withheld in [
+        alias_holding(&alias, true, Some(Term::prop())),
+        alias_holding(&alias, false, None),
+    ] {
+        let verdicts = mounted(withheld);
+        assert!(
+            matches!(
+                verdicts.as_slice(),
+                [Verdict { name: Some(refused), error: Error::Mismatch { .. } }]
+                    if *refused == coerce
+            ),
+            "a mounted definition published a value sort no reader may have: {verdicts:?}",
+        );
+    }
 }

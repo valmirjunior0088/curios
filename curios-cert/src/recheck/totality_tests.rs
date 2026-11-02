@@ -184,6 +184,60 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
     );
 }
 
+/// A record covering its unit, with every name it holds classified `Total`, and `extra` beside them: `held`, which the unit does not declare and the judged module does.
+fn covering_the_library(extra: bool) -> Certification {
+    let believed = |name: Global| {
+        (
+            name,
+            Certified {
+                totality: Totality::Total,
+                ..Certified::default()
+            },
+        )
+    };
+    let mut entries = vec![
+        believed(Global::Authored(Qualifier::from(["sink"]))),
+        believed(reaches()),
+    ];
+    if extra {
+        entries.push((
+            Global::Authored(Qualifier::from(["held"])),
+            Certified {
+                totality: Totality::Partial,
+                ..Certified::default()
+            },
+        ));
+    }
+
+    Certification::of(entries, [], [], [])
+}
+
+/// A record answers for the unit it was filed with and for no name beside it: an entry under a name the unit does not declare classifies nothing.
+///
+/// `Globals::partial` asks the record of each unit in scope for the name *and* asks that unit where it holds it, and `Certification::covers` ranges over the unit's names alone, so a record may carry an entry the unit answers for nowhere and still cover it. The record here covers the library and calls both its definitions total, so the proof beneath it is certified; the same record with `held` added as `Partial` — the judged module's own name, which the library does not declare — must certify it still. Read one name at a time, the entry would classify the judged module's `held` partial and have its own stamp refuse it, a verdict nothing in scope has any standing to raise.
+///
+/// Mutation-checked: with `Globals::partial` not asking where the unit holds the name, the proof is refused as `NotTotal` reaching nothing, and no other test in this file fails.
+#[test]
+fn a_record_answers_for_no_name_its_unit_does_not_declare() {
+    let library = stamp_trial_module(Totality::Total, false);
+    assert!(covering_the_library(false).covers(&library));
+    assert!(
+        covering_the_library(true).covers(&library),
+        "an entry beside the unit's own names leaves the record covering it",
+    );
+
+    assert_eq!(
+        carried_beneath_the_lie(&covering_the_library(false)),
+        Vec::new(),
+        "a record covering its unit and calling it total is believed",
+    );
+    assert_eq!(
+        carried_beneath_the_lie(&covering_the_library(true)),
+        Vec::new(),
+        "an entry under a name the unit does not declare classified the judged module's own",
+    );
+}
+
 /// A proof reaching two partial definitions is refused by the one written first, whichever spells first, as the elaborator refuses a type reaching two.
 #[test]
 fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
