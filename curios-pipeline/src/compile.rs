@@ -182,7 +182,29 @@ pub fn recheck(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> Vec<Verdict> {
-    certify_program(program, budget, &globals(predecessors), *syntax)
+    recheck_mounting(program, budget, predecessors, &[], syntax)
+}
+
+/// [`recheck`] with `mounted` in scope beside `predecessors`: each unit of it at the record stated for it rather than at one a walk filed, which is what an environment built by hand is ([`Globals::mount`]).
+///
+/// A compilation mounts no such unit — every record it files covers the unit it classifies — so this is the door the soundness board puts a witness through for a rule only an environment nobody walked reaches. The mounts come after the units are told what is fixed and what moved, so a unit mounted here is neither.
+pub fn recheck_mounting(
+    program: &curios_core::Zonked<Program>,
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    mounted: &[(
+        &curios_core::Module,
+        &curios_core::Places,
+        &curios_core::Certification,
+    )],
+    syntax: &SyntaxRegistry,
+) -> Vec<Verdict> {
+    let mut globals = globals(predecessors);
+    for (module, places, certification) in mounted {
+        globals.mount(module, places, certification);
+    }
+
+    certify_program(program, budget, &globals, *syntax)
         .0
         .verdicts
 }

@@ -4,13 +4,16 @@
 mod tests;
 
 use {
-    crate::Proof,
+    crate::{Mounting, Proof},
     curios_cert::Verdict,
     curios_core::{
-        Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Zonked,
+        Definition, Free, Global, Item, Module, Nominal, Places, Program, RecItem, Term, Zonked,
         ZonkedRefusal,
     },
-    curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
+    curios_pipeline::{
+        DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude,
+        recheck_with_prelude_mounting,
+    },
     curios_text::{RootSource, SYNTAX},
     curios_utilities::Report,
     std::fmt,
@@ -236,6 +239,32 @@ pub(crate) fn put_program(source: &str) -> Answer {
     }
 }
 
+/// Put a module built by hand to the kernel with the prelude in scope and `mounting` mounted beside it, as a program closing with `body` stated at `type_`.
+///
+/// The judged module is the one handed here; `mounting`'s is in scope and judged by nothing, which is what an environment built by hand means. Its places are read off it, as a unit's are.
+fn put_mounted(mounting: Mounting, module: Module, body: Term, type_: Term) -> Answer {
+    let program = Program {
+        module,
+        entry: curios_core::Entrypoint {
+            body,
+            type_: Some(type_),
+        },
+    };
+    let places = Places::of(&mounting.module);
+
+    Answer::Judged(match Zonked::project(&program) {
+        Err(refusal) => vec![Refusal::Unfinished(refusal)],
+        Ok(program) => recheck_with_prelude_mounting(
+            &program,
+            DEFAULT_BUDGET,
+            &[(&mounting.module, &places, &mounting.certification)],
+        )
+        .into_iter()
+        .map(Refusal::Kernel)
+        .collect(),
+    })
+}
+
 /// Put a module built by hand to the kernel alone, with the prelude in scope, as a program closing with `body` stated at `type_`.
 fn put_module(module: Module, body: Term, type_: Term) -> Answer {
     let program = Program {
@@ -265,6 +294,11 @@ impl Proof {
                 let (module, proof) = build();
 
                 put_module(module, proof, false_type())
+            }
+            Proof::Mounted(build) => {
+                let (mounting, module, proof) = build();
+
+                put_mounted(mounting, module, proof, false_type())
             }
         }
     }
