@@ -1,20 +1,22 @@
-//! What `curios test` compiles and runs, with nothing it shows: the subjects a selection declares tests in ([`test_subjects`]), each one's test program under the prefixes its tests are selected at or under — taken from a store where nothing it was made from moved, and compiled and filed there otherwise ([`TestSubject::compile`]) — and each of its tests run under a host its caller hands in ([`TestRun::run`]). The command line narrates around these pieces; a caller running a package's tests in process asserts on what they answer.
+//! What `curios test` compiles and runs, with nothing it shows: the subjects a selection declares tests in ([`test_subjects`]), each one's test program under the prefixes its tests are selected at or under, for the target it runs on — taken from a store where nothing it was made from moved, and compiled and filed there otherwise ([`TestSubject::compile`]) — and each of its tests run under a host its caller hands in ([`TestRun::run`]), or the page a browser runs them in ([`Tested::page`]). The command line narrates around these pieces; a caller running a package's tests in process asserts on what they answer.
 //!
 //! **A subject is one test program.** For the governing package entire it is its library and then each executable, and for a library, a program or a loose file its own. The one unit compiled tested among a subject's is its own ([`RootSource::tested`]), so its program schedules its own tests and nothing it stands on.
 //!
-//! **The store is consulted exactly as `run` consults it**: one payload per declared subject, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records and every test the subject declares beside the machine code, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
+//! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records and every test the subject declares beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
 
 use {
-    crate::{bindings_of, engine, to_cwasm},
+    crate::{bindings_of, engine, linked_of, optimize, to_cwasm},
     curios_abi::ForeignStore,
+    curios_browser::page,
     curios_native::{Compiled, HostOps, TestEnd},
-    curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, order},
+    curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, TestRecord},
     curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
     curios_utilities::{Qualifier, Source},
     curios_verdicts::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
     std::{
+        collections::BTreeMap,
         fs,
         path::{Path, PathBuf},
         sync::Arc,
@@ -34,6 +36,29 @@ pub enum Named {
     File(PathBuf),
     /// The program on standard input.
     Stdin,
+}
+
+impl Named {
+    /// Which subject `program` is, as `run` and `compile` name one: the executable its package declares it as, the file it was given as, or standard input.
+    pub fn of(program: &curios_package::Program) -> Self {
+        match (program.entry(), program.home()) {
+            (_, Some(home)) => Named::Executable(home.executable.clone()),
+            (Entry::File(path), None) => Named::File(path.clone()),
+            (Entry::Stdin, None) => Named::Stdin,
+        }
+    }
+
+    /// The name the subject's page runs its program by, which is its first argument and the page's title: the package's name for its library, an executable's name, a loose file's stem, and `stdin` for standard input, which a URL could not spell as `-`.
+    pub fn page_name(&self) -> String {
+        match self {
+            Named::Library(name) | Named::Executable(name) => name.clone(),
+            Named::File(path) => path.file_stem().map_or_else(
+                || "program".to_string(),
+                |stem| stem.to_string_lossy().into_owned(),
+            ),
+            Named::Stdin => "stdin".to_string(),
+        }
+    }
 }
 
 /// Where a declared subject's test payload is filed: the governing root its store sits beside, the package it is filed under and the executable its own declarations are filed as, the name reserved in the package for the payload, and the manifest that declares it.
@@ -230,12 +255,13 @@ impl TestSubject {
         })
     }
 
-    /// The subject's test program, scheduling its tests at or under any of `under` — from `store` when nothing it was made from has changed and the prefixes are the ones it was filed under, and compiled and filed there otherwise, `progress` told each step of the compile. Without a store, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no machine code, so a second run under it reuses every subject.
+    /// The subject's test program for `target`, scheduling its tests at or under any of `under` — from `store` when nothing it was made from has changed and the prefixes are the ones it was filed under, and compiled and filed there otherwise, `progress` told each step of the compile. Without a store, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no payload, so a second run under it reuses every subject.
     pub fn compile(
         &self,
         budget: u64,
         store: Option<&Verdicts>,
         under: &[Qualifier],
+        target: Target,
         progress: impl FnMut(Progress<'_>),
     ) -> Result<Tested, CompileError> {
         let sources = self
@@ -251,11 +277,14 @@ impl TestSubject {
             loader: &self.loader,
             tests: Some(under),
         });
-        let runs = Runs::Native { engine: engine() };
+        let runs = match target {
+            Target::Native => Runs::Native { engine: engine() },
+            Target::Browser => Runs::Browser,
+        };
 
         if let Some((store, program)) = store.zip(program.as_ref())
             && let Some((bytes, foreigns)) = store.payload_get(program, &sources, runs)
-            && let Some(tested) = decode(&bytes, foreigns)
+            && let Some(tested) = decode(&bytes, foreigns, target)
         {
             return Ok(tested);
         }
@@ -268,9 +297,15 @@ impl TestSubject {
                 |_| {},
                 progress,
             )?;
+        // What the target consumes, as `payload_of` makes it: machine code for the native runtime, and for a browser the module Binaryen wrote.
         let built = compiled
             .compiled
-            .map(|(module, foreigns)| to_cwasm(&module).map(|cwasm| (cwasm, foreigns)))
+            .map(|(module, foreigns)| match target {
+                Target::Native => to_cwasm(&module).map(|cwasm| (Payload::Cwasm(cwasm), foreigns)),
+                Target::Browser => {
+                    Ok((Payload::Module(optimize(&module, false, |_| {})), foreigns))
+                }
+            })
             .transpose()
             .map_err(CompileError::failure)?;
         let tested = Tested {
@@ -295,11 +330,36 @@ impl TestSubject {
     }
 }
 
-/// One subject compiled as a test program: the records of the tests it schedules, every test it declares, and the machine code with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own store, which is what lets [`Tested::loaded`] load its machine code.
+/// A test program as the target it was compiled for consumes it.
+pub enum Payload {
+    /// Machine code the native runtime deserializes.
+    Cwasm(Vec<u8>),
+    /// The module Binaryen wrote, which any browser runs.
+    Module(Vec<u8>),
+}
+
+impl Payload {
+    /// The payload's bytes, whichever it is.
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Payload::Cwasm(bytes) | Payload::Module(bytes) => bytes,
+        }
+    }
+
+    /// `bytes` as the payload `target` consumes.
+    fn of(target: Target, bytes: Vec<u8>) -> Self {
+        match target {
+            Target::Native => Payload::Cwasm(bytes),
+            Target::Browser => Payload::Module(bytes),
+        }
+    }
+}
+
+/// One subject compiled as a test program for one target: the records of the tests it schedules, every test it declares, and its payload with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own store, which is what lets [`Tested::loaded`] load its machine code.
 pub struct Tested {
     records: Vec<TestRecord>,
     declared: Vec<Qualifier>,
-    built: Option<(Vec<u8>, ForeignStore)>,
+    built: Option<(Payload, ForeignStore)>,
     reused: bool,
 }
 
@@ -319,10 +379,13 @@ impl Tested {
         self.reused
     }
 
-    /// The program, loaded to run the tests of `subject` it schedules, with what answers each `foreign` row it reaches: `None` where it schedules none, and so was built no further than its judgment.
+    /// The program, compiled for the native target, loaded to run the tests of `subject` it schedules, with what answers each `foreign` row it reaches: `None` where it schedules none, and so was built no further than its judgment.
     pub fn loaded(&self, subject: &TestSubject) -> Result<Option<TestRun>, String> {
-        let Some((cwasm, foreigns)) = &self.built else {
+        let Some((payload, foreigns)) = &self.built else {
             return Ok(None);
+        };
+        let Payload::Cwasm(cwasm) = payload else {
+            unreachable!("a test program is loaded for the target it was compiled for");
         };
         // SAFETY: a `Tested` is made by `TestSubject::compile` alone, from machine code this process precompiled or read back from the project's own store, where a compilation of this compiler filed it.
         let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }?;
@@ -335,6 +398,31 @@ impl Tested {
             // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/Process/args` promises opaque byte strings.
             argv0: subject.entry.as_os_str().as_encoded_bytes().to_vec(),
         }))
+    }
+
+    /// The program, compiled for a browser, laid out as the page that runs the tests of `subject` it schedules, every file by its page path, its rows linked to the gateways `subject`'s packages declare: `None` where it schedules none. A reached row no gateway answers is refused as `compile` refuses it, naming the row and the table.
+    pub fn page(&self, subject: &TestSubject) -> Result<Option<BTreeMap<String, Vec<u8>>>, String> {
+        let Some((payload, foreigns)) = &self.built else {
+            return Ok(None);
+        };
+        let Payload::Module(module) = payload else {
+            unreachable!("a test program is laid out for the target it was compiled for");
+        };
+        let linked = linked_of(subject.manifest(), foreigns)?;
+
+        page(
+            curios_browser::Program {
+                name: &subject.named.page_name(),
+                package: subject
+                    .filing
+                    .as_ref()
+                    .map(|filing| filing.package.as_str()),
+                module: module.clone(),
+                foreigns,
+            },
+            linked,
+        )
+        .map(Some)
     }
 }
 
@@ -380,12 +468,12 @@ pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), Com
     })
 }
 
-/// What the store files for one test program: its records as `(path, body)` pairs and every test it declares by its path's segments, beside the machine code — none where it schedules no test — one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
+/// What the store files for one test program: its records as `(path, body)` pairs and every test it declares by its path's segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the store is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.
 #[curios_archive::archived]
 struct TestPayload {
     records: Vec<(String, String)>,
     declared: Vec<Vec<String>>,
-    cwasm: Option<Vec<u8>>,
+    payload: Option<Vec<u8>>,
 }
 
 /// `tested` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
@@ -401,14 +489,17 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
             .iter()
             .map(|test| test.segments().to_vec())
             .collect(),
-        cwasm: tested.built.as_ref().map(|(cwasm, _)| cwasm.clone()),
+        payload: tested
+            .built
+            .as_ref()
+            .map(|(payload, _)| payload.bytes().to_vec()),
     };
 
     curios_archive::to_bytes(&payload).ok()
 }
 
-/// The inverse of [`encode`], with the rows the store filed beside the bytes, `None` on any malformation.
-fn decode(bytes: &[u8], foreigns: ForeignStore) -> Option<Tested> {
+/// The inverse of [`encode`], with the rows the store filed beside the bytes and the target whose directory they were filed in, `None` on any malformation.
+fn decode(bytes: &[u8], foreigns: ForeignStore, target: Target) -> Option<Tested> {
     let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
     let records = payload
         .records
@@ -420,7 +511,9 @@ fn decode(bytes: &[u8], foreigns: ForeignStore) -> Option<Tested> {
     Some(Tested {
         records,
         declared,
-        built: payload.cwasm.map(|cwasm| (cwasm, foreigns)),
+        built: payload
+            .payload
+            .map(|bytes| (Payload::of(target, bytes), foreigns)),
         reused: true,
     })
 }

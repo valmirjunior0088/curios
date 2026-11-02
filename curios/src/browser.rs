@@ -2,9 +2,9 @@
 
 use {
     crate::{Failure, payload_of},
-    curios::linked_of,
+    curios::{Named, linked_of},
     curios_browser::page,
-    curios_package::{Entry, Program, Target},
+    curios_package::{Program, Target},
     curios_verdicts::Verdicts,
     std::{collections::BTreeMap, fs, path::Path},
 };
@@ -16,7 +16,7 @@ pub(crate) fn built(
     store: Option<Verdicts>,
 ) -> Result<(String, BTreeMap<String, Vec<u8>>), Failure> {
     // Kept before the program is consumed: the page names the program, stands at its package's root and links what the manifest declaring it names.
-    let name = named(&program);
+    let name = Named::of(&program).page_name();
     let package = program.home().map(|home| home.package.clone());
     let manifest = program.home().map(|home| home.manifest.clone());
 
@@ -33,18 +33,6 @@ pub(crate) fn built(
     )?;
 
     Ok((name, files))
-}
-
-/// The name `program` runs by in a browser, which is its first argument and the page's title: the executable's name for one a package declares, a loose file's stem, and `stdin` for standard input, which a URL could not spell as `-`.
-pub(crate) fn named(program: &Program) -> String {
-    match (program.entry(), program.home()) {
-        (_, Some(home)) => home.executable.clone(),
-        (Entry::File(path), None) => path.file_stem().map_or_else(
-            || "program".to_string(),
-            |stem| stem.to_string_lossy().into_owned(),
-        ),
-        (Entry::Stdin, None) => "stdin".to_string(),
-    }
 }
 
 /// Write `files`, each at its page path, under `directory`, creating what is missing. Where the directory is the store's own, `owned`, it is emptied first, so it holds the page and nothing an earlier build left; one `--output` names keeps whatever else it holds, a file of the page replacing the one of its name.

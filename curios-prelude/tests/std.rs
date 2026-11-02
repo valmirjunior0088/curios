@@ -5,7 +5,7 @@
 use {
     curios::{TestSubject, run_wasm, test_subjects},
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_package::{Selection, Spelling},
+    curios_package::{Selection, Spelling, Target},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_prelude::test_support::*,
     curios_text::{Entrypoint, Formatted, Overlay, RootSource},
@@ -98,7 +98,7 @@ fn declared() -> Vec<Qualifier> {
     let store = subject.filed(|_| Some(store()));
 
     subject
-        .compile(DEFAULT_BUDGET, store.as_ref(), &[], |_| {})
+        .compile(DEFAULT_BUDGET, store.as_ref(), &[], Target::Native, |_| {})
         .unwrap_or_else(|error| panic!("the standard library failed to compile:\n{error}"))
         .declared()
         .to_vec()
@@ -115,6 +115,7 @@ fn run_module(module: &Qualifier) {
             DEFAULT_BUDGET,
             store.as_ref(),
             std::slice::from_ref(module),
+            Target::Native,
             |_| {},
         )
         .unwrap_or_else(|error| panic!("`{}` failed to compile:\n{error}", module.join()));

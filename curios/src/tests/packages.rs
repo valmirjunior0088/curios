@@ -3,12 +3,12 @@
 //! Everything below `Selection::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
-    crate::run_wasm,
+    crate::{TestSubject, run_wasm, test_subjects},
     curios_native::{ForeignBindings, MockHost},
-    curios_package::{Entry, Selection, Spelling},
+    curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
     curios_text::{Entrypoint, Overlay, RootSource},
-    curios_utilities::test_support::Temporary,
+    curios_utilities::{Qualifier, digest, test_support::Temporary},
     curios_verdicts::Verdicts,
     std::{
         fs,
@@ -504,5 +504,104 @@ fn a_unit_reached_after_different_others_is_filed_once() {
     assert_eq!(
         folded(&root.join("left"), None, &store()),
         ["reused /alpha", "reused /beta"]
+    );
+}
+
+/// The one test subject of the package at `root`, as `curios test` selects it: its library.
+fn library(root: &Path) -> TestSubject {
+    let selection = Selection::of(Spelling::of(None), None, root, &Overlay::default())
+        .expect("a governed package");
+    let mut subjects = test_subjects(selection, || {
+        unreachable!("the package reads nothing on standard input")
+    })
+    .expect("the package is a test subject");
+
+    subjects.remove(0)
+}
+
+/// A test subject compiled for a browser is laid out as a page: the three files of its own and the gateway its row names beside them, the program named after the subject, and the loader importing the gateway.
+#[test]
+fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
+    let gateway = "export const twice = (n) => n * 2n;\n";
+    let manifest = format!(
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"twice\"\n",
+        digest(gateway.as_bytes())
+    );
+    let root = tree(
+        "e2e-test-page",
+        &[
+            ("curios.toml", &manifest),
+            (
+                "lib.crs",
+                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling = Test/equal(double(21)!, 42);\n",
+            ),
+            ("web/dom.js", gateway),
+        ],
+    );
+    let subject = library(&root);
+
+    let tested = subject
+        .compile(
+            DEFAULT_BUDGET,
+            None,
+            &[Qualifier::empty()],
+            Target::Browser,
+            |_| {},
+        )
+        .expect("the subject compiles");
+    let files = tested
+        .page(&subject)
+        .expect("the page is laid out")
+        .expect("a test is selected");
+
+    assert_eq!(tested.records().len(), 1);
+    assert_eq!(
+        files.keys().collect::<Vec<_>>(),
+        ["index.html", "index.js", "index.wasm", "web/dom.js"]
+    );
+    let loader = String::from_utf8(files["index.js"].clone()).unwrap();
+    assert!(
+        loader.contains("name: \"app\",")
+            && loader.contains("import * as gateway0 from \"./web/dom.js\";"),
+        "{loader}"
+    );
+}
+
+/// A test reaching a row that states no browser table is refused where the page is laid out, naming the row and the table, as `compile --target browser` refuses a program reaching it.
+#[test]
+fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_table() {
+    let manifest = format!(
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"native\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+        digest(b"")
+    );
+    let root = tree(
+        "e2e-test-page-refused",
+        &[
+            ("curios.toml", &manifest),
+            (
+                "lib.crs",
+                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling = Test/equal(double(21)!, 42);\n",
+            ),
+            ("plugin.wasm", ""),
+        ],
+    );
+    let subject = library(&root);
+
+    let tested = subject
+        .compile(
+            DEFAULT_BUDGET,
+            None,
+            &[Qualifier::empty()],
+            Target::Browser,
+            |_| {},
+        )
+        .expect("the subject compiles");
+    let refusal = tested.page(&subject).unwrap_err();
+
+    assert!(
+        refusal.contains(
+            "`/app/double` is answered by the foreign row \"native\" of app, which states no `[foreign.browser]`: the browser target has nothing to link for it"
+        ),
+        "{refusal}"
     );
 }

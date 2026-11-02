@@ -12,7 +12,7 @@ use {
     },
     curios::{Named, TestSubject, Tested, test_subjects},
     curios_native::{OsHost, TestEnd},
-    curios_package::Selection,
+    curios_package::{Selection, Target},
     curios_pipeline::{CompileError, TestRecord},
     curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
@@ -110,7 +110,14 @@ pub(crate) fn run_tests(
     for subject in test_subjects(selection, drained)? {
         let shown = shown(subject.named());
         let store = subject.filed(|root| access.filed(root));
-        let tested = compiled(budget, &subject, &shown, store.as_ref(), printer.under())?;
+        let tested = compiled(
+            budget,
+            &subject,
+            &shown,
+            store.as_ref(),
+            printer.under(),
+            Target::Native,
+        )?;
         printer.took(store.as_ref(), &tested);
 
         // A subject with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
@@ -138,18 +145,19 @@ pub(crate) fn shown(named: &Named) -> Subject {
     }
 }
 
-/// One subject's test program, compiled or reused, narrated as `run` narrates a compile: `Processing`, a `↳ Compiling` step for each unit it stands on, and `↳ Linking` for the program itself, which lasts until its machine code exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes.
+/// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: `Processing`, a `↳ Compiling` step for each unit it stands on, and `↳ Linking` for the program itself, which lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes.
 pub(crate) fn compiled(
     budget: u64,
     subject: &TestSubject,
     shown: &Subject,
     store: Option<&Verdicts>,
     under: &[Qualifier],
+    target: Target,
 ) -> Result<Tested, CompileError> {
     processing(shown, subject.manifest());
 
     let mut steps = Steps::default();
-    let tested = subject.compile(budget, store, under, |progress| {
+    let tested = subject.compile(budget, store, under, target, |progress| {
         report(&mut steps, shown, progress);
     });
     match &tested {
