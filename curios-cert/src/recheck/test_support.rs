@@ -5,7 +5,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
 use {
-    crate::{Globals, Kernel, Rechecked, Verdict},
+    crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,

@@ -1,8 +1,6 @@
 use {
     super::*,
-    crate::{
-        HeadKey, Level, NumLit, Outlines, Subterm, Transient, UniverseMetaId, WitnessId, WitnessKey,
-    },
+    crate::*,
     curios_utilities::{RootKind, Sign},
 };
 

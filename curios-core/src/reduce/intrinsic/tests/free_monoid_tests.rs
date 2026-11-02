@@ -2,7 +2,7 @@
 
 use {
     crate::reduce::intrinsic::{reduce_intrinsic, test_support::*},
-    crate::{FUSION_CAP, Free, Intrinsic, Nat, Subterm, Term, test_support::*},
+    crate::{test_support::*, *},
     curios_num::Binary,
 };
 

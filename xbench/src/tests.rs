@@ -2,10 +2,7 @@
 //!
 //! The bench fails on none of this when a figure moves — a reading is a historical fact and cannot be re-run, so there is nothing for it to disagree with. What these hold is that the record is well formed.
 
-use {
-    super::*,
-    crate::{CONTESTANTS, WORKLOADS},
-};
+use super::*;
 
 /// Two is the fewest that yields a span rather than a single difference, and the report's whole test is whether two spans are disjoint.
 const LEAST_GROUPS: usize = 2;

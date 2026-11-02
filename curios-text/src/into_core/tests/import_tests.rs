@@ -1,9 +1,6 @@
 //! A `use` by path, brace group or glob: what it imports and re-exports, what it refuses, and where an unknown name is reported.
 
-use {
-    crate::into_core::test_support::*,
-    crate::{Entrypoint, RootSource},
-};
+use {crate::into_core::test_support::*, crate::*};
 
 #[test]
 fn private_use_does_not_expose_qualifier() {

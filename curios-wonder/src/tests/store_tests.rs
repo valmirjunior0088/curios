@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Origin, Overlaid, Severity, Subject, diagnosed, diagnostics},
+    crate::*,
     curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
     curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,

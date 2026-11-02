@@ -1,6 +1,6 @@
 //! How a list, a record and a packed literal print: each run packed before wrapping, structure kept apart, and a closer riding after its last entry.
 
-use {super::test_support::*, crate::Term};
+use {super::test_support::*, crate::*};
 
 #[test]
 fn an_overflowing_record_breaks_one_field_per_line_with_its_closer_riding_after_a_space() {

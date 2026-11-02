@@ -5,11 +5,7 @@
 //! The seeds of the rules no law table states are held to the first three conditions too — reversed, chained and at a compound term — with each checker asked alone, and a seed a checker lets go under one of them is a row of the table of parted rows.
 
 use {
-    super::{
-        Answers, Audit, Binder, IMPORTS, Row, SEEDS, STRUCTURAL, Side, applied, asked_alone, claim,
-        closes, declared, hold_to_the_table, name, orders, rows, spell, spell_over, spell_parts,
-        spell_sides, top_level, type_name, variables,
-    },
+    super::*,
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, declares},
 };

@@ -4,11 +4,10 @@
 //!
 //! For this crate's tests alone, and gated to them, the fixtures its erasure suites share.
 
-use crate::{ErasedUnit, NamedPart, Part, declared_digest, erased_digest};
+use crate::*;
 
 #[cfg(test)]
 use {
-    crate::*,
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module, certify_program},
     curios_core::Zonkable,

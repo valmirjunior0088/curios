@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Kernel, infer},
+    crate::*,
     curios_core::{Free, Intrinsic, Many, Scope, Term},
     curios_utilities::Plicity,
 };

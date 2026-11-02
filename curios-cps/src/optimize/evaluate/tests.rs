@@ -1,10 +1,6 @@
 //! Compile-time evaluation of an intrinsic, and the traps it must not fold away.
 
-use {
-    super::evaluate,
-    crate::{Atom, Intrinsic, Literal},
-    curios_num::Natural,
-};
+use {super::*, crate::*, curios_num::Natural};
 
 #[test]
 fn preserves_traps_and_folds_exact_u32_nat_add() {

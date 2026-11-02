@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::infer::{subsumes, test_support::*},
-    crate::{Error, infer},
+    crate::*,
     curios_core::{Free, Term, UniverseContext},
     curios_utilities::Plicity,
 };

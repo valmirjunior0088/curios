@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `convert`, and nothing outside it.
 
 use {
-    crate::Kernel,
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,

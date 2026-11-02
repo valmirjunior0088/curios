@@ -72,7 +72,7 @@ mod universes;
 mod wasm_conformance;
 
 use {
-    crate::{run_wasm, to_compiled},
+    crate::*,
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},

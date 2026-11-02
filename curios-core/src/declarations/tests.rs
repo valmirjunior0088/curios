@@ -1,8 +1,4 @@
-use {
-    super::*,
-    crate::{Atom, Definition, DefinitionKind, Free, Item, Term, Totality, UniverseContext},
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 fn name(path: &[&str]) -> Global {
     Global::Authored(Qualifier::from(path.iter().copied()))

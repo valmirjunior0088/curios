@@ -1,6 +1,6 @@
 //! The law table: what each family states, and that every declaration it makes is well formed.
 
-use crate::{Carrier, Constant, Expr, Family, Operation, Position, TABLE, laws, round_trip};
+use crate::*;
 
 #[test]
 fn a_unit_at_both_sides_states_both_laws() {

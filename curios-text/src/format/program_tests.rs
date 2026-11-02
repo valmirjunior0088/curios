@@ -1,7 +1,7 @@
 //! A program formatted whole: its canonical shape and idempotence, what it refuses, the blank lines and separations between items, and every source in the tree.
 
 use {
-    super::{Formatted, test_support::*},
+    super::{test_support::*, *},
     curios_utilities::Source,
 };
 

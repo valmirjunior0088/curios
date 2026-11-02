@@ -2,7 +2,7 @@
 
 use {
     crate::reduce::intrinsic::test_support::*,
-    crate::{Intrinsic, Nat, Term, reduce_intrinsic},
+    crate::*,
     curios_num::{Integer, Natural},
 };
 

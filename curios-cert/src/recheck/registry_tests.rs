@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,

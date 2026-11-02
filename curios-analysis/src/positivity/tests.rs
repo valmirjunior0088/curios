@@ -3,7 +3,7 @@
 //! Pure functions of the relation, so they need no checker and stay beside the analysis. The tests that drive `positivity_vectors` through a real `Env` are in `curios-analysis/tests/driven/positivity_tests.rs`; that directory's `main.rs` says why.
 
 use {
-    super::{Occurrences, close, rec_member},
+    super::*,
     curios_core::{Free, Global, Intrinsic, Polarity, Term},
     curios_utilities::Qualifier,
     std::collections::BTreeMap,

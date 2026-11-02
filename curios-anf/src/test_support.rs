@@ -2,13 +2,7 @@
 //!
 //! A namespace rather than a root export, for `curios-native`'s `test_support` reason: nothing here collides with anything, but `curios_anf::test_support::shape` says at its use site that the caller reached for scaffolding rather than product API. The census's admission is spelling-sensitive by necessity — a spread of a field's value is structurally indistinguishable from the builder-accumulator cliff — so a respelling can silently unmark a field, and the cost surfaces only in a profile. This surface is the loud guard: a test states the verdict it relies on, by name, and a breaking respelling fails it instead of quietly regressing.
 
-use {
-    super::{
-        Atom, BlockId, Constant, DESCRIPTION_COPY_NODE_LIMIT, FunctionId, Module, RecGroupId, Rhs,
-        Statement, StatementId, Terminator, sequence_census, spell_function, spell_value,
-    },
-    curios_utilities::ArenaId,
-};
+use {super::*, curios_utilities::ArenaId};
 
 /// A description's copy, weighed as the closed evaluator charges for it, beside the cap a replacement holding one is copied within: past `cap`, the copy is declined and the call it would have replaced stays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

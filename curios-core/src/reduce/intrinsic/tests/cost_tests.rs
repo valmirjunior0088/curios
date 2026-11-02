@@ -4,7 +4,7 @@ use {
     crate::reduce::intrinsic::{
         Footprint, Reducer, image_bound, operand_bound, product_bound, sum_bound, test_support::*,
     },
-    crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term, int_normalize},
+    crate::*,
     curios_num::{Binary, Integer, Natural},
 };
 

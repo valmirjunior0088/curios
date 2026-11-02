@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, whnf},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
     curios_utilities::Qualifier,

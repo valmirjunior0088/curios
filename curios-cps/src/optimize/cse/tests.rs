@@ -1,10 +1,8 @@
 //! Common-subexpression elimination: what dominates, what commutes, and what may not be shared.
 
 use {
-    super::dedupe_intrinsics,
-    crate::{
-        Atom, Continuation, Edge, Function, Intrinsic, Module, Node, ValueId, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     std::collections::BTreeMap,
 };
 

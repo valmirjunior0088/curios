@@ -1,8 +1,8 @@
 //! Scripted streams: a chunked endpoint and standard input handing the wait back between chunks, a peer's end, and a read and a write within what was asked.
 
 use {
-    super::{MockHost, SocketEvent, test_support::*},
-    crate::{Failure, Handle, Mode},
+    super::{test_support::*, *},
+    crate::*,
     curios_abi::{HostOps, event},
 };
 

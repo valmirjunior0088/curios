@@ -1,8 +1,8 @@
 //! The one spelling two paths to a file share, whether a `mod` chain reaches a module, and when a file is parsed again.
 
 use {
-    super::{Error, Overlay, RootSource, identity},
-    crate::Entrypoint,
+    super::*,
+    crate::*,
     curios_utilities::{Qualifier, RootKind, Source, test_support::*},
     std::{fs, path::Path, sync::Arc},
 };

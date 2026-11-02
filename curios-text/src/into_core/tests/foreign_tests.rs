@@ -2,7 +2,7 @@
 
 use {
     crate::into_core::test_support::*,
-    crate::{Entrypoint, RootSource},
+    crate::*,
     curios_abi::{WireResults, WireReturn, WireType},
 };
 

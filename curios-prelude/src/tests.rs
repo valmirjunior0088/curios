@@ -4,7 +4,7 @@ use {
     crate::{
         std_module::{std_directory, std_source},
         sys_module::{sys_module, sys_source},
-        with_prelude,
+        *,
     },
     curios_abi::HostOp,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},

@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::Cli,
+    crate::*,
     clap::CommandFactory,
     curios_utilities::test_support::*,
     std::{collections::BTreeSet, fmt::Write, fs, iter},

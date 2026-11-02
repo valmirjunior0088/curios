@@ -1,6 +1,6 @@
 //! What the carriers' algebra decides beside the law grid: a law at an instance that changes its atoms, a metavariable solved through the cancellation and through the packed-literal view, and a type that eliminates what the algebra decides — each through both checkers.
 
-use super::run;
+use super::*;
 
 // A law proved over bare atoms holds at an instance whose substitution reshapes them: `x + z <= y + z` at `x := a + b`, `y := b`, `z := a + 1` cancels a summand the bare statement never had, and both sides fall to `a <= 0`; `i - j + j` at `i := k · l`, `j := k + l` cancels a sum against itself. The instantiated type and the one written meet only through what the substitution created.
 #[test]

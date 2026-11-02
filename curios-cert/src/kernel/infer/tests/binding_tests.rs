@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::infer::test_support::*,
-    crate::{Error, infer, whnf},
+    crate::*,
     curios_core::{Intrinsic, Rec, Reducer, Subterm, Term, Totality},
 };
 

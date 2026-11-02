@@ -1,11 +1,6 @@
 //! Which records one program yields: every refusal, goal and lint it holds, each located at its own term, a lint after the verdict it stands beside, and nothing for a declaration whose only fault is reaching a refused one.
 
-use {
-    super::test_support::*,
-    crate::{Origin, Severity, Subject, diagnostics},
-    curios_pipeline::DEFAULT_BUDGET,
-    curios_text::Overlay,
-};
+use {super::test_support::*, crate::*, curios_pipeline::DEFAULT_BUDGET, curios_text::Overlay};
 
 fn of(text: &str) -> Vec<crate::Diagnosis> {
     diagnostics(

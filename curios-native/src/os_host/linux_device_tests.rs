@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    crate::{Failure, Handle, SerialFlow, SerialParity},
+    crate::*,
     curios_abi::errno,
     rustix::termios::ControlModes,
 };

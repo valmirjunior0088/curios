@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{DEFAULT_BUDGET, Fold, Stage, compile_with_prelude},
+    crate::*,
     curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
     curios_text::RootSource,

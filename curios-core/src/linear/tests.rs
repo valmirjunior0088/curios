@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{Free, One, Reducer, Scope, int_negate, int_of_nat, int_sum, test_support::*},
+    crate::{test_support::*, *},
 };
 
 fn sym(index: u32, hint: &'static str) -> Term {
@@ -146,7 +146,7 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
     let (carrier, view) = views
         .read(&Intrinsic::nat_lt(add(x.clone(), nat(1)), y.clone()))
         .expect("a `Nat` ordering");
-    assert_eq!(carrier, Carrier::Natural);
+    assert_eq!(carrier, curios_algebra::Carrier::Natural);
 
     let spelled = view
         .form()
@@ -160,5 +160,5 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
     let (carrier, _) = views
         .read(&Intrinsic::IntLe(int(0), image(&x)))
         .expect("an `Int` ordering");
-    assert_eq!(carrier, Carrier::Integer);
+    assert_eq!(carrier, curios_algebra::Carrier::Integer);
 }

@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        optimize,
         tests::{error, run},
+        *,
     },
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},

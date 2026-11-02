@@ -3,7 +3,7 @@
 //! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
-    super::{cps_optm, run},
+    super::*,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},

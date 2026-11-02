@@ -3,7 +3,7 @@
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests, which share it.
 
 use {
-    crate::{Context, Established},
+    crate::*,
     curios_core::{Free, Term},
     curios_utilities::SyntaxRegistry,
 };

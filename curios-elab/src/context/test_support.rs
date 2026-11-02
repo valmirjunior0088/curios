@@ -2,15 +2,10 @@
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use {
-    super::{Caches, Context},
-    curios_core::Consumption,
-    curios_utilities::SyntaxRegistry,
-};
+use {super::*, curios_core::Consumption, curios_utilities::SyntaxRegistry};
 
 #[cfg(test)]
 use {
-    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Declarations, Definition, DefinitionKind, Global, HeadKey, Intrinsic, Item, Module, Term,

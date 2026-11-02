@@ -1,10 +1,7 @@
 //! What the printed continuation IR states: the nesting, the elision rule's two clauses, and the spellings that make a transfer legible.
 
 use {
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, Intrinsic, Literal, Module,
-        Node, NodeId, Register, Row, Slot, ValueDef, ValueExpr, test_support::*,
-    },
+    crate::{test_support::*, *},
     curios_num::{Natural, Rounding},
 };
 

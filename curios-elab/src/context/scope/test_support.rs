@@ -1,7 +1,7 @@
 //! What a test reads of the context's scope and no judgment does: every local, the base frame's among them.
 
 use {
-    crate::Context,
+    crate::*,
     curios_core::{Free, Term},
 };
 

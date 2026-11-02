@@ -1,7 +1,7 @@
 //! Which parts of a definition elaborated again answer as its baseline's.
 
 use {
-    crate::{Question, Same, item_part_digest},
+    crate::*,
     curios_core::{
         Anchor, Anchored, Definition, DefinitionKind, Extent, Global, Intrinsic, Item, Level, Nat,
         Place, Sharing, Term, Totality, UniverseConstraint, UniverseConstraintKind,

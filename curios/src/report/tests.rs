@@ -1,6 +1,6 @@
 //! How a build's header names the manifest that governs it.
 
-use {super::spelled_from, std::path::Path};
+use {super::*, std::path::Path};
 
 /// A manifest beside the invocation goes unsaid, one above it is a climb from where the reader stands, and one off to the side is its own path.
 #[test]

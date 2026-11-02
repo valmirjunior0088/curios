@@ -1,11 +1,8 @@
 //! Turning a function into a continuation, and the call shapes that forbid it.
 
 use {
-    super::{contify_calls, separate_loop_entries},
-    crate::{
-        Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, SCC_CLONE_NODE_LIMIT,
-        function_nodes, optimize, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::BTreeMap,
 };

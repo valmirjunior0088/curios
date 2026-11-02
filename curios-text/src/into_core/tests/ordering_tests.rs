@@ -2,7 +2,7 @@
 
 use {
     crate::into_core::test_support::*,
-    crate::{Entrypoint, Error, RootSource},
+    crate::*,
     curios_utilities::{Qualifier, RootKind},
 };
 

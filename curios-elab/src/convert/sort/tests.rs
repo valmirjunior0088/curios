@@ -1,7 +1,7 @@
 //! The sort a type inhabits, remembered: what the table saves, and what ends it.
 
 use {
-    crate::{Context, Opened, Sort},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term},
     curios_utilities::Qualifier,

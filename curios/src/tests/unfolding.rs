@@ -5,7 +5,7 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude`'s `stored_prelude_measurements`, whose shape this follows.
 
 use {
-    super::anf_optm,
+    super::*,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::{fmt::Write, time::Instant},

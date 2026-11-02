@@ -13,10 +13,7 @@
 //! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
 
 use {
-    super::{
-        Compiled, ForeignBindings, GUEST_HEAP, Guest, HostOps, Lower, MachineCode, guest_store,
-        host_rows, instantiate, lower_scalars, on_guest_stack, shared_engine, words_array_type,
-    },
+    super::*,
     curios_abi::HostOp,
     log::{LevelFilter, Log, Metadata, Record, set_logger, set_max_level},
     std::sync::{Arc, Mutex, Once},

@@ -1,10 +1,6 @@
 //! The bundle's addressing and what it writes: a mark's referent is found where the record shows the declaration, which for a facade is the re-exporting module's page under that module's own name; the index lists every module, named declaration and member at that address; and a page carries the field the script shows.
 
-use {
-    super::*,
-    crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
-    curios_utilities::test_support::*,
-};
+use {super::*, crate::*, curios_utilities::test_support::*};
 
 fn signature(text: &str) -> Signature {
     Signature {

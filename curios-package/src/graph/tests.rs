@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::TreeHash,
+    crate::*,
     curios_utilities::{fill, test_support::*},
     std::fs,
 };

@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals, Verdict},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Global, Intrinsic, Level, Module, Term, UniverseParam, Variance},
     curios_utilities::Qualifier,

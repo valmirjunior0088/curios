@@ -2,7 +2,7 @@
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use {super::Reader, curios_core::Consumption};
+use {super::*, curios_core::Consumption};
 
 impl Reader<'_, '_> {
     /// What the declaration being read has consumed since its budget was last restored, which a measurement of what a reading spends takes.

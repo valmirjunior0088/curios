@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Counted, Error, Globals, Verdict},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,

@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::{Entrypoint, RootSource},
+    crate::*,
     curios_core::test_support::*,
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,

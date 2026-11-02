@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     super::*,
-    crate::{ChildExit, ChildHandles, Failure, Handle, StdioMode},
+    crate::*,
     std::{num::NonZeroU32, thread, time::Duration},
 };
 

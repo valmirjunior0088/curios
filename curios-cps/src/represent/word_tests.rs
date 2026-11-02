@@ -1,11 +1,8 @@
 //! Which values a word holds: a signed one what lies below `2³⁰`, an unsigned one what lies below `2³²`, as the bound on every value reaching a site says.
 
 use {
-    super::{Storage, representation, test_support::*},
-    crate::{
-        Atom, Callee, Continuation, Edge, Intrinsic, Literal, Module, Node, Register, Repr,
-        ValueDef, ValueId,
-    },
+    super::{test_support::*, *},
+    crate::*,
     curios_num::Natural,
 };
 

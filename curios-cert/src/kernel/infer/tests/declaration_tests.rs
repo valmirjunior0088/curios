@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::infer::test_support::*,
-    crate::{Error, check, check_definition, infer},
+    crate::*,
     curios_core::{
         Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,

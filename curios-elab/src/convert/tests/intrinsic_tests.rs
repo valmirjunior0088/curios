@@ -2,7 +2,7 @@
 
 use {
     crate::convert::test_support::*,
-    crate::same_uncommitted,
+    crate::*,
     curios_core::{
         Free, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm, Term,
         Universes, Var,

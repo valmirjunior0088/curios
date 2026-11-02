@@ -1,8 +1,8 @@
 //! What a witness signature spells before anything elaborates: the key each written shape gives, and the shapes that give none.
 
 use {
-    super::{HeadKey, Keying, WitnessKey, Written},
-    crate::{Free, Global, Intrinsic, Term},
+    super::*,
+    crate::*,
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeMap,
 };

@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Witness, refused},
+    crate::*,
     curios_core::{Intrinsic, Nat},
 };
 

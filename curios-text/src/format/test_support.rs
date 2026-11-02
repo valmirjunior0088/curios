@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    super::Formatted,
+    super::*,
     curios_utilities::Source,
     std::path::{Path, PathBuf},
 };

@@ -1,10 +1,7 @@
 //! Measures over known and symbolic lengths: a located window, a window on a concatenation's seams, a concatenation's normal form, and a literal's split.
 
 use {
-    crate::{
-        Concatenated, Cut, Joining, Seam, Span, Split, join, locate, seam_window, split,
-        test_support::*,
-    },
+    crate::{test_support::*, *},
     std::convert::Infallible,
 };
 

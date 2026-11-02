@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Asked, Checkout, Cli, schedule},
+    crate::*,
     clap::{CommandFactory, Parser},
     std::collections::BTreeSet,
 };

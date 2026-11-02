@@ -1,10 +1,6 @@
 //! How a reply encodes: the status first, a payload's values or the padding in their place, and a termination or a refusal in place of any value.
 
-use {
-    super::{Encoded, WireReply, WireValue},
-    crate::{ChildExit, ChildHandles, Failure, Handle, Refusal, Termination, TtySize, status},
-    std::num::NonZeroU32,
-};
+use {super::*, crate::*, std::num::NonZeroU32};
 
 #[test]
 fn a_failure_pads_the_payload_it_does_not_carry() {

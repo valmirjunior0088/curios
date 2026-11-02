@@ -1,11 +1,7 @@
 //! Call sweeps share equivalent sites, batch independent roots and defer callees whose incoming calls changed.
 
 use {
-    crate::{
-        Atom, BRANCH_COPY_NODE_LIMIT, Callee, CopyBudget, CopyPlan, FunctionId, Module, Node,
-        NodeId, copy_bodies, function_nodes, prune_unreachable, specialize_call_patterns,
-        test_support::*,
-    },
+    crate::{test_support::*, *},
     std::collections::BTreeSet,
 };
 

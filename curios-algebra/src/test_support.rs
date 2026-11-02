@@ -1,9 +1,6 @@
 //! A toy alphabet the word and measure suites share: symbols are names, a number is a constant beside a multiset of names, and a base may be declared a window of another or a concatenation of chunks.
 
-use {
-    crate::{Alphabet, Segment, Word},
-    std::collections::HashMap,
-};
+use {crate::*, std::collections::HashMap};
 
 /// A constant beside a sorted multiset of symbolic names.
 #[derive(Clone, Debug, PartialEq)]

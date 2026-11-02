@@ -1,8 +1,4 @@
-use {
-    super::*,
-    crate::{Definition, DefinitionKind, Free, Totality, UniverseContext},
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 fn definition(name: &str) -> Definition {
     let global = Global::Authored(Qualifier::from([name]));

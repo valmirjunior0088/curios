@@ -1,7 +1,7 @@
 //! The search, over forms built directly: what it refutes and with which multipliers, what it satisfies and with which assignment, what it refuses to cut, what exhausts it, and that it answers alike every time; where it opens a case split and what that costs; and the rationals its assignments are written in.
 
 use {
-    super::{Arms, Certificate, DERIVED_ROWS, Plan, Rational, Search, plan, refute},
+    super::*,
     curios_algebra::{Atom, LinearForm, Monomial},
     curios_num::{Integer, Natural},
     std::slice,

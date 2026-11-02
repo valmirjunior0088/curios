@@ -3,8 +3,8 @@
 //! The program is written with a mark around each name the lowering does not resolve, `«name»`, and is read with the marks taken out. Every path it writes is then held to what its text mentions: one that ends in a declaration's name, and stands in no mark, is one mention of that declaration over the whole path, and every other is none.
 
 use {
-    super::super::{UnitSource, into_core_entry, test_support::*},
-    crate::{Entrypoint, PreparedText},
+    super::super::{test_support::*, *},
+    crate::*,
     std::{collections::BTreeMap, ops::Range},
 };
 

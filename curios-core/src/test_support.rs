@@ -5,11 +5,7 @@
 //! **Behind `test-support`, not `#[cfg(test)]`.** The caller is `curios-text`'s lowering suite, a different crate, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to it. The gate is also what keeps a shape no compiler stage produces out of every build that ships.
 
 use {
-    crate::{
-        Cases, ConceptDecl, Cost, Definition, DefinitionKind, Free, Global, InductDecl, Item,
-        Match, MatchResult, Minted, Module, Nominal, Program, RecItem, ReduceError, Reducer,
-        StructDecl, Subterm, Term, reduce_intrinsic,
-    },
+    crate::*,
     curios_utilities::Qualifier,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},

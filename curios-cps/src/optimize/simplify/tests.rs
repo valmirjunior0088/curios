@@ -1,11 +1,8 @@
 //! Jump and call forwarding, atom rewriting, and the calls whose results nothing reads.
 
 use {
-    super::{eliminate_dead_calls, forward_calls, forward_continuations, rewrite_atoms},
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Literal, Module,
-        Node, NodeId,
-    },
+    super::*,
+    crate::*,
     curios_num::{Floating, Natural},
     std::collections::BTreeMap,
 };

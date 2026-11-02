@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Kernel, check_struct_decl},
+    crate::*,
     curios_core::{
         Free, Global, Intrinsic, Level, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext, Universes,

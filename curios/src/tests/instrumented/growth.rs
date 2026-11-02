@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        optimize,
         tests::{Growth, grown},
+        *,
     },
     curios_core::take_looks,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},

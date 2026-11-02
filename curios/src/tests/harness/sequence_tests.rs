@@ -1,6 +1,6 @@
 //! Successful payloads, declared embeddings and first-failure sequencing.
 
-use super::super::{error, run, run_tests_program, tests_error};
+use super::super::*;
 
 /// A written function reads its Test monad from the result, and Io embeds through its declared edge.
 #[test]

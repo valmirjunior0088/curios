@@ -1,13 +1,6 @@
 //! Entry capability follows returned rows, including recursive and opaque flows, without changing the representation vocabulary.
 
-use {
-    crate::{
-        Atom, Callee, CellOp, ChannelOp, Continuation, ContinuationId, Edge, Function, FunctionId,
-        Intrinsic, Literal, Module, Node, NodeId, RowId, ValueExpr, ValueId,
-    },
-    curios_num::Natural,
-    std::collections::BTreeMap,
-};
+use {crate::*, curios_num::Natural, std::collections::BTreeMap};
 
 fn nat(n: u32) -> Atom {
     Atom::Literal(Literal::Nat(Natural::from(n)))

@@ -1,7 +1,7 @@
 //! What `wonder at` and `wonder declarations` answer: the names a file writes, read off its subject as it was lowered, each with the declaration it names.
 
 use {
-    crate::{Declaration, Named, Origin, Subject, Written},
+    crate::*,
     curios_core::Declared,
     curios_pipeline::DEFAULT_BUDGET,
     curios_text::{Overlay, RootSource},

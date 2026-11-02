@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, resolved_spelling, whnf},
+    crate::*,
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Term},
 };

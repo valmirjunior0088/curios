@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    crate::{Free, Level, Var},
+    crate::*,
 };
 
 fn list_window(base: Term, start: Term, count: Term) -> Term {

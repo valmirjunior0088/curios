@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::convert::test_support::*,
-    crate::{Error, convert},
+    crate::*,
     curios_core::{
         Atom, Cases, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Match,
         MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext,

@@ -1,8 +1,8 @@
 //! What a run reports when more than one declaration is refused: every independent refusal, nothing from a declaration that reaches a refused one, and both erasure obligations when both fail.
 
 use {
-    super::{error, run_entrypoint, tests_error},
-    crate::to_compiled,
+    super::*,
+    crate::*,
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, TestProgram},
     curios_text::{Entrypoint, RootSource},

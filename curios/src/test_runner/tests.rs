@@ -1,6 +1,6 @@
 //! Which prefix a `--filter` names.
 
-use {super::prefix, curios_utilities::Qualifier};
+use {super::*, curios_utilities::Qualifier};
 
 #[test]
 fn a_filter_names_its_paths_segments() {

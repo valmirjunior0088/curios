@@ -1,6 +1,6 @@
 //! What the suites read of the constraint store's speculation and no judgment does: how deep it stands and what its journal holds.
 
-use super::ConstraintStore;
+use super::*;
 
 impl ConstraintStore {
     /// How many speculative scopes are open.

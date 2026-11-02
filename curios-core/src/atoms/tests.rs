@@ -1,8 +1,4 @@
-use {
-    super::{Atoms, same_atom},
-    crate::{Free, Intrinsic, Level, Nat, Term},
-    curios_algebra::Carrier,
-};
+use {super::*, crate::*, curios_algebra::Carrier};
 
 /// One call of a universe-polymorphic name at two instances, and the call at another argument.
 fn calls() -> (Term, Term, Term) {

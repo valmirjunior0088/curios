@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Sort, check_induct_decl, infer},
+    crate::*,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseContext,

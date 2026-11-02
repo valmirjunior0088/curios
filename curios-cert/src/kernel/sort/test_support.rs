@@ -1,7 +1,7 @@
 //! What the sort suites share: a kernel, a name, a binder, and a declaration at a stated sort.
 
 use {
-    crate::Kernel,
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Free, Global, InductDecl, Telescope, Term, UniverseContext},
     curios_utilities::Qualifier,

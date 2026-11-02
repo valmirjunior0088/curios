@@ -1,7 +1,7 @@
 //! The recording rule on each kind of spelling it is asked about.
 
 use {
-    super::{holds_no_type, records_case_equation},
+    super::*,
     curios_core::{Free, Intrinsic, Nat, Term},
     curios_utilities::Qualifier,
 };

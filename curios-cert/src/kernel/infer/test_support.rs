@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::Kernel,
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Free, Global, Intrinsic, Level, Nat, Polarity, StructDecl, Telescope, Term, UniverseContext,

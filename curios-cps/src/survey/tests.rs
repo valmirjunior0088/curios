@@ -1,8 +1,4 @@
-use {
-    super::*,
-    crate::{Atom, Edge, Literal, Node, ValueExpr},
-    curios_num::Natural,
-};
+use {super::*, crate::*, curios_num::Natural};
 
 /// A module holding one function per name given, plus one unnamed function — which is what a compiler-minted shell looks like to [`descendants`].
 fn module_naming(names: &[Option<&str>]) -> Module {

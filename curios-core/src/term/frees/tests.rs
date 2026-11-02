@@ -1,4 +1,4 @@
-use {super::*, crate::Term, curios_utilities::Qualifier};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 /// Every empty set is one allocation, however it was come to.
 #[test]

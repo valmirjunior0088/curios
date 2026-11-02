@@ -1,7 +1,7 @@
 //! What the suites write to the universe solver and no judgment does: a level metavariable minted bare, which a comparison under test starts from.
 
 use {
-    super::UniverseMutation,
+    super::*,
     curios_core::{UniverseConstraintOrigin, UniverseMetaId, UniverseRole},
 };
 

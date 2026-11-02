@@ -1,12 +1,6 @@
 //! The pieces the representation suites build their modules from by hand.
 
-use {
-    crate::{
-        Atom, Continuation, ContinuationId, Edge, Function, FunctionId, Literal, Module, Node,
-        NodeId, ValueId,
-    },
-    curios_num::Natural,
-};
+use {crate::*, curios_num::Natural};
 
 /// Make `body` the entry function's body, with `params` as its parameters. The return continuation is reserved and never defined, which is exactly what a function's return sentinel is.
 pub(super) fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {

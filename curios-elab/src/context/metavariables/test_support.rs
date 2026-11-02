@@ -1,7 +1,7 @@
 //! How a fixture states a metavariable, which no judgment does: over a telescope stated for it rather than the one where the context stands.
 
 use {
-    crate::{BirthTelescope, Context, Scoped, context::MetaKind},
+    crate::{context::MetaKind, *},
     curios_core::{MetavarId, Term},
 };
 

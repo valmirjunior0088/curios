@@ -7,7 +7,7 @@
 //! The documents are literals and reach the decoder as written. The evaluator does not unroll a closed decode — the stage profile of such a program puts its cost in the fixpoint, not in elaboration or `evaluate_closed_terms` — so nothing here needs a taint to reach the emitted codec. The long binary literals still use one, digit runs repeated a `(opaque + 1) * n` number of times, because a literal of thirty digits is the thing a reader should not have to count.
 
 use {
-    super::{compile, run},
+    super::*,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_utilities::fill,
     std::sync::OnceLock,

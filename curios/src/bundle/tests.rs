@@ -1,4 +1,4 @@
-use super::LAUNCHER;
+use super::*;
 
 /// Markers of a native backend, as they appear in a linked image: `cranelift-codegen`'s panic-location paths, its Rust symbol names, and Binaryen's.
 ///

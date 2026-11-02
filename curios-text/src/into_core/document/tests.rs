@@ -1,6 +1,6 @@
 //! What a declaration's own text states of a definition it declares: the head a page would print it by, and the prose above it.
 
-use super::{Heading, heading};
+use super::*;
 
 /// What `declaration` states of the definition named at the `nth` occurrence of `name` in it.
 fn stated(declaration: &str, name: &str, nth: usize) -> Option<(String, Vec<String>)> {

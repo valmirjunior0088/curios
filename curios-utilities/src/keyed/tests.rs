@@ -1,5 +1,5 @@
 use {
-    super::Keyed,
+    super::*,
     std::{
         cell::Cell,
         collections::HashMap,

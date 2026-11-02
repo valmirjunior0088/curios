@@ -1,11 +1,8 @@
 //! Which joins a float register holds: only one every argument reaching hands a float already, a statement included, never a reference stating nothing.
 
 use {
-    super::{Storage, representation, test_support::*},
-    crate::{
-        Atom, Continuation, Edge, Intrinsic, Literal, Module, Node, Register, Repr, ValueDef,
-        ValueId,
-    },
+    super::{test_support::*, *},
+    crate::*,
     curios_num::{Floating, Rounding},
 };
 

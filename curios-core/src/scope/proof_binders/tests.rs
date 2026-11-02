@@ -1,10 +1,6 @@
 //! The marking walk: which binders it asks, what it stands in for the binders around them, and that a term it changes nothing in comes back the node it was.
 
-use {
-    super::ProofBinders,
-    crate::{Bound, Free, Func, FuncType, Intrinsic, Let, Quality, Subterm, Term},
-    std::collections::BTreeMap,
-};
+use {super::*, crate::*, std::collections::BTreeMap};
 
 /// A checker that answers yes of a sort and of a variable it entered at `Prop`, and keeps a record of what it was asked: a rule chosen to tell the walk's questions apart, and not the one a checker asks.
 #[derive(Default)]

@@ -1,6 +1,6 @@
 //! What the encoder refuses at index-space construction, before any byte is written.
 
-use crate::{Module, to_bytes};
+use crate::*;
 
 /// The local index space is the type's inputs followed by the locals; a param list of another length would number every local into the wrong slot, in a module that still validates.
 #[test]

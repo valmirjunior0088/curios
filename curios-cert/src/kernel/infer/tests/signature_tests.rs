@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::infer::test_support::*,
-    crate::{Error, Kernel, infer},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Declaration, Free, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity,

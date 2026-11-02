@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::Telescope,
+    crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     std::sync::Arc,
 };

@@ -1,8 +1,8 @@
 //! Eta at a function, a pair and a type with no field or one inhabitant — by the goal's type, and by a literal where no type directs it.
 
 use {
-    crate::convert,
     crate::kernel::convert::test_support::*,
+    crate::*,
     curios_core::{
         Cases, Free, Global, Intrinsic, Match, MatchResult, StructDecl, StructType, Subterm,
         Telescope, Term, UniverseContext, Universes,

@@ -1,8 +1,8 @@
 //! Two host calls: a call is its declaration and its operands, and nothing else holds two apart or one.
 
 use {
-    crate::convert,
     crate::kernel::convert::test_support::*,
+    crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_core::{Global, Intrinsic, Term},
     curios_utilities::Qualifier,

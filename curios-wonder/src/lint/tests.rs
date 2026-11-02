@@ -1,6 +1,6 @@
 //! The one lint decided over a package rather than a unit: a declared dependency nothing reached.
 
-use {super::unused_dependencies, curios_utilities::Qualifier, std::collections::BTreeSet};
+use {super::*, curios_utilities::Qualifier, std::collections::BTreeSet};
 
 #[test]
 fn a_dependency_no_unit_resolved_into_is_unused_and_a_reached_one_is_not() {

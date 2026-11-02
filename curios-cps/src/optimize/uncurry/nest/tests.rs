@@ -1,10 +1,4 @@
-use {
-    super::uncurry_nests,
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Module,
-        Node, NodeId, ValueExpr, ValueId, shrink,
-    },
-};
+use {super::*, crate::*};
 
 fn jump(module: &mut Module, target: ContinuationId, args: Vec<Atom>) -> NodeId {
     module.add_node(Node::ApplyCont(Edge { target, args }))

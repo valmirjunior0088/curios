@@ -1,5 +1,5 @@
 use {
-    super::evaluate_closed_terms,
+    super::*,
     crate::*,
     curios_num::{Binary, Natural},
 };

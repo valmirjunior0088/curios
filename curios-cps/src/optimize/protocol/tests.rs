@@ -1,9 +1,6 @@
 use {
-    super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Module, Node, Row, RowId, Slot, ValueExpr, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
 };
 

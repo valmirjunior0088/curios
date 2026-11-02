@@ -1,10 +1,6 @@
 //! Structural equality modulo the identities a lowering mints.
 
-use {
-    crate::term::*,
-    crate::{Level, MetavarId, Nat, UniverseMetaId},
-    curios_utilities::Keyed,
-};
+use {crate::term::*, crate::*, curios_utilities::Keyed};
 
 fn hole(id: usize) -> Term {
     Term::hole(MetavarId::from(id))

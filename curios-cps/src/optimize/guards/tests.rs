@@ -1,12 +1,4 @@
-use {
-    super::answer_window_guards,
-    crate::{
-        Atom, Continuation, ContinuationId, Edge, Function, Intrinsic, Literal, Module, Node,
-        ValueId,
-    },
-    curios_num::Natural,
-    std::collections::BTreeMap,
-};
+use {super::*, crate::*, curios_num::Natural, std::collections::BTreeMap};
 
 fn nat(value: u32) -> Atom {
     Atom::Literal(Literal::Nat(Natural::from(value)))

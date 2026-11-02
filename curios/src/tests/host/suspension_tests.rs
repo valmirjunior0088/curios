@@ -1,7 +1,7 @@
 //! A program that suspends: the host's turn loop advancing it — through a timer, through a cell already filled, through the binds a suspension passes out of, through a cancel that suspends in turn, through a FIFO a branch waits on, through an embedder's row answered later — and what it reports of one suspended on nothing it can wait for.
 
 use {
-    crate::run_wasm,
+    crate::*,
     curios_abi::ForeignStore,
     curios_native::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},

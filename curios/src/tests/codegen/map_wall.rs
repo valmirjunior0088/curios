@@ -1,7 +1,7 @@
 //! The `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
 
 use {
-    crate::to_compiled,
+    crate::*,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},

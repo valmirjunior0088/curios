@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Failure, Handle},
+    crate::*,
     curios_abi::event,
     rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
 };

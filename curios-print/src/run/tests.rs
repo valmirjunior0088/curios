@@ -1,8 +1,8 @@
 //! A following run: where the comments of an [`Original`] land as the document read from it is written.
 
 use {
-    super::{Original, Owed, run_printer_placing},
-    crate::{Printer, ends, fill, flat, group, hard_line, indent, line, pure, reached, soft_line},
+    super::*,
+    crate::*,
     std::{cell::Cell, fmt},
 };
 

@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::ReadRecord,
+    crate::*,
     curios_utilities::{Facet, Qualifier, candidate_prefix},
 };
 

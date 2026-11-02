@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{DEFAULT_BUDGET, compile_unit_over},
+    crate::*,
     curios_core::{Global, ItemRun},
     curios_elab::{declaration_input, lowered_digest},
     curios_prelude::with_prelude,

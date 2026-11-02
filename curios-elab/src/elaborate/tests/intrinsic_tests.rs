@@ -1,7 +1,7 @@
 //! Raw intrinsic obligations, independently of the generated system wrappers.
 
 use {
-    crate::{Context, Mode, elaborate},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Free, Intrinsic, Nat, Term},
 };

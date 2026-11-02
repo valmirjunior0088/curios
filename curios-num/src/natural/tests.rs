@@ -1,6 +1,6 @@
 //! The greatest common divisor, against the cases a comparison reads it at.
 
-use crate::Natural;
+use crate::*;
 
 fn nat(value: u64) -> Natural {
     Natural::from(value)

@@ -1,9 +1,6 @@
 use {
-    super::{Origin, origins},
-    crate::{
-        Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, Slot, ValueExpr,
-        ValueId, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::BTreeSet,
 };

@@ -1,8 +1,8 @@
 //! Which values hold closures of one arity, so the emitter declares them at that arity's environment type: a join every edge hands one arity, and never one a second arity, a reference or a call's result reaches.
 
 use {
-    super::{representation, test_support::*},
-    crate::{Atom, Callee, Edge, FunctionId, Module, Node, ValueId},
+    super::{test_support::*, *},
+    crate::*,
 };
 
 /// Define a function taking `arity` parameters, which returns its first or, taking none, a literal, and answer it.

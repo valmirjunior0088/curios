@@ -8,7 +8,7 @@
 
 use {
     super::test_support::*,
-    crate::refine_head,
+    crate::*,
     curios_analysis::test_support::*,
     curios_cert::Kernel,
     curios_core::{Free, Intrinsic, Reducer, Term, UniverseContext},

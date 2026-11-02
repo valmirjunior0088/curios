@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::convert::test_support::*,
-    crate::{Error, convert},
+    crate::*,
     curios_core::{
         Free, FuncType, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext, Universes, Var,
     },

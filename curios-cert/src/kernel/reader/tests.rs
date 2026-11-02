@@ -1,7 +1,7 @@
 //! The reading door: each entry asked of terms the kernel accepted.
 
 use {
-    crate::{Kernel, infer},
+    crate::*,
     curios_analysis::{Erased, test_support::*},
     curios_core::{
         Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Telescope,

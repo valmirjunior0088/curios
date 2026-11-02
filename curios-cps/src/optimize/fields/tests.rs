@@ -1,10 +1,6 @@
 use {
-    super::{split_parameters, split_workers},
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, CopyPlan, Edge, FieldGroup, Function,
-        FunctionId, Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, copy_bodies,
-        optimize, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };

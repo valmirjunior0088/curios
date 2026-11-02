@@ -4,7 +4,7 @@ use {
     crate::reduce::intrinsic::{
         Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic, test_support::*,
     },
-    crate::{Aligned, Intrinsic, Nat, ReduceError, Subterm, Term},
+    crate::*,
     curios_num::Integer,
 };
 

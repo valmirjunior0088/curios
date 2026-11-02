@@ -4,7 +4,7 @@
 //!
 //! **Every row compiles, and every control is refused for its bound and nothing else** — a control refused for a misspelling would pass as refused, so the refusal must name what nothing discharged. A control states what the procedure's fragment leaves out. Why the procedure is what it is is `documentation/design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md`, and its contract is `curios-elab`'s `entailment` documentation.
 
-use super::{core_elab, typecheck};
+use super::*;
 
 /// The imports every program opens with.
 const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io, proved}; use /std/Bool/{True, False, Holds};";

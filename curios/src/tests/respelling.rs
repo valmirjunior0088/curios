@@ -7,7 +7,7 @@
 use {
     super::{
         laws::{Binder, orders},
-        typecheck,
+        *,
     },
     curios_utilities::fill,
 };

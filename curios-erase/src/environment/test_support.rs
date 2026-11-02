@@ -2,7 +2,7 @@
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use super::{Environment, FamilyRow};
+use super::*;
 
 impl Environment {
     /// The row of each inductive this item declares.

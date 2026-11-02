@@ -1,6 +1,6 @@
 //! The names a print spells: a binder suffixed beside a like-named global or label, a reader's own declaration claiming its bare name, suffixes counted across a scope, and a level a metavariable heads.
 
-use {super::*, crate::Level};
+use {super::*, crate::*};
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {

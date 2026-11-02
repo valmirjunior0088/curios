@@ -4,7 +4,7 @@
 //!
 //! No seed states a verdict. Which side a checker puts it on is read from each checker asked by itself, and a seed a checker puts on the other side is listed in the table of parted rows with the finding that holds why.
 
-use super::{Answers, Audit, asked_alone, closes, hold_to_the_table, parted};
+use super::*;
 
 /// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count. `through`, `into` and `pair` eliminate a proof of `Zero`, so unfolding one leaves its proof a stuck elimination's scrutinee: what comparing two calls by their spines first is for.
 pub(super) const STRUCTURAL: &str =

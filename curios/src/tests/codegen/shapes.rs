@@ -1,8 +1,8 @@
 //! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument; the figures live here, in the `stored_prelude_measurements` pattern — the command and what each probe last printed, beside the code that retakes it.
 
 use {
-    super::{compiled_of, run, timed},
-    crate::{optimize, tests::anf_optm},
+    super::*,
+    crate::{tests::anf_optm, *},
     curios_anf::{FieldShape, Module},
     curios_native::Compiled,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},

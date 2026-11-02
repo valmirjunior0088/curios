@@ -1,4 +1,4 @@
-use {super::Bound, crate::Lattice, curios_num::Natural};
+use {super::*, crate::*, curios_num::Natural};
 
 fn of(value: u64) -> Bound {
     Bound::of(&Natural::from(value))

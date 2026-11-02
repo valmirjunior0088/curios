@@ -1,6 +1,6 @@
 //! The truth table the decision diagram is held to, and the formulas it is held to it over.
 
-use super::{Formula, Node};
+use super::*;
 
 /// Whether the formulas rooted at `left` and `right` agree at every assignment of `formula`'s atoms, each evaluated at every one: the truth table, which needs nothing but the formula's meaning.
 pub(super) fn tabled(formula: &Formula, left: usize, right: usize) -> bool {

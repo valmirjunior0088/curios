@@ -2,7 +2,7 @@
 
 use {
     crate::reduce::intrinsic::test_support::*,
-    crate::{Free, Intrinsic, Term},
+    crate::*,
     curios_num::{Floating, Rounding},
 };
 

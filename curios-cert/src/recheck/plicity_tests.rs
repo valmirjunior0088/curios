@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Counted, Error, Globals},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Free, Subterm},
     curios_utilities::Plicity,

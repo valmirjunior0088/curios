@@ -1,12 +1,4 @@
-use {
-    super::{ClosedHost, ClosedMemo, Demand, reduce_closed, unfold_rec},
-    crate::{
-        Cases, Category, Cost, Exhaustion, Free, Func, InductArm, Intrinsic, Let, Many, Match,
-        ReduceError, Reducer, Scope, Subterm, Term,
-    },
-    curios_num::Binary,
-    std::collections::BTreeMap,
-};
+use {super::*, crate::*, curios_num::Binary, std::collections::BTreeMap};
 
 /// The minimal host: a definition store and a budget. Its own reduction *is* the machine, which is exactly the position the real hosts put it in for closed terms — anything the intrinsic folds hand back through the [`Reducer`] seam lands here and re-enters the machine.
 struct Host {

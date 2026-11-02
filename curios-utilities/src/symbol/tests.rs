@@ -1,6 +1,6 @@
 //! Interned spellings: one allocation per spelling, compared by address and ordered by content.
 
-use {super::Symbol, std::thread};
+use {super::*, std::thread};
 
 #[test]
 fn equal_spellings_are_one_symbol() {

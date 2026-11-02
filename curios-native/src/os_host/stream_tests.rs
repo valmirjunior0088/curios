@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     super::*,
-    crate::{Failure, Handle, Mode},
+    crate::*,
     curios_abi::{errno, event},
     curios_utilities::test_support::*,
     rustix::fs::OFlags,

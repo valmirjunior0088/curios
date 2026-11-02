@@ -1,9 +1,6 @@
 use {
-    super::shrink,
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Module, Node, NodeId, Row, RowId, Slot, ValueExpr, ValueId, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::{Floating, Integer, Natural, Rounding},
     std::collections::BTreeMap,
 };

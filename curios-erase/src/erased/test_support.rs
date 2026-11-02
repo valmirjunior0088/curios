@@ -2,10 +2,7 @@
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use {
-    super::{ErasedForms, ErasedUnit},
-    crate::test_support::*,
-};
+use {super::*, crate::test_support::*};
 
 impl ErasedUnit {
     /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.

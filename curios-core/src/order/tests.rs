@@ -1,8 +1,4 @@
-use {
-    super::*,
-    crate::{Definition, DefinitionKind, Free, Term, Totality, UniverseContext},
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 fn authored(name: &str) -> Global {
     Global::Authored(Qualifier::from([name]))

@@ -9,7 +9,7 @@
 //! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`kernel_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
-    super::{Consumed, predicates, typecheck_within},
+    super::*,
     curios_core::{Consumption, Cost},
     curios_pipeline::{
         DEFAULT_BUDGET, recheck_with_prelude, recheck_with_prelude_measured, typecheck_with_prelude,

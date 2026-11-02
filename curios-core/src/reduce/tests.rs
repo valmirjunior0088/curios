@@ -1,6 +1,6 @@
 //! The rule every probe keeps, read off a reduction's result.
 
-use crate::{Cost, Probe, ReduceError};
+use crate::*;
 
 fn exhausted() -> ReduceError {
     ReduceError::exhausted(3, Cost::term(8))

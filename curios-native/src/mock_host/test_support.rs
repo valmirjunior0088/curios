@@ -1,8 +1,8 @@
 //! What the scripted host's suites share: a wait driven to its answer, a watch on a handle, and a child spawned with its streams.
 
 use {
-    super::MockHost,
-    crate::{Answer, ChildHandles, Handle, Later, Settled, StdioMode},
+    super::*,
+    crate::*,
     curios_abi::{HostOps, event},
 };
 

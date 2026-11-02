@@ -1,10 +1,6 @@
 //! The pieces a page is cut into: keywords out of a signature, and the kind tally a module card shows.
 
-use {
-    super::*,
-    crate::{Declaration, Kind, Signature},
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 /// The text the segments spell, links and keywords included.
 fn plain(segments: &[Segment]) -> String {

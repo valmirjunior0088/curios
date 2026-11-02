@@ -1,13 +1,8 @@
 //! Specializing an SCC, a call pattern, and a jump pattern, each against its clone and growth budget.
 
 use {
-    super::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
-    crate::{
-        Atom, BRANCH_COPY_NODE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
-        CopyBudget, CopyPlan, Edge, Function, Intrinsic, JUMP_COPY_NODE_LIMIT, Literal, Module,
-        Node, Row, RowId, SCC_CLONE_NODE_LIMIT, SCC_COPY_NODE_LIMIT, Slot, ValueExpr,
-        function_nodes, known_values, shrink, test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };

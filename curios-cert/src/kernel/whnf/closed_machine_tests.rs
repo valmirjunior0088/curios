@@ -1,8 +1,7 @@
 //! The closed machine, checked against the strategy it accelerates.
 
 use {
-    super::{test_support::*, unfold_rec},
-    crate::Kernel,
+    super::{test_support::*, *},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Reducer, Scope,
         Subterm, Telescope, Term, UniverseContext,

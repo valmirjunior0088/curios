@@ -1,7 +1,4 @@
-use {
-    super::*,
-    crate::{Date, Platform, Timed, took},
-};
+use {super::*, crate::*};
 
 const MACHINE: &str = "A Processor, x86_64, 16 cpus, 31.3 GiB";
 const STATE: &str = "governor performance, boost on, smt on";

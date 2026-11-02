@@ -1,7 +1,4 @@
-use {
-    super::*,
-    crate::{Atom, Conclusion},
-};
+use {super::*, crate::*};
 
 fn atom(index: u32) -> Atom {
     Atom::new(index, u64::from(index))

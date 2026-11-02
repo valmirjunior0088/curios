@@ -1,6 +1,6 @@
 //! Several values' bytes laid out in one buffer, and read back as runs of it.
 
-use super::{Bytes, joined, parted};
+use super::*;
 
 fn parts_of(bytes: Vec<u8>) -> Option<Vec<Vec<u8>>> {
     let parts = parted(&Bytes::from(bytes))?;

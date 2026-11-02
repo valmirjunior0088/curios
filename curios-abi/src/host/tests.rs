@@ -1,12 +1,4 @@
-use {
-    super::{
-        ClosedCode, Failure, FileKind, ForeignFunction, ForeignStore, HostOp, Mode, ResultShape,
-        SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireResults, WireReturn,
-        WireSignature, WireType,
-    },
-    crate::{code_sets, status},
-    std::fmt::Debug,
-};
+use {super::*, crate::*, std::fmt::Debug};
 
 /// The results `op` answers with, for a row that returns.
 fn answers(op: HostOp) -> &'static WireResults {

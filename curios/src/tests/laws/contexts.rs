@@ -5,7 +5,7 @@
 //! **Where a hole lands is read back.** A context names the former its hole sits directly under, and `every_context_places_its_hole_under_the_former_it_names` reads that off the term the elaborator builds for it around a marker. [`former`] names a former by a `match` over `Subterm` with no wildcard, and over `Cases` beneath it, so a former added to Core does not compile here until it says whether a context holds a hole under it. What the lint holds is the former and the kind of elimination; which of a former's children a context's hole is, is the context's to state.
 
 use {
-    super::{Answers, Audit, SEEDS, STRUCTURAL, asked_alone, claim, hold_to_the_table},
+    super::*,
     curios_core::{Bound, Carrier, Cases, Free, Global, Item, Match, Subterm, Term, Visit},
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},

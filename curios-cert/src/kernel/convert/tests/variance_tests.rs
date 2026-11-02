@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::convert::test_support::*,
-    crate::{Kernel, convert, whnf},
+    crate::*,
     curios_analysis::held_levels,
     curios_core::{
         Free, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam, Variance,

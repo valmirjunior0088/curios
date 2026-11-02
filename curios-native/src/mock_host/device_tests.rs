@@ -1,8 +1,8 @@
 //! The scripted terminal and serial ports: sizes and keys as scripted, the devices listed, and a port's speed, discard and drain.
 
 use {
-    super::{CONTROLLING_TERMINAL, ENOTTY, ENXIO, MockHost, test_support::*},
-    crate::{Failure, Handle, Mode, SerialFlow, SerialOp, SerialParity, TtySize},
+    super::{test_support::*, *},
+    crate::*,
     curios_abi::{HostOps, errno},
 };
 

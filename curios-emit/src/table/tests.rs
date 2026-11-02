@@ -1,7 +1,4 @@
-use {
-    super::{EmissionModule, Table},
-    std::collections::HashMap,
-};
+use {super::*, std::collections::HashMap};
 
 #[test]
 fn rope_names_match_the_wasm_vocabulary() {

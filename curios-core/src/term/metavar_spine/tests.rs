@@ -1,11 +1,6 @@
 //! A spine's facts are its entries', however it was built, and only a spine built as the identity is known for one.
 
-use {
-    super::*,
-    crate::{Global, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm, Var},
-    curios_utilities::Qualifier,
-    std::hash::DefaultHasher,
-};
+use {super::*, crate::*, curios_utilities::Qualifier, std::hash::DefaultHasher};
 
 fn local(id: u64, name: &str) -> Free {
     Free::local(id, Some(name))

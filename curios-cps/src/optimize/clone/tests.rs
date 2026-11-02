@@ -1,8 +1,4 @@
-use {
-    super::{CopyPlan, copy_bodies},
-    crate::{Atom, Callee, Continuation, Edge, Function, FunctionId, Module, Node, ValueExpr},
-    std::collections::BTreeSet,
-};
+use {super::*, crate::*, std::collections::BTreeSet};
 
 /// `outer` binds a local, then defines `inner` inside its own body — and `inner` reads that local. The shared read is why a nested definition cannot be copied by a separate call: its body names a value the enclosing copy is renaming.
 fn nesting_module() -> (Module, FunctionId, FunctionId) {

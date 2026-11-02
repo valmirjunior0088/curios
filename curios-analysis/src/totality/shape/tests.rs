@@ -1,10 +1,6 @@
 //! The size order over shapes: what a tag identifies, and what carries a decrease.
 
-use {
-    super::{Shape, Tag},
-    crate::totality::Size,
-    curios_core::Atom,
-};
+use {super::*, crate::totality::Size, curios_core::Atom};
 
 /// A tag two families share is one leaf, so what grades a call is the shape and not the family it was declared in.
 ///

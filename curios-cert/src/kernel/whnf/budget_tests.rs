@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, whnf},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Category, Cost, Exhaustion, ReduceError, Reducer, Term},
 };

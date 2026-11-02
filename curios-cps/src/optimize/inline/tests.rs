@@ -1,12 +1,8 @@
 //! Inlining a known call, and what it must clone rather than share.
 
 use {
-    super::inline_known_calls,
-    crate::{
-        Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal,
-        MULTI_SITE_INLINE_LIMIT, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueExpr,
-        test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };

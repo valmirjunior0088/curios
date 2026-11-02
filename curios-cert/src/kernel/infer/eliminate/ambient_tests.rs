@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Kernel, infer},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,

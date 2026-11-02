@@ -1,10 +1,6 @@
 //! Which lambdas are a type former's η-form, what each is read back as, and the node an application of one is made as.
 
-use {
-    super::{FormerEta, former_eta},
-    crate::{Free, Func, Global, Intrinsic, StructType, Subterm, Telescope, Term},
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 fn global(name: &str) -> Global {
     Global::Authored(Qualifier::from([name]))

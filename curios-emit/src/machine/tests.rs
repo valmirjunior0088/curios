@@ -1,9 +1,6 @@
 use {
-    super::{
-        MachineFunction, MachineInstruction, MachineModule, MachineOperand, MachineTerminator,
-        MachineValueId, lower,
-    },
-    crate::{EmissionHostTarget, EmissionTail, test_support::*},
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
 };
 

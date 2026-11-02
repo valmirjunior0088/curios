@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, infer},
+    crate::*,
     curios_core::{Term, UniverseContext},
 };
 

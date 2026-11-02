@@ -1,11 +1,8 @@
 //! A known function's parameters and its tail-call class's results, decided as joins, and what withdraws them: an escaping function, a closure tail call, a resume parameter read otherwise.
 
 use {
-    super::{Storage, representation, test_support::*},
-    crate::{
-        Atom, Callee, Continuation, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
-        Repr, ValueExpr, ValueId,
-    },
+    super::{test_support::*, *},
+    crate::*,
     curios_num::{Floating, Natural, Rounding},
 };
 

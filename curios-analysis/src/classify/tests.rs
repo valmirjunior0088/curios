@@ -1,10 +1,7 @@
 //! Classing what the carriers' readers read: which terms are handed out as atoms, which pairs a judge is asked about, a pair read back one spelling to a class, and an operation held to another by its own reader.
 
 use {
-    super::{
-        Classes, atoms_in, atoms_of, atoms_within, classable, classed, classed_in, refold,
-        test_support::*,
-    },
+    super::{test_support::*, *},
     curios_algebra::Operation,
     curios_core::{
         Free, Intrinsic, Level, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic,

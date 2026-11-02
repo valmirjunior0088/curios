@@ -1,11 +1,8 @@
 //! What the one-shot transport does around the engine: a file subject the disk does not hold is refused before it is placed, and one fact reached by several subjects is rendered once.
 
 use {
-    crate::{Asked, Origin, Subject, rendered},
-    curios_pipeline::DEFAULT_BUDGET,
-    curios_text::Overlay,
-    curios_utilities::test_support::*,
-    std::fs,
+    crate::*, curios_pipeline::DEFAULT_BUDGET, curios_text::Overlay,
+    curios_utilities::test_support::*, std::fs,
 };
 
 /// One fact is reported once, however many subjects reach it.

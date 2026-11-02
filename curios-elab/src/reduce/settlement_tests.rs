@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Context, refine_head},
+    crate::*,
     curios_core::{Free, Intrinsic, MetavarId, Term},
 };
 

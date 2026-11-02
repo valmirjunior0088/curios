@@ -1,7 +1,7 @@
 //! What a test reads of the frames and no judgment does: every local, the base frame's among them.
 
 use {
-    super::Frames,
+    super::*,
     curios_core::{Free, Term},
 };
 

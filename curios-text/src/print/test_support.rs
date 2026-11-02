@@ -1,8 +1,8 @@
 //! What the printing suites share: a term rendered at a width.
 
 use {
-    super::print_term,
-    crate::Term,
+    super::*,
+    crate::*,
     curios_print::{Printer, run_printer_within},
     std::{cell::Cell, fmt},
 };

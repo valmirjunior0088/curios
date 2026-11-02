@@ -1,7 +1,7 @@
 //! A rank is compared by its key, then by the tie its caller handed it, and hashed by its key alone.
 
 use {
-    super::{Atom, Monomial, Rank, Tie},
+    super::*,
     std::{
         any::Any,
         cmp::Ordering,

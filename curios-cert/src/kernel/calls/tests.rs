@@ -3,7 +3,7 @@
 //! A member whose declared type yields a sort is erased, so it must descend — the local gate `check_group` applies — and a group's calls are the only thing that gate reads. A call the recorder missed would be an edge the closure never saw, and a group with no edges is accepted, so every fixture below that refuses is the evidence that the call is recorded at all, and every one that accepts is the evidence that the context it was graded under was built.
 
 use {
-    crate::{Error, Kernel, infer},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,

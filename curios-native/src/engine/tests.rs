@@ -1,8 +1,8 @@
 //! An answer is held to the row it is linked to: its operands and what it comes back with must cross as the program declares them, which is refused where the two are linked rather than when a program first calls the row.
 
 use {
-    super::{Answers, ForeignBindings, host_rows, link, shared_engine},
-    crate::{HostOps, MockHost, Termination},
+    super::*,
+    crate::*,
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireResults, WireReturn, WireSignature, WireType,
     },

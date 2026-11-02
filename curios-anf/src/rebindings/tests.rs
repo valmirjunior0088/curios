@@ -1,9 +1,6 @@
 //! Resolution keeps schema and forcing boundaries while following shared bindings.
 
-use {
-    super::*,
-    crate::{Builder, Constant, ConstantId, Field, ProductFields, ProductSchema, Terminator},
-};
+use {super::*, crate::*};
 
 fn fixture(matching: bool) -> (Rebindings, Atom, Atom) {
     let mut builder = Builder::new();

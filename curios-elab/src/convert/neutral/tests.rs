@@ -1,7 +1,7 @@
 //! The binders a walk opens beside the types it reads, each found by its name.
 
 use {
-    crate::Opened,
+    crate::*,
     curios_core::{Free, Term},
 };
 

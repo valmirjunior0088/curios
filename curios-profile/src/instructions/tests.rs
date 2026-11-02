@@ -1,4 +1,4 @@
-use {super::Instructions, std::hint::black_box};
+use {super::*, std::hint::black_box};
 
 /// A loop of `rounds` additions, each at least one retired instruction however it is compiled: `black_box` keeps the sum from being folded away.
 fn work(rounds: u64) -> u64 {

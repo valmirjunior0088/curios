@@ -1,8 +1,8 @@
 //! Where a use's demand decides a value's storage: operand and scrutinee positions, the edges that carry a demand backwards, a conflict, the entry's parameters and a value free in another function.
 
 use {
-    super::{Storage, representation, test_support::*},
-    crate::{Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, Repr},
+    super::{test_support::*, *},
+    crate::*,
     curios_num::{Floating, Natural, Rounding},
 };
 

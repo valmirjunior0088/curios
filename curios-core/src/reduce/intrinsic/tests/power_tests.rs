@@ -1,10 +1,6 @@
 //! `pow` folded: a closed power as `curios-num` computes it, and the node that stands, which is read no further.
 
-use {
-    crate::reduce::intrinsic::test_support::*,
-    crate::{Intrinsic, Nat, Term},
-    curios_num::Natural,
-};
+use {crate::reduce::intrinsic::test_support::*, crate::*, curios_num::Natural};
 
 fn pow(base: Term, exponent: Term) -> Term {
     Term::intrinsic(Intrinsic::NatPow(base, exponent))

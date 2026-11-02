@@ -1,5 +1,5 @@
 use {
-    crate::{Enter, Free, Subterm, Term},
+    crate::*,
     std::{collections::HashSet, ops::ControlFlow},
 };
 

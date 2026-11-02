@@ -1,4 +1,4 @@
-use super::Qualifier;
+use super::*;
 
 #[test]
 fn without_first_drops_the_leading_segment() {

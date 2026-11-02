@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Kernel, Sort, erased_half},
+    crate::*,
     curios_analysis::Erased,
     curios_core::{
         Free, Intrinsic, Level, Many, Nat, RecGroup, RecMemberScopes, Scope, Term, UniverseContext,

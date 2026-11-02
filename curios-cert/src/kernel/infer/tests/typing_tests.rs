@@ -2,7 +2,7 @@
 
 use {
     crate::kernel::infer::test_support::*,
-    crate::{Counted, Error, Kernel, check, infer},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Intrinsic, Nat, Subterm, Term},
     curios_utilities::Plicity,

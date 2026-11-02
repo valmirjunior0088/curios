@@ -1,6 +1,6 @@
 //! The *allowance* a growing operation takes, which has no oracle but the caller's own resources. The float model's `min` and `max` are `Floating`'s edge grid's to check.
 
-use crate::{Integer, Natural};
+use crate::*;
 
 fn nat(value: u64) -> Natural {
     Natural::from(value)

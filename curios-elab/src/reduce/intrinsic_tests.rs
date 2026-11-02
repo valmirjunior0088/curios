@@ -2,7 +2,7 @@
 
 use {
     crate::test_support::*,
-    crate::{Context, reduce},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Natural},

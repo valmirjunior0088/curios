@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    crate::Declined,
+    crate::*,
     curios_core::{Cost, Free, Global, Intrinsic, Level, Term},
     curios_utilities::Qualifier,
 };

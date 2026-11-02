@@ -2,7 +2,7 @@
 //!
 //! One table, held equal to what each audit finds: a row that starts parting fails its audit until it is listed, and a listed row that stops parting fails it until the entry is deleted, which is what the commit that closes its finding does. A row both checkers refuse is no disagreement between them and is listed all the same, since its seed derives that it holds.
 
-use super::Answers;
+use super::*;
 
 /// The audit that states a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

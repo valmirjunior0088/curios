@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Entrypoint, Free, Global, Intrinsic, Level, Module, Nat, Program, Term, UniverseContext,

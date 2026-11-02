@@ -1,5 +1,5 @@
 use {
-    crate::Context,
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term},
     curios_utilities::Qualifier,

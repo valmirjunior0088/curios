@@ -1,13 +1,6 @@
 //! Positional cleanup, retained interfaces and the escape boundary between the two phases.
 
-use {
-    super::eliminate_dead_parameters,
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Literal, Module,
-        Node, NodeId, ValueExpr, ValueId,
-    },
-    curios_num::Natural,
-};
+use {super::*, crate::*, curios_num::Natural};
 
 #[test]
 fn dead_parameter_elimination_rewrites_known_calls() {
@@ -806,7 +799,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
 
 #[test]
 fn every_returning_operation_retains_its_result_receiver() {
-    use crate::{CellOp, ChannelOp, IntrinsicCall};
+    use crate::*;
     use curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType};
     use std::sync::Arc;
     for kind in [

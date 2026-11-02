@@ -3,8 +3,8 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it but [`Folding`], which `term`'s walk harness puts the decision diagram through and `linear`'s suite folds a closed comparison with.
 
 use {
-    super::{Reducer, reduce_intrinsic},
-    crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term, test_support::*},
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Binary,
 };
 

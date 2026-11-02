@@ -1,7 +1,7 @@
 //! The alignment rule on the examples it is stated with.
 
 use {
-    super::{Misaligned, align, stands_at},
+    super::*,
     curios_utilities::Plicity::{self, Explicit as P, Implicit as A, Witness as U},
 };
 

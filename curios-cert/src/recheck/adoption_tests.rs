@@ -2,10 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{
-        Baseline, Error, Globals, Kernel, Rechecked, Verdict, complete, held_digest, induct_alike,
-        struct_alike,
-    },
+    crate::*,
     curios_analysis::test_support::*,
     curios_core::{
         Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
@@ -1175,7 +1172,7 @@ fn applying_module() -> Module {
 /// One question, one answer: the digest a stage outside the certifier asks a part by ([`part_digest`]) reads a unit's classification where the certifier's own ([`read_digest`]) reads one, off a record that covers its unit and nowhere else, as [`Globals::partial`] does.
 #[test]
 fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
-    use crate::{part_digest, read_digest};
+    use crate::*;
 
     let module = written();
     let places = Places::of(&module);

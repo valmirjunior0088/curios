@@ -1,10 +1,6 @@
 use {
-    super::{admit_site, uncurry_returns, uncurryable},
-    crate::{
-        Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal, Module, Node,
-        NodeId, ValueExpr, analyze_calls, continuation_entries, copy_bodies, prune_unreachable,
-        test_support::*,
-    },
+    super::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };

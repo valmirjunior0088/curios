@@ -4,10 +4,7 @@ mod resource_tests;
 mod sequence_tests;
 
 use {
-    super::{
-        anf_optm, anf_optm_tests, error, run, run_tests_program, run_text, test_program,
-        tests_error,
-    },
+    super::*,
     curios_native::MockHost,
     curios_pipeline::{DEFAULT_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},

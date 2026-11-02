@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::*,
     curios_analysis::{Erased, test_support::*},
     curios_core::{
         Atom, Free, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term, test_support::*,

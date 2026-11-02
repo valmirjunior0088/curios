@@ -1,12 +1,6 @@
 //! Where a ticket stands for what its witnesses answered.
 
-use {
-    super::*,
-    crate::{Date, Proof, Refusal, refused},
-    curios_cert::Verdict,
-    curios_core::Global,
-    curios_utilities::Qualifier,
-};
+use {super::*, crate::*, curios_cert::Verdict, curios_core::Global, curios_utilities::Qualifier};
 
 const FORGED: Witness = Witness {
     what: "the forged proof",

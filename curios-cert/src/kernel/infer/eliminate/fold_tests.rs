@@ -1,10 +1,6 @@
 //! The arm rule of a fold: an arm reduction takes at every tail learns nothing of the scrutinee.
 
-use {
-    super::test_support::*,
-    crate::{Error, Kernel, infer},
-    curios_core::Term,
-};
+use {super::test_support::*, crate::*, curios_core::Term};
 
 /// What a fold at `P` is built from: an opaque `P : (Nat) -> Type` with `z : P(0)` and `s : (k : Nat, P(k)) -> P(k + 1)` to inhabit its arms honestly, and a scrutinee `n : Nat` with `h : P(n)`, a hypothesis about it.
 struct Scene {

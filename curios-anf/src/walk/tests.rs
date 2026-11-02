@@ -1,7 +1,4 @@
-use {
-    super::control_blocks,
-    crate::{Atom, Builder, Constant, Terminator},
-};
+use {super::*, crate::*};
 
 /// A computed member's `init` is inline control and the walk must reach it — [`control_blocks`] states what a deep copy makes of an init block it misses: a block the original and the copy own jointly, which the verifier reports as a block with more than one owner, aborting compilation of any program whose recursive group has a value member.
 #[test]

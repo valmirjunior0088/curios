@@ -5,10 +5,7 @@
 //! `pub(super)` rather than private: these are consumed by the suites across the crate, and by nothing outside it.
 
 use {
-    crate::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Module, Node, NodeId, Row, RowId, Slot, ValueExpr, ValueId, function_nodes,
-    },
+    crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::Natural,
     std::{

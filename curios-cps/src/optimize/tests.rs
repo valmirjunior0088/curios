@@ -1,8 +1,8 @@
 //! The driver over the whole pass suite, and the budgets that bound its fixpoint.
 
 use {
-    super::optimize,
-    crate::{Callee, Intrinsic, Node, ValueExpr, test_support::*},
+    super::*,
+    crate::{test_support::*, *},
 };
 
 #[test]

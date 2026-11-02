@@ -1,10 +1,6 @@
 //! Copy plans a suite asks for with no limit on their extent, which the optimizer never plans.
 
-use {
-    super::CopyPlan,
-    crate::{ContinuationId, FunctionId, Module},
-    std::collections::BTreeSet,
-};
+use {super::*, crate::*, std::collections::BTreeSet};
 
 impl CopyPlan {
     pub(crate) fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
