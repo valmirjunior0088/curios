@@ -22,6 +22,7 @@ pub struct Defined<'a> {
     /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
     pub body: Option<&'a Term>,
     pub universe_context: &'a UniverseContext,
+    /// The stamp its publication carried ([`curios_core::Definition::totality`]), which is elaboration's own conclusion and the only answer this checker has. The kernel reads the certifier's record of the unit instead and consults a carried stamp nowhere, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
     pub totality: Totality,
     /// The vector its publication filed, empty where it filed none.
     pub variances: &'a [Variance],
