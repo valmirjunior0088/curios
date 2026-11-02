@@ -708,6 +708,34 @@ pub(super) const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
         /std/Io/pure(())
         "#;
 
+pub(super) const A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE: &str = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True};
+
+        pub let P(b : Bool) -> Prop =
+            match b: (_) => Prop
+            | true => True
+            | false => Nat
+            end;
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &str = r#"
+        use /std/{Nat, Bool, Eq};
+        use /std/Bool/{True};
+
+        pub let P(b : Bool) -> Prop =
+            match b: (_) => Prop
+            | true => True
+            | false => True
+            end;
+
+        pub let one(p : P(false), q : P(false)) -> Eq()(p, q) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str = r#"
         use /std/{Nat, Eq};
 

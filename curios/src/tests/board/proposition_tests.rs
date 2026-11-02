@@ -118,6 +118,24 @@ fn a_function_into_a_type_is_not_a_proposition() {
     );
 }
 
+// A proposition is known by its head: both checkers answer `Prop` for an application of a declaration whose codomain is one, with no argument reduced, and conversion's irrelevance gate reads that answer. `curios-cert`'s `classification_tests` hold the answer and that nothing is run for it; what makes the answer true is checked where the declaration's body is, so it is pinned here. `P` below says `Prop` and hands a `Nat` back at `false`, so `Sort::of(P(false))` would answer `Prop` for a type whose two inhabitants a program tells apart, and irrelevance would hold `0` and `7` one value there.
+#[test]
+fn a_declaration_into_prop_may_not_hand_a_relevant_value_back() {
+    rejected_by(
+        A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE,
+        "expected: Prop",
+    );
+}
+
+// The control, which is what keeps the refusal above from being a refusal of the head rule itself: where every arm is a proposition the declaration stands, and the answer the head gives is used — `p` and `q` convert at `P(false)` by irrelevance alone, the gate reading the head and reducing nothing.
+#[test]
+fn a_declaration_into_prop_is_a_proposition_at_every_argument() {
+    assert_eq!(
+        run(A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT),
+        b"1"
+    );
+}
+
 // A proposition is sized as a type is. Unsized, `Bad` held a payload quantifying over the sort it sat in, the payload applied at `Bad` handed back the value it was given, and the application read as a descent: the ticket in `xboard`'s totality part.
 #[test]
 fn a_payload_quantifying_over_its_own_propositions_sort_is_refused() {
