@@ -466,6 +466,177 @@ fn both_checkers_decide_universe_context_validity_alike() {
     );
 }
 
+/// Every level a two-parameter context can state within three rungs: the constants, each parameter at each offset, and the maxima that mix them. The table above names eleven contexts by hand; this is the alphabet the sweep below builds every context of two and three constraints from.
+fn small_levels() -> Vec<Level> {
+    let param = |index: usize| Level::param(UniverseParam(index));
+    let plus = |level: Level, offset: u32| level.checked_add(offset).expect("offset");
+
+    vec![
+        Level::constant(0),
+        Level::constant(1),
+        Level::constant(2),
+        param(0),
+        plus(param(0), 1),
+        plus(param(0), 2),
+        param(1),
+        plus(param(1), 1),
+        plus(param(1), 2),
+        Level::max([param(0), param(1)]),
+        Level::max([plus(param(0), 1), param(1)]),
+        Level::max([param(0), plus(param(1), 1)]),
+        Level::max([plus(param(0), 2), param(1)]),
+        Level::max([Level::constant(1), param(0)]),
+        Level::max([Level::constant(2), plus(param(0), 1)]),
+        Level::max([Level::constant(2), param(1)]),
+        Level::max([Level::constant(1), param(0), param(1)]),
+        Level::max([Level::constant(3), plus(param(0), 1), plus(param(1), 2)]),
+    ]
+}
+
+/// What `level` denotes when the parameters are assigned `at`: a maximum over its constant and each atom's head plus its offset.
+fn level_value(level: &Level, at: &[u64]) -> u64 {
+    let mut value = u64::from(level.constant_part());
+    for (head, offset) in level.atoms() {
+        let base = match head {
+            curios_core::LevelHead::Param(param) => at[param.0],
+            curios_core::LevelHead::Meta(_) => panic!("the sweep states no metavariable"),
+        };
+        value = value.max(base + u64::from(offset));
+    }
+
+    value
+}
+
+/// Whether some assignment of naturals below `bound` satisfies every constraint — the ground truth the two decisions are held to.
+fn satisfied_somewhere(constraints: &[UniverseConstraint], params: usize, bound: u64) -> bool {
+    let mut at = vec![0u64; params];
+    let total = (bound + 1).pow(params as u32);
+    for index in 0..total {
+        let mut rest = index;
+        for slot in at.iter_mut() {
+            *slot = rest % (bound + 1);
+            rest /= bound + 1;
+        }
+        if constraints.iter().all(|constraint| {
+            level_value(&constraint.lower, &at) <= level_value(&constraint.upper, &at)
+        }) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Both checkers call a universe context satisfiable exactly where an assignment of naturals satisfies it.
+///
+/// Two tests stand beside this and neither states it. [`both_checkers_decide_universe_context_validity_alike`] above compares the two decisions to *each other* over a table written by hand, which can only hold the shapes someone thought of, and nothing in it is held to the naturals. `curios-cert`'s `satisfy::tests::a_set_is_satisfiable_exactly_when_it_has_a_model_in_the_naturals` holds the kernel's half to the naturals over singles and pairs, and the elaborator's solver — the half that *runs a search*, with a node budget it can exhaust — is no part of it.
+///
+/// So this holds the elaborator's decision to the naturals, over every ordered pair of [`small_levels`] as one constraint and every set of two of those, and adds the case neither reaches: sets of **three** constraints, over the narrower alphabet a loop through a right-hand maximum needs, since a maximum read the other way is a disjunction and the set that separates a conjunctive derivation from the naturals' total order wants a clause to bound each part of one. The bound on the search is well above the least model any set in these alphabets can have, whose values a clause can raise by at most the largest offset once per head.
+///
+/// The unsound direction is the *kernel* calling satisfiable a set no assignment satisfies: the walk assumes an item's constraints while judging it, so such a set is a hypothesis set from which `entails` derives every level relation and `check_instance` discharges nothing — the universe discipline that keeps the paradox out stops applying. That direction is asserted to be empty, and so is the kernel being the more permissive of the two. The other two disagreements are incompleteness, which surfaces as a refusal, and are asserted empty as well, so a change that trades one for the other shows here.
+#[test]
+fn both_checkers_agree_with_the_naturals_over_every_small_context() {
+    const PARAMS: usize = 2;
+    const BOUND: u64 = 12;
+    let levels = small_levels();
+    let constraint = |lower: &Level, upper: &Level| UniverseConstraint {
+        lower: lower.clone(),
+        upper: upper.clone(),
+        origin: origin("sweep"),
+    };
+
+    let singles = levels
+        .iter()
+        .flat_map(|lower| levels.iter().map(move |upper| constraint(lower, upper)))
+        .collect::<Vec<_>>();
+
+    let mut admitted_without_a_model: Vec<Vec<UniverseConstraint>> = Vec::new();
+    let mut refused_with_a_model = 0usize;
+    let mut elaborator_alone = 0usize;
+    let mut kernel_alone: Vec<Vec<UniverseConstraint>> = Vec::new();
+    let mut sets = 0usize;
+
+    let mut judge = |constraints: Vec<UniverseConstraint>| {
+        let kernel = curios_cert::satisfiable(&constraints);
+        let truth = satisfied_somewhere(&constraints, PARAMS, BOUND);
+        let context = UniverseContext {
+            parameter_count: PARAMS,
+            quality_count: 0,
+            constraints: constraints.clone(),
+        };
+        let elaborator = universe_context_validate(&context).is_ok();
+
+        if kernel && !truth {
+            admitted_without_a_model.push(constraints.clone());
+        }
+        if !kernel && truth {
+            refused_with_a_model += 1;
+        }
+        if elaborator && !kernel {
+            elaborator_alone += 1;
+        }
+        if kernel && !elaborator {
+            kernel_alone.push(constraints);
+        }
+        sets += 1;
+    };
+
+    for one in &singles {
+        judge(vec![one.clone()]);
+    }
+    for first in &singles {
+        for second in &singles {
+            judge(vec![first.clone(), second.clone()]);
+        }
+    }
+
+    // Three constraints over the narrower alphabet a loop through a right-hand maximum needs: a maximum is a disjunction read the other way, so the set that separates a conjunctive derivation from the naturals' total order wants a clause to bound each part of one.
+    let narrow = [
+        Level::constant(0),
+        Level::constant(1),
+        Level::param(UniverseParam(0)),
+        Level::param(UniverseParam(0)).succ().expect("successor"),
+        Level::param(UniverseParam(1)),
+        Level::max([
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1)),
+        ]),
+        Level::max([
+            Level::param(UniverseParam(0)).succ().expect("successor"),
+            Level::param(UniverseParam(1)),
+        ]),
+    ];
+    let triples = narrow
+        .iter()
+        .flat_map(|lower| narrow.iter().map(move |upper| constraint(lower, upper)))
+        .collect::<Vec<_>>();
+    for first in &triples {
+        for second in &triples {
+            for third in &triples {
+                judge(vec![first.clone(), second.clone(), third.clone()]);
+            }
+        }
+    }
+
+    assert!(
+        admitted_without_a_model.is_empty(),
+        "the kernel called {} of {sets} sets satisfiable with no assignment satisfying them, the first being {:?}",
+        admitted_without_a_model.len(),
+        admitted_without_a_model.first(),
+    );
+    assert!(
+        kernel_alone.is_empty(),
+        "the kernel is the more permissive of the two over {} of {sets} sets, the first being {:?}",
+        kernel_alone.len(),
+        kernel_alone.first(),
+    );
+    assert_eq!(
+        (refused_with_a_model, elaborator_alone),
+        (0, 0),
+        "a decision refused a set an assignment satisfies, or the two disagree, over {sets} sets",
+    );
+}
+
 /// A refusal unwinds through brackets that never release, leaving their scopes open and the journal recording pre-images nothing will roll back to; the item boundary closes them all at once.
 #[test]
 fn abandoning_speculation_closes_every_scope_a_refusal_left_open() {

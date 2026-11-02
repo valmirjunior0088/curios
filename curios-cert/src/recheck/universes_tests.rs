@@ -5,10 +5,11 @@ use {
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Quality,
-        QualityMetaId, QualityParam, ReduceError, Term, Totality, UniverseConstraint,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseParam,
+        Definition, DefinitionKind, Entrypoint, Free, Global, InductDecl, Intrinsic, Item, Level,
+        Many, Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
+        RecMemberScopes, ReduceError, Scope, StructDecl, Telescope, Term, Totality,
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, UniverseMetaId, UniverseParam, test_support::declaring,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -130,6 +131,282 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
             "{label}: the kernel certified a module carrying an unsolved universe metavariable: {verdicts:?}",
         );
     }
+}
+
+/// One position a universe context is assumed from: what to call it, the declaration a refusal there is named against, and how to build the program that carries the context.
+type AssumedFrom<'a> = (
+    &'a str,
+    Option<Global>,
+    &'a dyn Fn(Vec<UniverseConstraint>) -> Program,
+);
+
+/// Every position a universe context is assumed from refuses a set with no instance in the naturals.
+///
+/// `curios-cert/src/satisfy.rs` states what an unsatisfiable set buys once assumed: `entails` starts proving whatever it is asked, `check_instance` stops discharging anything, and the universe discipline that keeps the paradox out stops applying. So the clause has to cover every position, not the one it was written for. [`an_unsatisfiable_universe_context_is_refused`] above covers a definition's; these are the rest, each carrying the loop `param 0 + 1 ≤ param 0` and nothing else wrong, and each refused by name:
+///
+/// - an `induct` registry entry's, assumed by `check_induct_decl` through `at_every_sort`;
+/// - a `struct` registry entry's, assumed by `check_struct_decl` the same way;
+/// - a top-level `rec` group's, assumed by `check_rec_group`;
+/// - an in-term group's, reached as a bare member projection, which `infer`'s `Rec` rule certifies through `check_group`;
+/// - a definition's that leaves a sort to its caller, where `at_every_sort` assumes it once per assignment;
+/// - the entrypoint's, whose closing term holds the group, the entry itself standing under no scheme.
+///
+/// The control is each fixture with an empty constraint set, which stands.
+#[test]
+fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
+    let loop_ = || {
+        vec![UniverseConstraint {
+            lower: Level::param(UniverseParam(0))
+                .succ()
+                .expect("a parameter has a successor"),
+            upper: Level::param(UniverseParam(0)),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }]
+    };
+    let context = |constraints: Vec<UniverseConstraint>, qualities: usize| UniverseContext {
+        parameter_count: 1,
+        quality_count: qualities,
+        constraints,
+    };
+    let family = Global::Authored(Qualifier::from(["Levelled"]));
+    let record = Global::Authored(Qualifier::from(["Record"]));
+    let held = Global::Authored(Qualifier::from(["held"]));
+    let definition = |universe_context: UniverseContext, type_: Term, body: Term| Definition {
+        name: held,
+        kind: DefinitionKind::Authored,
+        universe_context,
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_,
+        body,
+    };
+    let bare = |constraints: Vec<UniverseConstraint>| {
+        let member = Free::local(701, Some("m"));
+        let members = [&member];
+        let group = RecGroup::new(vec![RecMemberScopes {
+            type_: Scope::close(Many(1), &members, Term::intrinsic(Intrinsic::NatType)),
+            body: Scope::close(
+                Many(1),
+                &members,
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            ),
+        }])
+        .with_universe_context(context(constraints, 0));
+
+        Term::rec_proj(group, 0)
+    };
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let program = |items: Vec<Item>, body: Term| Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: items.into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        entry: Entrypoint {
+            body,
+            type_: Some(nat()),
+        },
+    };
+    let declared = |items: Vec<Item>,
+                    inducts: Vec<(Global, InductDecl)>,
+                    structs: Vec<(Global, StructDecl)>| Program {
+        module: declaring(program(items, zero()).module, inducts, structs, []),
+        entry: Entrypoint {
+            body: zero(),
+            type_: Some(nat()),
+        },
+    };
+
+    let entry_sites: [AssumedFrom<'_>; 6] = [
+        ("an `induct` registry entry", Some(family), &|constraints| {
+            declared(
+                Vec::new(),
+                vec![(
+                    family,
+                    InductDecl {
+                        universe_context: context(constraints, 0),
+                        arity: Telescope::done(Telescope::done(())),
+                        constructors: Vec::new().into(),
+                        result_sort: Term::type_ground(),
+                        module: Qualifier::default(),
+                        rep_public: true,
+                        polarities: Vec::new(),
+                        variances: Vec::new(),
+                    },
+                )],
+                Vec::new(),
+            )
+        }),
+        ("a `struct` registry entry", Some(record), &|constraints| {
+            declared(
+                Vec::new(),
+                Vec::new(),
+                vec![(
+                    record,
+                    StructDecl {
+                        universe_context: context(constraints, 0),
+                        arity: Telescope::done(Telescope::done(())),
+                        result_sort: Term::type_ground(),
+                        module: Qualifier::default(),
+                        rep_public: true,
+                        polarities: Vec::new(),
+                        variances: Vec::new(),
+                    },
+                )],
+            )
+        }),
+        ("a top-level `rec` group", Some(held), &|constraints| {
+            program(
+                vec![Item::Rec(RecItem::new(vec![definition(
+                    context(constraints, 0),
+                    nat(),
+                    zero(),
+                )]))],
+                zero(),
+            )
+        }),
+        ("a bare member projection", Some(held), &|constraints| {
+            program(
+                vec![Item::Let(Box::new(definition(
+                    context(Vec::new(), 0),
+                    nat(),
+                    bare(constraints),
+                )))],
+                zero(),
+            )
+        }),
+        (
+            "a definition leaving a sort open",
+            Some(held),
+            &|constraints| {
+                program(
+                    vec![Item::Let(Box::new(definition(
+                        context(constraints, 1),
+                        nat(),
+                        zero(),
+                    )))],
+                    zero(),
+                )
+            },
+        ),
+        ("the entrypoint's closing term", None, &|constraints| {
+            program(Vec::new(), bare(constraints))
+        }),
+    ];
+
+    for (label, refused, build) in entry_sites {
+        let verdicts = fixture_verdicts(&build(loop_()), 1_000_000, &Globals::default(), SYNTAX);
+        assert!(
+            verdicts.iter().any(|verdict| verdict.name == refused
+                && matches!(verdict.error, Error::UnsatisfiableUniverses)),
+            "{label}: the walk assumed a set with no instance in the naturals: {verdicts:?}",
+        );
+
+        assert_eq!(
+            fixture_verdicts(&build(Vec::new()), 1_000_000, &Globals::default(), SYNTAX),
+            Vec::new(),
+            "{label}: the same fixture stating no constraint was refused",
+        );
+    }
+}
+
+/// The level a bare member projection claims after its definition is instantiated is the level the group's own check was held to.
+///
+/// `instantiate_universes_scoped` enters the group's universe scope, so a level the member spells at an index at or above the group's own parameter count is the *enclosing* declaration's, shifted down by that count. `check_group` reads the member's levels raw against the constraints the kernel holds assumed, which are the enclosing item's at their own indices. Below, the group declares one parameter and its member spells `param 1`, so the two readings are one slot apart: the member's sort check asks `8 ≤ param 1` of the item, which grants it, and instantiation reads the same spelling as the item's `param 0`.
+///
+/// What that would buy is a concrete collapse rather than a free level: `held.{0, 8}` discharges `8 ≤ 8` and stands at `Type 8`, while the member it unfolds to claims `Type 0` and is `Type 7`, a dweller of `Type 8`. `hold_value_sort` is where such a claim would be written down — a definition's stated value sort is read by `Sort::of` at every occurrence with nothing run — so the fixture states `Type 0` and asks whether the walk holds it.
+///
+/// What refuses it is that the claim is never asked for. `Sort::of` forces the value before it classifies anything, and a projection's declared member type is read only by `sort_of_neutral`, for a projection that *survives* forcing; this one does not, since its member's body is a sort. So the value is classified as the `Type 7` it reduces to, and the stated sort is refused against that: `ValueSort { stated: Type 0, reached: Type 8 }`. A member whose body did not reduce to a head would leave the projection standing and the claim read — and one whose declared type yields a sort is a member erasure deletes, which `check_group`'s local gate refuses unless the group descends.
+#[test]
+fn a_bare_projections_claimed_level_survives_its_definitions_instance() {
+    let shifted = Level::param(UniverseParam(1));
+    let seven = Level::constant(7);
+    let held = Global::Authored(Qualifier::from(["held"]));
+    let collapse = Global::Authored(Qualifier::from(["collapse"]));
+    let member = Free::local(702, Some("m"));
+    let members = [&member];
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(Many(1), &members, Term::type_at(shifted.clone())),
+        body: Scope::close(Many(1), &members, Term::type_at(seven)),
+    }])
+    .with_universe_context(UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    });
+    // A `let` around the projection, so unfolding takes `instantiate_universes_scoped` rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
+    let wrapped = Term::let_(
+        &Free::local(703, Some("w")),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        Term::rec_proj(group, 0),
+    );
+    let definition = |name: Global,
+                      universe_context: UniverseContext,
+                      type_: Term,
+                      body: Term,
+                      value_sort: Option<Term>| {
+        Item::Let(Box::new(Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort,
+            type_,
+            body,
+        }))
+    };
+    let eight = Level::constant(8);
+
+    let module = Module {
+        mounts: Vec::new(),
+        items: vec![
+            definition(
+                held,
+                UniverseContext {
+                    parameter_count: 2,
+                    quality_count: 0,
+                    constraints: vec![UniverseConstraint {
+                        lower: eight.clone(),
+                        upper: shifted.clone(),
+                        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+                    }],
+                },
+                Term::type_at(shifted),
+                wrapped,
+                None,
+            ),
+            definition(
+                collapse,
+                UniverseContext::empty(),
+                Term::type_at(eight.clone()),
+                Term::instance_of(&Free::from(&held), vec![Level::zero(), eight]),
+                Some(Term::type_at(Level::zero())),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(collapse)
+            && matches!(verdict.error, Error::ValueSort { .. })),
+        "a `Type 7` was written down as inhabiting `Type 0`: {verdicts:?}",
+    );
 }
 
 /// A sort whose quality is open, in the two positions the boundary pass walks: a metavariable elaboration left, and a parameter no context binds.
