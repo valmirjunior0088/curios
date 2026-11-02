@@ -26,7 +26,7 @@ use {
     super::{Counted, Error, Kernel, infer_type, whnf},
     crate::instantiate_universes,
     curios_core::{
-        Bound, Field, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
+        Bound, Field, Free, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
         Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
     },
     curios_utilities::recurse,
@@ -213,19 +213,16 @@ pub(crate) fn declared_into_prop(
 /// The sort `type_` stands at where it is written as a definition stating the sort of its value ([`curios_core::Definition::value_sort`]), at the universes an occurrence states: this kernel checked the statement where it checked the definition, so it is read with nothing run. A binder in scope under the name is no such definition.
 fn published(kernel: &mut Kernel, type_: &Term) -> Result<Option<Sort>, Error> {
     let (name, universes) = match &**type_ {
-        Subterm::Var(var) => (var.unwrap(), None),
-        Subterm::Instance(Instance {
-            head: var,
-            universes,
-        }) => (var.unwrap(), Some(universes)),
+        Subterm::Var(var) => (*var.unwrap(), None),
+        Subterm::Instance(Instance { name, universes }) => (Free::Global(*name), Some(universes)),
         _ => return Ok(None),
     };
-    if kernel.local_type(name).is_some() {
+    if kernel.local_type(&name).is_some() {
         return Ok(None);
     }
     let sort = match universes {
-        None => kernel.value_sort(name).cloned(),
-        Some(universes) => match kernel.value_sort_at(name) {
+        None => kernel.value_sort(&name).cloned(),
+        Some(universes) => match kernel.value_sort_at(&name) {
             Some(sort) => Some(instantiate_universes(sort, universes)?),
             None => None,
         },
@@ -242,12 +239,12 @@ fn heads_a_declaration(kernel: &Kernel, term: &Term) -> bool {
     }
 
     let name = match &**head {
-        Subterm::Var(var) => var.unwrap(),
-        Subterm::Instance(Instance { head: var, .. }) => var.unwrap(),
+        Subterm::Var(var) => *var.unwrap(),
+        Subterm::Instance(Instance { name, .. }) => Free::Global(*name),
         _ => return false,
     };
 
-    kernel.local_type(name).is_none() && kernel.scheme_of(name).is_some()
+    kernel.local_type(&name).is_none() && kernel.scheme_of(&name).is_some()
 }
 
 /// How a type former's parts are established before its universe is computed from them.
@@ -417,18 +414,8 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap())?.cloned()),
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
-        Subterm::Instance(Instance {
-            head: var,
-            universes,
-        }) => {
-            let name = var.unwrap();
-
-            // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
-            if let Some(type_) = kernel.local_type(name) {
-                return Ok(Some(type_.clone()));
-            }
-
-            let Some((scheme, context)) = kernel.scheme_of(name) else {
+        Subterm::Instance(Instance { name, universes }) => {
+            let Some((scheme, context)) = kernel.scheme_of(&Free::Global(*name)) else {
                 return Ok(None);
             };
             let (scheme, context) = (scheme.clone(), context.clone());

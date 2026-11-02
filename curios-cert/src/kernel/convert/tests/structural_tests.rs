@@ -4,9 +4,10 @@ use {
     crate::kernel::convert::test_support::*,
     crate::*,
     curios_core::{
-        Free, FuncType, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext, Universes, Var,
+        Free, FuncType, Global, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext,
+        Universes,
     },
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 #[test]
@@ -338,20 +339,23 @@ fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
 #[test]
 fn one_operation_at_two_universe_instances_is_one_number() {
     let mut kernel = kernel();
-    let length = |operand: &Free, level: u32| {
+    let length = |operand: Global, level: u32| {
         Term::intrinsic(Intrinsic::bytes_len(Term::instance(
-            Var::free(*operand),
+            operand,
             vec![Level::constant(level)],
         )))
     };
-    let (n, m) = (binder(60, "n"), binder(61, "m"));
+    let (n, m) = (
+        Global::Authored(Qualifier::from(["n"])),
+        Global::Authored(Qualifier::from(["m"])),
+    );
 
     assert_eq!(
-        convert(&mut kernel, &nat_type(), &length(&n, 0), &length(&n, 1)),
+        convert(&mut kernel, &nat_type(), &length(n, 0), &length(n, 1)),
         Ok(true)
     );
     assert_eq!(
-        convert(&mut kernel, &nat_type(), &length(&n, 0), &length(&m, 0)),
+        convert(&mut kernel, &nat_type(), &length(n, 0), &length(m, 0)),
         Ok(false)
     );
 }

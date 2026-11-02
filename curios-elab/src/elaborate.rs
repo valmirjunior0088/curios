@@ -184,13 +184,10 @@ fn elaborate_subterm(
             )
         }
         Subterm::Instance(instance) => {
+            let name = Free::Global(instance.name);
             let type_ = context
-                .instantiate_assumption_at(
-                    instance.head.unwrap(),
-                    &instance.universes,
-                    term.extent(),
-                )?
-                .ok_or_else(|| context.unbound_variable(Term::var(instance.head.clone())))?;
+                .instantiate_assumption_at(&name, &instance.universes, term.extent())?
+                .ok_or_else(|| context.unbound_variable(Term::free_var(&name)))?;
             (term.clone(), type_)
         }
         Subterm::Intrinsic(intrinsic) => {
@@ -213,15 +210,18 @@ fn elaborate_subterm(
                             Some(extent) => former.with_extent(extent),
                             None => former,
                         }
-                    } else if universes.is_empty() {
-                        term.clone()
-                    } else {
-                        // The occurrence's extent moves onto the wrapping instance: the head carries none.
-                        let instance = Term::instance(var.clone(), universes);
+                    } else if let Some(name) = var.as_free().and_then(Free::as_global)
+                        && !universes.is_empty()
+                    {
+                        // The occurrence's extent moves onto the instance that replaces it.
+                        let instance = Term::instance(*name, universes);
                         match term.extent() {
                             Some(extent) => instance.with_extent(extent),
                             None => instance,
                         }
+                    } else {
+                        // Only a declaration is generalized, so anything else stands at no instance.
+                        term.clone()
                     };
                 (rebuilt, type_)
             }

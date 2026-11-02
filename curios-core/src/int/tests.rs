@@ -1,6 +1,6 @@
 //! The signed sum normal form: what folds to one term, what cancels, and what stays where it was written.
 
-use super::*;
+use {super::*, curios_utilities::Qualifier};
 
 fn sym(index: u32, hint: &'static str) -> Term {
     Term::free_var(&crate::Free::local(u64::from(index), Some(hint)))
@@ -64,7 +64,7 @@ fn a_product_of_symbols_has_one_factor_order() {
 fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::Var::free(crate::Free::local(0, Some("g"))),
+            crate::Global::Authored(Qualifier::from(["g"])),
             vec![crate::Level::constant(level)],
         )
     };

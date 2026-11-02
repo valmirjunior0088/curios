@@ -610,11 +610,11 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
 ///
 /// This is the only position from which a polymorphic definition unfolds — a bare occurrence of one denotes no particular instance, so [`Kernel::value`](super::Kernel) withholds it there.
 fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
-    let Instance { head, universes } = instance;
+    let Instance { name, universes } = instance;
 
-    let reduct = match kernel.value_at(head.unwrap()).cloned() {
+    let reduct = match kernel.value_at(&Free::Global(name)).cloned() {
         Some(reduct) => reduct,
-        None => return Ok(Step::Stop(Term::instance(head, universes))),
+        None => return Ok(Step::Stop(Term::instance(name, universes))),
     };
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.

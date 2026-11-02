@@ -54,8 +54,8 @@ use {
 
 /// The head identity a scrutinee-refinement key gates on: a named free-variable head, or the tag standing in for a comparison intrinsic whose normal form has no named head. Produced only by [`Term::head_key`], which documents the mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HeadTag<'a> {
-    Name(&'a Free),
+pub enum HeadTag {
+    Name(Free),
     Intrinsic(&'static str),
 }
 
@@ -444,24 +444,16 @@ impl Term {
                 fields: stamp(&struct_.fields, names, self_reference, universes),
                 entries: struct_.entries.clone(),
             }),
-            Subterm::Instance(instance)
-                if instance
-                    .head
-                    .as_free()
-                    .and_then(Free::as_global)
-                    .is_some_and(|name| names.contains(name)) =>
-            {
+            Subterm::Instance(instance) if names.contains(&instance.name) => {
                 return Some(self.clone());
             }
             Subterm::Var(var)
                 if self_reference == SelfReference::Free
-                    && var
-                        .as_free()
-                        .and_then(Free::as_global)
-                        .is_some_and(|name| names.contains(name)) =>
+                    && let Some(name) = var.as_free().and_then(Free::as_global)
+                    && names.contains(name) =>
             {
-                // The occurrence's extent moves onto the wrapping instance: the head is a bare `Var` with no extent of its own.
-                let stamped = Term::instance(var.clone(), universes.clone());
+                // The occurrence's extent moves onto the instance that replaces it.
+                let stamped = Term::instance(*name, universes.clone());
                 return Some(match self.extent() {
                     Some(extent) => stamped.with_extent(extent),
                     None => stamped,
@@ -491,11 +483,11 @@ impl Term {
     }
 
     /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. What a scrutinee refinement's probe is gated on, through [`Term::head_key`], before a key is built.
-    pub fn head_name(&self) -> Option<&Free> {
+    pub fn head_name(&self) -> Option<Free> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
-            Subterm::Instance(Instance { head, .. }) => head.as_free(),
-            Subterm::Var(var) => var.as_free(),
+            Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
+            Subterm::Var(var) => var.as_free().copied(),
             _ => None,
         }
     }
@@ -703,11 +695,11 @@ impl Term {
     }
 
     /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the intrinsic standing in for one where the normal form is an `Intrinsic` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
-    pub fn head_key(&self) -> Option<HeadTag<'_>> {
+    pub fn head_key(&self) -> Option<HeadTag> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
-            Subterm::Instance(Instance { head, .. }) => head.as_free().map(HeadTag::Name),
-            Subterm::Var(var) => var.as_free().map(HeadTag::Name),
+            Subterm::Instance(Instance { name, .. }) => Some(HeadTag::Name(Free::Global(*name))),
+            Subterm::Var(var) => var.as_free().copied().map(HeadTag::Name),
             // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key could be registered but never looked up, and an operator-spelled scrutinee would lose its arm refinement where the equivalent `Nat/le(a, b)` keeps it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
                 Intrinsic::BoolAnd(..) => Some(HeadTag::Intrinsic("intrinsic:BoolAnd")),
@@ -824,18 +816,13 @@ impl Term {
         Self::var(Var::free(*name))
     }
 
-    /// An instance whose head references `name` — the shape elaboration mints for every occurrence of a universe-polymorphic binding.
-    pub fn instance_of(name: &Free, universes: impl Into<Universes>) -> Self {
-        Self::instance(Var::free(*name), universes)
-    }
-
-    /// Instantiate a generalized binding at occurrence-specific levels. The result is without a position; a call site holding the occurrence lifts its extent onto the wrapper, since the head carries none.
-    pub fn instance(head: Var, universes: impl Into<Universes>) -> Self {
+    /// The declaration `name` at occurrence-specific levels — the shape elaboration mints for every occurrence of a universe-polymorphic declaration, and the bare name where there are none. The result is without a position; a call site holding the occurrence lifts its extent onto it.
+    pub fn instance(name: Global, universes: impl Into<Universes>) -> Self {
         let universes = universes.into();
         if universes.is_empty() {
-            Self::var(head)
+            Self::free_var(&Free::Global(name))
         } else {
-            Self::from(Subterm::Instance(Instance { head, universes }))
+            Self::from(Subterm::Instance(Instance { name, universes }))
         }
     }
 
@@ -2000,15 +1987,11 @@ struct Applied<'a> {
 
 /// The global an instance names, with its levels: the head [`Applied`] and [`Projected`] read a spine by.
 fn named(head: &Term) -> Option<(&Global, &Universes)> {
-    let Subterm::Instance(Instance {
-        head: var,
-        universes,
-    }) = head.look()
-    else {
+    let Subterm::Instance(Instance { name, universes }) = head.look() else {
         return None;
     };
 
-    Some((var.as_free()?.as_global()?, universes))
+    Some((name, universes))
 }
 
 /// A definition applied in full whose value is a field of one of its binders ([`Families::parameter_field`]): the definition, its instance, and the field of the argument the binder takes, which is what the application unfolds to.
@@ -2809,14 +2792,14 @@ impl Term {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
                 let named = match &**term {
-                    Subterm::Var(var) => var.as_free(),
-                    Subterm::Instance(instance) => instance.head.as_free(),
+                    Subterm::Var(var) => var.as_free().copied(),
+                    Subterm::Instance(instance) => Some(Free::Global(instance.name)),
                     _ => None,
                 };
                 if let Some(name) = named
-                    && chosen.contains(name)
+                    && chosen.contains(&name)
                 {
-                    return ControlFlow::Break(*name);
+                    return ControlFlow::Break(name);
                 }
                 match chosen.iter().any(|name| term.mentions_free(name)) {
                     true => ControlFlow::Continue(Enter::Descend),

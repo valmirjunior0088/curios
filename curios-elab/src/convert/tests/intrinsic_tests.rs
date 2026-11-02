@@ -4,8 +4,8 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_core::{
-        Free, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm, Term,
-        Universes, Var,
+        Free, Global, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm, Term,
+        Universes,
     },
     curios_num::Binary,
 };
@@ -386,19 +386,16 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
 #[test]
 fn one_operation_at_two_universe_instances_is_one_number() {
     let mut context = context();
-    let length = |operand: &Free, level: u32| {
+    let length = |operand: Global, level: u32| {
         Term::intrinsic(Intrinsic::bytes_len(Term::instance(
-            Var::free(*operand),
+            operand,
             vec![Level::constant(level)],
         )))
     };
-    let (n, m) = (context.fresh(Some("n")), context.fresh(Some("m")));
+    let (n, m) = (nominal("n"), nominal("m"));
 
-    assert_eq!(conv(&mut context, &length(&n, 0), &length(&n, 1)), Ok(true));
-    assert_eq!(
-        conv(&mut context, &length(&n, 0), &length(&m, 0)),
-        Ok(false)
-    );
+    assert_eq!(conv(&mut context, &length(n, 0), &length(n, 1)), Ok(true));
+    assert_eq!(conv(&mut context, &length(n, 0), &length(m, 0)), Ok(false));
 }
 
 /// The levels a result carries are compared before its operands: two polls of one cell whose results are the cell's family at two ground levels are two terms, though every operand agrees — which the elaborator reports as an inconsistency of its universe context, since its level comparison is a constraint. The control is the same poll at one level. The kernel's twin of this proposition shares the name.

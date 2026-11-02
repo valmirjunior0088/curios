@@ -30,10 +30,9 @@ use {
     },
     crate::{foreign_signature, hold_proof, spine},
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance, Intrinsic,
-        Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer,
-        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
-        Variant,
+        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
+        LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer, Scope,
+        Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
     },
     curios_num::{Binary, Natural},
     curios_utilities::recurse,
@@ -427,19 +426,11 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             Ok(kernel.by_value(&type_))
         }),
 
-        // A polymorphic name at a stated instance: its scheme, substituted.
-        //
-        // The occurrence is the head's, so a member named here is the call the `Var` rule above records, on the same reading: the levels spell the occurrence rather than stand between it and the member. A member reached only through this spelling would leave its group closing with no call at all, which is the one direction the recorder must not take. A projection head names its own group, which is certified below rather than recorded, since the group being checked holds its members as locals.
-        Subterm::Instance(Instance { head, .. }) => {
-            if !spine_head && let Some(free) = head.as_free() {
-                kernel.record_call(free, &[])?;
-            }
-
-            match synth_neutral(kernel, term)? {
-                Some(type_) => Ok(type_),
-                None => Err(Error::Unclassified(term.clone())),
-            }
-        }
+        // A polymorphic declaration at a stated instance: its scheme, substituted. It is no call a group records, since a group's members are assumed under locals while its bodies are checked, and an instance names a declaration.
+        Subterm::Instance(_) => match synth_neutral(kernel, term)? {
+            Some(type_) => Ok(type_),
+            None => Err(Error::Unclassified(term.clone())),
+        },
 
         // Elaboration-only syntax. Reaching a metavariable or any transient means a term arrived here before elaboration was finished with it.
         Subterm::Metavar(_) | Subterm::Transient(_) => Err(Error::NotCore(term.clone())),

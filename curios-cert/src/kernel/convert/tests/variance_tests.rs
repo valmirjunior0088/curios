@@ -5,13 +5,15 @@ use {
     crate::*,
     curios_analysis::held_levels,
     curios_core::{
-        Free, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam, Variance,
+        Free, Global, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam,
+        Variance,
     },
+    curios_utilities::Qualifier,
 };
 
 /// Whether `name` at two instances apart in its one level is one term at `type_`: as written, and reduced first, which leaves a projected former as two projections of one group.
-fn two_instances_convert(kernel: &mut Kernel, name: &Free, type_: &Term) -> [bool; 2] {
-    let at = |level: u32| Term::instance_of(name, vec![Level::constant(level)]);
+fn two_instances_convert(kernel: &mut Kernel, name: Global, type_: &Term) -> [bool; 2] {
+    let at = |level: u32| Term::instance(name, vec![Level::constant(level)]);
     let reduced = [0, 1].map(|level| kernel.reduce(at(level)).expect("an instance unfolds"));
 
     [
@@ -85,12 +87,12 @@ fn an_irrelevant_levels_arguments_are_compared_at_either_instance() {
 #[test]
 fn a_definition_applied_at_two_instances_converts_by_unfolding() {
     let mut kernel = kernel();
-    let alias = binder(84, "Alias");
+    let alias = Global::Authored(Qualifier::from(["Alias"]));
     let carrier = binder(85, "A");
     let sort = Term::type_at(Level::param(UniverseParam(0)));
     kernel
         .define(
-            &alias,
+            &Free::Global(alias),
             &Term::func_type([(carrier, sort.clone())], sort.clone()),
             &Term::func([(carrier, sort)], Term::free_var(&carrier)),
             &UniverseContext {
@@ -102,7 +104,7 @@ fn a_definition_applied_at_two_instances_converts_by_unfolding() {
         .expect("a name is declared once");
     let at = |level: u32| {
         Term::apply(
-            Term::instance_of(&alias, vec![Level::constant(level)]),
+            Term::instance(alias, vec![Level::constant(level)]),
             [nat_type()],
         )
     };
@@ -122,10 +124,10 @@ fn two_bare_formers_apart_in_an_irrelevant_level_convert_at_their_type() {
     for former in [Former::Projected, Former::Plain] {
         for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
             let mut kernel = kernel();
-            let wrap = Free::from(&declare_wrap(&mut kernel, vec![variance], former));
+            let wrap = declare_wrap(&mut kernel, vec![variance], former);
 
             assert_eq!(
-                two_instances_convert(&mut kernel, &wrap, &family),
+                two_instances_convert(&mut kernel, wrap, &family),
                 [converts; 2],
                 "{former:?}, {variance:?}"
             );
@@ -139,10 +141,10 @@ fn a_family_with_no_parameter_converts_by_its_name_at_two_instances() {
     for former in [Former::Projected, Former::Plain] {
         for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
             let mut kernel = kernel();
-            let leaf = Free::from(&declare_leaf(&mut kernel, vec![variance], former));
+            let leaf = declare_leaf(&mut kernel, vec![variance], former);
 
             assert_eq!(
-                two_instances_convert(&mut kernel, &leaf, &Term::type_ground()),
+                two_instances_convert(&mut kernel, leaf, &Term::type_ground()),
                 [converts; 2],
                 "{former:?}, {variance:?}"
             );
@@ -233,11 +235,11 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
         quality_count: 0,
         constraints: Vec::new(),
     };
-    let pair = binder(86, "pair");
-    let held = binder(87, "held");
+    let pair = Global::Authored(Qualifier::from(["pair"]));
+    let held = Global::Authored(Qualifier::from(["held"]));
     kernel
         .define(
-            &pair,
+            &Free::Global(pair),
             &Term::tuple_type([
                 (binder(88, "first"), Term::type_at(level())),
                 (binder(89, "second"), nat_type()),
@@ -248,7 +250,7 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
         .expect("a name is declared once");
     kernel
         .define(
-            &held,
+            &Free::Global(held),
             &Term::tuple_type([(
                 binder(92, "first"),
                 Term::type_at(level().succ().expect("a parameter has a successor")),
@@ -257,16 +259,16 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
             &scheme,
         )
         .expect("a name is declared once");
-    let first = |name: &Free, level: u32| {
-        Term::proj(Term::instance_of(name, vec![Level::constant(level)]), 0)
+    let first = |name: Global, level: u32| {
+        Term::proj(Term::instance(name, vec![Level::constant(level)]), 0)
     };
 
     assert_eq!(
         convert(
             &mut kernel,
             &Term::type_ground(),
-            &first(&pair, 0),
-            &first(&pair, 1)
+            &first(pair, 0),
+            &first(pair, 1)
         ),
         Ok(true)
     );
@@ -274,8 +276,8 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
         convert(
             &mut kernel,
             &Term::type_ground(),
-            &first(&held, 0),
-            &first(&held, 1)
+            &first(held, 0),
+            &first(held, 1)
         ),
         Ok(false)
     );

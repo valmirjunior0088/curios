@@ -9,8 +9,8 @@ use {
         zonk_solved_term_metas,
     },
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, Free, FuncType, Global, SelfReference, StructDecl,
-        Subterm, Telescope, Term, UniverseContext, UniverseMetaId, Universes, Visit,
+        Bound, ConceptDecl, DefinitionKind, FuncType, Global, SelfReference, StructDecl, Subterm,
+        Telescope, Term, UniverseContext, UniverseMetaId, Universes, Visit,
         stamp_declaration_instance, universe_metas,
     },
     std::{cell::RefCell, collections::BTreeSet, rc::Rc},
@@ -37,13 +37,7 @@ pub fn declaration_instance(value: &Term, name: &Global) -> Option<Universes> {
                 Subterm::InductType(induct_type) if induct_type.name == name => {
                     Some(induct_type.universes.clone())
                 }
-                Subterm::Instance(instance)
-                    if instance
-                        .head
-                        .as_free()
-                        .and_then(Free::as_global)
-                        .is_some_and(|head| *head == name) =>
-                {
+                Subterm::Instance(instance) if instance.name == name => {
                     Some(instance.universes.clone())
                 }
                 _ => None,

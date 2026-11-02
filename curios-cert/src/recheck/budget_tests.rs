@@ -167,7 +167,7 @@ fn held_at_a_counted_index(unfolding: usize) -> Module {
             Atom::from("hold"),
             InductParam::new(
                 Telescope::done(vec![Term::apply(
-                    Term::instance_of(&Free::from(&count), vec![level()]),
+                    Term::instance(count, vec![level()]),
                     [nat_type()],
                 )]),
                 Vec::new(),

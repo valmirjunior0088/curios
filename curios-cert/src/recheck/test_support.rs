@@ -1122,7 +1122,7 @@ pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Module {
             authored(
                 &Global::Authored(Qualifier::from(["held"])),
                 Term::type_at(Level::constant(expected)),
-                Term::instance_of(&Free::from(&lift), vec![Level::constant(instance)]),
+                Term::instance(lift, vec![Level::constant(instance)]),
             ),
         ]
         .into(),
@@ -2815,10 +2815,10 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
 
 /// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
 pub(super) fn scheme_occurrences() -> (Term, Term) {
-    let name = Free::from(&Global::Authored(Qualifier::from(["A"])));
-    let bare = Term::free_var(&name);
-    let instance = Term::instance_of(
-        &name,
+    let name = Global::Authored(Qualifier::from(["A"]));
+    let bare = Term::free_var(&Free::Global(name));
+    let instance = Term::instance(
+        name,
         vec![
             Level::param(UniverseParam(0)),
             Level::param(UniverseParam(1)),
@@ -2936,10 +2936,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     }));
 
     let f_at = |level: Level, arg: &Free| {
-        Term::apply(
-            Term::instance_of(&Free::from(&f_name), vec![level]),
-            [Term::free_var(arg)],
-        )
+        Term::apply(Term::instance(f_name, vec![level]), [Term::free_var(arg)])
     };
     let q_at = |index: Term| Term::induct_type(q_name, Vec::<Term>::new(), [index]);
 
@@ -3848,7 +3845,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
                         (
                             held,
                             Term::apply(
-                                Term::instance_of(&Free::from(&alias), vec![level]),
+                                Term::instance(alias, vec![level]),
                                 [Term::free_var(&carrier)],
                             ),
                         ),
@@ -3988,7 +3985,7 @@ pub(super) fn picked_module(
                 Telescope::build(
                     [(
                         Free::local(47, Some("x")),
-                        Term::instance_of(&Free::from(&pick), vec![kept, dropped]),
+                        Term::instance(pick, vec![kept, dropped]),
                     )],
                     Vec::new(),
                 ),
@@ -4235,56 +4232,6 @@ pub(super) fn lowered_sort_module(variances: Vec<Variance>) -> (Global, Module) 
         )],
         BTreeMap::from([(family, russell_carrier(family, variances))]),
         BTreeMap::new(),
-    );
-
-    (name, module)
-}
-
-/// `struct Through.{u}(A : Type u) { held : A.{u} }`, carried with `variances`, beside `coerce` between `Through.{from}(Nat)` and `Through.{to}(Nat)`; with `bare` the field is the plain `A`.
-///
-/// An instance whose head is a local states no scheme: `synth_neutral` hands back the binder's own type and the levels say nothing, `check_instance` is reached at no local, so the field is `A` to every judgment and the two instances have the same inhabitants whatever the level. There is no family whose vector could answer for such a head, and the walk reads an instance that survived forcing as a bare or partly applied former and marks every level it carries — the refusing answer, which costs the sound conversion and admits nothing.
-pub(super) fn through_instance_module(
-    variances: Vec<Variance>,
-    bare: bool,
-    from: u32,
-    to: u32,
-) -> (Global, Module) {
-    let name = Global::Authored(Qualifier::from(["Through"]));
-    let level = Level::param(UniverseParam(0));
-    let carrier = Free::local(90, Some("A"));
-    let held = match bare {
-        true => Term::free_var(&carrier),
-        false => Term::instance_of(&carrier, vec![level.clone()]),
-    };
-
-    let declaration = StructDecl {
-        universe_context: UniverseContext {
-            parameter_count: 1,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        arity: Telescope::build(
-            [(carrier, Term::type_at(level.clone()))],
-            Telescope::build([(Free::local(91, Some("held")), held)], ()),
-        ),
-        result_sort: Term::type_at(level),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances,
-    };
-    let at = |level: u32| {
-        Term::struct_type_at(
-            name,
-            [Level::constant(level)],
-            [Term::intrinsic(Intrinsic::NatType)],
-        )
-    };
-
-    let module = module_of(
-        vec![coercion(at(from), at(to))],
-        BTreeMap::new(),
-        BTreeMap::from([(name, declaration)]),
     );
 
     (name, module)

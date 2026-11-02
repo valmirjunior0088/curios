@@ -7,8 +7,8 @@ use {
     super::probe_level_fallback,
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced, Quality,
-        ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes,
+        Bound, Free, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced,
+        Quality, ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes,
     },
 };
 
@@ -358,7 +358,8 @@ impl Sort {
             }
             Subterm::Sort(_, level) => Sort::type_at(level.succ().map_err(ReduceError::Universe)?),
             Subterm::Instance(instance) => {
-                Sort::of_under(context, binders, opened, &Term::var(instance.head.clone()))?
+                let name = Term::free_var(&Free::Global(instance.name));
+                Sort::of_under(context, binders, opened, &name)?
             }
             // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. Its level is the one that sort states: the solution is held under it where it is committed, so a former over the metavariable is sized by a level that follows what the metavariable comes to. Read as zero, a list of an open element is small whatever the element is, and a level the list is handed to never learns the element's.
             Subterm::Metavar(metavar) => {
@@ -427,13 +428,13 @@ impl Sort {
             head = &apply.head;
         }
         let name = match &**head {
-            Subterm::Var(var) => var.unwrap(),
-            Subterm::Instance(Instance { head: var, .. }) => var.unwrap(),
+            Subterm::Var(var) => *var.unwrap(),
+            Subterm::Instance(Instance { name, .. }) => Free::Global(*name),
             _ => return Ok(None),
         };
         let declared = matches!(&**type_, Subterm::Apply(_))
             && name.as_global().is_some()
-            && context.assumption(name).is_some();
+            && context.assumption(&name).is_some();
         if !declared {
             return Ok(None);
         }
@@ -451,18 +452,15 @@ impl Sort {
 
     /// The sort `type_` stands at where it is written as a definition that publishes the sort of its value ([`curios_core::Definition::value_sort`]): a name, at the universes an occurrence of it states. Read before anything is run, so the value is not walked to learn it. `None` for any other type.
     pub fn published(context: &mut Context, type_: &Term) -> Result<Option<Sort>, ReduceError> {
-        let (var, universes) = match &**type_ {
-            Subterm::Var(var) => (var, None),
-            Subterm::Instance(Instance {
-                head: var,
-                universes,
-            }) => (var, Some(universes)),
+        let (name, universes) = match &**type_ {
+            Subterm::Var(var) => match var.unwrap().as_global() {
+                Some(name) => (*name, None),
+                None => return Ok(None),
+            },
+            Subterm::Instance(Instance { name, universes }) => (*name, Some(universes)),
             _ => return Ok(None),
         };
-        let Some(name) = var.unwrap().as_global() else {
-            return Ok(None);
-        };
-        let Some(sort) = context.definition_value_sort(name) else {
+        let Some(sort) = context.definition_value_sort(&name) else {
             return Ok(None);
         };
         let sort = match universes {

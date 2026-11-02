@@ -85,10 +85,10 @@ impl Subterm {
         }
     }
 
-    /// The global an instance node is of, where its head is a name: a family's, or a definition's.
+    /// The global an instance node is of: a family's, or a definition's.
     pub(super) fn instance_name(&self) -> Option<&Global> {
         match self {
-            Subterm::Instance(Instance { head: var, .. }) => var.as_free()?.as_global(),
+            Subterm::Instance(Instance { name, .. }) => Some(name),
             _ => None,
         }
     }
@@ -415,9 +415,7 @@ impl Subterm {
     /// A local is a [`Free::Local`], so this is a discriminant test rather than a search for a marker character in the spelling, which a compiler-made *global* could set by accident.
     pub(crate) fn newest_local(&self) -> Option<u64> {
         match self {
-            Subterm::Var(var) | Subterm::Instance(Instance { head: var, .. }) => {
-                var.as_free().and_then(Free::as_local).map(Mint::index)
-            }
+            Subterm::Var(var) => var.as_free().and_then(Free::as_local).map(Mint::index),
             Subterm::Metavar(Metavar { spine, .. }) => spine.newest_local(),
             _ => {
                 let mut newest = None;
@@ -555,11 +553,14 @@ impl Subterm {
 
     /// This subterm's free-variable set, read off what its children have filled: a free `Var`'s is its own name, a metavariable's is its spine's, and any other node's is its children's merged smaller into larger ([`Union`]), so a node whose children add nothing to its largest child's set holds that set itself. [`Term::get_or_init_free_vars`] fills a deep spine with it bottom-up, each node paying for the names it adds.
     pub(super) fn free_vars_from_children(&self) -> Frees {
-        // An instance's variable head is this node's own identity exactly as a bare `Var`'s is, and in both shapes a variable head means there are no child terms to union.
-        if let Subterm::Var(var) | Subterm::Instance(Instance { head: var, .. }) = self
+        if let Subterm::Var(var) = self
             && let Some(name) = var.as_free()
         {
             return Frees::single(*name);
+        }
+        // An instance's global is its own identity exactly as a bare `Var`'s name is, and it has no child terms to union.
+        if let Subterm::Instance(Instance { name, .. }) = self {
+            return Frees::single(Free::Global(*name));
         }
         if let Subterm::Metavar(Metavar { spine, .. }) = self {
             return spine.free_vars();
@@ -768,21 +769,27 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 tail: visit.visit_scope(tail),
             }),
-            // Erasure unwraps to the head's own spelling: the variable takes the ordinary `Var` route through the hook, and a projection rebuilds the `Rec` it abbreviates over the erased group. The projection's tail is a member variable below every hook's depth, so building it unvisited is the same as visiting it.
-            Subterm::Instance(Instance { head, .. }) if visit.erases_universes() => visit
-                .call(head)
-                .unwrap_or_else(|| Subterm::Var(head.clone())),
-            Subterm::Instance(Instance { head, universes }) => {
-                let head = match visit.call(head) {
-                    None => head.clone(),
-                    Some(replacement) => match &replacement {
-                        Subterm::Var(var) => var.clone(),
-                        // A replacement that is not a variable can only arrive through a binder no scheme governs — a crafted module's `let` or lambda, never an elaborated term, since locals are never generalized. The kernel types a local-headed instance as its bare head with the levels inert (`curios-cert`'s sort fixtures pin this), so substitution resolves it the same way: the instance dissolves to the replacement. Anything but a total answer here would let a hand-built module abort a reducer that promises totality on arbitrary terms.
-                        _ => return replacement,
-                    },
+            // Erasure unwraps to the global's own spelling, which takes the ordinary `Var` route through the hook.
+            Subterm::Instance(Instance { name, .. }) if visit.erases_universes() => {
+                let var = Var::free(Free::Global(*name));
+                visit.call(&var).unwrap_or(Subterm::Var(var))
+            }
+            // The global goes through the hook as a bare occurrence of it would. Another global renames the instance; anything else replaces it whole, as it replaces the bare occurrence, since only a declaration has levels to instantiate.
+            Subterm::Instance(Instance { name, universes }) => {
+                let name = match visit.call(&Var::free(Free::Global(*name))) {
+                    None => *name,
+                    Some(replacement) => {
+                        if let Subterm::Var(var) = &replacement
+                            && let Some(Free::Global(renamed)) = var.as_free()
+                        {
+                            *renamed
+                        } else {
+                            return replacement;
+                        }
+                    }
                 };
                 Subterm::Instance(Instance {
-                    head,
+                    name,
                     universes: visit.visit_universes(universes),
                 })
             }
@@ -826,11 +833,8 @@ impl Bound for Subterm {
                 .map(|child| child.reach())
                 .fold(0, usize::max),
             Subterm::Metavar(Metavar { spine, .. }) => spine.reach(),
-            // A head reaches as a bare `Var` does, being one.
-            Subterm::Instance(Instance { head, .. }) => match head.as_bound() {
-                Some(index) => index + 1,
-                None => 0,
-            },
+            // A global binds nothing a scope could reach.
+            Subterm::Instance(_) => 0,
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,

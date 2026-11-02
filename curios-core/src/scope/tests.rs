@@ -1,6 +1,6 @@
 //! What the traversal modes cost over shared structure.
 
-use {super::*, crate::*};
+use {super::*, crate::*, curios_utilities::Qualifier};
 
 /// **The universe-erased projection visits a shared subterm once**, which is the detector for a projection walking a DAG as the tree it expands to.
 ///
@@ -10,7 +10,7 @@ use {super::*, crate::*};
 #[test]
 fn the_erased_projection_visits_a_shared_subterm_once() {
     let mut term = Term::instance(
-        Var::free(Free::local(0, Some("x"))),
+        Global::Authored(Qualifier::from(["x"])),
         vec![Level::constant(0)],
     );
     for _ in 0..16 {

@@ -72,18 +72,22 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
 #[test]
 fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
     let mut context = context();
-    let poly = context.fresh(Some("poly"));
+    let poly = nominal("poly");
     let scheme = UniverseContext {
         parameter_count: 1,
         quality_count: 0,
         constraints: Vec::new(),
     };
     context.assume(
-        &poly,
+        &Free::Global(poly),
         &Term::type_at(Level::param(UniverseParam(0)).succ().unwrap()),
     );
-    context.define(&poly, &Term::type_at(Level::param(UniverseParam(0))), None);
-    context.set_assumption_universe_context(&poly, scheme.clone());
+    context.define(
+        &Free::Global(poly),
+        &Term::type_at(Level::param(UniverseParam(0))),
+        None,
+    );
+    context.set_assumption_universe_context(&Free::Global(poly), scheme.clone());
 
     let term = Term::intrinsic(Intrinsic::nat_add(
         nat(3),
@@ -92,7 +96,7 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
     let spent = context.consumed().units();
 
-    context.set_assumption_universe_context(&poly, scheme.clone());
+    context.set_assumption_universe_context(&Free::Global(poly), scheme.clone());
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
     assert_eq!(
         context.consumed().units(),
@@ -101,7 +105,7 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
     );
 
     context.set_assumption_universe_context(
-        &poly,
+        &Free::Global(poly),
         UniverseContext {
             parameter_count: 2,
             quality_count: 0,
@@ -120,12 +124,15 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
 fn a_closed_reduct_is_served_across_universe_spellings() {
     let mut context = context();
     // A global rather than a minted local: the second door serves closed terms alone, since a local-bearing reduct dies with its declaration.
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let parameter = Level::param(UniverseParam(0));
-    context.assume(&poly, &Term::type_at(parameter.succ().unwrap()));
-    context.define(&poly, &Term::type_at(parameter), None);
+    context.assume(
+        &Free::Global(poly),
+        &Term::type_at(parameter.succ().unwrap()),
+    );
+    context.define(&Free::Global(poly), &Term::type_at(parameter), None);
     context.set_assumption_universe_context(
-        &poly,
+        &Free::Global(poly),
         UniverseContext {
             parameter_count: 1,
             quality_count: 0,
@@ -135,15 +142,12 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
 
     let meta = Level::meta(UniverseMetaId(7));
     assert_eq!(
-        reduce(&mut context, Term::instance_of(&poly, vec![meta.clone()])),
+        reduce(&mut context, Term::instance(poly, vec![meta.clone()])),
         Ok(Term::type_at(meta.clone()))
     );
     let spent = context.consumed().units();
     assert_eq!(
-        reduce(
-            &mut context,
-            Term::instance_of(&poly, vec![Level::constant(3)])
-        ),
+        reduce(&mut context, Term::instance(poly, vec![Level::constant(3)])),
         Ok(Term::type_at(Level::constant(3))),
         "the reduct is rewritten to the asking spelling's level"
     );
@@ -158,20 +162,20 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
 #[test]
 fn a_level_metavariable_asked_for_itself_and_for_another_level_is_reduced_afresh() {
     let mut context = context();
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let x = context.fresh(Some("x"));
     let (first, second) = (
         Level::param(UniverseParam(0)),
         Level::param(UniverseParam(1)),
     );
-    context.assume(&poly, &Term::type_at(first.succ().unwrap()));
+    context.assume(&Free::Global(poly), &Term::type_at(first.succ().unwrap()));
     context.define(
-        &poly,
+        &Free::Global(poly),
         &Term::func_type([(x, Term::type_at(first))], Term::type_at(second)),
         None,
     );
     context.set_assumption_universe_context(
-        &poly,
+        &Free::Global(poly),
         UniverseContext {
             parameter_count: 2,
             quality_count: 0,
@@ -192,14 +196,14 @@ fn a_level_metavariable_asked_for_itself_and_for_another_level_is_reduced_afresh
     assert_eq!(
         reduce(
             &mut context,
-            Term::instance_of(&poly, vec![kept.clone(), kept.clone()])
+            Term::instance(poly, vec![kept.clone(), kept.clone()])
         ),
         Ok(arrow(&kept, &kept))
     );
     assert_eq!(
         reduce(
             &mut context,
-            Term::instance_of(&poly, vec![kept.clone(), other.clone()])
+            Term::instance(poly, vec![kept.clone(), other.clone()])
         ),
         Ok(arrow(&kept, &other)),
         "the first position keeps the metavariable the second is asked to leave"
@@ -210,13 +214,13 @@ fn a_level_metavariable_asked_for_itself_and_for_another_level_is_reduced_afresh
 #[test]
 fn a_closed_reduct_served_across_spellings_states_the_asking_sorts() {
     let mut context = context();
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let level = Level::param(UniverseParam(0));
     let left = Quality::Param(QualityParam(0));
-    context.assume(&poly, &Term::type_at(level.succ().unwrap()));
-    context.define(&poly, &Term::sort_at(left, level), None);
+    context.assume(&Free::Global(poly), &Term::type_at(level.succ().unwrap()));
+    context.define(&Free::Global(poly), &Term::sort_at(left, level), None);
     context.set_assumption_universe_context(
-        &poly,
+        &Free::Global(poly),
         UniverseContext {
             parameter_count: 1,
             quality_count: 1,
@@ -224,8 +228,8 @@ fn a_closed_reduct_served_across_spellings_states_the_asking_sorts() {
         },
     );
     let at = |level: Level, quality: Quality| {
-        Term::instance_of(
-            &poly,
+        Term::instance(
+            poly,
             Universes {
                 levels: vec![level],
                 qualities: vec![quality],
@@ -258,16 +262,16 @@ fn a_closed_reduct_served_across_spellings_states_the_asking_sorts() {
 #[test]
 fn a_reduct_stored_at_one_stated_sort_is_not_served_at_another() {
     let mut context = context();
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let level = Level::param(UniverseParam(0));
-    context.assume(&poly, &Term::type_at(level.succ().unwrap()));
+    context.assume(&Free::Global(poly), &Term::type_at(level.succ().unwrap()));
     context.define(
-        &poly,
+        &Free::Global(poly),
         &Term::sort_at(Quality::Param(QualityParam(0)), level),
         None,
     );
     context.set_assumption_universe_context(
-        &poly,
+        &Free::Global(poly),
         UniverseContext {
             parameter_count: 1,
             quality_count: 1,
@@ -275,8 +279,8 @@ fn a_reduct_stored_at_one_stated_sort_is_not_served_at_another() {
         },
     );
     let at = |quality: Quality| {
-        Term::instance_of(
-            &poly,
+        Term::instance(
+            poly,
             Universes {
                 levels: vec![Level::constant(3)],
                 qualities: vec![quality],
@@ -341,7 +345,7 @@ fn a_ground_sort_at_another_position_is_reduced_afresh() {
 #[test]
 fn a_universe_metavariable_a_solution_holds_is_not_carried() {
     let mut context = context();
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let stored = Level::meta(UniverseMetaId(7));
     context.birth_metavar(
         MetavarId(0),
@@ -356,7 +360,7 @@ fn a_universe_metavariable_a_solution_holds_is_not_carried() {
     let at = |level: Level| {
         Term::apply(
             second.clone(),
-            [Term::instance_of(&poly, vec![level]), Term::hole(0)],
+            [Term::instance(poly, vec![level]), Term::hole(0)],
         )
     };
 

@@ -99,7 +99,7 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     );
 }
 
-/// The same route to `False` behind an alias named as a universe instance: `Bad`'s constructor takes `D@{0}`, an instance of a definition generic in one level whose value is `(Bad) -> False`. An instance is a variable head the levels spell, which the walk records nothing at unless it forces the instance to the value it stands for, as it forces a bare name; the instance of a parameter is the occurrence itself (the board's `A parameter named through an instance is an occurrence positivity does not see`), and the instance of a definition is its value. With the budget to unfold it the set is refused by the rule, at `Bad`.
+/// The same route to `False` behind an alias named as a universe instance: `Bad`'s constructor takes `D@{0}`, an instance of a definition generic in one level whose value is `(Bad) -> False`. An instance names a declaration at levels, which the walk records nothing at unless it forces the instance to the value it stands for, as it forces a bare name, and the instance of a definition is its value. With the budget to unfold it the set is refused by the rule, at `Bad`.
 ///
 /// Mutation-checked against `forceable` declining an `Instance`: the instance then falls to the walk's variable arm, names no parameter, and `Bad` is admitted.
 #[test]
@@ -111,10 +111,10 @@ fn a_payload_behind_a_universe_instance_of_an_alias_is_refused_by_the_rule() {
     let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
     let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let alias = Free::local(1, Some("D"));
+    let alias = Global::Authored(Qualifier::from(["D"]));
     kernel
         .define(
-            &alias,
+            &Free::Global(alias),
             &Term::type_ground(),
             &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
             &UniverseContext {
@@ -135,7 +135,7 @@ fn a_payload_behind_a_universe_instance_of_an_alias_is_refused_by_the_rule() {
     inducts.insert(
         bad_name,
         single_payload(
-            Term::instance_of(&alias, vec![Level::zero()]),
+            Term::instance(alias, vec![Level::zero()]),
             Term::type_ground(),
         ),
     );

@@ -4,7 +4,7 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam,
     },
@@ -182,12 +182,12 @@ fn a_definition_checks_under_its_own_constraints() {
 fn an_instance_must_satisfy_its_schemes_constraints() {
     let u = Level::param(UniverseParam(0));
     let w = Level::param(UniverseParam(1));
-    let name = binder(1, "bounded");
+    let name = Global::Authored(Qualifier::from(["bounded"]));
 
     let mut kernel = kernel();
     kernel
         .declare(
-            &name,
+            &Free::Global(name),
             &Term::type_at(u.clone()),
             &UniverseContext {
                 parameter_count: 2,
@@ -201,7 +201,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
         )
         .expect("a name is declared once");
 
-    let at = |levels: Vec<Level>| Term::instance_of(&name, levels);
+    let at = |levels: Vec<Level>| Term::instance(name, levels);
 
     assert_eq!(
         infer(&mut kernel, &at(vec![Level::zero(), one()])),

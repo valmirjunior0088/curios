@@ -71,7 +71,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
 /// A witness named at a universe instance stays that name where it is passed as one: `twice(use g.{0})` hands back `g` at its instance, as the strategy does, where a machine that evaluated it put the witness's dictionary wherever an alias over the witness unfolded, in a reported type included. Passed as an ordinary argument the same instance is evaluated, which is what tells two instances of a family apart in a level from one: the function handed back holds `g`'s body and no name.
 #[test]
 fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
-    let g = Free::global(Qualifier::from(["g"]));
+    let g = Global::Authored(Qualifier::from(["g"]));
     let twice = Free::global(Qualifier::from(["twice"]));
     let (x, f) = (binder(0, "x"), binder(1, "f"));
     let unary = Term::func_type([(x, nat_type())], nat_type());
@@ -79,7 +79,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     let define = |kernel: &mut Kernel| {
         kernel
             .define(
-                &g,
+                &Free::Global(g),
                 &unary,
                 &Term::func(
                     [(x, nat_type())],
@@ -110,7 +110,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     let passed = |plicity: Plicity| {
         Term::apply_marked(
             Term::free_var(&twice),
-            [(plicity, Term::instance_of(&g, vec![Level::zero()]))],
+            [(plicity, Term::instance(g, vec![Level::zero()]))],
         )
     };
 
@@ -128,7 +128,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
         "the machine and the strategy agree on the function handed back"
     );
     assert!(
-        witness.mentions_free(&g),
+        witness.mentions_free(&Free::Global(g)),
         "the witness survives as the instance it was passed as:\n{witness}"
     );
 
@@ -136,7 +136,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
         .reduce(passed(Plicity::Explicit))
         .expect("the machine reduces");
     assert!(
-        !ordinary.mentions_free(&g),
+        !ordinary.mentions_free(&Free::Global(g)),
         "an instance passed as an ordinary argument is evaluated:\n{ordinary}"
     );
 }

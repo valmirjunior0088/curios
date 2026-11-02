@@ -444,7 +444,7 @@ impl<'s> Context<'s> {
         self.typing.frames.has_scrutinee_refinements()
     }
 
-    pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
+    pub(crate) fn scrutinee_head_refined(&self, head: HeadTag) -> bool {
         self.typing.frames.scrutinee_head_refined(head)
     }
 

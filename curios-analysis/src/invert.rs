@@ -247,7 +247,7 @@ fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<
     Ok(Invert::Solved(kept))
 }
 
-/// Whether `actual` has the shape of a key index refinement refines: a variable, bare or at a universe instance, or a projection. An instance whose head is a variable is one occurrence of that variable, its levels spelling the occurrence, and forcing leaves it standing where the variable is a local, so it is the key the bare variable is.
+/// Whether `actual` has the shape of a key index refinement refines: a variable, a name at a universe instance, or a projection. An instance is one occurrence of the name it holds, its levels spelling the occurrence, so where forcing leaves it standing it is the key the bare name is.
 fn key_shaped(actual: &Term) -> bool {
     matches!(
         &**actual,

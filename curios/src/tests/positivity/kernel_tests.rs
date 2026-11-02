@@ -3,9 +3,9 @@
 use {
     curios_cert::{Error, Verdict},
     curios_core::{
-        Definition, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level,
-        Many, Module, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm,
-        Telescope, Term, UniverseContext, Universes, Zonked,
+        Definition, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Item, Many,
+        Module, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm, Telescope,
+        Term, UniverseContext, Universes, Zonked,
     },
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude},
     curios_text::SYNTAX,
@@ -14,10 +14,6 @@ use {
 
 fn bad() -> Global {
     Global::Authored(Qualifier::from(["Bad"]))
-}
-
-fn sink() -> Global {
-    Global::Authored(Qualifier::from(["Sink"]))
 }
 
 fn false_type() -> Term {
@@ -195,63 +191,6 @@ fn curry_through_a_list_is_refused_at_the_family_alone() {
     };
 
     let verdicts = verdicts(module, curried(|payload| payload, |list| list));
-    assert!(
-        only_bad_is_refused_as_not_positive(&verdicts),
-        "{verdicts:?}"
-    );
-}
-
-// The formation ticket's instance, under a carrier: `struct Sink(A) { fs: List((x: A) -> False) }` names its parameter as an instance of it inside the list, and `Bad` holds a `Sink` of its own witnesses, its index the length of the sink's list. The parameter is an occurrence wherever the walk meets it, under a carrier as under an arrow, so `Sink`'s vector is negative and the kernel's refusal of `Bad` is the only one.
-//
-// Mutation-checked as the test above is.
-#[test]
-fn curry_through_a_list_behind_a_parameter_named_by_an_instance_is_refused_at_the_family_alone() {
-    let parameter = Free::local(961, Some("A"));
-    let declaration = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::build(
-            [(parameter, Term::type_ground())],
-            Telescope::build(
-                [(
-                    Free::local(962, Some("fs")),
-                    Term::intrinsic(Intrinsic::ListType(refutation(Term::instance_of(
-                        &parameter,
-                        vec![Level::zero()],
-                    )))),
-                )],
-                (),
-            ),
-        ),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    let held: Term = Subterm::StructType(StructType {
-        name: sink(),
-        universes: Universes::default(),
-        params: vec![witness_type()],
-    })
-    .into();
-    let read = |payload| Term::proj_struct(payload, sink(), 0);
-    let module = Module {
-        items: vec![
-            Item::Let(Box::new(Definition::former(
-                sink(),
-                Qualifier::default(),
-                Nominal::Struct(declaration),
-            ))),
-            family((Free::local(963, Some("s")), held), read),
-        ]
-        .into(),
-        ..Module::default()
-    };
-
-    let verdicts = verdicts(
-        module,
-        curried(read, |list| Term::struct_(sink(), [witness_type()], [list])),
-    );
     assert!(
         only_bad_is_refused_as_not_positive(&verdicts),
         "{verdicts:?}"

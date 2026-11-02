@@ -182,41 +182,18 @@ fn a_value_in_type_position_is_refused() {
 
 // === The `Instance` arm, which reads its levels ==========================
 //
-// `Sort::of` classifies a universe instance as the neutral it is, at the levels the occurrence states. `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it.
-
-/// The one production-reachable head: a local. A local is monomorphic — it was opened at one type, so there is no scheme to instantiate — and its sort is its binder's, whatever levels the wrapper states and however many. The width-2 vector is deliberate: even an instance no typing rule would admit cannot move the lookup, because a local head is answered from its binder before any instance is checked.
-#[test]
-fn a_universe_instance_over_a_local_head_takes_the_locals_sort() {
-    let mut kernel = kernel();
-    let one = Level::zero().succ().expect("level zero succeeds");
-
-    let hypothesis = Free::local(0, Some("h"));
-    kernel.assume(&hypothesis, &Term::prop());
-    let data = Free::local(1, Some("d"));
-    kernel.assume(&data, &Term::type_ground());
-
-    for levels in [vec![Level::zero()], vec![one.clone(), Level::zero()]] {
-        assert_eq!(
-            Sort::of(&mut kernel, &Term::instance_of(&hypothesis, levels.clone()),),
-            Ok(Sort::Prop(Level::zero())),
-        );
-        assert_eq!(
-            Sort::of(&mut kernel, &Term::instance_of(&data, levels),),
-            Ok(Sort::Type(Level::zero())),
-        );
-    }
-}
+// `Sort::of` classifies a universe instance as the neutral it is, at the levels the occurrence states. `step_instance` leaves an `Instance` stuck only over a global declared without a body, while every defined scheme instantiates its body at the instance before the arm can see it.
 
 /// A defined scheme never reaches the arm: `step_instance` instantiates its body at the stated instance first, so the sort lands at the *instance's* level — the second clause of the entry's Assumes, probed at the sort. `A<u> : Type (u + 1) = Type u` at `u := 1` classifies as `Type 2`, with no scheme parameter surviving to be captured.
 #[test]
 fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level() {
     let mut kernel = kernel();
-    let scheme = Free::from(&nominal("A"));
+    let scheme = nominal("A");
     let parameter = Level::param(UniverseParam(0));
 
     kernel
         .define(
-            &scheme,
+            &Free::Global(scheme),
             &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
             &Term::type_at(parameter),
             &UniverseContext {
@@ -231,7 +208,7 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
     let two = one.clone().succ().expect("level one succeeds");
 
     assert_eq!(
-        Sort::of(&mut kernel, &Term::instance_of(&scheme, vec![one]),),
+        Sort::of(&mut kernel, &Term::instance(scheme, vec![one]),),
         Ok(Sort::Type(two)),
     );
 }
@@ -240,12 +217,12 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
 #[test]
 fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level() {
     let mut kernel = kernel();
-    let scheme = Free::from(&nominal("A"));
+    let scheme = nominal("A");
     let parameter = Level::param(UniverseParam(0));
 
     kernel
         .declare(
-            &scheme,
+            &Free::Global(scheme),
             &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
             &UniverseContext {
                 parameter_count: 1,
@@ -259,14 +236,11 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
     let two = one.clone().succ().expect("level one succeeds");
 
     assert_eq!(
-        Sort::of(
-            &mut kernel,
-            &Term::instance_of(&scheme, vec![Level::zero()]),
-        ),
+        Sort::of(&mut kernel, &Term::instance(scheme, vec![Level::zero()]),),
         Ok(Sort::Type(one.clone())),
     );
     assert_eq!(
-        Sort::of(&mut kernel, &Term::instance_of(&scheme, vec![one])),
+        Sort::of(&mut kernel, &Term::instance(scheme, vec![one])),
         Ok(Sort::Type(two)),
     );
 }

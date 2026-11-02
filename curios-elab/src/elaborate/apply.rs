@@ -376,7 +376,7 @@ pub fn elaborate_apply(
         match &**term {
             Subterm::Var(var) => Some(*var.unwrap()),
             Subterm::Apply(apply) => innermost_reference(&apply.head),
-            Subterm::Instance(instance) => Some(*instance.head.unwrap()),
+            Subterm::Instance(instance) => Some(Free::Global(instance.name)),
             _ => None,
         }
     }

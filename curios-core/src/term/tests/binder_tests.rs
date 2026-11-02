@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, Qualifier},
     std::{collections::hash_map::RandomState, hash::BuildHasher, rc::Rc},
 };
 
@@ -285,23 +285,12 @@ fn tuple_type_field_labels_are_identity() {
     );
 }
 
+/// A replacement that is not a global replaces an instance whole, as it replaces a bare occurrence of the global, since only a declaration has levels to instantiate ([`Instance::name`]).
 #[test]
-fn closing_and_opening_a_variable_headed_instance_round_trips() {
-    let f = Free::local(41, Some("f"));
-    let instance = Term::instance_of(&f, vec![Level::zero()]);
-    let scope = Scope::close(Many(1), &[&f], instance.clone());
-
-    assert_eq!(scope.open(&[&Term::free_var(&f)]), instance);
-}
-
-/// The seam's total answer for every replacement that is not a head shape: a binder no scheme governs substituted by an arbitrary value, a group's member projection among them. The instance dissolves to the replacement — the levels-inert reading the kernel's sort fixtures pin for local heads — because a reducer that promises totality on arbitrary terms may not abort here.
-///
-/// A projection was once the one replacement that re-entered an instance's head, when a head could name a member. It cannot: a group binds no universe, so there is no scheme for an instance of a member to satisfy, and an [`Instance`]'s head is a variable ([`Instance::head`]).
-#[test]
-fn a_replacement_that_is_not_a_head_shape_dissolves_the_instance() {
-    let f = Free::local(42, Some("f"));
-    let instance = Term::instance_of(&f, vec![Level::zero()]);
-    let scope = Scope::close(Many(1), &[&f], instance);
+fn a_replacement_that_is_not_a_global_replaces_the_instance() {
+    let f = Global::Authored(Qualifier::from(["f"]));
+    let instance = Term::instance(f, vec![Level::zero()]);
+    let scope = Scope::close(Many(1), &[&Free::Global(f)], instance);
     let value = Term::intrinsic(Intrinsic::NatType);
 
     assert_eq!(scope.open(&[&value]), value);

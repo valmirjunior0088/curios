@@ -990,10 +990,7 @@ impl Convert {
                 .as_free()
                 .and_then(Free::as_global)
                 .map(|global| (*global, false)),
-            Subterm::Instance(Instance { head: var, .. }) => var
-                .as_free()
-                .and_then(Free::as_global)
-                .map(|global| (*global, true)),
+            Subterm::Instance(Instance { name, .. }) => Some((*name, true)),
             _ => None,
         };
         let (Some((this_global, polymorphic)), Some((that_global, _))) =
@@ -2555,7 +2552,7 @@ impl Convert {
         if let Some((name, levels)) = Self::bare_family(context, term) {
             let fresh = Self::occurrence_of(context, &name, &levels)?;
 
-            return Ok((fresh != levels).then(|| Term::instance_of(&Free::from(&name), fresh)));
+            return Ok((fresh != levels).then(|| Term::instance(name, fresh)));
         }
 
         let Subterm::Func(Func { telescope, .. }) = &**term else {
@@ -2607,14 +2604,10 @@ impl Convert {
         if let Some((name, universes)) = term.bare_former() {
             return Some((*name, universes.clone()));
         }
-        let Subterm::Instance(Instance {
-            head: var,
-            universes,
-        }) = &**term
-        else {
+        let Subterm::Instance(Instance { name, universes }) = &**term else {
             return None;
         };
-        let name = *var.as_free()?.as_global()?;
+        let name = *name;
         let parameters = context
             .induct_decl(&name)
             .map(|declaration| declaration.param_count() + declaration.index_count())
@@ -3063,8 +3056,8 @@ impl Convert {
                     } else {
                         self.enqueue(
                             type_,
-                            Term::var(this.head.clone()),
-                            Term::var(that.head.clone()),
+                            Term::free_var(&Free::Global(this.name)),
+                            Term::free_var(&Free::Global(that.name)),
                         );
                         true
                     }

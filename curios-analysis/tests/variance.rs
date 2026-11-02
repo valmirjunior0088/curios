@@ -145,14 +145,14 @@ fn boxed() -> InductDecl {
 }
 
 /// `Uses.{u}(A: Type u) | c(x: head.{u}(A))`: a level a payload mentions only on an instance of `head`.
-fn uses(head: &Free) -> InductDecl {
+fn uses(head: Global) -> InductDecl {
     family(
         1,
         vec![Term::type_at(level(0))],
         Vec::new(),
         |params| {
             vec![Term::apply(
-                Term::instance_of(head, vec![level(0)]),
+                Term::instance(head, vec![level(0)]),
                 [Term::free_var(&params[0])],
             )]
         },
@@ -341,7 +341,7 @@ fn an_instance_reduction_removes_leaves_no_level() {
                 &scheme(1),
             )
             .expect("a name is declared once");
-        let inducts = BTreeMap::from([(named("Uses"), uses(&alias))]);
+        let inducts = BTreeMap::from([(named("Uses"), uses(named("Alias")))]);
         kernel
             .declare_induct(&named("Uses"), &inducts[&named("Uses")])
             .expect("a name is declared once");
@@ -373,7 +373,7 @@ fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
             &scheme(1),
         )
         .expect("a name is declared once");
-    let inducts = BTreeMap::from([(named("Uses"), uses(&opaque))]);
+    let inducts = BTreeMap::from([(named("Uses"), uses(named("Opaque")))]);
 
     assert_eq!(vectors(&mut kernel, &inducts)[&named("Uses")], "=");
 }
@@ -493,7 +493,7 @@ fn a_lambda_is_read_with_its_binders() {
 // A family's name with no argument: its instance is compared level by level, as two formers met at no function type are, whatever its vector says of the node it builds once applied.
 #[test]
 fn a_bare_former_is_read_whole() {
-    let bare = |name: &str| Term::instance_of(&Free::from(&named(name)), vec![level(0)]);
+    let bare = |name: &str| Term::instance(named(name), vec![level(0)]);
     let mut kernel = with_wrap_and_box();
 
     assert_eq!(held(&mut kernel, &[bare("Wrap")]), [0]);

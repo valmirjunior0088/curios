@@ -8,6 +8,7 @@ use {
     crate::{test_support::*, *},
     curios_algebra::Deduction,
     curios_num::Natural,
+    curios_utilities::Qualifier,
 };
 
 // Soundness gate: `nat_bound` must never under-report, because the division split and the comparison body both turn a bound into a definitional equation — an under-report there is a false equation, not merely a wrong value. Every closed instantiation of each bounded shape must land at or below the bound the oracle states for the shape itself.
@@ -258,7 +259,7 @@ fn euclid_split_is_a_euclidean_division() {
 fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::Var::free(Free::local(0, Some("g"))),
+            Global::Authored(Qualifier::from(["g"])),
             vec![crate::Level::constant(level)],
         )
     };
@@ -291,7 +292,7 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
 fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::Var::free(Free::local(0, Some("g"))),
+            Global::Authored(Qualifier::from(["g"])),
             vec![crate::Level::constant(level)],
         )
     };

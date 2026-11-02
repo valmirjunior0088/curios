@@ -397,15 +397,8 @@ pub fn synth_neutral(
             }
         }
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
-        Subterm::Instance(Instance {
-            head: var,
-            universes,
-        }) => {
-            let name = var.unwrap();
-            if let Some(type_) = opened.type_of(name) {
-                return Ok(Some(type_.clone()));
-            }
-            let Some(scheme) = context.assumption(name).cloned() else {
+        Subterm::Instance(Instance { name, universes }) => {
+            let Some(scheme) = context.assumption(&Free::Global(*name)).cloned() else {
                 return Ok(None);
             };
             instantiate_universes(&scheme, universes)

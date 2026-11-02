@@ -55,12 +55,12 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
         &mut HashSet::new(),
         |seen: &mut HashSet<Term>, term| {
             let named = match &**term {
-                Subterm::Var(var) => var.as_free(),
-                Subterm::Instance(instance) => instance.head.as_free(),
+                Subterm::Var(var) => var.as_free().and_then(Free::as_global).copied(),
+                Subterm::Instance(instance) => Some(instance.name),
                 _ => None,
             };
-            match (named.and_then(|free| free.as_global()), term.extent()) {
-                (Some(named), Some(extent)) if named == name => ControlFlow::Break(extent),
+            match (named, term.extent()) {
+                (Some(named), Some(extent)) if named == *name => ControlFlow::Break(extent),
                 _ if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
                 _ => ControlFlow::Continue(Enter::Skip(())),
             }

@@ -3,6 +3,7 @@
 use {
     super::{test_support::*, *},
     crate::*,
+    curios_utilities::Qualifier,
 };
 
 fn list_window(base: Term, start: Term, count: Term) -> Term {
@@ -240,7 +241,7 @@ fn a_word_number_is_one_number_across_a_universe_instance() {
     let (xs, l) = (sym(0, "xs"), sym(1, "l"));
     let n = |level: u32| {
         Term::instance(
-            Var::free(Free::local(2, Some("n"))),
+            Global::Authored(Qualifier::from(["n"])),
             vec![Level::constant(level)],
         )
     };

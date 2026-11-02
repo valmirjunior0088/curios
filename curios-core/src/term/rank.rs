@@ -13,7 +13,7 @@ mod tests;
 
 use {
     super::{Subterm, Term},
-    crate::{Bound, Free, Instance, LevelHead, MaskedLevels, Metavar, Quality, Visit},
+    crate::{Bound, Free, LevelHead, MaskedLevels, Metavar, Quality, Visit},
     curios_algebra::Tie,
     curios_utilities::Sorted,
     std::{
@@ -65,7 +65,6 @@ const ALONE: u64 = 12;
 const BOTH: u64 = 13;
 const SPINE_STRUCTURE: u64 = 14;
 const SPINE_ENTRY: u64 = 15;
-const INSTANCE_OF_LOCAL: u64 = 16;
 
 /// `parts` folded into one hash, in order.
 fn mix(parts: &[u64]) -> u64 {
@@ -104,22 +103,8 @@ fn own(subterm: &Subterm) -> (u64, Vec<(Identity, u64)>) {
             let MaskedLevels {
                 levels, qualities, ..
             } = visit.take_masked_levels();
-            let mut parts = Vec::new();
+            let mut parts = vec![mix(&[NODE, hashed(&masked)])];
             let mut identities = Vec::new();
-            // An instance's variable head is this node's own identity, as a bare `Var`'s is, and the masked node would spell it by its value.
-            match subterm {
-                Subterm::Instance(Instance { head: var, .. })
-                    if var.as_free().and_then(Free::local_index).is_some() =>
-                {
-                    parts.push(INSTANCE_OF_LOCAL);
-                    let index = var
-                        .as_free()
-                        .and_then(Free::local_index)
-                        .expect("the head is a local");
-                    identities.push(((Kind::Binder, index), HERE));
-                }
-                _ => parts.push(mix(&[NODE, hashed(&masked)])),
-            }
             for (slot, level) in levels.iter().enumerate() {
                 parts.push(u64::from(level.constant));
                 let mut metas = Vec::new();

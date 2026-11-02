@@ -44,8 +44,8 @@ fn generic(name: &Global, sorts: usize, type_: Term, body: Term) -> Item {
 
 /// An occurrence of `name` stating `sorts`.
 fn at(name: &Global, sorts: impl IntoIterator<Item = Quality>) -> Term {
-    Term::instance_of(
-        &Free::from(name),
+    Term::instance(
+        *name,
         Universes {
             levels: Vec::new(),
             qualities: sorts.into_iter().collect(),

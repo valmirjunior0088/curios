@@ -808,11 +808,11 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 }
 
 fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, ReduceError> {
-    let Instance { head, universes } = instance;
+    let Instance { name, universes } = instance;
 
-    let reduct = match context.var_reduct_at(head.unwrap()).cloned() {
+    let reduct = match context.var_reduct_at(&Free::Global(name)).cloned() {
         Some(reduct) => reduct,
-        None => return Ok(Reduce::Break(Term::instance(head, universes))),
+        None => return Ok(Reduce::Break(Term::instance(name, universes))),
     };
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
@@ -1671,7 +1671,7 @@ fn normalize_argument_vec(
         .collect()
 }
 
-/// The head of an application, or the term itself: the position a name sits in, and the position a stuck form shows at. An instance wrapper is not looked through — its typed head is not a term — so a caller asking about the head's shape matches `Instance` beside the bare shape it wraps.
+/// The head of an application, or the term itself: the position a name sits in, and the position a stuck form shows at. An instance is not looked through — the name it holds is no term — so a caller asking about the head's shape matches `Instance` beside the bare name.
 pub fn applied_head(term: &Term) -> &Term {
     match &**term {
         Subterm::Apply(Apply { head, .. }) => head,

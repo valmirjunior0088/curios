@@ -20,10 +20,10 @@ use {
 #[test]
 fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let mut context = context();
-    let partial = context.fresh(Some("partial"));
+    let partial = nominal("partial");
     let ignored = context.fresh(Some("ignored"));
     context.define(
-        &partial,
+        &Free::Global(partial),
         &Term::func(
             [(ignored, Term::intrinsic(Intrinsic::NatType))],
             Term::intrinsic(Intrinsic::bytes_get(
@@ -37,10 +37,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
     let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
     let applied = |meta: UniverseMetaId| {
-        Term::apply(
-            Term::instance_of(&partial, vec![Level::meta(meta)]),
-            [nat(0)],
-        )
+        Term::apply(Term::instance(partial, vec![Level::meta(meta)]), [nat(0)])
     };
 
     assert_eq!(

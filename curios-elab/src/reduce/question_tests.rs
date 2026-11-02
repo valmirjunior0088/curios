@@ -699,7 +699,7 @@ struct AtTwoLevels {
 impl AtTwoLevels {
     fn over(context: &mut Context) -> Self {
         let asked = Asked::over(context);
-        let g = context.fresh(Some("g"));
+        let g = nominal("g");
         let w = context.fresh(Some("w"));
         let (x, y) = (context.fresh(Some("x")), context.fresh(Some("y")));
         let nat_type = Term::intrinsic(Intrinsic::NatType);
@@ -714,7 +714,7 @@ impl AtTwoLevels {
                 Term::free_var(&w),
                 [
                     Term::apply(
-                        Term::instance_of(&g, vec![level.clone()]),
+                        Term::instance(g, vec![level.clone()]),
                         [Term::free_var(&asked.a)],
                     ),
                     Term::intrinsic(Intrinsic::nat_add(

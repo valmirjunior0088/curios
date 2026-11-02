@@ -966,7 +966,7 @@ impl Writing {
 /// `head` as a program names it: a reference at levels of its own, as a name is read where it is written, and not at the instance elaboration settled for it.
 fn as_named(head: &Term) -> Term {
     match &**head {
-        Subterm::Instance(Instance { head: var, .. }) => Term::var(var.clone()),
+        Subterm::Instance(Instance { name, .. }) => Term::free_var(&Free::Global(*name)),
         Subterm::Apply(Apply { head, arguments }) => Term::from(Subterm::Apply(Apply {
             head: as_named(head),
             arguments: arguments.clone(),
@@ -1096,7 +1096,7 @@ fn dictionary_type(context: &mut Context, dictionary: &Term) -> Option<Term> {
 /// Who a call headed by `head` is a call of, as an open slot's provenance names it.
 fn callee_of(head: &Term) -> CalleeId {
     match head.head_name() {
-        Some(name) => CalleeId::Function(*name),
+        Some(name) => CalleeId::Function(name),
         None => CalleeId::Anonymous,
     }
 }

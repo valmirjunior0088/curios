@@ -346,10 +346,10 @@ fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
         Some((vec![(u, v)], vec![(p, q)]))
     );
 
-    let poly = Free::Global(nominal("poly"));
+    let poly = nominal("poly");
     let instance = |quality| {
-        Term::instance_of(
-            &poly,
+        Term::instance(
+            poly,
             Universes {
                 levels: vec![Level::zero()],
                 qualities: vec![quality],

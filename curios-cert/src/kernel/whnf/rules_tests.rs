@@ -44,12 +44,12 @@ fn delta_withholds_a_universe_polymorphic_definition() {
 #[test]
 fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let mut kernel = kernel();
-    let f = binder(0, "f");
+    let f = Global::Authored(Qualifier::from(["f"]));
     kernel
-        .define(&f, &nat_type(), &nat(3), &polymorphic())
+        .define(&Free::Global(f), &nat_type(), &nat(3), &polymorphic())
         .expect("a name is declared once");
 
-    let instance = Term::instance_of(&f, vec![Level::zero()]);
+    let instance = Term::instance(f, vec![Level::zero()]);
     assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
 }
 

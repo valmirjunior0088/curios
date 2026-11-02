@@ -348,7 +348,7 @@ impl<'s> Eraser<'s> {
             | curios_core::Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
             // An instance is its head at the sorts it states: a level carries nothing at run time, and a declaration that leaves sorts open is bound at each of them apart.
             curios_core::Subterm::Instance(instance) => self.erase_name(
-                instance.head.unwrap(),
+                &curios_core::Free::Global(instance.name),
                 Sorts::of(&instance.universes.qualities),
             ),
             curios_core::Subterm::Var(var) => self.erase_name(var.unwrap(), Sorts::NONE),

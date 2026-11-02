@@ -232,7 +232,10 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             curios_core::Quality::Param(_) | curios_core::Quality::Meta(_) => Subterm::Sort.into(),
         },
         // An instance is the name it is of: no source states the levels.
-        Core::Instance(instance) => sub(curios_core::Term::var(instance.head.clone()), frame)?,
+        Core::Instance(instance) => sub(
+            curios_core::Term::free_var(&curios_core::Free::Global(instance.name)),
+            frame,
+        )?,
         Core::Intrinsic(intrinsic) => {
             let form = curios_core::intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
 

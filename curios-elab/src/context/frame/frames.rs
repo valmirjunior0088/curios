@@ -783,7 +783,7 @@ impl<'s> Frames<'s> {
                 .any(|top| top.scrutinees_through() > 0)
     }
     /// Whether some registered scrutinee key shares `head` as its applied-head symbol. The second gate, past `Term::head_key`: only a head that is actually refined justifies building the candidate's key.
-    pub fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
+    pub fn scrutinee_head_refined(&self, head: HeadTag) -> bool {
         self.refined_everywhere().any(|frame| {
             frame
                 .refinement_scrutinees

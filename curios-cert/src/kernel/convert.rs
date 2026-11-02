@@ -16,7 +16,7 @@
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
-//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition, or has one inhabitant by its shape. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets a family indexed by two proofs of a `P : Prop`, `Same(@P)(p, q)`, convert with `Same(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and the same member of two groups is decided by the groups compared as binders, before either is unfolded (`two_groups`); two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
+//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's head and an instance's name are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition, or has one inhabitant by its shape. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets a family indexed by two proofs of a `P : Prop`, `Same(@P)(p, q)`, convert with `Same(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and the same member of two groups is decided by the groups compared as binders, before either is unfolded (`two_groups`); two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
 //!
 //! Where a lookup gives no type, the direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. A refusal can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -33,7 +33,7 @@ use {
     crate::{case_target_indices, instantiate_universes, pinned_instance, struct_reaches_itself},
     curios_analysis::{Classes, Within},
     curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
+        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Free, Func, FuncType, Global, InductType,
         Instance, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality, ReduceError, Reducer,
         Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes,
         Variant,
@@ -396,17 +396,16 @@ fn one_definition_by_its_spines(
             }
             (
                 Subterm::Instance(Instance {
-                    head: left,
+                    name: left,
                     universes: left_universes,
                 }),
                 Subterm::Instance(Instance {
-                    head: right,
+                    name: right,
                     universes: right_universes,
                 }),
             ) => {
-                let name = left.unwrap();
-                name == right.unwrap()
-                    && kernel.value_at(name).is_some()
+                left == right
+                    && kernel.value_at(&Free::Global(*left)).is_some()
                     && kernel.universes_eq(left_universes, right_universes)
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {
@@ -789,19 +788,19 @@ fn structural(
 
         (
             Subterm::Instance(Instance {
-                head: left,
+                name: left,
                 universes: left_universes,
             }),
             Subterm::Instance(Instance {
-                head: right,
+                name: right,
                 universes: right_universes,
             }),
         ) => Ok(kernel.universes_eq(left_universes, right_universes)
             && ground(
                 kernel,
                 pairs,
-                &Term::var(left.clone()),
-                &Term::var(right.clone()),
+                &Term::free_var(&Free::Global(*left)),
+                &Term::free_var(&Free::Global(*right)),
             )?),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.

@@ -635,9 +635,9 @@ impl Machine {
 
             Subterm::Instance(instance) => {
                 let universes = instance.universes;
-                let var = instance.head;
-                let Some(reduct) = host.closed_body_at(var.unwrap()).cloned() else {
-                    return Ok(Step::Value(Term::instance(var, universes)));
+                let name = instance.name;
+                let Some(reduct) = host.closed_body_at(&Free::Global(name)).cloned() else {
+                    return Ok(Step::Value(Term::instance(name, universes)));
                 };
                 // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
                 let reduct =

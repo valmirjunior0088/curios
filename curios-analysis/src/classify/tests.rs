@@ -4,8 +4,9 @@ use {
     super::{test_support::*, *},
     curios_algebra::Operation,
     curios_core::{
-        Free, Intrinsic, Level, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic,
+        Free, Global, Intrinsic, Level, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic,
     },
+    curios_utilities::Qualifier,
     std::convert::Infallible,
 };
 
@@ -620,7 +621,10 @@ fn an_operation_under_its_own_is_held_where_its_reader_does_not_flatten_it() {
 /// A call of one universe-polymorphic name at a level of its own, over one argument.
 fn applied_at(level: u32, argument: Term) -> Term {
     Term::apply(
-        Term::instance_of(&Free::local(10, Some("f")), vec![Level::constant(level)]),
+        Term::instance(
+            Global::Authored(Qualifier::from(["f"])),
+            vec![Level::constant(level)],
+        ),
         [argument],
     )
 }

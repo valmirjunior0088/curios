@@ -22,15 +22,17 @@ fn proj_refinement_lookup() {
 #[test]
 fn scrutinee_refinement_holds_fresh_universe_instances_to_one() {
     let mut context = context();
-    let classify = context.fresh(Some("classify"));
+    let classify = nominal("classify");
+    // Applied to a local, as a scrutinee an arm refines is: a closed term takes the machine, which reads no refinement.
+    let x = context.fresh(Some("x"));
     let (registered_at, probed_at) = fresh_instances(&mut context);
     let registered = Term::apply(
-        Term::instance_of(&classify, vec![Level::meta(registered_at)]),
-        [nat(0)],
+        Term::instance(classify, vec![Level::meta(registered_at)]),
+        [Term::free_var(&x)],
     );
     let probe = Term::apply(
-        Term::instance_of(&classify, vec![Level::meta(probed_at)]),
-        [nat(0)],
+        Term::instance(classify, vec![Level::meta(probed_at)]),
+        [Term::free_var(&x)],
     );
     let canonical = shallow_scrutinee(&context, &registered);
     context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
@@ -75,8 +77,8 @@ fn instance(context: &Context, meta: UniverseMetaId) -> Level {
 #[test]
 fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let mut context = context();
-    let classify = context.fresh(Some("classify"));
-    let at = |level: Level| Term::apply(Term::instance_of(&classify, vec![level]), [nat(0)]);
+    let classify = nominal("classify");
+    let at = |level: Level| Term::apply(Term::instance(classify, vec![level]), [nat(0)]);
     let registered = at(Level::zero());
     let probe = at(Level::zero().succ().expect("level zero has a successor"));
     let canonical = shallow_scrutinee(&context, &registered);
@@ -89,8 +91,8 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
 #[test]
 fn projection_refinement_does_not_fire_at_another_ground_universe_instance() {
     let mut context = context();
-    let record_binder = context.fresh(Some("record"));
-    let at = |level: Level| Term::apply(Term::instance_of(&record_binder, vec![level]), [nat(0)]);
+    let record_binder = nominal("record");
+    let at = |level: Level| Term::apply(Term::instance(record_binder, vec![level]), [nat(0)]);
     let registered = at(Level::zero());
     let probe = Term::proj(
         at(Level::zero().succ().expect("level zero has a successor")),
@@ -105,15 +107,17 @@ fn projection_refinement_does_not_fire_at_another_ground_universe_instance() {
 #[test]
 fn projection_refinement_holds_fresh_universe_instances_to_one() {
     let mut context = context();
-    let record_binder = context.fresh(Some("record"));
+    let record_binder = nominal("record");
+    // Applied to a local, for the reason the scrutinee case is.
+    let x = context.fresh(Some("x"));
     let (registered_at, probed_at) = fresh_instances(&mut context);
     let registered = Term::apply(
-        Term::instance_of(&record_binder, vec![Level::meta(registered_at)]),
-        [nat(0)],
+        Term::instance(record_binder, vec![Level::meta(registered_at)]),
+        [Term::free_var(&x)],
     );
     let probe = Term::apply(
-        Term::instance_of(&record_binder, vec![Level::meta(probed_at)]),
-        [nat(0)],
+        Term::instance(record_binder, vec![Level::meta(probed_at)]),
+        [Term::free_var(&x)],
     );
     context.refine_projection(registered, 0, nat(1));
 

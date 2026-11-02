@@ -48,18 +48,18 @@ fn declare_held(context: &mut Context) {
         constraints: Vec::new(),
     };
 
-    let drop = Free::from(&nominal("Drop"));
+    let drop = nominal("Drop");
     let dropped = context.fresh(Some("X"));
     context.define_assuming(
-        &drop,
+        &Free::Global(drop),
         &Term::func_type([(dropped, Term::type_at(level()))], Term::type_ground()),
         &Term::func([(dropped, Term::type_at(level()))], nat_type()),
         Some(&DefinitionKind::Authored),
     );
-    context.set_assumption_universe_context(&drop, scheme.clone());
+    context.set_assumption_universe_context(&Free::Global(drop), scheme.clone());
 
     let held = context.fresh(Some("held"));
-    let payload = Term::apply(Term::instance_of(&drop, vec![level()]), [nat_type()]);
+    let payload = Term::apply(Term::instance(drop, vec![level()]), [nat_type()]);
     context
         .register_induct(
             &nominal("Held"),
@@ -125,7 +125,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
 
 /// `pick.{level}`, passed bare.
 fn pick(level: Level) -> Term {
-    Term::instance_of(&Free::from(&nominal("pick")), vec![level])
+    Term::instance(nominal("pick"), vec![level])
 }
 
 /// A level bounded away from zero, which an equation with zero refuses where the declaration closes.
@@ -483,10 +483,7 @@ fn define_records(context: &mut Context) {
 
 /// The first field of the record `name` at `level`.
 fn first(name: &str, level: Level) -> Term {
-    Term::proj(
-        Term::instance_of(&Free::from(&nominal(name)), vec![level]),
-        0,
-    )
+    Term::proj(Term::instance(nominal(name), vec![level]), 0)
 }
 
 // A field of a definition applied in full is that field's value once the definition unfolds: two projections apart in a level the value drops are one term, and two apart in a level it holds are two. The kernel's twin of this proposition shares the name.

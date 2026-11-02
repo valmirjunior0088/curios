@@ -1,11 +1,11 @@
-use {super::*, crate::*, curios_algebra::Carrier};
+use {super::*, crate::*, curios_algebra::Carrier, curios_utilities::Qualifier};
 
 /// One call of a universe-polymorphic name at two instances, and the call at another argument.
 fn calls() -> (Term, Term, Term) {
-    let name = Free::local(0, Some("f"));
+    let name = Global::Authored(Qualifier::from(["f"]));
     let at = |level: u32, argument: u64| {
         Term::apply(
-            Term::instance_of(&name, vec![Level::constant(level)]),
+            Term::instance(name, vec![Level::constant(level)]),
             [Term::free_var(&Free::local(argument, Some("x")))],
         )
     };

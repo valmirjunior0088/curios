@@ -315,16 +315,3 @@ fn an_irrelevant_levels_higher_instance_is_no_type_at_the_lower_instances_sort()
 
     assert!(mismatched(&verdicts, lowered), "{verdicts:?}");
 }
-
-// A field reaching a level only inside an instance whose head is the declaration's own parameter: no family's vector can answer for such a head, and `Invariant` is the answer the walk takes there, marking every level the instance carries. So the level is compared though the field is `A` to every judgment — `check_instance` is reached at no local and the levels an instance of one states say nothing — and the two instances, which have the same inhabitants, are held apart. Spelled as the plain `A` the same declaration is irrelevant in the level and the two convert, so the instance is what marks it; carried as irrelevant over the instance the declaration is denied.
-#[test]
-fn a_level_an_instance_of_a_parameter_carries_is_invariant() {
-    let (_, through) = through_instance_module(vec![Variance::Invariant], false, 0, 1);
-    assert!(only_the_coercion_refused(&refusals(&through)));
-
-    let (_, plain) = through_instance_module(vec![Variance::Irrelevant], true, 0, 1);
-    assert_eq!(refusals(&plain), Vec::new());
-
-    let (family, lying) = through_instance_module(vec![Variance::Irrelevant], false, 0, 1);
-    assert!(denied(&refusals(&lying), family, 0));
-}

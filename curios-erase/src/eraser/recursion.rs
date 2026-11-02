@@ -76,9 +76,10 @@ impl Eraser<'_> {
             .iter()
             .map(|definition| curios_core::Free::from(&definition.name))
             .collect::<Vec<_>>();
-        let occurrences = names
+        let occurrences = rec
+            .definitions
             .iter()
-            .map(|name| curios_core::Term::instance_of(name, universes.clone()))
+            .map(|definition| curios_core::Term::instance(definition.name, universes.clone()))
             .collect::<Vec<_>>();
         let occurrences = occurrences.iter().collect::<Vec<_>>();
         let hints = rec

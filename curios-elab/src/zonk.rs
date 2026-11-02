@@ -355,8 +355,8 @@ impl<'a> Zonk<'a> {
             }
             Subterm::Var(var) => Subterm::Var(var.clone()),
             Subterm::Instance(instance) => Subterm::Instance(Instance {
-                // A head holds nothing to zonk.
-                head: instance.head.clone(),
+                // A name holds nothing to zonk.
+                name: instance.name,
                 universes: self.zonk_universes(&instance.universes)?,
             }),
 

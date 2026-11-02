@@ -153,10 +153,7 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
     // The reader: the same four spellings, read at an instance the carrier's own constraints are satisfied by. The carrier's body carries no group, so an instance substitutes its levels and the four products arrive over `Type 0`; the record's field types are the group's own and are shadowed, so they arrive spelled in the reader's parameters.
     let one = Level::zero().succ().expect("level has a successor");
     let two = one.clone().succ().expect("level has a successor");
-    let read = Term::instance_of(
-        &Free::from(&carrier),
-        vec![Level::zero(), one.clone(), one.clone(), two],
-    );
+    let read = Term::instance(carrier, vec![Level::zero(), one.clone(), one.clone(), two]);
     let product = |index: usize| Term::proj(read.clone(), index);
 
     let boxed = Global::Authored(Qualifier::from(["Boxed"]));
@@ -212,8 +209,8 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
 
     (
         module,
-        Term::instance_of(
-            &Free::from(&paradox),
+        Term::instance(
+            paradox,
             vec![Level::zero(), one, Level::zero(), Level::zero()],
         ),
     )

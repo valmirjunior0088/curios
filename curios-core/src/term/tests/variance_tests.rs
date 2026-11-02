@@ -40,8 +40,8 @@ fn number(n: usize) -> Term {
 
 /// The family `path`'s name at `levels`: the head an application of it stands on.
 fn named(path: &str, levels: &[u32]) -> Term {
-    Term::instance_of(
-        &Free::from(&nominal(path)),
+    Term::instance(
+        nominal(path),
         levels.iter().copied().map(at).collect::<Universes>(),
     )
 }

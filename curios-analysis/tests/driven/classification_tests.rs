@@ -8,10 +8,11 @@ use {
     },
     curios_cert::Kernel,
     curios_core::{
-        Cases, Exhaustion, Free, Intrinsic, Level, Match, Nat, Rec, Reducer, Subterm, Term,
+        Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Rec, Reducer, Subterm, Term,
         Totality,
     },
     curios_num::{Integer, Natural, Rounding},
+    curios_utilities::Qualifier,
 };
 
 /// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Partial`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.
@@ -376,7 +377,10 @@ fn a_call_apart_from_the_key_in_its_instance_alone_is_asked_about_by_its_argumen
     }
     let called = |level: u32, argument: &Free| {
         Term::apply(
-            Term::instance_of(&Free::local(10, Some("f")), vec![Level::constant(level)]),
+            Term::instance(
+                Global::Authored(Qualifier::from(["f"])),
+                vec![Level::constant(level)],
+            ),
             [Term::free_var(argument)],
         )
     };

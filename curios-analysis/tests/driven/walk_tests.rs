@@ -13,7 +13,7 @@ use {
         Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
         MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Rec, Row, Scope, Struct, StructEntry,
         StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two, UniverseContext,
-        Universes, Var, Variant,
+        Universes, Variant,
     },
     curios_num::Natural,
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -221,7 +221,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |_| Term::type_ground()),
         Specimen::of(&mut markers, |_| {
             Subterm::Instance(Instance {
-                head: Var::free(binder(7)),
+                name: name(),
                 universes: Universes::default(),
             })
             .into()
@@ -498,17 +498,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }
     }
 
-    // The variable head is the node's own data rather than a child term, so the fold reports nothing there, but it is still a call position the walk must see.
-    let head: Term = Subterm::Instance(Instance {
-        head: Var::free(planted()),
-        universes: Universes::default(),
-    })
-    .into();
-    assert!(
-        call_is_seen(Term::tuple([head])),
-        "a universe instance's variable head: the walk missed the planted self-call",
-    );
-
     // The third mechanism, stated as the pair that separates it from `Walk::step`: the same lambda is invisible at the top of a member body and visited one node deeper.
     let lambda = || Term::func([(binder(1), call())], Term::type_ground());
     assert!(
@@ -739,28 +728,24 @@ fn a_let_alias_of_the_arm_payload_descends() {
     assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
 }
 
-/// A key at a universe instance is the key the bare variable is. At the top of a position the first direction leaves a key to index refinement, which may have refined it to the very binder it stands against, and a variable under an instance is that key: solved against, the binder would be aliased to what reduces back to it.
+/// A key at a universe instance is the key the bare name is. At the top of a position the first direction leaves a key to index refinement, which may have refined it to the very binder it stands against, and a name at an instance is that key: solved against, the binder would be aliased to what reduces back to it.
 ///
 /// Mutation-checked: with the guard reading a bare variable and a projection alone, the binder is solved to the instance.
 #[test]
 fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     let mut kernel = kernel();
-    let n = Free::local(900, Some("n"));
+    let n = Global::Authored(Qualifier::from(["n"]));
     let k = Free::local(901, Some("k"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    kernel.assume(&n, &nat_type);
+    kernel.assume(&Free::Global(n), &nat_type);
     kernel.assume(&k, &nat_type);
-    // At a level, since forcing spells an instance that states none as its bare head.
-    let instance: Term = Subterm::Instance(Instance {
-        head: Var::free(n),
-        universes: Universes::levels(vec![Level::zero()]),
-    })
-    .into();
+    // At a level, since an instance that states none is its bare name.
+    let instance = Term::instance(n, vec![Level::zero()]);
     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
     for (label, actual, solved) in [
-        ("a bare variable", Term::free_var(&n), None),
-        ("a variable at an instance", instance, None),
+        ("a bare name", Term::free_var(&Free::Global(n)), None),
+        ("a name at an instance", instance, None),
         ("a literal", literal.clone(), Some(literal)),
     ] {
         let Invert::Solved(solutions) = invert_indices(

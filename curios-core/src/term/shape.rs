@@ -842,13 +842,13 @@ impl Metavar {
     }
 }
 
-/// An internal, occurrence-specific instantiation of a universe-polymorphic binding: a head at the levels, and the qualities, this occurrence chose.
+/// An internal, occurrence-specific instantiation of a universe-polymorphic declaration: its name at the levels, and the qualities, this occurrence chose.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Instance {
-    /// The binding this occurrence instantiates. A variable, so that an ill-formed head is unrepresentable rather than refused; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
+    /// The declaration this occurrence instantiates. A global, as a family's and a constructor's name is, so that a binder no scheme governs — a local, a bound variable, a `let` — has no spelling here; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
     ///
-    /// A projection out of a recursive group is no such head, and there is no other shape one can take. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; a head that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
-    pub head: Var,
+    /// A projection out of a recursive group is no such name, and there is no other shape one can take. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; an instance that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+    pub name: Global,
     pub universes: Universes,
 }

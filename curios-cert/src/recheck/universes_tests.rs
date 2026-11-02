@@ -611,35 +611,6 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     );
 }
 
-/// A crafted module can spell what no elaborated term does: an instance whose head is a `let`-bound variable, which let-reduction then substitutes with an arbitrary value. The declared type types — an instance of a local head reads levels-inert, as the sort fixtures pin for local heads — and checking `5` against it reduces it, where `whnf` promises totality on arbitrary terms, so the walk must return a verdict rather than abort: the substitution dissolves the instance to its head's value. A typed instance head makes the shape unrepresentable everywhere else; this is the one seam substitution can drive, and what it pins is the walk surviving it.
-#[test]
-fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_walk() {
-    let alias = Free::local(960, Some("alias"));
-    let declared = Term::let_(
-        &alias,
-        Term::type_ground(),
-        Term::intrinsic(Intrinsic::NatType),
-        Term::instance_of(&alias, vec![Level::zero()]),
-    );
-    let module = Module {
-        mounts: Vec::new(),
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["dissolved"])),
-            declared,
-            Term::intrinsic(Intrinsic::Nat(Nat::new(5usize))),
-        )]
-        .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
-
-    assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
-        Vec::new(),
-        "the declared type reduces through the dissolving instance to `Nat`, which `5` inhabits",
-    );
-}
-
 /// A definition whose declared type is a bare `rec` projection is read at the levels its own instance states.
 ///
 /// `carrier@{p} : rec m : Type (p + 2) = Type (p + 1) end.0 = Type p`: the declared type is a projection whose member's body is `Type (p + 1)`, so a reader stating `carrier@{5}` is owed that type at `p := 5`, which forces `Type 6`. Claiming it at `Type 1` is a mismatch.
@@ -704,7 +675,7 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
                 reads,
                 readers_context.clone(),
                 Term::type_at(claimed),
-                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Term::instance(carrier, vec![Level::constant(5)]),
             ),
         ]
         .into(),
@@ -789,7 +760,7 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
                 reads,
                 readers_context.clone(),
                 Term::type_at(claimed),
-                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Term::instance(carrier, vec![Level::constant(5)]),
             ))),
         ]
         .into(),
@@ -890,7 +861,7 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
             definition(
                 reads,
                 readers_context.clone(),
-                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Term::instance(carrier, vec![Level::constant(5)]),
                 Term::type_at(inhabitant),
             ),
         ]
@@ -1000,7 +971,7 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
                 published,
                 readers_context.clone(),
                 Term::type_at(Level::constant(7)),
-                Term::instance_of(&Free::from(&carrier), vec![Level::constant(5)]),
+                Term::instance(carrier, vec![Level::constant(5)]),
                 Some(Term::type_at(stated)),
             ),
         ]

@@ -285,10 +285,10 @@ pub fn written_monad(type_: &Term) -> Option<Term> {
 }
 
 /// The name `head` is, at a universe instance or not.
-fn named(head: &Term) -> Option<&Free> {
+fn named(head: &Term) -> Option<Free> {
     match &**head {
-        Subterm::Var(var) => var.as_free(),
-        Subterm::Instance(Instance { head: var, .. }) => var.as_free(),
+        Subterm::Var(var) => var.as_free().copied(),
+        Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
         _ => None,
     }
 }
@@ -299,7 +299,7 @@ fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
     while let Subterm::Apply(apply) = &**head {
         head = &apply.head;
     }
-    let mut result = context.assumption(named(head)?)?.clone();
+    let mut result = context.assumption(&named(head)?)?.clone();
     let mut binders = Vec::new();
     while let Subterm::FuncType(func_type) = &*result {
         let mut cursor = func_type.telescope.cursor();
@@ -728,12 +728,7 @@ fn instantiate(
         Some(occurrence),
     )?;
     let minted = universes.clone();
-    let name = Free::from(&witness.name);
-    let head = if universes.is_empty() {
-        Term::free_var(&name)
-    } else {
-        Term::instance_of(&name, universes)
-    };
+    let head = Term::instance(witness.name, universes);
     let extent = origin.extent();
 
     let (args, premises, bounds, terminal) = match &*signature {
