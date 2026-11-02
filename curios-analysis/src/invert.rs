@@ -13,6 +13,7 @@ use {
     curios_core::{
         Free, Instance, InstanceHead, Names, Quality, Subterm, Telescope, Term, peel_intrinsic,
     },
+    curios_utilities::recurse,
     std::collections::{BTreeSet, HashMap},
 };
 
@@ -279,7 +280,18 @@ impl<'f> Unifier<'f> {
         }
     }
 
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: this walk, [`Walk::unify_node`] and [`Walk::unify_all`] descend a pair of index terms one level per constructor or tuple layer, forcing both sides at each, and nothing between the levels is a loop or a charge. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn unify_index<J: Judge>(
+        &mut self,
+        judge: &mut J,
+        actual: &Term,
+        target: &Term,
+        top: bool,
+    ) -> Result<Step, J::Error> {
+        recurse(|| self.unify_within(judge, actual, target, top))
+    }
+
+    fn unify_within<J: Judge>(
         &mut self,
         judge: &mut J,
         actual: &Term,

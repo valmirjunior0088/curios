@@ -441,3 +441,32 @@ fn a_value_is_another_case_only_where_it_names_one_that_clashes() {
         );
     }
 }
+
+/// Depth is bought with stack: a pair of index terms nested five thousand layers deep is inverted on the default test-thread stack, where the walk descends a tuple's fields one level at a time and forces both sides at each.
+///
+/// What this guards is the shape `.claude/rules/rust.md` asks of every walk over data-shaped depth, which the two analyses beside this one were brought to first. The two towers differ only at the bottom, `0` against `1`, so no structural shortcut can answer and the descent is forced the whole way; the answer is a clash, which is what the intrinsic carriers' deduction says of two different literals.
+///
+/// Mutation-checked: with `Walk::unify_index`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts, which is a death and not a refusal.
+#[test]
+fn a_deep_pair_of_index_terms_is_inverted_on_the_default_stack() {
+    let mut kernel = kernel();
+    let deep = |bottom: Term| {
+        let mut term = bottom;
+        for _ in 0..5_000 {
+            term = Term::tuple([term]);
+        }
+        term
+    };
+    let actual = deep(Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))));
+    let target = deep(Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))));
+
+    assert!(matches!(
+        solve_indices(
+            &mut kernel,
+            slice::from_ref(&actual),
+            slice::from_ref(&target),
+            &[]
+        ),
+        Ok(Invert::Impossible)
+    ));
+}
