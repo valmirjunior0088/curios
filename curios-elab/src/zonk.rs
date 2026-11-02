@@ -97,12 +97,23 @@ impl<'a> Zonk<'a> {
     fn zonk_item(&self, item: &Item) -> Result<Item, Error> {
         match item {
             Item::Let(def) => Ok(Item::Let(Box::new(self.zonk_definition(def)?))),
-            Item::Rec(rec) => Ok(Item::Rec(RecItem::try_new(
-                rec.definitions()
-                    .iter()
-                    .map(|def| self.zonk_definition(def))
-                    .collect::<Result<Vec<_>, Error>>()?,
-            )?)),
+            // Inside the group's scopes: a group closes over finished terms, whatever was solved in it materialized before it closed (`elaborate_module_rec`), so zonking it reports what was left unsolved and spells its levels, and places nothing under its binder.
+            Item::Rec(rec) => {
+                let mut refusal = None;
+                let group = rec.group.map_members(|term| {
+                    self.zonk_term(term).unwrap_or_else(|error| {
+                        refusal.get_or_insert(error);
+                        term.clone()
+                    })
+                });
+                match refusal {
+                    Some(error) => Err(error),
+                    None => Ok(Item::Rec(RecItem {
+                        group,
+                        ..rec.clone()
+                    })),
+                }
+            }
         }
     }
 
@@ -769,14 +780,10 @@ pub fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
         let Some(solution) = entry.solution() else {
             continue;
         };
-        // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
+        // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The member's local is what its group closes over (`Term::rec`, `RecItem::try_new`), so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
         if let Some(name) = context.rec_slot_name(id) {
-            // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine. A top-level member is spelled at no levels, which the group's stamp fills with its own instance.
-            let member = match name.as_global() {
-                Some(name) => Term::instance(*name, Universes::default()),
-                None => Term::free_var(name),
-            };
-            solutions.insert(id, (entry.telescope().clone(), member));
+            // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine.
+            solutions.insert(id, (entry.telescope().clone(), Term::free_var(name)));
             continue;
         }
         pending.extend(solution.metavars());

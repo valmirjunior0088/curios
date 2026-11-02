@@ -902,7 +902,7 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<Mo
             }
             Subterm::Transient(Transient::Name(name))
             | Subterm::Instance(Instance { name, .. }) => {
-                let Some(declared) = context.assumption(&Free::Global(*name)).cloned() else {
+                let Some(declared) = context.written_assumption(name).cloned() else {
                     return Ok(None);
                 };
                 return declared_result_shape(context, &declared, &explicit);

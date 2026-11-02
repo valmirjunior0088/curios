@@ -3,7 +3,7 @@
 //! A goal inside a witness's body that resolves to the witness being declared arrives as a projection of the witness's own name, applied to the parameters the body binds. Where the method projected mentions that name nowhere, the projection is that method's term — the witness unfolded once and projected — so the read is no recursion and is replaced by the term. A method that reaches itself, alone or through another, keeps the name, and only then is the witness the recursive group [`elaborate_module_let`](super::elaborate_module_let) makes of a body that names itself: a group is a knot at run time, forced at every use, which a body that states one method by another must not pay.
 
 use {
-    crate::Context,
+    crate::{Context, declared},
     curios_core::{Advance, Free, Func, Global, Struct, Subterm, Term, Universes},
 };
 
@@ -11,7 +11,8 @@ use {
 ///
 /// Rewritten to a fixed point, since a method cleared of the name is one the others may then read. A body that is no concept literal under its parameters, and one that reads no such method, is returned as it stands.
 pub fn own_methods_read(context: &mut Context, name: Global, body: &Term) -> Term {
-    let free = Free::Global(name);
+    // What the body names the witness by: the local its group names it by while it elaborates ([`Context::within_group`]).
+    let free = context.group_member(&name).unwrap_or(Free::Global(name));
     if !body.mentions_free(&free) {
         return body.clone();
     }
@@ -34,8 +35,8 @@ pub fn own_methods_read(context: &mut Context, name: Global, body: &Term) -> Ter
         return body.clone();
     };
 
-    // A self-reference stands at no instance until the declaration's parameters are stamped on it.
-    let reference = Term::instance(name, Universes::default());
+    // The witness named as its own body names it: its group's binder, at no instance.
+    let reference = declared(context, name, Universes::default());
     let itself = match binders.is_empty() {
         true => reference,
         false => Term::apply_marked(

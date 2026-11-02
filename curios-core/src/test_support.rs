@@ -127,7 +127,10 @@ pub fn declaring(
         let former = Definition::former(name, island, nominal);
 
         let item = match grouped {
-            true => Item::Rec(RecItem::new(vec![former])),
+            true => Item::Rec(RecItem::new(vec![(
+                fresh(name.qualifier().map(Qualifier::last)),
+                former,
+            )])),
             false => Item::Let(Box::new(former)),
         };
         formers.entry(place).or_default().push((name, reach, item));

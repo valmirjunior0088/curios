@@ -7,7 +7,7 @@ use {
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
         Module, Nat, Nominal, RecGroup, RecItem, RecMemberScopes, ReduceError, Scope, Telescope,
-        Term, UniverseContext, UniverseParam, Universes, Variance,
+        Term, UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -71,10 +71,13 @@ fn spent_item_beside_an_aliased_payload() -> Module {
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             ),
             // The family's former is the module's last item, so its entry is judged once `spent` has been.
-            Item::Rec(RecItem::new(vec![Definition::former(
-                good(),
-                Qualifier::default(),
-                Nominal::Inductive(declaration),
+            Item::Rec(RecItem::new(vec![(
+                fresh(None),
+                Definition::former(
+                    good(),
+                    Qualifier::default(),
+                    Nominal::Inductive(declaration),
+                ),
             )])),
         ]
         .into(),
@@ -185,10 +188,13 @@ fn held_at_a_counted_index(unfolding: usize) -> Module {
         mounts: Vec::new(),
         items: vec![
             alias,
-            Item::Rec(RecItem::new(vec![Definition::former(
-                held(),
-                Qualifier::default(),
-                Nominal::Inductive(declaration),
+            Item::Rec(RecItem::new(vec![(
+                fresh(None),
+                Definition::former(
+                    held(),
+                    Qualifier::default(),
+                    Nominal::Inductive(declaration),
+                ),
             )])),
         ]
         .into(),

@@ -78,8 +78,14 @@ fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
 
     // `Wit` holds a `Box` and `Box` holds a `Wit`, so the two are declared as one group, which is what puts a proof's constructor over a payload a program can read.
     let carriers = Item::Rec(RecItem::new(vec![
-        Definition::former(wit, Qualifier::default(), Nominal::Inductive(wit_decl)),
-        Definition::former(boxed, Qualifier::default(), Nominal::Inductive(box_decl)),
+        (
+            Free::local(988, Some("Wit")),
+            Definition::former(wit, Qualifier::default(), Nominal::Inductive(wit_decl)),
+        ),
+        (
+            Free::local(989, Some("Box")),
+            Definition::former(boxed, Qualifier::default(), Nominal::Inductive(box_decl)),
+        ),
     ]));
 
     let index = Free::local(992, Some("n"));
@@ -102,10 +108,9 @@ fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
     let module = Module {
         items: vec![
             carriers,
-            Item::Rec(RecItem::new(vec![Definition::former(
-                family,
-                Qualifier::default(),
-                Nominal::Inductive(q_decl),
+            Item::Rec(RecItem::new(vec![(
+                Free::local(987, Some("Q")),
+                Definition::former(family, Qualifier::default(), Nominal::Inductive(q_decl)),
             )])),
         ]
         .into(),

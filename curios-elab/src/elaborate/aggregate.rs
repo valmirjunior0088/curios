@@ -5,9 +5,8 @@ use {
         reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
-        Bound, Extent, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant, instantiate_universes,
-        stamp_declaration_instance,
+        Bound, Extent, Field, InductType, Level, Proj, Quality, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, Variant, instantiate_universes, stamp_declaration_instance,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -425,7 +424,6 @@ pub fn elaborate_variant(
             targets,
         ),
         &BTreeSet::from([*name]),
-        SelfReference::Free,
         &universes,
     );
     let rebuilt = Term::variant_at(

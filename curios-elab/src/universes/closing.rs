@@ -9,9 +9,9 @@ use {
         zonk_solved_term_metas,
     },
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, FuncType, Global, SelfReference, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseMetaId, Universes, Visit,
-        stamp_declaration_instance, universe_metas,
+        Bound, ConceptDecl, DefinitionKind, FuncType, Global, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseMetaId, Universes, Visit, stamp_declaration_instance,
+        universe_metas,
     },
     std::{cell::RefCell, collections::BTreeSet, rc::Rc},
 };
@@ -163,7 +163,6 @@ pub fn finalize_definition(
     kind: &DefinitionKind,
     type_: Term,
     body: Term,
-    self_reference: SelfReference,
 ) -> Result<(UniverseContext, Term, Term), Error> {
     curios_profile::profile!("finalize_definition");
     let type_ = zonk_solved_term_metas(context, &type_);
@@ -275,20 +274,10 @@ pub fn finalize_definition(
     let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
     let instance = universe_context.identity_instance();
     let owned = BTreeSet::from([*name]);
-    // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself. A definition whose body names *itself* is about to be captured by a single-member group instead, and its occurrences reach that binder — see [`elaborate_module_let`].
-    let free = self_reference;
-    let type_ = stamp_declaration_instance(
-        &context.zonk_universe_levels(&type_)?,
-        &owned,
-        free,
-        &instance,
-    );
-    let body = stamp_declaration_instance(
-        &context.zonk_universe_levels(&body)?,
-        &owned,
-        free,
-        &instance,
-    );
+    // A definition's own nominal forms, in its signature, body and registry entry, denote its own instance; a witness whose body names itself names it by the local its group of one closes over — see [`elaborate_module_let`].
+    let type_ =
+        stamp_declaration_instance(&context.zonk_universe_levels(&type_)?, &owned, &instance);
+    let body = stamp_declaration_instance(&context.zonk_universe_levels(&body)?, &owned, &instance);
 
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
         context.update_struct(
@@ -298,13 +287,11 @@ pub fn finalize_definition(
                 arity: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.arity)?,
                     &owned,
-                    free,
                     &instance,
                 ),
                 result_sort: stamp_declaration_instance(
                     &context.zonk_universe_levels(&struct_decl.result_sort)?,
                     &owned,
-                    free,
                     &instance,
                 ),
                 module: struct_decl.module,
@@ -322,7 +309,6 @@ pub fn finalize_definition(
                 params: stamp_declaration_instance(
                     &context.zonk_universe_levels(&concept.params)?,
                     &owned,
-                    free,
                     &instance,
                 ),
                 fields: concept.fields,

@@ -1992,24 +1992,28 @@ pub(super) fn proof_at_an_argument_module(reaching: bool) -> Module {
 pub(super) fn proof_typed_nullary_group() -> Module {
     let (vouched_name, declaration) = vouched_declaration();
     let bad = Global::Authored(Qualifier::from(["bad"]));
+    let member = fresh(Some("bad"));
 
     declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Rec(RecItem::new(vec![Definition {
-                name: bad,
-                kind: DefinitionKind::Authored,
-                universe_context: UniverseContext::empty(),
-                island: Qualifier::default(),
-                totality: Totality::Partial,
-                proof: false,
-                variances: Vec::new(),
-                field_variances: Vec::new(),
-                parameter_field: None,
-                value_sort: None,
-                type_: Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
-                body: Term::instance(bad, Universes::default()),
-            }]))]
+            items: vec![Item::Rec(RecItem::new(vec![(
+                member,
+                Definition {
+                    name: bad,
+                    kind: DefinitionKind::Authored,
+                    universe_context: UniverseContext::empty(),
+                    island: Qualifier::default(),
+                    totality: Totality::Partial,
+                    proof: false,
+                    variances: Vec::new(),
+                    field_variances: Vec::new(),
+                    parameter_field: None,
+                    value_sort: None,
+                    type_: Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
+                    body: Term::free_var(&member),
+                },
+            )]))]
             .into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
@@ -3143,20 +3147,26 @@ fn constant(name: Global) -> Definition {
 
 /// A group of one member, `name : type_ = body`, marked a proof: how a lemma proved by its own recursion is stored.
 pub(super) fn proof_group(name: &Global, type_: Term, body: Term) -> Item {
-    Item::Rec(RecItem::new(vec![Definition {
-        proof: true,
-        type_,
-        body,
-        ..constant(*name)
-    }]))
+    Item::Rec(RecItem::new(vec![(
+        fresh(None),
+        Definition {
+            proof: true,
+            type_,
+            body,
+            ..constant(*name)
+        },
+    )]))
 }
 
 /// One group of two constants, `shadowed` and `fresh`: the first under a name [`judged_environment`] holds, the second under none.
 pub(super) fn group_held_in_part() -> Module {
     collision_module(
         vec![Item::Rec(RecItem::new(vec![
-            constant(shadowed_name()),
-            constant(Global::Authored(Qualifier::from(["fresh"]))),
+            (fresh(None), constant(shadowed_name())),
+            (
+                fresh(None),
+                constant(Global::Authored(Qualifier::from(["fresh"]))),
+            ),
         ]))],
         BTreeMap::new(),
     )
@@ -3166,8 +3176,8 @@ pub(super) fn group_held_in_part() -> Module {
 pub(super) fn group_naming_a_member_twice() -> Module {
     collision_module(
         vec![Item::Rec(RecItem::new(vec![
-            constant(shadowed_name()),
-            constant(shadowed_name()),
+            (fresh(None), constant(shadowed_name())),
+            (fresh(None), constant(shadowed_name())),
         ]))],
         BTreeMap::new(),
     )
@@ -3266,13 +3276,16 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
 
     // An entry is held by its former, so the family beside the record is a second former under the record's name.
     let family = beside_a_family.then(|| {
-        Item::Rec(RecItem::new(vec![Definition::former(
-            bad,
-            Qualifier::default(),
-            Nominal::Inductive(InductDecl {
-                result_sort: Term::type_ground(),
-                ..proposition(Vec::new())
-            }),
+        Item::Rec(RecItem::new(vec![(
+            fresh(None),
+            Definition::former(
+                bad,
+                Qualifier::default(),
+                Nominal::Inductive(InductDecl {
+                    result_sort: Term::type_ground(),
+                    ..proposition(Vec::new())
+                }),
+            ),
         )]))
     });
     let induct_decls = BTreeMap::from([(absurd_name, proposition(Vec::new()))]);

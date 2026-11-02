@@ -7,12 +7,12 @@ use {
     crate::Proof,
     curios_cert::Verdict,
     curios_core::{
-        Definition, Global, Item, Module, Nominal, Program, RecItem, Term, Universes, Zonked,
+        Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Universes, Zonked,
         ZonkedRefusal,
     },
     curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
-    curios_utilities::Report,
+    curios_utilities::{Qualifier, Report},
     std::fmt,
 };
 
@@ -36,7 +36,11 @@ pub(crate) fn declared(name: Global, entry: Nominal) -> Item {
     let former = Definition::former(name, island, entry);
 
     match grouped {
-        true => Item::Rec(RecItem::new(vec![former])),
+        // The former names its family nominally, so its group's binder is named by nothing, and a local counted from zero aliases nothing in a former's closed terms.
+        true => Item::Rec(RecItem::new(vec![(
+            Free::local(0, name.qualifier().map(Qualifier::last)),
+            former,
+        )])),
         false => Item::Let(Box::new(former)),
     }
 }

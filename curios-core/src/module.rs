@@ -817,39 +817,36 @@ impl RecItem {
         }
     }
 
-    pub fn new(definitions: Vec<Definition>) -> Self {
-        Self::try_new(definitions).expect("a recursive group has one valid universe context")
+    pub fn new(members: Vec<(Free, Definition)>) -> Self {
+        Self::try_new(members).expect("a recursive group has one valid universe context")
     }
 
-    pub fn try_new(definitions: Vec<Definition>) -> Result<Self, UniverseError> {
-        let universe_context = definitions
+    /// The group of `members`, each a definition beside the local it and its siblings name it by: closed over those locals, so every reference a member makes to the group is the group's own binder.
+    pub fn try_new(members: Vec<(Free, Definition)>) -> Result<Self, UniverseError> {
+        let universe_context = members
             .first()
-            .map(|definition| definition.universe_context.clone())
+            .map(|(_, definition)| definition.universe_context.clone())
             .unwrap_or_default();
-        if !definitions
+        if !members
             .iter()
-            .all(|definition| definition.universe_context == universe_context)
+            .all(|(_, definition)| definition.universe_context == universe_context)
         {
             return Err(UniverseError::MismatchedRecursiveContexts);
         }
-        let names = definitions
-            .iter()
-            .map(|definition| Free::from(&definition.name))
-            .collect::<Vec<_>>();
-        let members = names.iter().collect::<Vec<_>>();
-        let arity = Many(members.len());
+        let locals = members.iter().map(|(local, _)| local).collect::<Vec<_>>();
+        let arity = Many(locals.len());
         let group = RecGroup::new(
-            definitions
+            members
                 .iter()
-                .map(|definition| RecMemberScopes {
-                    type_: Scope::close(arity, &members, definition.type_.clone()),
-                    body: Scope::close(arity, &members, definition.body.clone()),
+                .map(|(_, definition)| RecMemberScopes {
+                    type_: Scope::close(arity, &locals, definition.type_.clone()),
+                    body: Scope::close(arity, &locals, definition.body.clone()),
                 })
                 .collect(),
         );
-        let definitions = definitions
+        let definitions = members
             .into_iter()
-            .map(|definition| RecDefinition {
+            .map(|(_, definition)| RecDefinition {
                 name: definition.name,
                 kind: definition.kind,
                 island: definition.island,
@@ -865,7 +862,7 @@ impl RecItem {
         })
     }
 
-    /// Open the recursive scopes against their exported names.
+    /// Open the recursive scopes against their exported names: each member's references to the group read as the declarations they are, at the group's own instance.
     ///
     /// The returned definitions are a read-only projection; the authoritative types and bodies remain structurally shared in the group's scheme.
     pub fn definitions(&self) -> Vec<Definition> {
@@ -876,7 +873,13 @@ impl RecItem {
                 Term::instance(definition.name, self.universe_context.identity_instance())
             })
             .collect::<Vec<_>>();
-        let name_refs = names.iter().collect::<Vec<_>>();
+
+        self.opened(&names)
+    }
+
+    /// The recursive scopes opened at `members`, one for each member in order, standing for it wherever the group names it: what a reader that names the members its own way reads, as a lowering reads its members' written names and an elaboration its locals.
+    pub fn opened(&self, members: &[Term]) -> Vec<Definition> {
+        let name_refs = members.iter().collect::<Vec<_>>();
 
         self.definitions
             .iter()

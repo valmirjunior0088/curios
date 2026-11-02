@@ -106,10 +106,10 @@ fn family(payload: (Free, Term), list: impl Fn(Term) -> Term) -> Item {
         variances: Vec::new(),
     };
 
-    Item::Rec(RecItem::new(vec![Definition::former(
-        bad(),
-        Qualifier::default(),
-        Nominal::Inductive(declaration),
+    // The former names its family nominally, so the group's binder is named by nothing.
+    Item::Rec(RecItem::new(vec![(
+        Free::local(961, Some("Bad")),
+        Definition::former(bad(), Qualifier::default(), Nominal::Inductive(declaration)),
     )]))
 }
 

@@ -15,7 +15,7 @@ use {
     super::{
         Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, Outcome,
         ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
-        pending, reduce_with, resolved_for_display,
+        declared, pending, reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
@@ -301,7 +301,11 @@ fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
     while let Subterm::Apply(apply) = &**head {
         head = &apply.head;
     }
-    let mut result = context.assumption(&named(head)?)?.clone();
+    let mut result = match named(head)? {
+        Free::Global(name) => context.written_assumption(&name)?,
+        local => context.assumption(&local)?,
+    }
+    .clone();
     let mut binders = Vec::new();
     while let Subterm::FuncType(func_type) = &*result {
         let mut cursor = func_type.telescope.cursor();
@@ -733,7 +737,7 @@ fn instantiate(
         Some(occurrence),
     )?;
     let minted = universes.clone();
-    let head = Term::instance(witness.name, universes);
+    let head = declared(context, witness.name, universes);
     let extent = origin.extent();
 
     let (args, premises, bounds, terminal) = match &*signature {

@@ -280,22 +280,36 @@ fn written_intrinsic_former(term: &Term) -> Option<Term> {
     })
 }
 
-/// What elaboration writes for the declaration `name`, beside its type: its instance at the levels chosen here, none where it is monomorphic, or the former it spells. `None` for a name nothing declares.
+/// What elaboration writes for the declaration `name`, beside its type: the former it spells, or the declaration named where the context stands ([`declared`]) at the levels chosen here. A member of the group being elaborated stands at the group's own levels, which have no instance to choose. `None` for a name nothing declares, and for a member named before its own signature is.
 pub fn reference(
     context: &mut Context,
     name: Global,
     extent: Option<Extent>,
 ) -> Result<Option<(Term, Term)>, Error> {
-    let Some((type_, universes)) = context.instantiate_assumption(&Free::Global(name), extent)?
-    else {
+    let assumed = match context.group_member(&name) {
+        Some(local) => context
+            .assumption(&local)
+            .cloned()
+            .map(|type_| (type_, Universes::default())),
+        None => context.instantiate_assumption(&Free::Global(name), extent)?,
+    };
+    let Some((type_, universes)) = assumed else {
         return Ok(None);
     };
     let written = match spelled_former(context, name, &type_, &universes)? {
         Some(former) => former,
-        None => Term::instance(name, universes),
+        None => declared(context, name, universes),
     };
 
     Ok(Some((written, type_)))
+}
+
+/// The declaration `name` named where the context stands, at `universes`: inside the group being elaborated a member is the local its group names it by, and any other declaration its instance.
+pub fn declared(context: &Context, name: Global, universes: Universes) -> Term {
+    match context.group_member(&name) {
+        Some(local) => Term::free_var(&local),
+        None => Term::instance(name, universes),
+    }
 }
 
 /// What a type former's name is elaborated to, at an occurrence instantiated at `universes` whose type is `type_`: a nominal former's body as its entry spells it ([`former_spelling`]) at those levels — its η-form, one lambda to a call, or the node where it takes nothing — and an intrinsic former that takes an operand, written bare, as the lambda over that former at the domain its name's type states. Applied over its call, either is made as what the call reduces to ([`curios_core::former_eta`]), so no elaborated term holds a former's name. `None` for a name that is no former's.

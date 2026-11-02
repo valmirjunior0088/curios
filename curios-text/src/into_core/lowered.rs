@@ -739,10 +739,15 @@ impl<'a> Baseline<'a> {
                 curios_core::Item::Let(definition) => {
                     FlatItem::Let(kept_let(definition, context, lowered))
                 }
-                // A group of witnesses is closed again under the names this lowering gives its members, which the scope it was closed under spells.
+                // A group of witnesses is closed again under the names this lowering gives its members, which the scope it was closed under spells: opened at its members' written names, as a group is before the lowering binds it.
                 curios_core::Item::Rec(rec) if rec.definitions.iter().any(is_witness) => {
+                    let written = rec
+                        .definitions
+                        .iter()
+                        .map(|definition| curios_core::Term::written(definition.name))
+                        .collect::<Vec<_>>();
                     FlatItem::Rec(
-                        rec.definitions()
+                        rec.opened(&written)
                             .iter()
                             .map(|definition| kept_let(definition, context, lowered))
                             .collect(),

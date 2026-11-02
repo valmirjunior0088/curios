@@ -390,9 +390,9 @@ pub struct Solutions {
     held_log: Vec<(MetavarId, Held)>,
     /// The literals that gave a metavariable its shape since the last drain. A product is sized where it is held to its metavariable, and the drain reads it again once every field is settled.
     shaped: Vec<ParkedChoice>,
-    /// The member name each recursive slot stands for.
+    /// The member local each recursive slot stands for.
     ///
-    /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` defines the member's *name* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. `RecItem::try_new` captures member **names** into the group's binder, so a slot reaching that point is not something the capture can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the name lets both substitution walks spell the member as the capturable thing it is.
+    /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` and `elaborate_module_rec` define the member's *local* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. A group closes over its members' **locals** (`Term::rec`, `RecItem::try_new`), so a slot reaching that point is not something the closing can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the local lets both substitution walks spell the member as the bindable thing it is.
     rec_slot_names: BTreeMap<MetavarId, Free>,
     /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
     ///

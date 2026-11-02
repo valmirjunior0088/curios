@@ -27,9 +27,9 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, Entrypoint, Free, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Nominal, Order,
-        Places, Quality, RecItem, Revised, SelfReference, StructDecl, Subterm, Telescope, Term,
-        Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes,
+        InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Names, Nominal,
+        Order, Places, Quality, RecItem, Revised, StructDecl, Subterm, Telescope, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
         stamp_declaration_instance,
     },
     curios_utilities::{Candidates, Plicity, Qualifier, grown},
@@ -506,32 +506,94 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     share_struct_params(context, &def.name, &type_);
 
     context.enter_value(&def.kind);
-    let body = check(context, &def.body, type_.clone())?;
-    context.sweep_parked()?;
-    // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
-    let body = match context.is_witness_declaration(&def.name) {
-        true => own_methods_read(context, def.name, &zonk_solved_term_metas(context, &body)),
-        false => body,
+    let (solved_from, checked_from) = (context.solutions_committed(), context.checked_mark());
+    // A witness may resolve through its own table entry — the registration above exists to let it — so while its body elaborates its own name is a local, which a body that names itself names it by and is bound over below, as a group's members are ([`Context::within_group`]). What it parked drains there, while the local still stands for it.
+    let own = context
+        .is_witness_declaration(&def.name)
+        .then(|| context.fresh(def.name.qualifier().map(Qualifier::last)));
+    let body = match own {
+        None => {
+            let body = check(context, &def.body, type_.clone())?;
+            context.sweep_parked()?;
+            body
+        }
+        Some(own) => context.with_frame(|context| {
+            context.assume(&own, &type_);
+            context.within_group(vec![(def.name, own)], |context| {
+                let body = check(context, &def.body, type_.clone())?;
+                context.sweep_parked()?;
+                // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
+                let body =
+                    own_methods_read(context, def.name, &zonk_solved_term_metas(context, &body));
+                context.drain_parked()?;
+                Ok::<_, Error>(zonk_solved_term_metas(context, &body))
+            })
+        })?,
     };
+    // Cross-definition value recursion is unexpressible outside a `rec` item by construction, so a witness whose body names itself becomes a group of one below.
+    let recursive = own.is_some_and(|own| body.mentions_free(&own));
 
-    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity.
-    context.define_assuming(&name, &type_, &body, Some(&def.kind));
+    if !recursive {
+        // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity.
+        context.define_assuming(&name, &type_, &body, Some(&def.kind));
+    }
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
     elaborate_struct(context, &def.name, &parameters)?;
-
-    // A witness may resolve through its own table entry — the registration above exists to let it — and a body that does names itself. Cross-definition value recursion is unexpressible outside a `rec` item by construction, so such a witness becomes a single-member group below, and its self-references are bound by that group's binder rather than free.
-    let recursive_witness = context.is_witness_declaration(&def.name) && {
-        // Read the *zonked* body: the self-reference arrives as a witness metavariable that resolution solved, so an unzonked body does not mention the name yet. `finalize_definition` zonks again, which costs nothing and keeps that its own business.
-        zonk_solved_term_metas(context, &body).mentions_free(&name)
-    };
-    let self_reference = match recursive_witness {
-        true => SelfReference::Bound,
-        false => SelfReference::Free,
-    };
+    // What the declaration parked is settled before its levels close: a witness's was, above.
+    if !context.is_witness_declaration(&def.name) {
+        context.drain_parked()?;
+    }
 
     let (universe_context, type_, body) =
-        finalize_definition(context, &def.name, &def.kind, type_, body, self_reference)?;
+        finalize_definition(context, &def.name, &def.kind, type_, body)?;
+    // What the witness recorded while its own name was its local names it by its declaration from here on, as what a group stores outside itself does.
+    if let Some(own) = own {
+        let instance = universe_context.identity_instance();
+        let declared = Term::instance(def.name, instance.clone());
+        Outside {
+            owned: &BTreeSet::from([def.name]),
+            instance: &instance,
+            locals: &[&own],
+            declared: &[&declared],
+        }
+        .restate_recorded(context, solved_from, checked_from)?;
+    }
+
+    if let Some(own) = own.filter(|_| recursive) {
+        // The witness is a recursive group of one, closed over the local it named itself by; its name is defined as the group's projection, so a later item reducing it meets the fold rather than a free name the kernel would refuse.
+        let definition = Definition {
+            name: def.name,
+            kind: def.kind.clone(),
+            universe_context: universe_context.clone(),
+            island: def.island,
+            totality: def.totality,
+            proof: def.proof,
+            // A member carries none.
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_: type_.clone(),
+            body,
+        };
+        let rec = RecItem::try_new(vec![(own, definition)]).map_err(Error::from)?;
+        let member = Term::rec_proj(rec.group.clone(), 0);
+        context.define_assuming(&name, &type_, &member, Some(&def.kind));
+        context.set_assumption_universe_context(&name, universe_context.clone());
+        context.update_witness_scheme(&def.name, universe_context, type_);
+        record_variances(context, &[def.name])?;
+        context.restore_checked_site(outer_site);
+
+        // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
+        let verdict = group_totality(context, &rec.group)?;
+        for definition in rec.definitions() {
+            record_definition_totality(context, &definition, verdict)?;
+        }
+
+        return Ok(Item::Rec(rec));
+    }
+
     context.reassume(&name, &type_);
     context.define(&name, &body, Some(&def.kind));
     context.set_assumption_universe_context(&name, universe_context.clone());
@@ -540,15 +602,10 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     }
     // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
     record_variances(context, &[def.name])?;
-    // After a struct's own vector, which its former's body is read by. A witness that names itself becomes a group of one below, and a member carries none.
-    let (variances, field_variances, parameter_field) = match recursive_witness {
-        true => (Vec::new(), Vec::new(), None),
-        false => (
-            definition_variances(context, &universe_context, &type_, &body)?,
-            field_variances(&universe_context, &type_, &body),
-            parameter_field(&type_, &body),
-        ),
-    };
+    // After a struct's own vector, which its former's body is read by.
+    let variances = definition_variances(context, &universe_context, &type_, &body)?;
+    let field_variances = field_variances(&universe_context, &type_, &body);
+    let parameter_field = parameter_field(&type_, &body);
 
     context.restore_checked_site(outer_site);
 
@@ -568,125 +625,33 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         body,
     };
 
-    if !recursive_witness {
-        // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
-        record_definition_totality(context, &definition, Totality::Total)?;
-        return Ok(Item::Let(Box::new(definition)));
-    }
-
-    // The witness is a recursive group of one. Its members' occurrences were stamped `Bound` above, which is what `RecItem::try_new` then captures; the context binding moves from the self-mentioning body to the group's own projection, so a later item reducing this witness meets the fold rather than a free name the kernel would refuse.
-    let rec = RecItem::try_new(vec![definition]).map_err(Error::from)?;
-    let member = Term::rec_proj(rec.group.clone(), 0);
-    context.define(&name, &member, Some(&def.kind));
-
-    // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
-    let verdict = group_totality(context, &rec.group)?;
-    for definition in rec.definitions() {
-        record_definition_totality(context, &definition, verdict)?;
-    }
-
-    Ok(Item::Rec(rec))
+    // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
+    record_definition_totality(context, &definition, Totality::Total)?;
+    Ok(Item::Let(Box::new(definition)))
 }
 
-/// Type-check a flat top-level `rec` item and return its rebuilt structural group. The input is opened over the export names for elaboration; the output captures those names back into one [`RecItem`] and publishes each export as its folded structural member.
+/// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
 fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
-    let defs = rec.definitions();
-    // Where the group's own solutions begin, so they can be stamped with its instance once it has one.
+    // Where what the group records begins, so what it names of the group can be restated once it has an instance.
     let solved_from = context.solutions_committed();
-    // See `elaborate_module_let`: Γ keys on identities, the registries on names.
-    let names = defs
+    let checked_from = context.checked_mark();
+    let locals = rec
+        .definitions
         .iter()
-        .map(|def| Free::from(&def.name))
+        .map(|definition| context.fresh(definition.name.qualifier().map(Qualifier::last)))
         .collect::<Vec<_>>();
-
-    let mut types = Vec::with_capacity(defs.len());
-    // Each struct former's parameters, at the levels typing read them at, as `elaborate_module_let` reads a lone one's.
-    let mut parameters = Vec::with_capacity(defs.len());
-    for (def, name) in defs.iter().zip(&names) {
-        check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
-        // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
-        context.enter_declaration(Some(def.name));
-        let (type_, levels) = match context.struct_decl(&def.name).is_some() {
-            true => check_former_type(context, &def.type_)?,
-            false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
-        };
-        // In scope from its own signature on, at the type it elaborated to: a signature reads the members written before it, and no type is judged before it is elaborated.
-        context.assume(name, &type_);
-        types.push(type_);
-        parameters.push(levels);
-    }
-
-    // A `satisfy … and …` group registers every member's signature before any body elaborates, as `elaborate_module_let` does for one witness: the bodies resolve through one another's entries, and through their own.
-    for (def, type_) in defs.iter().zip(&types) {
-        if context.is_witness_declaration(&def.name) {
-            register_witness(
-                context,
-                &def.name,
-                type_,
-                def.universe_context.clone(),
-                &def.island,
-            )
-            .map_err(|error| error.at_opt(def.type_.extent()))?;
-        }
-    }
-
-    // A struct group's formers check their parameters against registry arities lowered raw, exactly as a lone former does — see `share_struct_params`.
-    for (def, type_) in defs.iter().zip(&types) {
-        share_struct_params(context, &def.name, type_);
-    }
-
-    // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the rebuilt signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
-    for def in &defs {
-        elaborate_induct_indices(context, &def.name)?;
-    }
-
-    // A body reads a member by its name alone and a signature through the member's slot, as `elaborate_rec` states.
-    let mut slots = Vec::with_capacity(defs.len());
-    let mut through = Vec::with_capacity(defs.len());
-    for ((def, name), type_) in defs.iter().zip(&names).zip(&types) {
-        let (id, slot) = context.fresh_rec_slot(name, type_.clone());
-        context.define(name, &slot, Some(&def.kind));
-        slots.push(id);
-        through.push((*name, slot));
-    }
-    let read = types
+    let defs = rec.opened(&locals.iter().map(Term::free_var).collect::<Vec<_>>());
+    let members = defs
         .iter()
-        .map(|type_| type_.substitute(&through))
+        .map(|def| def.name)
+        .zip(locals.iter().copied())
         .collect::<Vec<_>>();
-    for (name, type_) in names.iter().zip(&read) {
-        context.reassume(name, type_);
-    }
+    let (types, bodies) = context.with_frame(|context| {
+        context.within_group(members, |context| {
+            elaborate_members(context, &defs, &locals)
+        })
+    })?;
 
-    let mut bodies = Vec::with_capacity(defs.len());
-    for ((def, type_), slot) in defs.iter().zip(&read).zip(slots) {
-        let outer_site = context.set_checked_site(def.name);
-        context.enter_declaration(Some(def.name));
-        context.enter_value(&def.kind);
-        let body = check(context, &def.body, type_.clone())?;
-        context.restore_checked_site(outer_site);
-        context.fill_rec_slot(slot, body.substitute(&through));
-        bodies.push(body);
-    }
-    context.retry_parked()?;
-
-    // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the rebuilt bodies are defined.
-    for def in &defs {
-        elaborate_induct_constructors(context, &def.name)?;
-    }
-    // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
-    for (def, levels) in defs.iter().zip(&parameters) {
-        elaborate_struct(context, &def.name, levels)?;
-    }
-    context.sweep_parked()?;
-
-    let types = types
-        .iter()
-        .map(|type_| zonk_solved_term_metas(context, type_))
-        .collect::<Vec<_>>();
-    let bodies = bodies
-        .iter()
-        .map(|body| zonk_solved_term_metas(context, body))
-        .collect::<Vec<_>>();
     for def in &defs {
         let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
             continue;
@@ -747,7 +712,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
 
     // A top-level group is one cycle of what its members reach: read once their terms and registry entries are elaborated, so a witness's resolutions count, and before the group's levels close, which a member outside the cycle would share.
-    let parts = group_parts(context, &defs, &types, &bodies);
+    let parts = group_parts(context, &defs, &locals, &types, &bodies);
     if parts.len() > 1 {
         return Err(Error::group_apart(&defs, &types, &parts));
     }
@@ -788,32 +753,31 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
     let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
 
-    // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
+    // The group's members are monomorphic in their own universes, so every nominal occurrence of a member family — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
     let owned = defs.iter().map(|def| def.name).collect::<BTreeSet<_>>();
-    fn stamp<B: Bound>(
-        context: &Context,
-        value: &B,
-        owned: &BTreeSet<Global>,
-        self_reference: SelfReference,
-        instance: &Universes,
-    ) -> Result<B, Error> {
-        Ok(stamp_declaration_instance(
-            &context.zonk_universe_levels(value)?,
-            owned,
-            self_reference,
-            instance,
-        ))
-    }
+    let declared = defs
+        .iter()
+        .map(|def| Term::instance(def.name, instance.clone()))
+        .collect::<Vec<_>>();
+    let (local_refs, declared_refs) = (
+        locals.iter().collect::<Vec<_>>(),
+        declared.iter().collect::<Vec<_>>(),
+    );
+    let outside = Outside {
+        owned: &owned,
+        instance: &instance,
+        locals: &local_refs,
+        declared: &declared_refs,
+    };
 
-    // `RecItem::try_new` captures the member names into the group's binder, so the signatures and bodies reach it with their self-references bound.
     let types = types
         .iter()
-        .map(|type_| stamp(context, type_, &owned, SelfReference::Bound, &instance))
+        .map(|type_| outside.stamped(context, type_))
         .collect::<Result<Vec<_>, _>>()?;
     let bodies = bodies
         .iter()
-        .map(|body| stamp(context, body, &owned, SelfReference::Bound, &instance))
+        .map(|body| outside.stamped(context, body))
         .collect::<Result<Vec<_>, _>>()?;
 
     for def in &defs {
@@ -826,22 +790,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             .map(|(tag, constructor)| {
                 Ok((
                     tag,
-                    // A registry telescope is stored outside the group and instantiated per use site, so its self-references are free and must carry the instance themselves.
                     InductParam {
-                        telescope: stamp(
-                            context,
-                            &constructor.telescope,
-                            &owned,
-                            SelfReference::Free,
-                            &instance,
-                        )?,
+                        telescope: outside.stored(context, &constructor.telescope)?,
                     },
                 ))
             })
             .collect::<Result<_, Error>>()?;
-        let free = SelfReference::Free;
-        let arity = stamp(context, &induct_decl.arity, &owned, free, &instance)?;
-        let result_sort = stamp(context, &induct_decl.result_sort, &owned, free, &instance)?;
+        let arity = outside.stored(context, &induct_decl.arity)?;
+        let result_sort = outside.stored(context, &induct_decl.result_sort)?;
         context.update_induct(
             &def.name,
             InductDecl {
@@ -856,16 +812,15 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             },
         );
     }
-    // A struct or concept registry entry is stamped as an inductive's is: stored outside the group, so its self-references are free and carry the instance themselves.
+    // A struct or concept registry entry is stamped as an inductive's is: stored outside the group, it names a member by its declaration.
     for def in &defs {
-        let free = SelfReference::Free;
         if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
             context.update_struct(
                 &def.name,
                 StructDecl {
                     universe_context: universe_context.clone(),
-                    arity: stamp(context, &struct_decl.arity, &owned, free, &instance)?,
-                    result_sort: stamp(context, &struct_decl.result_sort, &owned, free, &instance)?,
+                    arity: outside.stored(context, &struct_decl.arity)?,
+                    result_sort: outside.stored(context, &struct_decl.result_sort)?,
                     module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
@@ -878,27 +833,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 &def.name,
                 ConceptDecl {
                     universe_context: universe_context.clone(),
-                    params: stamp(context, &concept.params, &owned, free, &instance)?,
+                    params: outside.stored(context, &concept.params)?,
                     fields: concept.fields,
                     supers: concept.supers,
                 },
             );
         }
     }
-    // The solutions committed while the group elaborated are terms it produced too, and a later zonk substitutes them long after this rewrite — the proof-totality check fills in every type elaboration recorded, and a goal's report its scope — so they are stamped as a registry entry is, being stored outside the group. `Eq()(a, a)` in a constructor's payload solves `Eq`'s `@A` to the member's reduct from before its generalization, with no instance, and `Eq()`'s recorded type carries it into that check.
-    let restamped = context
-        .solutions_since(solved_from)
-        .into_iter()
-        .map(|(id, solution)| {
-            let stamped = stamp(context, &solution, &owned, SelfReference::Free, &instance)?;
-            Ok((id, solution, stamped))
-        })
-        .collect::<Result<Vec<_>, Error>>()?
-        .into_iter()
-        .filter(|(_, solution, stamped)| solution != stamped)
-        .map(|(id, _, stamped)| (id, stamped))
-        .collect();
-    context.restamp_solutions(restamped);
+    outside.restate_recorded(context, solved_from, checked_from)?;
 
     let definitions = defs
         .iter()
@@ -918,16 +860,16 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             type_,
             body,
         })
-        .collect();
-    let rec = RecItem::try_new(definitions)?;
+        .collect::<Vec<_>>();
+    let rec = RecItem::try_new(locals.into_iter().zip(definitions).collect())?;
     // Before the members are defined into the context, because the shape this rejects makes reducing a *use* of one of them unfold without end.
     check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
         let name = Free::from(&definition.name);
-        context.reassume(&name, &rec.group.member_type(index));
-        context.define(
+        context.define_assuming(
             &name,
+            &rec.group.member_type(index),
             &Term::rec_proj(rec.group.clone(), index),
             Some(&definition.kind),
         );
@@ -958,12 +900,196 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     Ok(rec)
 }
 
-/// The parts a top-level group's members fall into by what each reaches of the others, through its type, its body and its registry entry: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.
+/// How a declaration that closes over its members' locals names them in what it stores outside itself: by their declarations, at its own instance ([`Outside::stored`]).
+struct Outside<'o> {
+    /// The members' declarations, whose nominal forms the declaration's instance is stamped on.
+    owned: &'o BTreeSet<Global>,
+    /// The declaration's own instance.
+    instance: &'o Universes,
+    /// The members' locals, each in the place of its declaration below.
+    locals: &'o [&'o Free],
+    /// The members' declarations at `instance`.
+    declared: &'o [&'o Term],
+}
+
+impl Outside<'_> {
+    /// `value` with the members' families' nominal forms at the declaration's own instance: the members are monomorphic in their own universes, and the forms were elaborated before the parameters existed, so they carry no instance until this gives them one. Its levels are zonked on the way.
+    fn stamped<B: Bound>(&self, context: &Context, value: &B) -> Result<B, Error> {
+        Ok(stamp_declaration_instance(
+            &context.zonk_universe_levels(value)?,
+            self.owned,
+            self.instance,
+        ))
+    }
+
+    /// `value`, a term stored outside the declaration, [`stamped`](Self::stamped) and naming each member by its declaration where the declaration's own terms name it by its local: a registry entry, a solution, a settled term, each read once the declaration has closed over its members.
+    ///
+    /// An occurrence keeps its place, which a report about the member reads; a local in a metavariable's spine, which holds none, is reached by closing over the locals and opening at the declarations, as no rewrite of occurrences reaches a spine.
+    fn stored<B: Bound>(&self, context: &Context, value: &B) -> Result<B, Error> {
+        let members = self
+            .locals
+            .iter()
+            .zip(self.declared)
+            .map(|(local, declared)| (**local, (*declared).clone()))
+            .collect::<Vec<_>>();
+        let names = Names::new(self.locals.iter().map(|local| **local));
+        let occurrences = self
+            .stamped(context, value)?
+            .traverse(&mut Visit::rewriting_shared(
+                |_, _| None,
+                Box::new(move |_, term| {
+                    if let Subterm::Var(var) = &**term
+                        && let Some(local) = var.as_free()
+                        && let Some((_, declared)) =
+                            members.iter().find(|(member, _)| member == local)
+                    {
+                        return Some(match term.extent() {
+                            Some(extent) => declared.clone().with_extent(extent),
+                            None => declared.clone(),
+                        });
+                    }
+
+                    match term.mentions_any(&names) {
+                        true => None,
+                        false => Some(term.clone()),
+                    }
+                }),
+            ));
+
+        Ok(occurrences.capture(self.locals).release(self.declared))
+    }
+
+    /// The solutions committed since `solved_from` and the terms settled since `checked_from`, each [`stored`](Self::stored): what the declaration recorded while its members were locals, which a later zonk, the obligations and the reports read once it has closed. `Eq()(a, a)` in a constructor's payload solves `Eq`'s `@A` to the member's reduct from before its generalization, with no instance, and `Eq()`'s recorded type carries it into the proof-totality check.
+    fn restate_recorded(
+        &self,
+        context: &mut Context,
+        solved_from: usize,
+        checked_from: usize,
+    ) -> Result<(), Error> {
+        let restamped = context
+            .solutions_since(solved_from)
+            .into_iter()
+            .map(|(id, solution)| {
+                let stored = self.stored(context, &solution)?;
+                Ok((id, solution, stored))
+            })
+            .collect::<Result<Vec<_>, Error>>()?
+            .into_iter()
+            .filter(|(_, solution, stored)| solution != stored)
+            .map(|(id, _, stored)| (id, stored))
+            .collect();
+        context.restamp_solutions(restamped);
+
+        context.restate_checked(checked_from, |context, term| self.stored(context, term))
+    }
+}
+
+/// A group's members elaborated, each named by its local ([`Context::within_group`]): every signature, the member in scope from its own on; every body, reading its siblings' signatures through their slots; the registry entries they rebuild; and whatever they parked, drained, so the group closes over finished terms and no hole in it is filled once it has closed. Their signatures and bodies, with what is solved of them materialized.
+fn elaborate_members(
+    context: &mut Context,
+    defs: &[Definition],
+    locals: &[Free],
+) -> Result<(Vec<Term>, Vec<Term>), Error> {
+    let mut types = Vec::with_capacity(defs.len());
+    // Each struct former's parameters, at the levels typing read them at, as `elaborate_module_let` reads a lone one's.
+    let mut parameters = Vec::with_capacity(defs.len());
+    for (def, local) in defs.iter().zip(locals) {
+        check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
+        // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
+        context.enter_declaration(Some(def.name));
+        let (type_, levels) = match context.struct_decl(&def.name).is_some() {
+            true => check_former_type(context, &def.type_)?,
+            false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
+        };
+        // In scope from its own signature on, at the type it elaborated to: a signature reads the members written before it, and no type is judged before it is elaborated.
+        context.assume(local, &type_);
+        types.push(type_);
+        parameters.push(levels);
+    }
+
+    // A `satisfy … and …` group registers every member's signature before any body elaborates, as `elaborate_module_let` does for one witness: the bodies resolve through one another's entries, and through their own.
+    for (def, type_) in defs.iter().zip(&types) {
+        if context.is_witness_declaration(&def.name) {
+            register_witness(
+                context,
+                &def.name,
+                type_,
+                def.universe_context.clone(),
+                &def.island,
+            )
+            .map_err(|error| error.at_opt(def.type_.extent()))?;
+        }
+    }
+
+    // A struct group's formers check their parameters against registry arities lowered raw, exactly as a lone former does — see `share_struct_params`.
+    for (def, type_) in defs.iter().zip(&types) {
+        share_struct_params(context, &def.name, type_);
+    }
+
+    // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
+    for def in defs {
+        elaborate_induct_indices(context, &def.name)?;
+    }
+
+    // A body reads a member by its local alone and a signature through the member's slot, as `elaborate_rec` states.
+    let mut slots = Vec::with_capacity(defs.len());
+    let mut through = Vec::with_capacity(defs.len());
+    for ((def, local), type_) in defs.iter().zip(locals).zip(&types) {
+        let (id, slot) = context.fresh_rec_slot(local, type_.clone());
+        context.define(local, &slot, Some(&def.kind));
+        slots.push(id);
+        through.push((*local, slot));
+    }
+    let read = types
+        .iter()
+        .map(|type_| type_.substitute(&through))
+        .collect::<Vec<_>>();
+    for (local, type_) in locals.iter().zip(&read) {
+        context.reassume(local, type_);
+    }
+
+    let mut bodies = Vec::with_capacity(defs.len());
+    for ((def, type_), slot) in defs.iter().zip(&read).zip(slots) {
+        let outer_site = context.set_checked_site(def.name);
+        context.enter_declaration(Some(def.name));
+        context.enter_value(&def.kind);
+        let body = check(context, &def.body, type_.clone())?;
+        context.restore_checked_site(outer_site);
+        context.fill_rec_slot(slot, body.substitute(&through));
+        bodies.push(body);
+    }
+    context.retry_parked()?;
+
+    // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the bodies are defined.
+    for def in defs {
+        elaborate_induct_constructors(context, &def.name)?;
+    }
+    // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
+    for (def, levels) in defs.iter().zip(&parameters) {
+        elaborate_struct(context, &def.name, levels)?;
+    }
+    context.drain_parked()?;
+
+    // Materialized before the group closes, as `elaborate_rec` materializes a local group: what a solution spells as a member's slot becomes the member's local here, while the group's binder can still close over it.
+    let types = types
+        .iter()
+        .map(|type_| zonk_solved_term_metas(context, type_))
+        .collect();
+    let bodies = bodies
+        .iter()
+        .map(|body| zonk_solved_term_metas(context, body))
+        .collect();
+
+    Ok((types, bodies))
+}
+
+/// The parts a top-level group's members fall into by what each reaches of the others, through its type, its body and its registry entry — a sibling by its local, which the group's terms name it by, or by the nominal head a construction of its family holds: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.
 ///
 /// A declaration reads any other wherever it is written, so a group ties nothing but declarations that need one another, and one part is all a group may be ([`Error::GroupApart`]).
 fn group_parts(
     context: &Context,
     defs: &[Definition],
+    locals: &[Free],
     types: &[Term],
     bodies: &[Term],
 ) -> Vec<Vec<usize>> {
@@ -974,19 +1100,34 @@ fn group_parts(
         .map(|(name, (type_, body))| {
             let mut reached = type_.reaches();
             reached.extend(body.reaches());
+            let mut frees = vec![type_.free_vars(), body.free_vars()];
             if let Some(entry) = context.induct_decl(name) {
                 reached.extend(entry.reaches());
+                frees.push(entry.arity.free_vars());
+                frees.push(entry.result_sort.free_vars());
+                frees.extend(
+                    entry
+                        .constructors
+                        .iter()
+                        .map(|(_, constructor)| constructor.telescope.free_vars()),
+                );
             }
             if let Some(entry) = context.struct_decl(name) {
                 reached.extend(entry.reaches());
+                frees.push(entry.arity.free_vars());
+                frees.push(entry.result_sort.free_vars());
             }
             if let Some(entry) = context.concept(name) {
                 reached.extend(entry.reaches());
+                frees.push(entry.params.free_vars());
             }
             names
                 .iter()
+                .zip(locals)
                 .enumerate()
-                .filter(|(_, other)| reached.contains(other))
+                .filter(|(_, (other, local))| {
+                    reached.contains(other) || frees.iter().any(|free| free.contains(local))
+                })
                 .map(|(index, _)| index)
                 .collect::<Vec<_>>()
         })

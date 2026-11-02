@@ -507,26 +507,14 @@ pub fn universe_params<B: Bound>(value: &B) -> BTreeSet<UniverseParam> {
         .into_inner()
 }
 
-/// How a declaration's own name reaches the value being stamped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelfReference {
-    /// Still a free variable. Nothing else will supply the instance, so the occurrence must carry one explicitly: a later use site instantiates the stored scheme by substituting the declaration's universe parameters, and a bare variable has none to substitute.
-    Free,
-    /// Already captured by an enclosing `RecGroup`'s binder, which instantiates its own members through `RecGroup::instantiate_universes`. An explicit instance here would be applied a second time when the group is opened, against a group whose parameters that first instantiation already consumed.
-    Bound,
-}
-
-/// Rewrite every occurrence of a declaration group's own members to denote the universe instance `universes`.
+/// Rewrite every nominal normal form of a declaration group's own members to denote the universe instance `universes`.
 ///
-/// A declaration's signature, body, and registry telescopes are elaborated before its universe parameters exist: within its own group it is monomorphic, so its self-references carry no instance at all. Finalization mints the parameters, and every internal occurrence must then denote *that* instance rather than a freshly instantiated one — the concrete form of the rule that recursion is monomorphic inside a group.
-///
-/// Nominal normal forms always carry the instance in their own universe vector. Variable occurrences carry it only when they are still [`SelfReference::Free`].
+/// A declaration's signature, body, and registry telescopes are elaborated before its universe parameters exist: within its own group it is monomorphic, so the nominal forms of its own families carry no instance at all. Finalization mints the parameters, and every internal occurrence must then denote *that* instance rather than a freshly instantiated one — the concrete form of the rule that recursion is monomorphic inside a group. A member named inside its group is the group's own binder, which carries no instance, so a nominal normal form is the one occurrence that holds one: in its own universe vector.
 ///
 /// The per-node rule is `Term::stamp_declaration_node`; this driver only carries it through the binders and telescopes an arbitrary [`Bound`] holds. An empty instance is the identity, so a monomorphic declaration pays a single comparison rather than a traversal.
 pub fn stamp_declaration_instance<B: Bound>(
     value: &B,
     names: &BTreeSet<Global>,
-    self_reference: SelfReference,
     universes: &Universes,
 ) -> B {
     if names.is_empty() {
@@ -536,7 +524,7 @@ pub fn stamp_declaration_instance<B: Bound>(
     let universes = universes.clone();
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
-        Box::new(move |_, term| term.stamp_declaration_node(&names, self_reference, &universes)),
+        Box::new(move |_, term| term.stamp_declaration_node(&names, &universes)),
     );
     value.traverse(&mut visit)
 }

@@ -1,4 +1,8 @@
-use {super::*, crate::*, curios_utilities::Qualifier};
+use {
+    super::*,
+    crate::{test_support::*, *},
+    curios_utilities::Qualifier,
+};
 
 fn definition(name: &str) -> Definition {
     let global = Global::Authored(Qualifier::from([name]));
@@ -31,8 +35,11 @@ fn module(items: Vec<Item>) -> Module {
 fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
     let module = module(vec![
         Item::Let(Box::new(definition("first"))),
-        Item::Rec(RecItem::new(vec![definition("even"), definition("odd")])),
-        Item::Rec(RecItem::new(vec![definition("loop")])),
+        Item::Rec(RecItem::new(vec![
+            (fresh(None), definition("even")),
+            (fresh(None), definition("odd")),
+        ])),
+        Item::Rec(RecItem::new(vec![(fresh(None), definition("loop"))])),
     ]);
     let places = Places::of(&module);
     let place = |name: &str| places.place(&Global::Authored(Qualifier::from([name])));
@@ -51,7 +58,10 @@ fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
 fn a_module_declaring_a_name_twice_has_no_places() {
     Places::of(&module(vec![
         Item::Let(Box::new(definition("twice"))),
-        Item::Rec(RecItem::new(vec![definition("other"), definition("twice")])),
+        Item::Rec(RecItem::new(vec![
+            (fresh(None), definition("other")),
+            (fresh(None), definition("twice")),
+        ])),
     ]));
 }
 

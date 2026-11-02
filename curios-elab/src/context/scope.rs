@@ -68,6 +68,36 @@ impl<'s> Context<'s> {
             .invalidate_frame_exit(dropped_refinements, dropped_definitions);
     }
 
+    /// Run `elaborate` with `members` the group being elaborated, each named by its local: inside, a reference to one of them is that local ([`Context::group_member`]); the group it stood in before is restored after, however `elaborate` ends.
+    pub(crate) fn within_group<R>(
+        &mut self,
+        members: Vec<(Global, Free)>,
+        elaborate: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let enclosing = std::mem::replace(&mut self.underway.group, members);
+        let result = elaborate(self);
+        self.underway.group = enclosing;
+
+        result
+    }
+
+    /// The local the group being elaborated names `name` by, where `name` is one of its members.
+    pub(crate) fn group_member(&self, name: &Global) -> Option<Free> {
+        self.underway
+            .group
+            .iter()
+            .find(|(member, _)| member == name)
+            .map(|(_, local)| *local)
+    }
+
+    /// The type the declaration `name`, written where the context stands, is read at before an instance of it is chosen: a member of the group being elaborated at its local's, any other at its scheme's.
+    pub(crate) fn written_assumption(&self, name: &Global) -> Option<&Term> {
+        match self.group_member(name) {
+            Some(local) => self.assumption(&local),
+            None => self.assumption(&Free::Global(*name)),
+        }
+    }
+
     pub(crate) fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.enter_frame();
         let result = f(self);

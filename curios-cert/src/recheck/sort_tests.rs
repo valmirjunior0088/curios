@@ -318,7 +318,7 @@ fn a_declaration_ill_typed_at_one_sort_alone_is_refused_at_it() {
         (Term::type_ground(), "`Type`", Quality::Prop),
     ] {
         let grouped = match handing_back("back", sort.clone()) {
-            Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
+            Item::Let(definition) => Item::Rec(RecItem::new(vec![(fresh(None), *definition)])),
             item => item,
         };
         let only = named("only");
@@ -578,7 +578,7 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
     let (held, held_type, qed) = held();
     let id = named("id");
     let group = match identity() {
-        Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![(fresh(None), *definition)])),
         item => item,
     };
 
@@ -720,6 +720,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
 #[test]
 fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
     let spin = named("spin");
+    let member = fresh(Some("spin"));
     let (carrier, count) = (Free::local(50, Some("A")), Free::local(51, Some("n")));
     let binders = || [(carrier, left(0)), (count, nat())];
     let group = match generic(
@@ -729,12 +730,12 @@ fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
         Term::func(
             binders(),
             Term::apply(
-                Term::instance(spin, Universes::default()),
+                Term::free_var(&member),
                 [Term::free_var(&carrier), Term::free_var(&count)],
             ),
         ),
     ) {
-        Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![(member, *definition)])),
         item => item,
     };
 
@@ -753,10 +754,13 @@ fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
 #[test]
 fn a_group_stating_a_sort_its_context_does_not_leave_is_refused() {
     let group = match identity() {
-        Item::Let(definition) => Item::Rec(RecItem::new(vec![Definition {
-            universe_context: leaving(0),
-            ..*definition
-        }])),
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![(
+            fresh(None),
+            Definition {
+                universe_context: leaving(0),
+                ..*definition
+            },
+        )])),
         item => item,
     };
 

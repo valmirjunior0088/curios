@@ -4,7 +4,7 @@
 
 use {
     super::{Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture},
-    curios_core::{Declarations, Extent, Global, Imports, Minted},
+    curios_core::{Declarations, Extent, Free, Global, Imports, Minted},
     std::{collections::BTreeSet, rc::Rc},
 };
 
@@ -37,6 +37,8 @@ pub struct Underway {
     pub defining: bool,
     /// What each auto-lift site named as written, under the extent its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
     pub embedding_sites: Vec<(Extent, EmbeddingSite)>,
+    /// The members of the group being elaborated, each beside the local its group names it by while it elaborates ([`Context::within_group`](super::Context::within_group)). Empty outside one.
+    pub group: Vec<(Global, Free)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
     pub imports: Imports,
 }
@@ -58,6 +60,7 @@ impl Default for Underway {
             declaration: None,
             defining: false,
             embedding_sites: Vec::new(),
+            group: Vec::new(),
             imports: Imports::default(),
         }
     }

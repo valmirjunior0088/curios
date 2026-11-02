@@ -247,10 +247,9 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
         }),
         ("a top-level `rec` group", Some(held), &|constraints| {
             program(
-                vec![Item::Rec(RecItem::new(vec![definition(
-                    context(constraints, 0),
-                    nat(),
-                    zero(),
+                vec![Item::Rec(RecItem::new(vec![(
+                    fresh(None),
+                    definition(context(constraints, 0), nat(), zero()),
                 )]))],
                 zero(),
             )
@@ -754,11 +753,14 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
     let module = |claimed: Level| Module {
         mounts: Vec::new(),
         items: vec![
-            Item::Rec(RecItem::new(vec![definition(
-                carrier,
-                carriers_context.clone(),
-                Term::type_at(plus_one.clone()),
-                Term::type_at(p.clone()),
+            Item::Rec(RecItem::new(vec![(
+                fresh(None),
+                definition(
+                    carrier,
+                    carriers_context.clone(),
+                    Term::type_at(plus_one.clone()),
+                    Term::type_at(p.clone()),
+                ),
             )])),
             Item::Let(Box::new(definition(
                 reads,

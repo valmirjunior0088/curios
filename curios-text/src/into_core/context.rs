@@ -254,11 +254,26 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => curios_core::Item::Let(Box::new(let_.into_core())),
             FlatItem::Kept(rec) => curios_core::Item::Rec(rec),
-            FlatItem::Rec(items) => curios_core::Item::Rec(curios_core::RecItem::new(
-                items.into_iter().map(FlatLet::into_core).collect(),
-            )),
+            FlatItem::Rec(items) => curios_core::Item::Rec(group(items)),
         }
     }
+}
+
+/// The group `items` are. Each member's written name stays as written in its siblings' terms and its own, its place kept for whatever reads the lowered text; elaboration, which knows the group, binds it. So the group's binder is named by nothing yet, and closes over locals counted from zero, which no lowered top-level term holds free.
+fn group(items: Vec<FlatLet>) -> curios_core::RecItem {
+    curios_core::RecItem::new(
+        items
+            .into_iter()
+            .enumerate()
+            .map(|(index, let_)| {
+                let hint = let_.name.qualifier().map(Qualifier::last);
+                (
+                    curios_core::Free::local(index as u64, hint),
+                    let_.into_core(),
+                )
+            })
+            .collect(),
+    )
 }
 
 // The direct interface of a module: every declared label (public *and* private) in each namespace, with its visibility. This is the per-module body view used for lexical scope during elaboration, and to tell private from absent when a public lookup misses.

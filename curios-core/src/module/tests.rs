@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_utilities::{RootKind, Sign},
 };
 
@@ -22,9 +22,22 @@ fn definition(name: &str, universe_context: UniverseContext) -> Definition {
     }
 }
 
+/// `name`, a member of a group that names it by `member`, whose body is that one name.
+fn member(name: &str, universe_context: UniverseContext, member: &Free) -> Definition {
+    Definition {
+        body: Term::free_var(member),
+        ..definition(name, universe_context)
+    }
+}
+
+/// A top-level group binds its members in its own scopes: a member's body names the local the group closed over, which the group's binder takes, and the group publishes the member under its declaration.
 #[test]
-fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
-    let rec = RecItem::new(vec![definition("loop", UniverseContext::empty())]);
+fn a_top_level_rec_item_binds_its_members_in_the_shared_group() {
+    let loop_ = fresh(Some("loop"));
+    let rec = RecItem::new(vec![(
+        loop_,
+        member("loop", UniverseContext::empty(), &loop_),
+    )]);
 
     assert!(
         rec.group
@@ -59,11 +72,12 @@ fn recursive_members_cannot_silently_discard_different_universe_contexts() {
         quality_count: 0,
         constraints: Vec::new(),
     };
+    let (left, right) = (fresh(Some("left")), fresh(Some("right")));
 
     assert_eq!(
         RecItem::try_new(vec![
-            definition("left", UniverseContext::empty()),
-            definition("right", polymorphic),
+            (left, member("left", UniverseContext::empty(), &left)),
+            (right, member("right", polymorphic, &right)),
         ])
         .unwrap_err(),
         UniverseError::MismatchedRecursiveContexts,

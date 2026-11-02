@@ -541,6 +541,7 @@ entry
 #[test]
 fn top_level_recursive_items_erase_through_the_item_chain() {
     let x = fresh(Some("x"));
+    let go = fresh(Some("go"));
     let func_type = curios_core::Term::func_type(
         [(
             x,
@@ -548,7 +549,8 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         )],
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
     );
-    let items = vec![curios_core::Item::Rec(curios_core::RecItem::new(vec![
+    let items = vec![curios_core::Item::Rec(curios_core::RecItem::new(vec![(
+        go,
         curios_core::Definition {
             name: curios_core::Global::Authored(Qualifier::from(["go"])),
             kind: curios_core::DefinitionKind::Authored,
@@ -566,10 +568,13 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
                     x,
                     curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
                 )],
-                curios_core::Term::apply(reference("go"), [curios_core::Term::free_var(&x)]),
+                curios_core::Term::apply(
+                    curios_core::Term::free_var(&go),
+                    [curios_core::Term::free_var(&x)],
+                ),
             ),
         },
-    ]))];
+    )]))];
     let body = curios_core::Term::apply(reference("go"), [nat_lit(1)]);
     let erased = erase(
         &module(items, body),

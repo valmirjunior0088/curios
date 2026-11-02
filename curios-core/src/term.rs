@@ -32,9 +32,9 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Quality, QualityMetaId, Scope, SelfReference, Spelled, Spelling, Telescope,
-        Three, Two, UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, oldest_local,
-        print_term, project_erased_universes, stamp_declaration_instance, universe_metas,
+        MaskedLevels, Quality, QualityMetaId, Scope, Spelled, Spelling, Telescope, Three, Two,
+        UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, oldest_local, print_term,
+        project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
@@ -389,26 +389,18 @@ impl Term {
         );
     }
 
-    /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `universes`. Returns `None` for every other node, leaving it to ordinary traversal.
-    ///
-    /// Two occurrence shapes carry an instance. A nominal normal form holds it in its own universe vector; a not-yet-reduced reference to a type former is an ordinary variable, which holds it as the head of a wrapping [`Instance`] — the same node an external use site receives from scheme instantiation. A variable already heading an `Instance` has been instantiated and is returned untouched rather than wrapped twice.
+    /// Rewrite this node, if it is a nominal normal form of one of `names`, to denote the declaration instance `universes`, which it holds in its own universe vector. Returns `None` for every other node, leaving it to ordinary traversal.
     ///
     /// Nominal children are stamped explicitly because a rewrite hook replaces its node wholesale: an occurrence nested in a parameter or index must receive the same instance as the occurrence containing it.
     pub(crate) fn stamp_declaration_node(
         &self,
         names: &BTreeSet<Global>,
-        self_reference: SelfReference,
         universes: &Universes,
     ) -> Option<Self> {
-        fn stamp(
-            terms: &[Term],
-            names: &BTreeSet<Global>,
-            self_reference: SelfReference,
-            universes: &Universes,
-        ) -> Vec<Term> {
+        fn stamp(terms: &[Term], names: &BTreeSet<Global>, universes: &Universes) -> Vec<Term> {
             terms
                 .iter()
-                .map(|term| stamp_declaration_instance(term, names, self_reference, universes))
+                .map(|term| stamp_declaration_instance(term, names, universes))
                 .collect()
         }
 
@@ -417,47 +409,33 @@ impl Term {
                 Subterm::InductType(InductType {
                     name: induct.name,
                     universes: universes.clone(),
-                    params: stamp(&induct.params, names, self_reference, universes),
-                    indices: stamp(&induct.indices, names, self_reference, universes),
+                    params: stamp(&induct.params, names, universes),
+                    indices: stamp(&induct.indices, names, universes),
                 })
             }
             Subterm::Variant(variant) if names.contains(&variant.name) => {
                 Subterm::Variant(Variant {
                     name: variant.name,
                     universes: universes.clone(),
-                    params: stamp(&variant.params, names, self_reference, universes),
+                    params: stamp(&variant.params, names, universes),
                     tag: variant.tag.clone(),
-                    payload: stamp(&variant.payload, names, self_reference, universes),
+                    payload: stamp(&variant.payload, names, universes),
                 })
             }
             Subterm::StructType(struct_type) if names.contains(&struct_type.name) => {
                 Subterm::StructType(StructType {
                     name: struct_type.name,
                     universes: universes.clone(),
-                    params: stamp(&struct_type.params, names, self_reference, universes),
+                    params: stamp(&struct_type.params, names, universes),
                 })
             }
             Subterm::Struct(struct_) if names.contains(&struct_.name) => Subterm::Struct(Struct {
                 name: struct_.name,
                 universes: universes.clone(),
-                params: stamp(&struct_.params, names, self_reference, universes),
-                fields: stamp(&struct_.fields, names, self_reference, universes),
+                params: stamp(&struct_.params, names, universes),
+                fields: stamp(&struct_.fields, names, universes),
                 entries: struct_.entries.clone(),
             }),
-            // A self-reference elaborated before the declaration's parameters existed stands at no instance: still free, it takes the declaration's own, and bound, its group's binder captures it as it stands. An instance chosen at the occurrence is kept.
-            Subterm::Instance(instance) if names.contains(&instance.name) => {
-                if self_reference == SelfReference::Free
-                    && instance.universes.is_empty()
-                    && !universes.is_empty()
-                {
-                    let stamped = Term::instance(instance.name, universes.clone());
-                    return Some(match self.extent() {
-                        Some(extent) => stamped.with_extent(extent),
-                        None => stamped,
-                    });
-                }
-                return Some(self.clone());
-            }
             _ => return None,
         };
 
@@ -2839,7 +2817,7 @@ impl Term {
         ))
     }
 
-    /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A solved declaration's instance is replaced whole, whatever its levels, as a capture binds one ([`Subterm::traverse`]). A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
+    /// This term with every solved variable replaced by its solution, simultaneously: parallel substitution of `solutions`, as one identity-memoized, free-vars-pruned traversal. A subtree mentioning no solved name is returned by reference, and a shared input node is rewritten once rather than once per occurrence, so sharing and warm memo cells survive it.
     ///
     /// **A variable in a metavariable's spine is left standing.** A traversal asks a bare variable there of the variable hook alone ([`Subterm::traverse`]), which this walk answers nothing through, so `?m[x]` substituted at `x` is `?m[x]` still, and still names `x`. `Scope::close` followed by `open` reaches the spine, and is the same term only where no solved name stands in one. The elaborator's zonk rests on the spine being left: it materializes a metavariable's solution, and each element of its spine, by a walk of its own at every occurrence, and with a term in a spine it walks that term once for each path to it (`zonk_solved_term_metas`, in `curios-elab`).
     ///
@@ -2860,15 +2838,12 @@ impl Term {
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
-                let named = match &**term {
-                    Subterm::Var(var) => var.as_free().copied(),
-                    Subterm::Instance(Instance { name, .. }) => Some(Free::Global(*name)),
-                    _ => None,
-                };
-                if let Some(name) = named {
-                    let at = solutions.partition_point(|(solved, _)| *solved < name);
+                if let Subterm::Var(var) = &**term
+                    && let Some(name) = var.as_free()
+                {
+                    let at = solutions.partition_point(|(solved, _)| solved < name);
                     if let Some((solved, value)) = solutions.get(at)
-                        && *solved == name
+                        && solved == name
                     {
                         return Some(value.clone());
                     }

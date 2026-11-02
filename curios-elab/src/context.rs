@@ -258,6 +258,22 @@ impl<'s> Context<'s> {
         self.underway.checked.truncate(mark);
     }
 
+    /// Each term recorded since `mark`, and its type, through `restate`: what a declaration recorded while its members were locals, which the obligations read after it has closed over them.
+    pub(crate) fn restate_checked(
+        &mut self,
+        mark: usize,
+        restate: impl Fn(&Self, &Term) -> Result<Term, Error>,
+    ) -> Result<(), Error> {
+        let recorded = self.underway.checked.split_off(mark);
+        let mut restated = Vec::with_capacity(recorded.len());
+        for (term, type_, site) in recorded {
+            restated.push((restate(self, &term)?, restate(self, &type_)?, site));
+        }
+        self.underway.checked.replace_since(mark, restated);
+
+        Ok(())
+    }
+
     /// Begin a unit's items: the declarations they make, which place each of its names, and the names of those its walk is to decide, none finished yet; every other declaration of the unit is a baseline's, and finished. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
     pub(crate) fn begin_unit(&mut self, declarations: Declarations, unfinished: BTreeSet<Global>) {
         self.underway.declarations = declarations;
