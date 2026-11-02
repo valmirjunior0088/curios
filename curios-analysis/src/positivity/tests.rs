@@ -3,8 +3,8 @@
 //! Pure functions of the relation, so they need no checker and stay beside the analysis. The tests that drive `positivity_vectors` through a real `Env` are in `curios-analysis/tests/driven/positivity_tests.rs`; that directory's `main.rs` says why.
 
 use {
-    super::{Occurrences, close},
-    curios_core::{Global, Polarity},
+    super::{Occurrences, close, rec_member},
+    curios_core::{Free, Global, Intrinsic, Polarity, Term},
     curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
@@ -267,5 +267,44 @@ fn accepting_polarities_are_closed_under_join() {
                 assert!(p.join(q).accepting(), "{p:?} ⊔ {q:?} escaped acceptance");
             }
         }
+    }
+}
+
+/// The cycle guard reads a member applied past its own parameters, which stands under more than one application.
+///
+/// A member whose result is a function is applied in two spines, `f(a)(b)`, and a family with both parameters and indices is applied in exactly two. Read one level deep — an application's immediate head — the outer application is a neutral no demand ever unfolds, so the guard would not fire and the walk would force the same member again one level deeper. The relation is [`Term::spine_rec_proj`]'s, which reads through every enclosing application, and the guard asks it rather than spelling it again.
+///
+/// The universe-instance spelling of a member is read by neither, and that half is an entry of `documentation/roadmap/soundness/000-findings.md`.
+#[test]
+fn the_cycle_guard_reads_a_member_applied_in_more_than_one_spine() {
+    let member = Free::local(1, Some("f"));
+    let rec = Term::rec(
+        vec![(
+            member,
+            Term::intrinsic(Intrinsic::NatType),
+            Term::free_var(&member),
+        )],
+        Term::free_var(&member),
+    );
+    let group = match rec_member(&rec) {
+        Some((group, _)) => group,
+        None => panic!("the fixture's tail selects a member"),
+    };
+    let projection = Term::rec_proj(group.clone(), 0);
+    let argument = || Term::intrinsic(Intrinsic::NatType);
+
+    for (spelling, term) in [
+        ("bare", projection.clone()),
+        ("one spine", Term::apply(projection.clone(), [argument()])),
+        (
+            "two spines",
+            Term::apply(Term::apply(projection, [argument()]), [argument()]),
+        ),
+    ] {
+        assert_eq!(
+            rec_member(&term).map(|(found, index)| (found == group, index)),
+            Some((true, 0)),
+            "the guard reads a member spelled {spelling}",
+        );
     }
 }
