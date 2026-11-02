@@ -5,7 +5,7 @@
 use {super::*, crate::test_support::*};
 
 impl ErasedUnit {
-    /// [`declared_families`](crate::test_support::declared_families)' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
+    /// [`declared_families`]' answer: each family read off the fragment of the item that declares it, a field at a family naming it.
     pub fn declared_families(&self) -> Vec<ErasedFamily> {
         self.items()
             .flat_map(ErasedForms::forms)
