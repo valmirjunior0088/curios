@@ -3,7 +3,7 @@
 //! **Only a declaration drops.** A structure's fields and a constructor's payload are classified once, against the declaration's own signature, and every construction and elimination reads that one row. A function type and an anonymous tuple type have no declaration: the type a value of one stands at differs from site to site by a substitution or a refinement, and a domain one site reads as a proof or a type another reads as a variable. So neither is classified for its shape at all — a function has a parameter for each binder and a tuple a field for each member — and what [`is_erasable`] decides of a slot is only what fills it.
 
 use {
-    crate::{AtSorts, Error, Lowering, Sorts, advance_assumed, is_erasable, reduced},
+    crate::{AtSorts, Eraser, Error, Sorts, advance_assumed, is_erasable, reduced},
     curios_cert::Reader,
     curios_core::{Advance, Bound},
     std::collections::BTreeSet,
@@ -11,7 +11,7 @@ use {
 
 /// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders assumed as fresh opaque variables at their declared types, in the frame the caller opened ([`is_erasable`]). That opaque-open discipline is what makes a row a fact of its declaration at its sorts, the same at every instantiation of its levels and parameters, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
 pub fn constructor_entries<B: Bound>(
-    lowering: &mut Lowering<'_>,
+    lowering: &mut Eraser<'_>,
     context: &mut Reader,
     telescope: curios_core::Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_anf::FieldShape)>, Error> {
@@ -34,7 +34,7 @@ pub fn constructor_entries<B: Bound>(
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 fn field_shape(
-    lowering: &mut Lowering<'_>,
+    lowering: &mut Eraser<'_>,
     context: &mut Reader,
     visited: &mut BTreeSet<AtSorts>,
     type_: &curios_core::Term,
@@ -44,7 +44,7 @@ fn field_shape(
 
 /// The register carrier a value of `type_` is held in where a register holds it ([`curios_anf::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than naming their rows — a value is held as a reference whatever row it holds.
 pub fn register_shape(
-    lowering: &mut Lowering<'_>,
+    lowering: &mut Eraser<'_>,
     context: &mut Reader,
     type_: &curios_core::Term,
 ) -> Result<Option<curios_anf::RegisterShape>, Error> {
@@ -113,7 +113,7 @@ fn entry_at<B: Bound>(
 
 /// The walk behind [`field_shape`] and [`register_shape`]. A nominal type is what its declaration's row says ([`Relevance`]), read where the row is registered, and `rows` says whether a product or a family names its row.
 fn shape_walk(
-    lowering: &mut Lowering<'_>,
+    lowering: &mut Eraser<'_>,
     rows: Rows,
     context: &mut Reader,
     visited: &mut BTreeSet<AtSorts>,
@@ -201,7 +201,7 @@ fn shape_walk(
                 induct_type.name,
                 Sorts::of(&induct_type.universes.qualities),
             );
-            let family = |lowering: &mut Lowering<'_>, context: &mut Reader| match rows {
+            let family = |lowering: &mut Eraser<'_>, context: &mut Reader| match rows {
                 Rows::Named => Ok(curios_anf::FieldShape::Family(
                     lowering.family_identity(context, name)?,
                 )),

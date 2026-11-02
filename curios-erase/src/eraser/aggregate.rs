@@ -1,11 +1,11 @@
 //! Products, structs, variants, and projections — schema registration and the construction/projection sites.
 //!
-//! A declaration's post-erasure shape is registered once at each assignment of the sorts it leaves open, by the form of the item that declares it at that assignment, from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. Every other item imports what it reads of the row, off that item's erased form (the order a module's items are stored in puts it first), which a program resolves to the declaration's own: a structure's schema at its width, and an inductive's family with each constructor the item names, at its position and width. Neither says anything of a field, and a mask is read where the declaring item holds it, so an item holds of a row what it names of it. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
+//! A declaration's post-erasure shape is registered once at each assignment of the sorts it leaves open, by the form of the item that declares it at that assignment, from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. Every other item imports what it reads of the row, off that item's erased form (the order a module's items are stored in puts it first), which a program resolves to the declaration's own: a structure's schema at its width, and an inductive's family with each constructor the item names, at its position and width. Neither says anything of a field, and a mask is read where the declaring item holds it, so an item holds of a row what it names of it. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Eraser::kept_operand`]).
 //!
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
 use {
-    super::{Lowering, Outcome},
+    super::{Eraser, Outcome},
     crate::{
         AtSorts, ConstructorRow, Error, FamilyRow, ProductRow, Relevance, Sorts,
         constructor_entries, emitted, open_opaque, reduced,
@@ -27,7 +27,7 @@ impl StructRow<'_> {
     }
 }
 
-impl<'s> Lowering<'s> {
+impl<'s> Eraser<'s> {
     /// The memoized layout of a registered structure at the sorts `name` names it at.
     pub fn struct_row(
         &mut self,
@@ -312,7 +312,7 @@ impl<'s> Lowering<'s> {
         })
     }
 
-    /// Whether `name`'s structure row is being registered right now — see [`Lowering::in_flight`].
+    /// Whether `name`'s structure row is being registered right now — see [`Eraser::in_flight`].
     pub fn in_flight(&self, name: AtSorts) -> bool {
         self.in_flight.contains(&name)
     }

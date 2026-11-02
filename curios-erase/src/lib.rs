@@ -23,9 +23,9 @@ use classify::*;
 mod environment;
 use environment::*;
 
-mod lower;
-use lower::*;
-pub use lower::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
+mod eraser;
+use eraser::*;
+pub use eraser::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
 
 mod erased;
 use erased::*;

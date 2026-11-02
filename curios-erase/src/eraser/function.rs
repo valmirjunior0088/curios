@@ -7,12 +7,12 @@
 //! Application evaluates head first, then its arguments in order (under the operand law the erasure order *is* the runtime order). An application at an erasable (proof-/type-producing) function type whose callee is not a direct function reference is erased content applied to arguments — it collapses to the unit constant; a direct function reference keeps its call, because a never-returning host effect is proof-typed but must run. Every argument has its slot; one whose type here is a proof or a type fills it with the unit constant rather than a materialized witness (proof irrelevance — the slot stays, only its contents collapse).
 
 use {
-    super::{Lowering, Outcome},
+    super::{Eraser, Outcome},
     crate::{Error, advance_assumed, emitted, inferred, is_erasable, reduced},
     curios_cert::Reader,
 };
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     pub fn erase_func(
         &mut self,
         context: &mut Reader,
@@ -300,10 +300,10 @@ fn named_head(
     }
 }
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// The call a concept method's wrapper forwards to, at `apply`'s arguments — `w.i(x…)` for a method, `w.i` for any other field — or `None` when the callee is not a wrapper.
     ///
-    /// `into_core` generates each wrapper as exactly that forwarding, `(@p…, use w, x…) => w.i(x…)`, and a call fills its one parameter group, so every call to one supplies the whole group and unfolds in one step: the wrapper's body, at the call's instance, opened at the call's arguments. One step and no further — reducing the call instead would go on into the method's own body wherever the dictionary is known, which is inlining arbitrary code. The kind is the definition's, read off the item that declares it as [`Lowering::is_proof_constructor`] reads its own, rather than guessed from the name.
+    /// `into_core` generates each wrapper as exactly that forwarding, `(@p…, use w, x…) => w.i(x…)`, and a call fills its one parameter group, so every call to one supplies the whole group and unfolds in one step: the wrapper's body, at the call's instance, opened at the call's arguments. One step and no further — reducing the call instead would go on into the method's own body wherever the dictionary is known, which is inlining arbitrary code. The kind is the definition's, read off the item that declares it as [`Eraser::is_proof_constructor`] reads its own, rather than guessed from the name.
     fn forwarded_method(
         &self,
         apply: &curios_core::Apply,

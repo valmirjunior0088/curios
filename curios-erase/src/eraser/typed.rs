@@ -4,17 +4,17 @@
 //!
 //! Nothing is checked. The term is certified, and judging it again would run the kernel's rules over what they already accepted. Every rule here is the type half of the kernel's, with the checks left where they were made, and what it asks of a name, a neutral or a type's head it asks of the kernel that certified the term ([`inferred`], [`reduced`]).
 //!
-//! **A term's type is read once per item, and once per arm.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Lowering::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands, but in an arm: there the kernel binds a variable the case solves to its value and reads every type by value, so an arm is read with nothing kept from outside it and keeps nothing past it (`Lowering::in_arm`). A type kept across two arms would read one arm's family in the other, which shares its tags and widths and is not the row its value was built at (`curios`'s `tests::codegen::specialize`).
+//! **A term's type is read once per item, and once per arm.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Eraser::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands, but in an arm: there the kernel binds a variable the case solves to its value and reads every type by value, so an arm is read with nothing kept from outside it and keeps nothing past it (`Eraser::in_arm`). A type kept across two arms would read one arm's family in the other, which shares its tags and widths and is not the row its value was built at (`curios`'s `tests::codegen::specialize`).
 
 use {
-    super::Lowering,
+    super::Eraser,
     crate::{Error, advance_assumed, inferred, reduced},
     curios_cert::Reader,
     curios_core::Bound,
     curios_utilities::recurse,
 };
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// The type `term` has, read at most once for the item being erased.
     pub fn type_of(
         &mut self,

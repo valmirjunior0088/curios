@@ -1,8 +1,8 @@
 //! What erasure costs: a projection or call chain in work proportional to its depth, a doubling term in its own size, and a refusal past the budget in erasure's words.
 
 use {
+    crate::eraser::test_support::*,
     crate::test_support::{definition, fresh, module, nat_lit, try_erase, zonked},
-    crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_cert::{Globals, certify_module},
     curios_elab::DEFAULT_BUDGET,
@@ -42,13 +42,7 @@ fn chain_cost(
         let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
         let places = curios_core::Places::of(unit.as_module());
         kernel.read(|reader| {
-            crate::erase_items(
-                reader,
-                Erasures::nothing(),
-                (unit.as_module(), &places),
-                None,
-            )
-            .expect("the unit erases");
+            erase_through(reader, unit.as_module(), &places).expect("the unit erases");
 
             reader.consumed().units()
         })
@@ -124,9 +118,9 @@ fn doubled_record(levels: u32, mint: u32) -> curios_core::Term {
     )
 }
 
-/// Erasure answers a term that shares in the term's own size: sixty levels that each hold the one below twice, a tree no walk per path finishes, as `walk_tests` puts the crate's other walks to one. A function at the doubling type, as a program's entry and as a definition; a chain of sixty projections out of a value at it; and sixty definitions that each pair the one before with itself, projected, whose type is its tail's with every binding substituted (`Lowering::type_of`).
+/// Erasure answers a term that shares in the term's own size: sixty levels that each hold the one below twice, a tree no walk per path finishes, as `walk_tests` puts the crate's other walks to one. A function at the doubling type, as a program's entry and as a definition; a chain of sixty projections out of a value at it; and sixty definitions that each pair the one before with itself, projected, whose type is its tail's with every binding substituted (`Eraser::type_of`).
 ///
-/// Mutation-checked: with a type read again where `Lowering::type_of` kept one, the row of definitions does not return, and with the type a lambda is checked at walked once per occurrence, none of the other three does.
+/// Mutation-checked: with a type read again where `Eraser::type_of` kept one, the row of definitions does not return, and with the type a lambda is checked at walked once per occurrence, none of the other three does.
 #[test]
 fn erasure_answers_a_doubling_term_in_its_own_size() {
     let nat_type = || curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);

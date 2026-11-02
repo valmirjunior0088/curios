@@ -3,7 +3,7 @@
 //! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is a `Byte` — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
 
 use {
-    super::{Lowering, Outcome},
+    super::{Eraser, Outcome},
     crate::{Error, Sorts, emitted},
     curios_cert::Reader,
     curios_num::Natural,
@@ -72,7 +72,7 @@ pub fn demanded_type(context: &mut Reader, demand: &curios_core::Operand) -> cur
     }
 }
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// Resolve an outcome through the declaration's ordinary registered layout, at the sorts the operation's result states.
     pub fn outcome_constructor(
         &mut self,

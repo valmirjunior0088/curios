@@ -3,12 +3,12 @@
 //! An item's name is bound in its fragment's environment, which is what the item hands on of itself: how each name it declares is bound is all another item's erasure reads of it. The Core context holds every item's definition before any is erased, so nothing here writes one.
 
 use {
-    super::{Lowering, Outcome},
+    super::{Eraser, Outcome},
     crate::Error,
     curios_cert::Reader,
 };
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// Erase one top-level definition as the fragment's item, and bind its name.
     pub fn erase_definition(
         &mut self,

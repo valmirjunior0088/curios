@@ -5,14 +5,14 @@
 //! The lane is `curios_abi::LANE_IN` and `curios_abi::LANE_OUT`: a call is made with no token, and where it answers a token instead of a reply, its description suspends on the token's handle, asks again with the token once it is ready, and is cancelled by dropping the token through the same row. A call that asks again or drops sends fillers for the row's operands, which its answerer does not read once a token is given. The suspension itself is one shape every row shares ([`curios_anf::SuspensionOperation::Later`]), so all a row defines is its call.
 
 use {
-    super::{Lowering, Polled},
+    super::{Eraser, Polled},
     crate::Error,
     curios_abi::WireType,
     curios_cert::Reader,
     curios_num::{Binary, Floating, Integer, Natural},
 };
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// How a value of `wire` crosses: as the option the row states, where the wire admits none, read at the instance `curios_core::wire_term` gives it; as itself otherwise.
     pub fn crossed(
         &mut self,

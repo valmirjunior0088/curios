@@ -5,7 +5,7 @@
 //! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
 use {
-    super::{Demanded, Lowering, Outcome, demanded_type, narrow_case_key},
+    super::{Demanded, Eraser, Outcome, demanded_type, narrow_case_key},
     crate::{Error, Sorts, emitted, is_erasable, reduced, refine},
     curios_analysis::{case_target_indices, pinned_by_targets},
     curios_cert::Reader,
@@ -129,7 +129,7 @@ impl InductMatch<'_> {
     }
 }
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// Erase a match by its elimination form.
     pub fn erase_match(
         &mut self,
@@ -891,7 +891,7 @@ impl Lowering<'_> {
         })
     }
 
-    /// Run `arm` in a frame of its own, as an arm whose case it puts in force is checked, with none of the types kept for the item in hand ([`Lowering::types`]): there the kernel binds a variable the case solves to its value and reads every type by value, so a type read outside the arm is not the one the kernel reads in it, and one read under the case is not the walk's once the arm is left.
+    /// Run `arm` in a frame of its own, as an arm whose case it puts in force is checked, with none of the types kept for the item in hand ([`Eraser::types`]): there the kernel binds a variable the case solves to its value and reads every type by value, so a type read outside the arm is not the one the kernel reads in it, and one read under the case is not the walk's once the arm is left.
     fn in_arm<T>(
         &mut self,
         context: &mut Reader,

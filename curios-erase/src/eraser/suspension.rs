@@ -5,7 +5,7 @@
 //! The resume loop has no definition a description could name, so it is emitted where it is needed: beside each `Io/advance`, and once beside the entry, which hands the host a suspension it can advance without knowing its frames. A program that never builds a suspension never reaches either, since `curios-anf` takes the value arm of every test in it before anything is optimized.
 
 use {
-    super::Lowering,
+    super::Eraser,
     crate::{Error, Sorts, inferred, reduced},
     curios_cert::Reader,
 };
@@ -18,7 +18,7 @@ pub struct Polled {
     pub none: curios_anf::ConstructorId,
 }
 
-impl Lowering<'_> {
+impl Eraser<'_> {
     /// Bind `rhs` in the innermost open block and hand back its value.
     pub fn let_atom(&mut self, rhs: curios_anf::Rhs) -> curios_anf::Atom {
         curios_anf::Atom::Value(self.builder.let_value(None, rhs))

@@ -1,11 +1,11 @@
 //! How terms erase: scalars in evaluation order, carriers in their shapes, items in module order, functions with a parameter a binder and no captures, recursive groups, and the same erasure every time.
 
 use {
+    crate::eraser::test_support::*,
     crate::test_support::{
         bound, definition, erase, fresh, global, module, nat_lit, newtype_struct, nominal,
         struct_type_of, zonked,
     },
-    crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,
     curios_cert::{Globals, certify_module},
@@ -314,13 +314,7 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
                 reader.fresh(None);
             }
 
-            crate::erase_items(
-                reader,
-                Erasures::nothing(),
-                (unit.as_module(), &places),
-                None,
-            )
-            .expect("the unit erases")
+            erase_through(reader, unit.as_module(), &places).expect("the unit erases")
         })
     };
     let first = erased(0);
