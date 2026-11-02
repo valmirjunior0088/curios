@@ -239,3 +239,35 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
     assert_eq!(whole.verdicts, Vec::new());
     assert_eq!(whole.certification.variances(&held()), irrelevant);
 }
+
+/// No budget opens a window on a group that does not descend. Acceptance is upward closed in the budget ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s third boundary), so what has to be held is the other direction: a budget too small for the walk to file a verdict at all reads the group as not descending and refuses, rather than finding nothing to refuse.
+///
+/// [`proof_typed_nullary_group`] is `rec bad : Vouched = bad`, which `check_group`'s local gate owes a refusal: its member is a proof, so erasure deletes it. Every budget from one step up must refuse it, and the largest must refuse it by the rule rather than by the budget — below, the walk runs out before `close_group` files anything, and `group_verdict` answering `None` is what makes that a refusal.
+#[test]
+fn no_budget_accepts_a_proof_typed_group_that_does_not_descend() {
+    let mut by_the_rule = 0;
+    for budget in [1, 2, 10, 100, 1_000, 10_000, 1_000_000] {
+        let verdicts = fixture_verdicts(
+            &proof_typed_nullary_group(),
+            budget,
+            &Globals::default(),
+            SYNTAX,
+        );
+
+        assert!(
+            !verdicts.is_empty(),
+            "at a budget of {budget} the walk found nothing to refuse: {verdicts:?}",
+        );
+        if verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. }))
+        {
+            by_the_rule += 1;
+        }
+    }
+
+    assert!(
+        by_the_rule > 0,
+        "no budget in the sweep reached the rule's own refusal, so the sweep says nothing about it",
+    );
+}

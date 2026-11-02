@@ -1766,6 +1766,98 @@ pub(super) fn diverging(name: &str) -> Item {
     )
 }
 
+/// `held : Nat = ((p : Vouched) => 0)(proof)` beside `sink` and `reaches`, where `proof` is `((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` when `reaching` and `Vouched/qed(())` otherwise.
+///
+/// The one position this records that names `reaches` is the **argument**: `held`'s own type and body sit at `Nat`, which is neither a proposition nor a sort, and every other recorded position — the binders' types, the lambdas, `qed(())` — names nothing partial. So the obligation that refuses it is (V) at an argument position and no other, which is the fixture [the soundness board's *Rejected*](../../../documentation/design/soundness/the-soundness-board.md) says has to be constructed, the corpus passing (V) inert there.
+pub(super) fn proof_at_an_argument_module(reaching: bool) -> Module {
+    let (vouched_name, declaration) = vouched_declaration();
+    let vouched = || Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let qed = || {
+        Term::variant(
+            vouched_name,
+            Vec::<Term>::new(),
+            "qed",
+            [Term::tuple(Vec::<Term>::new())],
+        )
+    };
+    let proof = match reaching {
+        true => Term::apply(
+            Term::func(
+                [(
+                    Free::local(960, Some("g")),
+                    Term::func_type([(Free::local(961, Some("n")), nat.clone())], nat.clone()),
+                )],
+                qed(),
+            ),
+            [Term::free_var(&Free::from(&Global::Authored(
+                Qualifier::from(["reaches"]),
+            )))],
+        ),
+        false => qed(),
+    };
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        nat.clone(),
+        Term::apply(
+            Term::func(
+                [(Free::local(962, Some("p")), vouched())],
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            ),
+            [proof],
+        ),
+    );
+
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![
+                diverging_sink(),
+                reaching_definition(Totality::Partial),
+                held,
+            ]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(vouched_name, declaration)]),
+        [],
+        [],
+    )
+}
+
+/// `rec bad : Vouched = bad`: a group at a proposition with nothing to descend on, which `check_group`'s local gate must refuse — the verdict every budget has to reach the same way.
+pub(super) fn proof_typed_nullary_group() -> Module {
+    let (vouched_name, declaration) = vouched_declaration();
+    let bad = Global::Authored(Qualifier::from(["bad"]));
+
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![Item::Rec(RecItem::new(vec![Definition {
+                name: bad,
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext::empty(),
+                island: Qualifier::default(),
+                totality: Totality::Partial,
+                proof: false,
+                variances: Vec::new(),
+                field_variances: Vec::new(),
+                parameter_field: None,
+                value_sort: None,
+                type_: Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
+                body: Term::free_var(&Free::from(&bad)),
+            }]))]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(vouched_name, declaration)]),
+        [],
+        [],
+    )
+}
+
 /// `held : Vouched = ((g : (Nat) -> Nat, h : (Nat) -> Nat) => Vouched/qed(()))(first, second)` beside the two diverging definitions it names, in that order.
 pub(super) fn two_sinks_module(first: &str, second: &str) -> Module {
     let (vouched_name, declaration) = vouched_declaration();

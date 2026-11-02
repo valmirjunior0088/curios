@@ -131,6 +131,34 @@ fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
     );
 }
 
+/// Obligation (V) fires at an argument position, where the corpus never reaches it.
+///
+/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. [`proof_at_an_argument_module`] is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
+#[test]
+fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
+    let verdicts = fixture_verdicts(
+        &proof_at_an_argument_module(true),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        refuses_the_proof_reaching_the_lie(&verdicts),
+        "a proof at an argument position reaching a partial definition was not refused: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &proof_at_an_argument_module(false),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "the same argument position holding a total proof was refused",
+    );
+}
+
 /// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — `Globals::mount` taking every record as covering — fails this test and no other in this file.
 #[test]
 fn a_record_that_does_not_cover_its_unit_is_not_read() {
