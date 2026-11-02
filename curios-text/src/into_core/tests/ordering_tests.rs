@@ -76,9 +76,9 @@ fn an_entry_reads_its_modules_beside_it_and_a_module_from_its_stem_directory() {
     write_module(&base, "main/A.crs", "pub let wrong : Type = Type;");
 
     let entrypoint = r#"
-            pub mod A;
-            pub mod B;
-            A/y
+        pub mod A;
+        pub mod B;
+        A/y
         "#
     .parse::<Entrypoint>()
     .unwrap();
@@ -90,8 +90,8 @@ fn an_entry_reads_its_modules_beside_it_and_a_module_from_its_stem_directory() {
 #[test]
 fn file_backed_module_missing_from_loader_is_module_not_found() {
     let entrypoint = r#"
-            pub mod A;
-            Type
+        pub mod A;
+        Type
         "#
     .parse::<Entrypoint>()
     .unwrap();

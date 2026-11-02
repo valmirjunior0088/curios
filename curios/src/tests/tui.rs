@@ -268,17 +268,17 @@ fn resize_events_update_the_drawing_session_before_rendering() {
 
 // A program that never quits by itself, so what ends its run is its terminal: a failure is printed by its name, and a run that ended any other way prints that it did.
 const IDLE_PROGRAM: &str = r#"
-        use /std/{Nat, Try, Show, Tui, Io, print};
-        use /std/Tui/{View, Directive};
-        let app: Tui(Nat, Nat) = Tui {
-            init = (0, Directive/none()),
-            update(model, event) = (model, Directive/none()),
-            view(model) = (w, h) => View/blank(w, h),
-        };
-        let program() -> Io({}) =
-            let result = Try/run(Tui/main(app))!;
-            print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
-        program()
+    use /std/{Nat, Try, Show, Tui, Io, print};
+    use /std/Tui/{View, Directive};
+    let app: Tui(Nat, Nat) = Tui {
+        init = (0, Directive/none()),
+        update(model, event) = (model, Directive/none()),
+        view(model) = (w, h) => View/blank(w, h),
+    };
+    let program() -> Io({}) =
+        let result = Try/run(Tui/main(app))!;
+        print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
+    program()
     "#;
 
 // A read of the terminal that fails ends the run with the read's error, the bracket undone on the way out: a program whose terminal has failed does not run on without input and without a reason.
@@ -359,30 +359,30 @@ fn a_program_outlives_the_end_of_its_input() {
 
 // Shared with the coordination measurement so both exercise the same application.
 pub(super) const LISTING_PROGRAM: &str = r#"
-        use /std/{Nat, Str, Bool, List, Option, Try, Io, Show, Tui};
-        use /std/Tui/{Style, Pane, Key, Event, Directive, Listing};
-        let app: Tui(Listing(Str), Nat) =
-            Tui {
-                init = (Listing/new(["one", "two", "three"]), Directive/none()),
-                update(model, event) =
-                    match event
-                    | input(key(k)) =>
-                        match k.code
-                        | char(c) => match c == 'q' | true => (model, Directive/quit()) | false => (model, Directive/none()) end
-                        | _ => (Listing/handle(model, k, 3), Directive/none())
-                        end
-                    | _ => (model, Directive/none())
-                    end,
-                view(model) = Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
-            };
-        let program() -> Io({}) =
-            let outcome = Try/run(Tui/main(app))!;
-            match outcome
-            | success(model) => /std/print(Option/unwrap_or(Listing/selected(model), "none"))
-            | failure(e) => /std/print(Show/show(e))
-            end;
-        program()
-        "#;
+    use /std/{Nat, Str, Bool, List, Option, Try, Io, Show, Tui};
+    use /std/Tui/{Style, Pane, Key, Event, Directive, Listing};
+    let app: Tui(Listing(Str), Nat) =
+        Tui {
+            init = (Listing/new(["one", "two", "three"]), Directive/none()),
+            update(model, event) =
+                match event
+                | input(key(k)) =>
+                    match k.code
+                    | char(c) => match c == 'q' | true => (model, Directive/quit()) | false => (model, Directive/none()) end
+                    | _ => (Listing/handle(model, k, 3), Directive/none())
+                    end
+                | _ => (model, Directive/none())
+                end,
+            view(model) = Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
+        };
+    let program() -> Io({}) =
+        let outcome = Try/run(Tui/main(app))!;
+        match outcome
+        | success(model) => /std/print(Option/unwrap_or(Listing/selected(model), "none"))
+        | failure(e) => /std/print(Show/show(e))
+        end;
+    program()
+    "#;
 
 // Saving and quitting in one update: the quit waits for the save its update asked for, which runs to its end before the program does.
 #[test]
@@ -526,67 +526,67 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
 
 // A whole program of the widgets: a field that filters a listing, each in a bordered pane under `Pane/rows`, the keys going to whichever the focus holds. It types a letter, sits through a resize, moves the focus to the listing and down it, and saves the selection and quits in one update.
 const PICKER_PROGRAM: &str = r#"
-        use /std/{Nat, Str, List, Option, Try, Tui, Io, print};
-        use /std/ops/{Eql};
-        use /std/Tui/{Style, View, Pane, Key, Input, Event, Directive, Listing, Field, Focus};
+    use /std/{Nat, Str, List, Option, Try, Tui, Io, print};
+    use /std/ops/{Eql};
+    use /std/Tui/{Style, View, Pane, Key, Input, Event, Directive, Listing, Field, Focus};
 
-        induct Part: Type
-        | filter()
-        | items()
-        end
+    induct Part: Type
+    | filter()
+    | items()
+    end
 
-        satisfy Eql(Part) {
-            ..
-        }
+    satisfy Eql(Part) {
+        ..
+    }
 
-        struct Model: Type {
-            field: Field,
-            listing: Listing(Str),
-            focus: Focus(Part),
-        }
+    struct Model: Type {
+        field: Field,
+        listing: Listing(Str),
+        focus: Focus(Part),
+    }
 
-        let fruit: List(Str) = ["apple", "banana", "blueberry", "cherry"];
+    let fruit: List(Str) = ["apple", "banana", "blueberry", "cherry"];
 
-        let matching(f: Field) -> Listing(Str) =
-            Listing/new(List/filter(fruit, (s: Str) => Str/starts_with(s, f.text)));
+    let matching(f: Field) -> Listing(Str) =
+        Listing/new(List/filter(fruit, (s: Str) => Str/starts_with(s, f.text)));
 
-        let save(chosen: Option(Str)) -> Io(Nat) =
-            let _ = print(Str/concat("saved ", Option/unwrap_or(chosen, "nothing")))!;
-            Io/pure(0);
+    let save(chosen: Option(Str)) -> Io(Nat) =
+        let _ = print(Str/concat("saved ", Option/unwrap_or(chosen, "nothing")))!;
+        Io/pure(0);
 
-        let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =
-            choose
-            | k.code == Key/Code/tab() => (Model { ..m, focus = Focus/handle(m.focus, k) }, Directive/none())
-            | k.ctrl && k.code == Key/Code/char('s') =>
-                (m, Directive/batch([Directive/perform(save(Listing/selected(m.listing))), Directive/quit()]))
-            | Focus/holds(m.focus, Part/filter()) =>
-                let field = Field/handle(m.field, k);
-                (Model { ..m, field = field, listing = matching(field) }, Directive/none())
-            | _ => (Model { ..m, listing = Listing/handle(m.listing, k, 3) }, Directive/none())
-            end;
+    let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =
+        choose
+        | k.code == Key/Code/tab() => (Model { ..m, focus = Focus/handle(m.focus, k) }, Directive/none())
+        | k.ctrl && k.code == Key/Code/char('s') =>
+            (m, Directive/batch([Directive/perform(save(Listing/selected(m.listing))), Directive/quit()]))
+        | Focus/holds(m.focus, Part/filter()) =>
+            let field = Field/handle(m.field, k);
+            (Model { ..m, field = field, listing = matching(field) }, Directive/none())
+        | _ => (Model { ..m, listing = Listing/handle(m.listing, k, 3) }, Directive/none())
+        end;
 
-        let marked: Style = Style { ..Style/plain, reverse = true };
+    let marked: Style = Style { ..Style/plain, reverse = true };
 
-        let app: Tui(Model, Nat) =
-            Tui {
-                init = (
-                    Model { field = Field/empty, listing = matching(Field/empty), focus = Focus/new(Part/filter(), [Part/items()]) },
-                    Directive/none()),
-                update(model, event) =
-                    match event
-                    | input(key(k)) => reacted(model, k)
-                    | _ => (model, Directive/none())
-                    end,
-                view(model) =
-                    Pane/rows([
-                        (Pane/Constraint/length(3), Pane/border(Style/plain, "find", Field/view(model.field, Style/plain))),
-                        (Pane/Constraint/fill(1), Pane/border(Style/plain, "fruit", Listing/view(model.listing, (s: Str) => s, Style/plain, marked)))]),
-            };
+    let app: Tui(Model, Nat) =
+        Tui {
+            init = (
+                Model { field = Field/empty, listing = matching(Field/empty), focus = Focus/new(Part/filter(), [Part/items()]) },
+                Directive/none()),
+            update(model, event) =
+                match event
+                | input(key(k)) => reacted(model, k)
+                | _ => (model, Directive/none())
+                end,
+            view(model) =
+                Pane/rows([
+                    (Pane/Constraint/length(3), Pane/border(Style/plain, "find", Field/view(model.field, Style/plain))),
+                    (Pane/Constraint/fill(1), Pane/border(Style/plain, "fruit", Listing/view(model.listing, (s: Str) => s, Style/plain, marked)))]),
+        };
 
-        let program() -> Io({}) =
-            let result = Try/run(Tui/main(app))!;
-            print(match result | success(m) => Str/concat(" with ", m.field.text) | failure(_) => " failed" end);
-        program()
+    let program() -> Io({}) =
+        let result = Try/run(Tui/main(app))!;
+        print(match result | success(m) => Str/concat(" with ", m.field.text) | failure(_) => " failed" end);
+    program()
     "#;
 
 // The program's frames, its cursor and its answer: the first frame whole and the resize's whole again, the terminal's cursor in the field past the letter typed, the save run with the selection the keys moved to, and the field's text answered.

@@ -6,11 +6,11 @@ use {
 };
 
 const TWO: &str = r#"
-        use /std/{Nat, Bool, Str, Show, print};
-        let first: Show(Nat) = Show { show(n) = "a" };
-        let other: Show(Bool) = Show { show(b) = "b" };
-        let two(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B) -> Str =
-            Str/concat(Show/show(a), Show/show(b));
+    use /std/{Nat, Bool, Str, Show, print};
+    let first: Show(Nat) = Show { show(n) = "a" };
+    let other: Show(Bool) = Show { show(b) = "b" };
+    let two(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B) -> Str =
+        Str/concat(Show/show(a), Show/show(b));
 "#;
 
 // Hidden arguments are written in order from the first of their run, and the rest of the run may be left out: none of them, the first alone, both dictionaries, and — through the placeholder that holds a slot's place — the second dictionary alone.
@@ -104,15 +104,15 @@ fn a_lambdas_hidden_binders_are_written_from_the_first_of_their_run() {
 }
 
 const BOTH: &str = r#"
-        use /std/{Nat, Str, print};
-        concept E(A: Type): pub Type { e: Nat }
-        concept F(A: Type): pub Type { f: Nat }
-        concept Both(A: Type): pub Type { use E(A), use F(A), both: Nat }
-        satisfy E(Nat) { e = 1 }
-        satisfy F(Nat) { f = 2 }
-        let e9: E(Nat) = E { e = 9 };
-        let f9: F(Nat) = F { f = 9 };
-        let edges(use Both(Nat)) -> Nat = E/e(@Nat) * 10 + F/f(@Nat);
+    use /std/{Nat, Str, print};
+    concept E(A: Type): pub Type { e: Nat }
+    concept F(A: Type): pub Type { f: Nat }
+    concept Both(A: Type): pub Type { use E(A), use F(A), both: Nat }
+    satisfy E(Nat) { e = 1 }
+    satisfy F(Nat) { f = 2 }
+    let e9: E(Nat) = E { e = 9 };
+    let f9: F(Nat) = F { f = 9 };
+    let edges(use Both(Nat)) -> Nat = E/e(@Nat) * 10 + F/f(@Nat);
 "#;
 
 // A concept literal's entries follow its declaration: the superclass edges before a field are written from the first, an edge left out or written `use _` is resolved, and `use _` is how the second is written alone.

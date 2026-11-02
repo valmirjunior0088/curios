@@ -35,10 +35,10 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
 
 /// `g`, whose bound a guard's arm proves by standing under it.
 const BOUNDED: &str = r#"
-        use /std/{Nat, Bool, proved};
-        use /std/Bool/{True, Holds};
-        let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
-        "#;
+    use /std/{Nat, Bool, proved};
+    use /std/Bool/{True, Holds};
+    let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
+    "#;
 
 // An arm under a scrutinee that computes to another case is not typed. `h`'s result matches on `c`, and its `true` arm holds a proof that `c` holds, which the arm's case is. A `let` at `h(Bool/not(true))` is written at the result at a scrutinee that names no local, so no equation is recorded for the arm, and that computes to `false`; at `Bool/not(false)` the arm is the one taken, and its proof holds by reduction.
 #[test]
