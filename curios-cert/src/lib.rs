@@ -33,4 +33,4 @@ mod shared;
 pub(crate) use shared::*;
 
 #[cfg(test)]
-mod walk_tests;
+mod tests;

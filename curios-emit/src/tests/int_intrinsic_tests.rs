@@ -1,6 +1,6 @@
 //! Every `Int` intrinsic's emitted shape: the i31 fast path it computes in, the one result it boxes past it, and a remainder held in a word.
 
-use super::test_support::*;
+use crate::test_support::*;
 
 // --- Int ------------------------------------------------------------------
 

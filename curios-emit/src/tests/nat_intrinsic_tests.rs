@@ -1,7 +1,7 @@
 //! Every `Nat` intrinsic's emitted shape: the i31 fast path it computes in, the helper it grows through past it, and a literal or shift count past the i31.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_num::{Natural, Rounding},
 };
 

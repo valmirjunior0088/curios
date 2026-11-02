@@ -1,6 +1,6 @@
 //! The emitted module's exports and dispatch table, and the loop shapes that need a dispatcher.
 
-use super::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn unknown_callee_dispatches_through_the_closure_table() {

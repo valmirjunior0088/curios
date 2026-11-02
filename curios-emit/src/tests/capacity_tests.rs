@@ -1,7 +1,7 @@
 //! The construction boundary: logical length arithmetic stays wide until checked, including fused flat lists.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_num::{Binary, Natural},
 };
 

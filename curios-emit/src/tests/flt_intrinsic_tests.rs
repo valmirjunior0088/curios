@@ -1,6 +1,6 @@
 //! Every `Flt` intrinsic's emitted shape: the struct it boxes into, a NaN through the model's rule, its bytes, and the guard a conversion refuses through before truncating.
 
-use {super::test_support::*, curios_num::Rounding};
+use {crate::test_support::*, curios_num::Rounding};
 
 // --- Flt ------------------------------------------------------------------
 

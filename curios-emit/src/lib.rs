@@ -72,27 +72,9 @@ mod types;
 pub use types::*;
 
 #[cfg(test)]
-mod aggregate_tests;
-#[cfg(test)]
-mod capacity_tests;
-#[cfg(test)]
-mod entry_tests;
-#[cfg(test)]
-mod flt_intrinsic_tests;
-#[cfg(test)]
-mod foreign_tests;
-#[cfg(test)]
-mod hoist_tests;
-#[cfg(test)]
-mod int_intrinsic_tests;
-#[cfg(test)]
-mod module_tests;
-#[cfg(test)]
-mod nat_intrinsic_tests;
-#[cfg(test)]
-mod rope_tests;
-#[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod tests;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built, its reducible control structurized into blocks and loops and its constant data hoisted, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 ///

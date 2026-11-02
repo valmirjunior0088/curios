@@ -1,7 +1,7 @@
 //! A foreign call's import and the resume its result arity shapes.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_abi::{ForeignFunction, WireResults, WireType},
     std::sync::Arc,
 };

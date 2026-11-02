@@ -1,6 +1,6 @@
 //! What hoists to an interned global and what stays inline.
 
-use super::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn constant_tuples_hoist_to_one_interned_global() {

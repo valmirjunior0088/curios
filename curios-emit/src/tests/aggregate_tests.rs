@@ -1,7 +1,7 @@
 //! Tuples, list and packed literals, cells and variants — built and read at their own carriers.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_num::{Binary, Rounding},
 };
 

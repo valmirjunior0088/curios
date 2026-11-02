@@ -92,7 +92,7 @@ pub use elaborate::{
 };
 
 #[cfg(test)]
-mod walk_tests;
+mod tests;
 
 mod zonk;
 use zonk::*;

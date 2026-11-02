@@ -1,7 +1,7 @@
 //! The shared rope helpers a `Bytes` or `List` operation calls, and the chain depth they lower on.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_abi::{WireLeaf, WireResults, WireType},
 };
 
