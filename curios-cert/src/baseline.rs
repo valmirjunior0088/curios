@@ -170,7 +170,11 @@ impl Readable<'_> {
     fn digest(&self, body: bool) -> Result<String, String> {
         let sharing = Sharing::new();
         if body {
-            let unfolds = self.held.value.map(|value| sharing.share(value));
+            // The sort a definition states for its value goes with what it unfolds to, since `Kernel::value_sort` records a body read where `Sort::of` asks a publication.
+            let unfolds = (
+                self.held.value.map(|value| sharing.share(value)),
+                self.held.value_sort.map(|sort| sharing.share(sort)),
+            );
 
             return curios_archive::to_bytes(&unfolds).map(|bytes| digest(&bytes));
         }
@@ -202,6 +206,8 @@ impl Readable<'_> {
         });
         let part = (
             sharing.share(self.held.type_),
+            // Held by both parts: the publication is read by `Sort::of` with nothing run and `hold_value_sort` holds a stated sort to it, so a verdict may rest on it whichever read the asking walk recorded, and covering it twice refuses an adoption that would have stood rather than standing on one that would not.
+            self.held.value_sort.map(|sort| sharing.share(sort)),
             self.held.universes.inequalities(),
             family,
             record,

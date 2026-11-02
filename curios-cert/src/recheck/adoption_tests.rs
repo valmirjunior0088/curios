@@ -777,28 +777,26 @@ fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Mo
     }
 }
 
-/// A reader adopted over a baseline carries the baseline's `value_sort` for a definition it read, because the certifier's read-digest ([`held_digest`]) digests a body read as the body *term* and omits `value_sort` — yet the verdict a whole compile gives is preserved.
+/// A reader of a moved `value_sort` is judged again rather than adopted, because the certifier's read-digest ([`held_digest`]) holds the sort a definition states for its value beside its type.
 ///
-/// `H : Type 5` moves from `Nat` (value sort `Type 0`) to `Type 4` (value sort `Type 5`) under a fixed declared type, so the alias `G : Type 5 = H` republishes a value sort that moves `Type 0` → `Type 5` while `G`'s body term, the occurrence of `H`, does not. `D : (G) -> G` reads `G`'s value sort through `Sort::of` and is adopted, its body-read of `G` standing on the unchanged body term.
+/// `H : Type 5` moves from `Nat` (value sort `Type 0`) to `Type 4` (value sort `Type 5`) under a fixed declared type, so the alias `G : Type 5 = H` republishes a value sort that moves `Type 0` → `Type 5` while `G`'s body term, the occurrence of `H`, does not. `D : (G) -> G` reads `G`'s value sort through `Sort::of`, so its verdict is a function of a field the digest now covers and the walk asks the reads of it again.
 ///
-/// **Why the stale sort is harmless, which nothing else pins.** Every acceptance gate `Sort::of` drives reads only `.is_prop()`; a level alone gates no verdict, and a definition's prop-ness is carried by its declared type, which the signature read-digest does keep. So `D`'s verdict — accepted — is the one a whole compile of the edited module gives, and the walk's record matches it.
+/// The first assertion pins the digest directly: two modules whose `G` differs only in `value_sort` digest it apart, signature read and body read alike. The three that follow are what a reader judged again must agree with — the verdict and the record of a whole compile of the same module.
 ///
-/// The first assertion pins the omission directly: two modules whose `G` differs only in `value_sort` have one `held_digest` for `G`, signature and body alike.
-///
-/// Mutation-checked: adding `self.held.value_sort` to `Readable::digest`'s signature part makes the two `G` digests differ and the first assertion fail.
+/// Mutation-checked: dropping `self.held.value_sort` from both parts of `Readable::digest` makes the two `G` digests equal, and fails this test and [`a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it`] and no other.
 #[test]
-fn a_reader_of_a_moved_value_sort_is_adopted_and_its_verdict_is_a_whole_compiles() {
-    // The omission, read off the digest: `G`'s part digests alike whether its value sort is `Type 0` or `Type 5`.
+fn a_reader_of_a_moved_value_sort_is_judged_again() {
+    // The field, read off the digest: `G`'s part digests apart where its value sort is `Type 0` and where it is `Type 5`.
     let low = value_sort_module(type_at(4), type_at(5), type_at(0));
     let high = value_sort_module(type_at(4), type_at(5), type_at(5));
     let (low_places, high_places) = (Places::of(&low), Places::of(&high));
     for body in [false, true] {
-        assert_eq!(
+        assert_ne!(
             held_digest(&low, &low_places, &global("G"), (false, None, None), body)
                 .expect("G digests"),
             held_digest(&high, &high_places, &global("G"), (false, None, None), body)
                 .expect("G digests"),
-            "the read-digest of G ignores its value_sort (body read: {body})",
+            "the read-digest of G holds its value_sort (body read: {body})",
         );
     }
 
@@ -826,7 +824,7 @@ fn a_reader_of_a_moved_value_sort_is_adopted_and_its_verdict_is_a_whole_compiles
     assert_eq!(
         over.verdicts,
         Vec::new(),
-        "the edited module is admitted over the baseline, D adopted with G's stale value sort",
+        "the edited module is admitted over the baseline, D judged again at G's republished value sort",
     );
     assert_eq!(
         over.verdicts, whole.verdicts,
@@ -937,9 +935,9 @@ fn chained_sort_module(h_body: Term, h: Term, k: Term, l: Term) -> Module {
     }
 }
 
-/// A level alone does gate a verdict: `hold_value_sort` refuses a stated sort the value does not inhabit, and the value's sort is read off a published one the read-digest leaves out.
+/// A level alone does gate a verdict — `hold_value_sort` refuses a stated sort the value does not inhabit, reading the value's sort off a published one — so a walk over a baseline asks that reader's reads again and refuses it where a whole compile refuses it.
 #[test]
-fn a_reader_of_a_moved_value_sorts_level_is_adopted_where_a_whole_compile_refuses_it() {
+fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it() {
     let baseline = versioned(chained_sort_module(
         nat(),
         type_at(0),
@@ -975,49 +973,19 @@ fn a_reader_of_a_moved_value_sorts_level_is_adopted_where_a_whole_compile_refuse
     );
 
     let over = walked_over(&edited, &baseline, &certification);
-    assert_eq!(
+    assert!(
+        over.verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("L"))
+                && matches!(verdict.error, Error::ValueSort { .. })),
+        "the walk over the baseline refuses L for the same reason: {:?}",
         over.verdicts,
-        Vec::new(),
-        "L is adopted over the baseline and the module is admitted",
     );
 }
 
 /// [`walked`] without its assertion, for a module a whole walk refuses.
 fn walked_whole(module: &Module) -> Rechecked {
     fixture_certified(module, BUDGET, &Globals::default(), SYNTAX)
-}
-
-/// The module whose `L` publishes `Type 0` for a value that unfolds to `Type 4`, and the record the warm walk filed for it: what a later compilation finds in scope.
-fn warm_unit() -> (Module, Certification) {
-    let baseline = versioned(chained_sort_module(
-        nat(),
-        type_at(0),
-        type_at(0),
-        type_at(0),
-    ));
-    let certification = walked(&baseline).certification;
-    let edited = replaced(
-        &replaced(
-            &baseline,
-            "H",
-            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
-        ),
-        "K",
-        aliased(
-            &global("K"),
-            type_at(5),
-            Term::free_var(&Free::from(&global("H"))),
-            type_at(5),
-        ),
-    );
-    let over = walked_over(&edited, &baseline, &certification);
-    assert_eq!(over.verdicts, Vec::new(), "the warm walk admits the unit");
-    assert!(
-        over.certification.covers(&edited),
-        "and files a record covering every declaration it holds",
-    );
-
-    (edited, over.certification)
 }
 
 /// `M : Type 5 = L` stating `sort`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
@@ -1036,45 +1004,27 @@ fn later_alias(sort: Term) -> Module {
     }
 }
 
-/// The lie escapes the walk that adopted it: a whole walk with the warm unit in scope reads `L`'s published sort with nothing run and admits an alias stating it, where the same walk over an honest unit refuses.
+/// A later walk reads the sort a definition states for its value with nothing run, so it refuses an alias publishing a sort that value does not inhabit: `M : Type 5 = L` stating `Type 0`, where `L` unfolds to a type at `Type 5`.
+///
+/// No walk files a unit whose own `L` states a sort its value denies — [`a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it`] holds that — so the unit in scope here is the honest one, and what is under test is the reading rather than the record.
 #[test]
-fn a_published_sort_a_warm_walk_filed_is_believed_by_a_later_whole_walk() {
-    let (warm, record) = warm_unit();
-    let scope = AlreadyJudged::with(&warm, &record);
-    let admitted =
-        fixture_certified(&later_alias(type_at(0)), BUDGET, &scope.globals(), SYNTAX).verdicts;
-    assert_eq!(
-        admitted,
-        Vec::new(),
-        "a whole walk admits M publishing Type 0 for a value whose sort is Type 5: {admitted:?}",
-    );
+fn a_later_walk_refuses_an_alias_publishing_a_sort_its_value_does_not_inhabit() {
+    let honest = chained_sort_module(type_at(4), type_at(5), type_at(5), type_at(5));
+    let record = walked(&honest).certification;
+    let scope = AlreadyJudged::with(&honest, &record);
+    let verdicts =
+        |stated| fixture_certified(&later_alias(stated), BUDGET, &scope.globals(), SYNTAX).verdicts;
 
-    // The control: the same unit with `L` publishing the sort its value inhabits.
-    let honest = replaced(
-        &warm,
-        "L",
-        aliased(
-            &global("L"),
-            type_at(5),
-            Term::free_var(&Free::from(&global("K"))),
-            type_at(5),
-        ),
-    );
-    let honest_record = walked(&honest).certification;
-    let honest_scope = AlreadyJudged::with(&honest, &honest_record);
-    let refused = fixture_certified(
-        &later_alias(type_at(0)),
-        BUDGET,
-        &honest_scope.globals(),
-        SYNTAX,
-    )
-    .verdicts;
+    let refused = verdicts(type_at(0));
     assert!(
         refused
             .iter()
             .any(|verdict| matches!(verdict.error, Error::ValueSort { .. })),
-        "the control refuses the same alias: {refused:?}",
+        "M publishing Type 0 for a value whose sort is Type 5: {refused:?}",
     );
+
+    // The control: the same alias publishing the sort its value inhabits stands, so what refuses the first is the sort and not the shape.
+    assert_eq!(verdicts(type_at(5)), Vec::new());
 }
 
 /// `Big : (T: Type 5) -> Type 6` with one constructor aiming at `L`, and `f(X: Type 0, b: Big(X)) -> X = match b at X | big() => Type 3 end`.
@@ -1151,46 +1101,22 @@ fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
 /// The one gate that reads a published level and could admit a term — an index refinement the published sort makes `fits_its_variable` keep — reaches no closed term: the arm is behind a hypothesis the sort the variable is assumed at leaves uninhabited, and the arm's goal, which the publication cannot move, is the case's own target.
 #[test]
 fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
-    let (warm, record) = warm_unit();
-    let honest = replaced(
-        &warm,
-        "L",
-        aliased(
-            &global("L"),
-            type_at(5),
-            Term::free_var(&Free::from(&global("K"))),
-            type_at(5),
-        ),
-    );
-    let honest_record = walked(&honest).certification;
-    let verdicts = |module: Module, lying: bool| match lying {
-        true => {
-            let scope = AlreadyJudged::with(&warm, &record);
-            fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts
-        }
-        false => {
-            let scope = AlreadyJudged::with(&honest, &honest_record);
-            fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts
-        }
-    };
+    let honest = chained_sort_module(type_at(4), type_at(5), type_at(5), type_at(5));
+    let record = walked(&honest).certification;
+    let scope = AlreadyJudged::with(&honest, &record);
+    let verdicts =
+        |module: Module| fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts;
 
     // The arm's body is typed, so what the goal is decides: a body the refined goal does not admit is refused.
-    for lying in [true, false] {
-        let bogus = verdicts(refining_module(literal(0)), lying);
-        assert!(
-            !bogus.is_empty(),
-            "the arm's body is typed (lying: {lying}): {bogus:?}",
-        );
-    }
+    let bogus = verdicts(refining_module(literal(0)));
+    assert!(!bogus.is_empty(), "the arm's body is typed: {bogus:?}");
 
-    // The refinement is kept whatever the publication says: `Type 3` inhabits the refined goal on both sides.
-    for lying in [true, false] {
-        assert_eq!(
-            verdicts(refining_module(type_at(3)), lying),
-            Vec::new(),
-            "the arm is admitted (lying: {lying})",
-        );
-    }
+    // The refinement is kept: `Type 3` inhabits the refined goal.
+    assert_eq!(
+        verdicts(refining_module(type_at(3))),
+        Vec::new(),
+        "the arm is admitted",
+    );
 
     // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `MatchResult::at` opens the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
     for assumed in [0, 1, 5] {
