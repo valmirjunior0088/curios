@@ -175,9 +175,17 @@ pub(crate) fn detail(text: impl fmt::Display) {
     eprintln!("{:<HEADING_WIDTH$}  {text}", "");
 }
 
+/// One complete step of the header above, as text — `↳ Running hello`, or `↳ Tested /app; 3 passed, 1 failed` with `outcome` — for a step written to the terminal and carried elsewhere as the same bytes.
+pub(crate) fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>) -> String {
+    match outcome {
+        Some(outcome) => format!("{}{subject}; {outcome}", head(NESTED, heading)),
+        None => format!("{}{subject}", head(NESTED, heading)),
+    }
+}
+
 /// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.
 pub(crate) fn step(heading: Heading, subject: &Subject) {
-    eprintln!("{}{subject}", head(NESTED, heading));
+    eprintln!("{}", nested(heading, subject, None));
 }
 
 /// The step a page is served with, naming where a browser opens it — the one fact a reader needs from what follows, which is nothing until the server is stopped.
