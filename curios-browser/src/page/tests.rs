@@ -142,6 +142,10 @@ fn the_loader_imports_each_gateway_and_holds_the_program_to_its_integrity() {
         )),
         "{loader}"
     );
+    assert!(
+        loader.contains(&format!("argument: {},", json(ARGUMENT))),
+        "{loader}"
+    );
 }
 
 /// A path is the package's to spell, and a URL is not a path: what a segment cannot carry as itself is percent-encoded, so `#` starts no fragment and `?` no query.

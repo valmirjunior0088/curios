@@ -24,6 +24,10 @@ export class PanicSignal extends Error {
 }
 
 /** The largest `Nat` and the `Int` range a 64-bit wire integer holds. */
+/** The `Bool` a yielded reference is, where it is one: the i31 `0` or `1` crosses as that number, and anything else — a program's unit, a struct — is no word. */
+const word = (yielded) =>
+  yielded === 0 || yielded === 1 ? yielded === 1 : null;
+
 const NAT_MAX = 2n ** 64n - 1n;
 const INT_MIN = -(2n ** 63n);
 const INT_MAX = 2n ** 63n - 1n;
@@ -60,7 +64,7 @@ const describe = (value) => {
  * - `args`: optional, the program's arguments, each a `Uint8Array`, its name first, which a page passes and the playground does not;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each handed every write to its stream as a `Uint8Array` it owns, which the run then keeps no copy of; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
- * Resolves to `{ stdout, stderr, exitCode, trap }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
+ * Resolves to `{ stdout, stderr, exitCode, trap, held }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), the trap message if execution failed instead, and the word the entry answered where it returned one — `true` or `false`, a test program's verdict — or `null` where it answered none: a program's unit, an exit, a trap.
  */
 export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
@@ -789,6 +793,7 @@ export async function run(config) {
     stderr: concat(output.stderr),
     exitCode: 0,
     trap: null,
+    held: null,
   });
 
   try {
@@ -817,7 +822,10 @@ export async function run(config) {
       turn = advance(turn[4]);
     }
 
-    return result();
+    // The entry's word: a test program's entry answers a `Bool` as the i31 `0` or `1`, which crosses as a number, and a program's the unit, a struct, which is no word and is not read.
+    const yielded = advance === undefined ? turn : turn[1];
+
+    return { ...result(), held: word(yielded) };
   } catch (error) {
     if (error instanceof ExitSignal) {
       return { ...result(), exitCode: error.code };

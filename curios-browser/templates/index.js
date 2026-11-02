@@ -6,9 +6,10 @@ import * as gateway{{ loop.index0 }} from {{ gateway.specifier }};
 
 {{ harness }}
 
-/** What this page was built with: the name the program is run by, the harness's configuration, the program's rows, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
+/** What this page was built with: the name the program is run by, the key the query spells its arguments under, the harness's configuration, the program's rows, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
 const page = {
   name: {{ name }},
+  argument: {{ argument }},
   configuration: {{ configuration }},
   rows: {{ rows }},
   bridge: {{ bridge }},
@@ -30,14 +31,14 @@ const encoder = new TextEncoder();
 const decoded = (text) =>
   Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
 
-/** The program's arguments `query` spells, the part of a URL from its `?`: each `arg=` one argument, a `%` before two hex digits one byte, and any other character its UTF-8 — `+` among them, which is no space here. */
+/** The program's arguments `query` spells, the part of a URL from its `?`: each pair under the page's key one argument, a `%` before two hex digits one byte, and any other character its UTF-8 — `+` among them, which is no space here. */
 const argumentsOf = (query) =>
   query
     .replace(/^\?/, "")
     .split("&")
-    .filter((pair) => pair.startsWith("arg="))
+    .filter((pair) => pair.startsWith(`${page.argument}=`))
     .map((pair) => {
-      const text = pair.slice("arg=".length);
+      const text = pair.slice(page.argument.length + 1);
       const bytes = [];
 
       for (let i = 0; i < text.length; ) {
@@ -54,9 +55,10 @@ const argumentsOf = (query) =>
       return Uint8Array.from(bytes);
     });
 
-/** A stream of the program's output: each write decoded and written into `element` while it stands in the document, and each line handed to `log`, the console's. */
+/** A stream of the program's output: each write decoded and written into `element` while it stands in the document, each line handed to `log`, the console's, and every write kept, so a framed page can post the stream whole. */
 const stream = (element, log) => {
   const decoder = new TextDecoder();
+  const kept = [];
   let line = "";
 
   const shown = (text) => {
@@ -73,13 +75,29 @@ const stream = (element, log) => {
   };
 
   return {
-    write: (bytes) => shown(decoder.decode(bytes, { stream: true })),
+    write: (bytes) => {
+      kept.push(bytes);
+      shown(decoder.decode(bytes, { stream: true }));
+    },
     end: () => {
       shown(decoder.decode());
 
       if (line !== "") {
         log(line);
       }
+    },
+    taken: () => {
+      const whole = new Uint8Array(
+        kept.reduce((length, bytes) => length + bytes.length, 0),
+      );
+      let at = 0;
+
+      for (const bytes of kept) {
+        whole.set(bytes, at);
+        at += bytes.length;
+      }
+
+      return whole;
     },
   };
 };
@@ -119,18 +137,26 @@ const answers = () => {
 /**
  * Run the page's program: `program`, its bytes, or what `index.wasm` holds, fetched beside this loader against its integrity; its arguments from `query`, the location's own where there is one. Its output is written into the page's element while that stands in the document and to the console, and a trap is reported in both.
  *
+ * Framed — `globalThis.parent` a window other than this one — the page posts `{ type: "started" }` to its parent before the program runs and `{ type: "outcome", outcome }` after, `outcome` what this resolves to with each stream whole, each to the page's own origin, `"/"`, so no other origin reads a program's output.
+ *
  * Resolves to what the harness's `run` resolves to.
  */
 export async function start({ program, query = globalThis.location?.search ?? "" } = {}) {
   const element = globalThis.document?.getElementById(page.output) ?? null;
   const stdout = stream(element, (line) => console.log(line));
   const stderr = stream(element, (line) => console.error(line));
+  const parent = globalThis.parent;
+  const framed = parent !== undefined && parent !== globalThis;
+
+  if (framed) {
+    parent.postMessage({ type: "started" }, "/");
+  }
 
   const outcome = await (async () => {
     const { refusal, foreign } = answers();
 
     if (refusal !== undefined) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal, held: null };
     }
 
     try {
@@ -144,7 +170,7 @@ export async function start({ program, query = globalThis.location?.search ?? ""
         hooks: { onStdout: stdout.write, onStderr: stderr.write, foreign },
       });
     } catch (error) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error) };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error), held: null };
     }
   })();
 
@@ -157,6 +183,13 @@ export async function start({ program, query = globalThis.location?.search ?? ""
     }
 
     console.error(outcome.trap);
+  }
+
+  if (framed) {
+    parent.postMessage(
+      { type: "outcome", outcome: { ...outcome, stdout: stdout.taken(), stderr: stderr.taken() } },
+      "/",
+    );
   }
 
   return outcome;

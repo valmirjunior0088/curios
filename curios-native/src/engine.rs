@@ -701,7 +701,7 @@ pub enum TestEnd {
     Exited(u8),
 }
 
-/// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is none is refused rather than read as a verdict. The unit a program's entry hands back is the reference `false` is, so a module that is no test program is never read as one whose tests held.
+/// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is no i31 word is refused rather than read as a verdict. The unit a program's entry hands back is a struct, no word, so a module that is no test program is never read as one whose tests held.
 impl Ended for TestEnd {
     fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String> {
         let refused = || format!("{ENTRY} answered no Bool");

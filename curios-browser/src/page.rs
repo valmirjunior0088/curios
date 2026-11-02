@@ -36,6 +36,9 @@ pub const PAGE_FILES: [&str; 3] = [INDEX_HTML, INDEX_JS, INDEX_WASM];
 /// The `id` of the `<pre>` the loader writes the program's output into.
 pub const OUTPUT: &str = "output";
 
+/// The one key the page claims in its URL's query: each `arg=` pair, in order, is one argument of the program after its name, and every other key is a gateway's to read. Rendered into the loader, which decodes the pairs, and read by whatever writes a page's address.
+pub const ARGUMENT: &str = "arg";
+
 /// The harness, which the loader carries whole.
 const HARNESS: &str = include_str!("harness.mjs");
 
@@ -123,6 +126,7 @@ pub fn page(
     let loader = Loader {
         harness: HARNESS,
         name: json(program.name),
+        argument: json(ARGUMENT),
         configuration: configuration(),
         rows: rows(program.foreigns),
         bridge: json(&STANDARD.encode(bridge_bytes())),
@@ -191,6 +195,7 @@ impl Claims {
 struct Loader {
     harness: &'static str,
     name: String,
+    argument: String,
     configuration: String,
     rows: String,
     bridge: String,

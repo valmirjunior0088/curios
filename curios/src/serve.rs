@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_browser::{INDEX_HTML, content_type, encoded},
+    curios_browser::{ARGUMENT, INDEX_HTML, content_type, encoded},
     std::{
         collections::BTreeMap,
         ffi::OsString,
@@ -32,12 +32,12 @@ pub(crate) struct Served {
 }
 
 impl Served {
-    /// Where a browser opens the page served on `port`, its program handed `args`: each an `arg=` of the query, every byte but the unreserved ones percent-encoded, as the loader decodes them.
+    /// Where a browser opens the page served on `port`, its program handed `args`: each a pair of the query under the key the page claims, every byte but the unreserved ones percent-encoded, as the loader decodes them.
     pub(crate) fn url(&self, port: u16, args: &[OsString]) -> String {
         let query = args
             .iter()
             .map(|arg| {
-                let mut pair = String::from("arg=");
+                let mut pair = format!("{ARGUMENT}=");
                 for &byte in arg.as_encoded_bytes() {
                     match byte {
                         b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
