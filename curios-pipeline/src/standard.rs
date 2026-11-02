@@ -10,7 +10,7 @@ use {
         Cache, Checked, CompileError, EntryTail, Examined, Progress, ReadLowering, Refused, Stage,
         TestProgram, Told, Typechecked, check_entrypoint_reading, compile_units_reading,
         compile_with_tail, declared_test_paths, examine_entrypoint, lower_subject, recheck,
-        recheck_measured, recheck_mounting, typecheck_entrypoint,
+        recheck_measured, typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
     curios_document::Documentation,
@@ -476,25 +476,4 @@ pub fn recheck_with_prelude(
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
     with_prelude(|prelude| recheck(program, budget, Predecessors::over(prelude), &SYNTAX))
-}
-
-/// Put `program` to the independent kernel with the fixed prelude in scope and `mounted` beside it, each at the record stated for it. See [`recheck_mounting`], which says whose question this answers.
-pub fn recheck_with_prelude_mounting(
-    program: &curios_core::Zonked<curios_core::Program>,
-    budget: u64,
-    mounted: &[(
-        &curios_core::Module,
-        &curios_core::Places,
-        &curios_core::Certification,
-    )],
-) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| {
-        recheck_mounting(
-            program,
-            budget,
-            Predecessors::over(prelude),
-            mounted,
-            &SYNTAX,
-        )
-    })
 }

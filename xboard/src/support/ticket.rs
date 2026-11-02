@@ -2,7 +2,7 @@
 
 use {
     crate::{Date, Expected},
-    curios_core::{Certification, Module, Term},
+    curios_core::{Module, Term},
     std::fmt,
 };
 
@@ -49,28 +49,13 @@ pub(crate) struct Witness {
     pub(crate) expect: &'static [Expected],
 }
 
-/// The proof of `False` a witness alleges, in the form it is put. Each way supplies a term, and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
+/// The proof of `False` a witness alleges, in the form it is put. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Proof {
     /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the kernel over the module it built.
     Program(&'static str),
     /// A module built by hand and the term it closes with, put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
     Module(fn() -> (Module, Term)),
-    /// A module built by hand and the term it closes with, put to the kernel over an environment built by hand: the prelude, and beside it the [`Mounting`] this proof states. For a rule that answers about a unit in scope rather than about anything the judged module spells.
-    #[allow(
-        dead_code,
-        reason = "Only a flaw about what the kernel believes of a unit in scope constructs it, and while the board holds none it is constructed nowhere — as `Status::Open` is while every flaw found is fixed."
-    )]
-    Mounted(fn() -> (Mounting, Module, Term)),
-}
-
-/// A unit a witness puts in scope by hand, with the record it states for it.
-///
-/// A compilation never mounts one of these: every record a walk files covers the unit it classifies, so a record that covers less — an empty one included — is an input only a caller in Rust supplies. What the kernel does with it is `Globals::mount`'s to say, and it says that a unit whose record does not cover it is a walk's own to classify.
-#[derive(Debug)]
-pub(crate) struct Mounting {
-    pub(crate) module: Module,
-    pub(crate) certification: Certification,
 }
 
 impl Proof {
@@ -78,7 +63,6 @@ impl Proof {
         match self {
             Proof::Program(_) => "program",
             Proof::Module(_) => "module",
-            Proof::Mounted(_) => "mounted",
         }
     }
 }
