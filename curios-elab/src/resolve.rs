@@ -870,7 +870,7 @@ pub fn attempt_witness_goal(
     resolve_witness_goal(context, slot, goal, provenance, origin)
 }
 
-/// Resolve a freshly minted witness goal where it stands: solved, or parked on a flex key. It is what a slot nothing after it names asks — a call's whose binder no later parameter's type and no result type mentions, an operator's, a scheme's premise — since resolution is the one source such a slot has, and what a dictionary's superclass field asks, whatever term awaits it: a superclass is the table's entry at its key, and no other field's type names another (`documentation/design/surface/concepts-resolve-with-global-coherence.md`), so the goal waits for nothing the literal has yet to read. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
+/// Resolve a freshly minted witness goal where it stands: solved, or parked on a flex key — refused on one inside an oracle, where nothing parks. It is what a slot nothing after it names asks — a call's whose binder no later parameter's type and no result type mentions, an operator's, a scheme's premise — since resolution is the one source such a slot has, and what a dictionary's superclass field asks, whatever term awaits it: a superclass is the table's entry at its key, and no other field's type names another (`documentation/design/surface/concepts-resolve-with-global-coherence.md`), so the goal waits for nothing the literal has yet to read. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
 pub fn resolve_witness_goal(
     context: &mut Context,
     slot: MetavarId,
@@ -905,6 +905,10 @@ pub fn resolve_witness_goal_or(
         Resolution::Solved(term) => {
             context.solve_metavar(slot, term);
             Ok(())
+        }
+        // Inside an oracle nothing waits, so a goal that would is refused there, a refusal its reader takes for undecided ([`Context::declined_to_park`]): parked, it would outlive the rollback that ends the oracle and be answered against solutions that no longer stand.
+        Resolution::Flex if !context.may_park() => {
+            Err(missing(context, &provenance).at_opt(origin.extent()))
         }
         Resolution::Flex => {
             context.park(

@@ -4,8 +4,9 @@ use {
     crate::context::test_support::*,
     crate::*,
     curios_core::{
-        Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat, Term,
+        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseMetaId, UniverseRole,
+        WitnessOrigin,
     },
     curios_utilities::Qualifier,
     std::{collections::BTreeSet, rc::Rc},
@@ -180,6 +181,31 @@ fn a_declined_park_is_recorded_by_the_oracle_it_was_declined_in() {
     assert_eq!(recorded, (false, (false, true), false, false, true));
     assert!(!context.declined_to_park());
     assert!(context.may_park());
+}
+
+/// A witness goal whose key is still a metavariable waits for it, and inside an oracle nothing waits: posed there, the goal is refused, the oracle records the park it declined, and the rollback that ends the oracle leaves nothing parked to be answered against solutions it took back. Outside every oracle the same goal parks.
+#[test]
+fn a_witness_goal_on_a_flexible_key_is_refused_inside_an_oracle_and_parks_outside_it() {
+    let mut context = context();
+    let key = MetavarId(0);
+    let slot = MetavarId(1);
+    context.birth_metavar(key, Vec::<(Free, Term)>::new(), Term::type_ground());
+    context.birth_metavar(slot, Vec::<(Free, Term)>::new(), Term::hole(key));
+    let provenance = WitnessOrigin {
+        func: CalleeId::Anonymous,
+        role: None,
+    };
+    let origin = Term::hole(slot);
+    let pose = |context: &mut Context| {
+        resolve_witness_goal(context, slot, &Term::hole(key), provenance.clone(), &origin)
+    };
+
+    let inside = context.asking(|context| (pose(context).is_err(), context.declined_to_park()));
+
+    assert_eq!(inside, (true, true));
+    assert_eq!(context.parked_len(), 0);
+    pose(&mut context).expect("a goal on a flexible key parks outside an oracle");
+    assert_eq!(context.parked_len(), 1);
 }
 
 /// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and a clear at each would throw away the reducts the next node needs — while one that unwound a solution clears them, since a reduct cached since may have read it.
