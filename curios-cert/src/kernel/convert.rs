@@ -129,6 +129,9 @@ fn compare(
             return Ok(true);
         }
 
+        // Snapshotted before any rule runs: a pair left apart inside `by_their_own_type`'s own unfolding is one this comparison rested on as much as one left apart below, and a verdict reached across either is a fact about this path alone.
+        let apart = pairs.apart;
+
         // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
         let untyped = matches!(&**type_, Subterm::Sort(..));
         if untyped && by_their_own_type(kernel, pairs, this, that)? {
@@ -146,8 +149,6 @@ fn compare(
         if let Some(verdict) = kernel.convert_hit(type_, this, that) {
             return Ok(verdict);
         }
-
-        let apart = pairs.apart;
 
         // Two calls of one definition by their spines, on the pair as posed and ahead of eta by the goal's type. Eta hands on each call applied to a binder or projected, which is no call of a definition at its head, so tried after it the spines would never be compared at a function or a record type.
         // Then the same member of two recursive groups by the groups as binders, before `by_the_type` forces either into what it unfolds to.
