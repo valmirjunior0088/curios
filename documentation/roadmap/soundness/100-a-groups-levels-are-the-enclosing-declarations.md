@@ -1,0 +1,64 @@
+# A group's levels are the enclosing declaration's
+
+The rule this breaks is [A universe level is implicit, cumulative and settles by where it stands](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md): a level means one thing where it stands, and an instance of a declaration settles every level the declaration binds. The proof of `False` it admits is `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs`, open since 2026-11-02.
+
+## What is wrong today, and where
+
+A `RecGroup` carries a `UniverseScheme` and therefore **binds universe parameters of its own**: `RecGroup::traverse` calls `visit.enter_universe_scope(parameter_count)` before it visits the member scopes. `RecItem::try_new` then gives the group the enclosing declaration's own context, refusing a group whose definitions' contexts differ (`MismatchedRecursiveContexts`). So one parameter index means two things, and which applies is decided by the reader rather than by the data:
+
+- **Positionally, the enclosing item's**, by `check_group` — reached from `infer`'s `Rec` arm with the item's constraints assumed, and checking each member's terms as written — and by `synth_neutral`'s projection return, `Sort::of`'s `Rec` arm through `sort_of_neutral`, `infer`'s `Rec` arm binding each member at `member_type`, and `whnf`'s `force`, `unfold_spelling` and `unfold_rec_apply`, which read `member_body` raw.
+- **Scoped, the group's own**, by `instantiate_universes_scoped` and every walk that reaches it through `RecGroup::traverse`, by `RecGroup::instantiate_universes`, which consumes the parameters and clears the context, by `curios_core::universe_params`, and by `convert`'s `two_groups`, which refuses to pair two groups of nonzero width and states the scoped reading in as many words: a level under a group's binder is no level of the declaration the comparison is judged in.
+
+A declaration's instance therefore substitutes the levels of everything that does not carry a group and shadows the levels of everything that does, and the member a projection selects is read at the reader's spelling of levels it was never checked at. Four sites, each shown by a fixture at `be52f5c6a`, each with a two-way discriminator — the same module admitted with no verdict under a reader stating `w ≤ 0`, and refused `Mismatch` at the level the instance stated:
+
+1. **A definition's declared type**, where the group stands as a bare projection. This is the open ticket's `carrier`: the group's member computes the record of the four products Hurkens' paradox needs, the carrier's constraints license them as cumulativity should, and the reader's own constraints — `u ≤ 0`, `w ≤ 0` — are what the field types arrive under.
+2. **A top-level group's exported member type.** `Places::member` exports a member as `(group.member_type(index), Term::rec_proj(group, index))`, and `member_type` opens the type scope over the group's folded members, so a member whose type names a sibling is exported at a term carrying the group. This is the spelling the elaborator itself produces, for the inductive-recursive shape `check_group`'s own documentation names.
+3. **A registry entry's field type**, and by the same code path its arity, its result sort, its parameter telescope, its constructor telescopes and its index targets: `check_signature` types each once, positionally, under the declaration's constraints, and `infer`'s projection rule reads the field type at the occurrence's instance.
+4. **A definition's stored body.** The findings entry this specification replaces recorded this route as stopping short, on the ground that `instantiate_universes_scoped` shadows the group's levels and leaves them free in the reading item. That sentence is wrong: the shadowing is the attack and not the stopper, because a binder typed at the reader's occurrence stands at the member's body under the reader's own constraints, and those are the reader's to choose, satisfiably.
+
+A motive and an arm's goal are no fifth kind: each travels inside one of the four with its own levels substituted and a group inside it shadowed.
+
+**The two counts are related by nothing.** A group's `parameter_count` need not equal its declaration's, and where it is smaller `instantiate_universes_scoped` shadows the first few and renumbers the rest *down* by the group's count, so a level the declaration declared takes the instance argument of a different parameter: in a declaration of four levels holding a group of one, the member's third parameter arrives as the instance's second. Shown with no constraint anywhere. So a repair that only equalises the counts, or that reads a group's levels as the declaration's without removing the binder, still owes an answer for a group stating fewer.
+
+**The quality half of this pairing is already decided the other way.** `check_group` opens by refusing a group whose `quality_count` is nonzero, `Error::GroupLeavesSort`, and its comment names this very hazard: one that leaves a sort here would have it read as that declaration's. The level half has no such clause, and the asymmetry is the defect.
+
+## Context from the code
+
+Nothing the language can ask for needs a group to generalise over universes in its own right.
+
+- `documentation/syntax.md` gives no syntax for universe variables, levels or explicit universe arguments, so no source program can ask for a group generalised independently of its declaration.
+- No production code constructs a `RecProj`-headed instance. Every `Term::instance` call in `curios-elab`, `curios-text`, `curios-core`, `curios-cert` and `curios-erase` either states `InstanceHead::Var` or passes through a head it was handed; the form exists because the grammar admits it and a module built by hand can write it.
+- `RecItem::try_new` exists to insist a group's context *is* its declaration's, which is the positional reading expressed as a constructor's refusal.
+- `RecGroup::projected()` clears the context for ANF, so below Core the scheme carries nothing.
+
+## Goal
+
+A group binds no universe parameters. A member's levels are the enclosing declaration's, substituted by an instance of that declaration with every other level the declaration binds, and read one way by every reader. The forbidden form is unrepresentable rather than refused: `RecGroup` holds its members and no scheme, and no term states an instance of a member.
+
+## Settled decisions
+
+- **A group binds nothing**, rather than binding its own with every reader made to instantiate. The capability removed is one no surface program can ask for and no production code produces, and keeping it means two spellings of a member survive, which is the shape that produced this ticket, the ticket fixed before it, and the value-sort pairing of `0d71d8a09`.
+- **Not the narrow patch.** Wrapping the `Rec` arm's `check_group` in `under_universes` is in the wrong place — at sites 2, 3 and 4 the group is checked once, correctly, under the declaration that holds it, and it is the export or the occurrence that is read at another spelling — and it refuses programs the elaborator produces, `curios-prelude/std/Tui.crs`'s universe-polymorphic `and all(@E: Type, …)` among them.
+- **Not stopping the shadowing alone.** Having `traverse` not enter a universe scope closes every site in one line, and leaves `RecGroup`'s context field documented as what an instance must satisfy while binding nothing: one fact with two readings again.
+- **The two tickets written in the form that goes are retired with a note where the part's question is stated**, rather than restated to a surviving spelling: `xboard/src/formation/a_groups_instance_is_held_to_the_groups_constraints_and_its_bodies_were_checked_under_the_enclosing_declarations.rs` and `xboard/src/totality/a_group_a_universe_instance_names_is_no_group_to_the_classification_of_a_unit_mounted_without_a_covering_record.rs`. The construction each was filed for is unspellable once the form is gone, so there is nothing left for the board to run; the record stays in git and here. This specification's own ticket is not one of them — its witness states an instance of a *definition*, which survives — and it turns fixed when the stages below land.
+
+## Open questions
+
+- Whether `Error::GroupLeavesSort` disappears or is restated. A group carrying no context leaves no sort, so the clause becomes unreachable; what the rule it states is about then is the declaration's own context, which `at_every_sort` already judges at every assignment.
+- Whether `convert`'s `two_groups` compares two groups' members pointwise once their levels are the declaration's. Its present refusal of two groups of nonzero width becomes vacuous, and its stated reason is reversed, so the comparison it declines today is one the new reading licenses. This widens what conversion compares and is the one stage whose direction is permissive rather than refusing.
+
+## Stages
+
+1. **A group stops binding universes.** `RecGroup` holds `Rc<[RecMemberScopes]>` with no scheme; `traverse` enters no universe scope; `RecItem::try_new` stops copying the declaration's context and `MismatchedRecursiveContexts` goes with `RecGroup::instantiate_universes`, `universes()`, `universe_context()` and `with_universe_context`. Check: `cargo test --package curios-core`, and the four site fixtures, each of whose admitted half must now be refused and whose refused half must now be admitted.
+2. **The member-instance form goes.** `InstanceHead::RecProj` is removed, with `infer`'s `Instance` arm for it, `whnf`'s `step_instance` branch, and the arms in `curios-elab`'s `elaborate`, `reduce`, `zonk`, `convert/neutral` and `universes/gate`. Check: `cargo xtask workspace test`, and the two tickets named above retired with their note.
+3. **The quality clause is answered**, per the first open question. Check: `cargo test --package curios-cert`.
+4. **Conversion's reading of two groups is restated**, per the second open question, with a differential case putting the kernel's comparison and the elaborator's to one pair, as `documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md` asks. Check: `cargo test --package curios -- tests::laws`, and `cargo test --package curios-cert -- kernel::convert`.
+5. **The positional readers are left as they are**, correct by construction, and the entry of `000-findings.md` on three readers missing the instance spelling is dropped: with no instance of a member there is no spelling to miss.
+
+## What may change and what may not
+
+This is a representation change. `RecGroup`'s archived layout changes, so every stored unit's bytes and the embedded prelude archive change and are rebuilt; the compiler digest moves anyway, so no slot survives the change to be misread. What must remain equal: every verdict `cargo xtask workspace test` and `cargo xboard report` give over `/sys`, `/std`, `programs/` and the board, the ticket of this specification excepted, which must turn from admitted to refused; and the emitted artifacts of `programs/`, since no level survives into ANF (`RecGroup::projected`).
+
+## Verification and retirement
+
+The ticket's witness is refused by the kernel and its ticket reads `Status::Fixed`; `cargo xboard report` shows no open ticket. The four site fixtures land with the stage that refuses them, in `curios-cert/src/recheck/universes_tests.rs`. This specification is deleted when the ticket turns fixed, with its settled decisions going to `curios-core`'s `README.md` for what a group is and to [A universe level is implicit, cumulative and settles by where it stands](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md) for the rule that a member's levels are its declaration's.
