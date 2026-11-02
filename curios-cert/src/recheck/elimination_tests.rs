@@ -71,6 +71,38 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
     );
 }
 
+/// Coverage holds the *sole-arm* elimination too, which is the shape reduction fires rather than leaves standing.
+///
+/// A closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated (`Cases::unread`, which the kernel's `whnf`, the closed machine and `curios-elab`'s reducer each state), so the arm's body stands at the elimination's own type whatever the scrutinee is. The vacuous elimination above is the shape `check_induct_arms` deliberately skips the large-elimination guard for; this is the shape whose arm the guard does reach and whose omission coverage must still decide.
+///
+/// `Pin(1)` below is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. Only coverage is left: `no` has no arm and is not impossible at `Pin(1)`. Excused, `forged(Pin/no())` would reduce to the `yes` arm's body — the sort `Prop`, a term nothing typed standing at `False`.
+///
+/// Only a fixture reaches the kernel's own loop with this shape: `curios-elab` refuses the same sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind and `curios`'s `tests::board::index_tests` reads the elaborator's matrix rather than this.
+///
+/// Mutation-checked, which is what makes this a forgery rather than a refusal: with the coverage loop's `MissingArm` suppressed, the walk returns **zero** verdicts over this module, so the entry is certified at `False`.
+#[test]
+fn a_sole_arm_elimination_must_still_rule_out_the_constructors_it_omits() {
+    let verdicts = fixture_verdicts(&sole_arm_forgery(), 1_000_000, &Globals::default(), SYNTAX);
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::MissingArm { .. })),
+        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+    );
+}
+
+/// The control: the same two constructors at `Pin(0)`, where `no` is impossible and `yes` is the arm reduction takes. The sole-arm elimination must stay accepted, since it is the form a cast along a proof is written in; refusing every match with one arm is how the refusal above would be reached with a brick.
+#[test]
+fn a_sole_arm_elimination_whose_omissions_are_ruled_out_is_still_accepted() {
+    let verdicts = fixture_verdicts(&sole_arm_control(), 1_000_000, &Globals::default(), SYNTAX);
+
+    assert!(
+        verdicts.is_empty(),
+        "a cast along a proof whose other case the index rules out was refused: {verdicts:?}",
+    );
+}
+
 /// A family that declares one tag twice, where the shadowed entry is the one a coverage decision is about.
 ///
 /// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match*. So a repeat hides a constructor instead of adding one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage is where that shows: `Held(t : Two)` below declares `mk() : (Two/a())` and then `mk() : (Two/b())`, and asked whether each constructor is impossible at `Two/b()`, a rule resolving both entries to the first would compare `Two/a()` against `Two/b()` twice and report the family empty at an index its own second entry constructs at.

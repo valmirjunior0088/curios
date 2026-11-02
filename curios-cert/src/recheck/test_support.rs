@@ -646,6 +646,160 @@ pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
     }
 }
 
+/// `induct Pin : (n : Nat) -> Prop | yes() : (0) | no() : (1) end`, and a nullary proposition `Held` with one proof, for the sole-arm fixtures below.
+fn pin_decls() -> (Global, Global, BTreeMap<Global, InductDecl>) {
+    let pin_name = Global::Authored(Qualifier::from(["Pin"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let targeting = |tag: &str, index: usize| {
+        (
+            Atom::from(tag),
+            InductParam::new(
+                Telescope::done(vec![Term::intrinsic(Intrinsic::Nat(Nat::new(index)))]),
+                Vec::new(),
+            ),
+        )
+    };
+
+    let pin_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(760, Some("n")),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
+            (),
+        )),
+        constructors: vec![targeting("yes", 0), targeting("no", 1)].into(),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let held_decl = proposition(vec![(
+        Atom::from("qed"),
+        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+    )]);
+
+    (
+        pin_name,
+        held_name,
+        BTreeMap::from([(pin_name, pin_decl), (held_name, held_decl)]),
+    )
+}
+
+/// `Pin(n : Nat)` eliminated at `Pin(1)` with its `yes` arm alone — the shape `Cases::sole_arm` reads and `Cases::unread` fires on, where the empty elimination above is the shape `check_induct_arms` skips the large-elimination guard for.
+///
+/// `Pin(1)` is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. What stands between it and a closed inhabitant of `False` is coverage: `no` has no arm and is not impossible at `Pin(1)`. Were its absence excused, `forged(Pin/no())` would reduce to the `yes` arm's body — a closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated, which is why the body below is the sort `Prop`, a term standing at `False` that nothing typed.
+///
+/// Only a fixture reaches the kernel's own coverage loop with this shape: `curios-elab`'s matrix refuses the sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind.
+pub(super) fn sole_arm_forgery() -> Program {
+    let (pin_name, _, mut decls) = pin_decls();
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let false_type = || Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    decls.insert(false_name, proposition(Vec::new()));
+
+    let at = |index: usize| {
+        Term::induct_type(
+            pin_name,
+            Vec::<Term>::new(),
+            [Term::intrinsic(Intrinsic::Nat(Nat::new(index)))],
+        )
+    };
+    let proof = Free::local(761, Some("p"));
+
+    // forged : (p : Pin(1)) -> False = (p) => match p at Pin(1) : (_, _) => False | yes() => Prop end
+    let forged_name = Global::Authored(Qualifier::from(["forged"]));
+    let forged = authored(
+        &forged_name,
+        Term::func_type([(proof, at(1))], false_type()),
+        Term::func(
+            [(proof, at(1))],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&proof),
+                Scope::constant(Many(2), false_type()),
+                [(
+                    Atom::from("yes"),
+                    Vec::<(Plicity, Free)>::new(),
+                    Term::prop(),
+                )],
+                None,
+            )
+            .stating(at(1)),
+        ),
+    );
+
+    Program {
+        module: declaring(
+            Module {
+                items: vec![forged].into(),
+                ..Module::default()
+            },
+            decls,
+            [],
+            [],
+        ),
+        entry: Entrypoint {
+            body: Term::apply(
+                Term::free_var(&Free::from(&forged_name)),
+                [Term::variant(
+                    pin_name,
+                    Vec::<Term>::new(),
+                    "no",
+                    Vec::<Term>::new(),
+                )],
+            ),
+            type_: Some(false_type()),
+        },
+    }
+}
+
+/// The control: the same two constructors with the scrutinee at `Pin(0)`, where `no` *is* impossible and `yes` is the arm reduction takes. The sole-arm elimination must stay accepted — it is the form a cast along a proof is written in, and it runs none of the proof — so a clause that refused every match with one arm would shut the forgery above with a brick.
+pub(super) fn sole_arm_control() -> Module {
+    let (pin_name, held_name, decls) = pin_decls();
+    let held_type = || Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let at = |index: usize| {
+        Term::induct_type(
+            pin_name,
+            Vec::<Term>::new(),
+            [Term::intrinsic(Intrinsic::Nat(Nat::new(index)))],
+        )
+    };
+    let (proof, carried) = (Free::local(762, Some("p")), Free::local(763, Some("h")));
+
+    // cast : (p : Pin(0), h : Held) -> Held = (p, h) => match p at Pin(0) : (_, _) => Held | yes() => h end
+    let cast_name = Global::Authored(Qualifier::from(["cast"]));
+    let cast = authored(
+        &cast_name,
+        Term::func_type([(proof, at(0)), (carried, held_type())], held_type()),
+        Term::func(
+            [(proof, at(0)), (carried, held_type())],
+            Term::induct_match_scoped_marked(
+                Term::free_var(&proof),
+                Scope::constant(Many(2), held_type()),
+                [(
+                    Atom::from("yes"),
+                    Vec::<(Plicity, Free)>::new(),
+                    Term::free_var(&carried),
+                )],
+                None,
+            )
+            .stating(at(0)),
+        ),
+    );
+
+    declaring(
+        Module {
+            items: vec![cast].into(),
+            ..Module::default()
+        },
+        decls,
+        [],
+        [],
+    )
+}
+
 /// The control: the same two families with `Two` at `Type 0`, where `Two/b()` really does clash with `Two/a()`. Nothing inhabits `Held(Two/b())`, so the module proves nothing — what it pins is that the empty elimination stays legal.
 pub(super) fn relevant_index_control() -> Module {
     let (two_name, held_name, mut decls) = clashing_index_decls(Term::type_ground());
