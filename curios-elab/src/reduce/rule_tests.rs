@@ -315,34 +315,28 @@ fn let_then_var_unfolds_definition() {
 
 #[test]
 fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
+    let mut context = context();
     let poly = nominal("poly");
-    // Each half in a context of its own: the reduction cache's universe-erased door equates the bare name with its instance.
-    let defined = || {
-        let mut context = context();
-        let parameter = Level::param(UniverseParam(0));
-        context.assume(
-            &Free::Global(poly),
-            &Term::type_at(parameter.succ().unwrap()),
-        );
-        context.define(&Free::Global(poly), &Term::type_at(parameter), None);
-        context.set_assumption_universe_context(
-            &Free::Global(poly),
-            UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: Vec::new(),
-            },
-        );
-        context
-    };
+    let parameter = Level::param(UniverseParam(0));
+    context.assume(
+        &Free::Global(poly),
+        &Term::type_at(parameter.succ().unwrap()),
+    );
+    context.define(&Free::Global(poly), &Term::type_at(parameter), None);
+    context.set_assumption_universe_context(
+        &Free::Global(poly),
+        UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+    );
 
+    // In one context, so the bare name's stuck reduct is remembered before the instance is asked: the cache's universe-erased door equates the two spellings and may serve neither for the other.
     let raw = Term::free_var(&Free::Global(poly));
-    assert_eq!(reduce(&mut defined(), raw.clone()), Ok(raw));
+    assert_eq!(reduce(&mut context, raw.clone()), Ok(raw));
     assert_eq!(
-        reduce(
-            &mut defined(),
-            Term::instance(poly, vec![Level::constant(3)])
-        ),
+        reduce(&mut context, Term::instance(poly, vec![Level::constant(3)])),
         Ok(Term::type_at(Level::constant(3)))
     );
 }

@@ -333,10 +333,11 @@ impl Caches {
         };
         let (key, reduct) = stored(&self.reduction_erased[plain], &self.reduction[plain])
             .or_else(|| stored(&self.lasting_erased[plain], &self.lasting[plain]))?;
-        // An entry recording that a term is its own weak-head form says the same of every spelling the door equates with it, and the asking spelling is the one to hand back: the stored one was written elsewhere, and a Π-type served in its place carried that spelling's binder names into a report about this one.
+        // An entry recording that a term is its own weak-head form says the same of every spelling the stored one carries to, as any hit does, and the asking spelling is the one to hand back: the stored one was written elsewhere, and a Π-type served in its place carried that spelling's binder names into a report about this one. A spelling the door equates and the stored one does not carry to is no hit: a polymorphic name standing bare is withheld where its instance unfolds.
         if reduct == key {
-            curios_profile::sample!("reduction::across_levels", 1);
-            return Some(term.clone());
+            let served = AcrossUniverses::between(&key, term).is_some();
+            curios_profile::sample!("reduction::across_levels", u64::from(served));
+            return served.then(|| term.clone());
         }
         let adapted = (!term.has_metavar() && !reduct.has_metavar())
             .then(|| AcrossUniverses::between(&key, term))
