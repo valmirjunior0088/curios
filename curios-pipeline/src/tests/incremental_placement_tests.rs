@@ -1,11 +1,7 @@
 //! One unit compiled over a baseline, where its declarations stand: a new one where the order puts it, a kept one where an edit above moved it, and each name where its module holds it across a chain of recompiles.
 
 use {
-    super::test_support::{BASE, placed},
-    super::test_support::{
-        assert_modules_agree, assert_stored_alike, entrypoint_of, recompile_over, reuses_body,
-        unit_of,
-    },
+    super::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},

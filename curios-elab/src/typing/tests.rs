@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::{Kernel, carries_information},
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope, Term,

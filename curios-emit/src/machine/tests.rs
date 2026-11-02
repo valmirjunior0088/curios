@@ -3,7 +3,7 @@ use {
         MachineFunction, MachineInstruction, MachineModule, MachineOperand, MachineTerminator,
         MachineValueId, lower,
     },
-    crate::{EmissionHostTarget, EmissionTail, test_support::halt},
+    crate::{EmissionHostTarget, EmissionTail, test_support::*},
     curios_num::Natural,
 };
 

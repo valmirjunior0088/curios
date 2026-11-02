@@ -1,12 +1,12 @@
 //! What a question takes from the store and its session, and what it gives back: a hit verified against the text the compilation would read, a unit filed where the disk holds every text the fold has read, whole or over a baseline, and kept and placed otherwise, and a baseline — filed or kept — that a unit is recompiled over only while the units before it still hold what they held when it was made.
 
 use {
-    super::test_support::{mounted, mounted_project, write},
+    super::test_support::*,
     crate::{Origin, Overlaid, Severity, Subject, diagnosed, diagnostics},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
     curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     curios_verdicts::{Session, Verdicts},
     std::{
         cell::{Cell, RefCell},

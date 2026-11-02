@@ -1,8 +1,8 @@
 //! The fragment linked last taken back out of a program, as it was linked and after its items were evaluated where it stood.
 
 use {
-    super::super::test_support::{digit, digits},
-    crate::{test_support::shape, *},
+    super::super::test_support::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
 };
 

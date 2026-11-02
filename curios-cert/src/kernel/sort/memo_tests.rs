@@ -1,9 +1,9 @@
 //! Remembered sorts: a shared type classified once a node, and a sort that does not outlive the equations, arm, type or binder it was read under.
 
 use {
-    super::test_support::{binder, declare, kernel, nominal},
+    super::test_support::*,
     crate::{Error, Kernel, Sort},
-    curios_analysis::{Erased, test_support::SYNTAX},
+    curios_analysis::{Erased, test_support::*},
     curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext},
 };
 

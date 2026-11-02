@@ -2,10 +2,10 @@
 
 use {
     super::super::{
-        PreparedText, UnitSource, into_core_unit, into_core_unit_over, test_support::syntax,
+        PreparedText, UnitSource, into_core_unit, into_core_unit_over, test_support::*,
     },
     crate::RootSource,
-    curios_utilities::{RootKind, test_support::Temporary},
+    curios_utilities::{RootKind, test_support::*},
     std::{fs, path::Path},
 };
 

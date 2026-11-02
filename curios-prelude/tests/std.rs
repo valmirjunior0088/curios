@@ -11,7 +11,7 @@ use {
     curios_text::{Entrypoint, Formatted, Overlay, RootSource},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
-        is_extended_pictographic, test_support::grapheme_break_cases,
+        is_extended_pictographic, test_support::*,
     },
     curios_utilities::{Qualifier, fill},
     curios_verdicts::Verdicts,

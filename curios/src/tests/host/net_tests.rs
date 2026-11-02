@@ -5,7 +5,7 @@ use {
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_pipeline::compile_with_prelude,
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{fill, test_support::Temporary},
+    curios_utilities::{fill, test_support::*},
 };
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.

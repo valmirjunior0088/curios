@@ -3,7 +3,7 @@
 //! An integration test for the reason `driven.rs` gives: the analysis is written against `Env`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the kernel and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
 
 use {
-    curios_analysis::{Declarations, held_levels, test_support::SYNTAX, variance_vectors},
+    curios_analysis::{Declarations, held_levels, test_support::*, variance_vectors},
     curios_cert::Kernel,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,

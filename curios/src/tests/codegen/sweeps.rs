@@ -4,7 +4,7 @@ mod test_support;
 use test_support::*;
 
 use {
-    super::compile_raw_program,
+    super::structural::test_support::*,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
 };

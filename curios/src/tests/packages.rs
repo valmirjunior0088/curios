@@ -8,7 +8,7 @@ use {
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
     curios_text::{Entrypoint, Overlay, RootSource},
-    curios_utilities::{Qualifier, digest, test_support::Temporary},
+    curios_utilities::{Qualifier, digest, test_support::*},
     curios_verdicts::Verdicts,
     std::{
         fs,

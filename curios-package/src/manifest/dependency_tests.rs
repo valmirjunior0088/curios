@@ -1,10 +1,6 @@
 //! A manifest's dependency rows: named by a path, live or pinned, and the columns a fetchable row must state.
 
-use {
-    super::test_support::{parse, refuse},
-    super::*,
-    curios_utilities::fill,
-};
+use {super::test_support::*, super::*, curios_utilities::fill};
 
 /// A dependency key is a canonical name too, and earns the same refusal.
 #[test]

@@ -1,7 +1,7 @@
 //! The native CLI selects a target before forwarding opaque arguments through the runtime.
 
 use {
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         fs,
         io::{Read, Write},

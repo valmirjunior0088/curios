@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    curios_utilities::{fill, test_support::Temporary},
+    curios_utilities::{fill, test_support::*},
     std::{fs, path::Path},
 };
 

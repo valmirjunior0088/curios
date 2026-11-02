@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{compile, run_text},
-    curios_native::{MockHost, test_support::run_within_heap},
+    curios_native::{MockHost, test_support::*},
 };
 
 /// Every element at its position, weighed so an element out of place moves the sum, as the program weighs its runs.

@@ -27,4 +27,3 @@ mod parity;
 mod shapes;
 
 mod structural;
-use structural::*;

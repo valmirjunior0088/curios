@@ -1,11 +1,11 @@
 //! Streams and their readiness: pipes, FIFOs, the null device and the standard streams, a read and a write within what was asked, and a reply to come.
 
 use {
-    super::test_support::{awaited, loopback_pair, watched},
+    super::test_support::*,
     super::*,
     crate::{Failure, Handle, Mode},
     curios_abi::{errno, event},
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     rustix::fs::OFlags,
     std::{path::Path, thread, time::Duration},
 };

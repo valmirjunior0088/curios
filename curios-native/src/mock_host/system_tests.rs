@@ -1,10 +1,7 @@
 //! The rest of the scripted host: a handle missed loudly after close, the file system's root and directories, replies and children, and the timeline a wait and a deadline share.
 
 use {
-    super::{
-        EBUSY, Looked, MockHost,
-        test_support::{come, spawned, watched},
-    },
+    super::{EBUSY, Looked, MockHost, test_support::*},
     crate::{ChildExit, Failure, FileKind, FileStat, Mode, Settled, blocking},
     curios_abi::{HostOps, event},
     std::{num::NonZeroU32, sync::mpsc},

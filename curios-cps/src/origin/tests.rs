@@ -2,8 +2,7 @@ use {
     super::{Origin, origins},
     crate::{
         Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, Slot, ValueExpr,
-        ValueId,
-        test_support::{halt, halt_zero, module_with},
+        ValueId, test_support::*,
     },
     curios_num::Natural,
     std::collections::BTreeSet,

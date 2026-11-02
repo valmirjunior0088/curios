@@ -1,10 +1,9 @@
 //! Strict positivity through a real checker: a negative or strict self-occurrence, a payload the driver cannot read refused, and the polarity vectors recomputed rather than believed.
 
 use {
-    super::test_support::{kernel, single_payload},
+    super::test_support::*,
     curios_analysis::{
-        Declarations, PositivityRefusal, positivity_vectors, struct_reaches_itself,
-        test_support::SYNTAX,
+        Declarations, PositivityRefusal, positivity_vectors, struct_reaches_itself, test_support::*,
     },
     curios_cert::Kernel,
     curios_core::{

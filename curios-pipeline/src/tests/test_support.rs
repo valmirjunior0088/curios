@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::{compile::test_support::elaborate_and_zonk, *},
+    crate::{compile::test_support::*, *},
     curios_core::{Enter, Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
@@ -11,7 +11,7 @@ use {
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
     curios_utilities::{
-        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::Temporary,
+        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::*,
     },
     std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
 };

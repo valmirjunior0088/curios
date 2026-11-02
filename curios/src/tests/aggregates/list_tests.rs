@@ -1,7 +1,7 @@
 //! `List/each` under `Io`, whose claim is the order its effects reach the host. The pure `List` surface — predicates, searches, builders, `traverse` and the stable sort — is the corpus's `/aggregates/list`.
 
 use {
-    super::test_support::{ARRIVAL, LIST, extends_in_place, reads_in_every_shape},
+    super::test_support::*,
     crate::tests::{run, run_text},
     curios_native::MockHost,
 };

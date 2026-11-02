@@ -1,7 +1,7 @@
 //! A scrutinee entry's reduced spelling: what leaves a settled one alone, and what forgets it.
 
 use {
-    super::test_support::{context, nat},
+    super::test_support::*,
     crate::{Context, refine_head},
     curios_core::{Free, Intrinsic, MetavarId, Term},
 };

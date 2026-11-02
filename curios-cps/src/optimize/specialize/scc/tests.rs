@@ -4,8 +4,7 @@ use {
     super::Context,
     crate::{
         Atom, Callee, Continuation, CopyBudget, CopyPlan, Edge, Function, FunctionId, Literal,
-        Node, SCC_COPY_NODE_LIMIT, copy_bodies, specialize_scc_calls,
-        test_support::{known_callee, polymorphic_loop},
+        Node, SCC_COPY_NODE_LIMIT, copy_bodies, specialize_scc_calls, test_support::*,
     },
     curios_num::{Floating, Natural},
     std::collections::{BTreeMap, BTreeSet, HashMap},

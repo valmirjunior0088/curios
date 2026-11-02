@@ -1,7 +1,7 @@
 //! The sort a type is classified at: intrinsics, universes, nominals, functions and records, a hypothesis and an instance, and the shapes refused rather than guessed.
 
 use {
-    super::test_support::{binder, declare, kernel, nominal},
+    super::test_support::*,
     crate::{Error, Kernel, Sort, erased_half},
     curios_analysis::Erased,
     curios_core::{

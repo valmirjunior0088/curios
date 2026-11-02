@@ -2,12 +2,9 @@
 
 use {
     crate::eraser::test_support::*,
-    crate::test_support::{
-        bound, definition, erase, fresh, global, module, nat_lit, newtype_struct, nominal,
-        struct_type_of, zonked,
-    },
+    crate::test_support::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
     curios_elab::DEFAULT_BUDGET,
     curios_utilities::{Plicity, Qualifier},

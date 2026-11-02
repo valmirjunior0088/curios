@@ -3,10 +3,10 @@
 use {
     super::test_support::*,
     crate::{Error, Kernel, infer},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,
-        Two, UniverseContext, test_support::match_ambient,
+        Two, UniverseContext, test_support::*,
     },
     curios_utilities::Plicity,
 };

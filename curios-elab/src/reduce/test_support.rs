@@ -1,11 +1,10 @@
-//! Fixtures the reduction suites share: a name, a discharged bound, a context, and a literal.
+//! Fixtures the reduction suites share: a name, a context, and a literal.
 //!
-//! The module is `pub`: the sibling suites across `reduce` consume it. The discharged bound is the crate's test support's, which erasure's suite reads too.
+//! The module is `pub`: the sibling suites across `reduce` consume it.
 
-pub use crate::test_support::qed;
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{Global, Intrinsic, Nat, Term},
     curios_utilities::Qualifier,
 };

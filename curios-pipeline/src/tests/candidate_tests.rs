@@ -1,7 +1,7 @@
 //! How a recompile takes a declaration's elaboration from a candidate a store holds: found by what the declaration was lowered to, and taken where every answer it was given stands and every part it read digests as it did.
 
 use {
-    super::test_support::{Store, assert_stored_alike, mounted, recompile_over, unit_of},
+    super::test_support::*,
     crate::{DEFAULT_BUDGET, compile_unit_over},
     curios_core::{Global, ItemRun},
     curios_elab::{declaration_input, lowered_digest},

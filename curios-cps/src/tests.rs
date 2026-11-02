@@ -1,8 +1,7 @@
 use {
     crate::{
         Atom, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId, Intrinsic,
-        Literal, Module, Node, NodeId, Row, Slot, UseTarget, ValueExpr, ValueId,
-        test_support::halt_zero,
+        Literal, Module, Node, NodeId, Row, Slot, UseTarget, ValueExpr, ValueId, test_support::*,
     },
     curios_num::Natural,
     std::collections::BTreeMap,

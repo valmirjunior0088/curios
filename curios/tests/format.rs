@@ -1,7 +1,7 @@
 //! What `curios format` does at the command line: which files a target names — every file a package declares for none, a file itself, standard input for `-` — and that `--check` writes nothing.
 
 use {
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         fs,
         io::Write,

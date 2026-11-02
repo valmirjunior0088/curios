@@ -3,7 +3,7 @@
 use {
     crate::kernel::infer::test_support::*,
     crate::{Error, Kernel, Sort, infer},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
     },

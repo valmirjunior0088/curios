@@ -1,8 +1,8 @@
 //! Fragments linked into programs: what an import stands for, what is interned, and what a fragment is held to through an interface.
 
 use {
-    super::test_support::{digit, digits},
-    crate::{test_support::shape, *},
+    super::test_support::*,
+    crate::{test_support::*, *},
     curios_num::Natural,
 };
 

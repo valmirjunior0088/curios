@@ -13,7 +13,7 @@ use {
         Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
         Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
-        test_support::declaring,
+        test_support::*,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{

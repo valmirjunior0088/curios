@@ -1,6 +1,6 @@
 use {
     crate::Context,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term},
     curios_utilities::Qualifier,
     std::rc::Rc,

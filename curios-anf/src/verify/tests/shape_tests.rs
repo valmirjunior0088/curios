@@ -1,6 +1,6 @@
 //! A module's well-formedness: carriers stated where they may be, scope, arity and saturation, a match's coverage and keys, a block's owner, a projection's range, and a deep module checked without native stack.
 
-use {crate::verify::test_support::nat_atom, crate::*};
+use {crate::verify::test_support::*, crate::*};
 
 /// An operation names its result's carrier, so a register stated on its result would state one fact twice, and could state it otherwise than the operation computes it.
 #[test]

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Kernel, convert, whnf},
-    curios_analysis::{Env, test_support::SYNTAX},
+    curios_analysis::{Env, test_support::*},
     curios_core::{Free, Intrinsic, Reducer, Term},
 };
 

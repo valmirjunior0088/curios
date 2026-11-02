@@ -1,7 +1,7 @@
 //! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program; and that what the kernel alone refuses stops the fold's products.
 
 use {
-    super::test_support::{compile, entrypoint_of, recompile_over, reuses_body, unit_of},
+    super::test_support::*,
     crate::{DEFAULT_BUDGET, Fold, Stage, compile_with_prelude},
     curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,

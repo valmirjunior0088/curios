@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Global, InductDecl, InductParam, Intrinsic, Nat, Subterm, Telescope, Term,
         UniverseContext,

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_anf::{Analysis, Rhs, Statement, test_support::shape},
+    curios_anf::{Analysis, Rhs, Statement, test_support::*},
     curios_text::RootSource,
     curios_wasm::to_bytes,
 };

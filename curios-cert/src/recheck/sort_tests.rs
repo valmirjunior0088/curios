@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::{Counted, Error, Globals, Verdict},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
         Module, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
-        UniverseContext, UniverseParam, Universes, test_support::declaring,
+        UniverseContext, UniverseParam, Universes, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,

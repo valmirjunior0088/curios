@@ -5,7 +5,7 @@
 use {
     super::test_support::*,
     curios_core::{Global, Item, ReaderPosition, build_rename, display_names},
-    curios_elab::{Established, Reading, test_support::written_for_reader},
+    curios_elab::{Established, Reading, test_support::*},
     curios_prelude::with_prelude,
     curios_text::{SYNTAX, Translation},
     curios_unit::Predecessors,

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Kernel, resolved_spelling, whnf},
-    curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::SYNTAX},
+    curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Term},
 };
 

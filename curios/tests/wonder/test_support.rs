@@ -1,7 +1,7 @@
 //! What the transport suites share: a temporary project on disk and the `curios` process run in it.
 
 use {
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         fs,
         io::Write,

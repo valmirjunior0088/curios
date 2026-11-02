@@ -6,7 +6,7 @@ use {
         Baseline, Error, Globals, Kernel, Rechecked, Verdict, complete, held_digest, induct_alike,
         struct_alike,
     },
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
         Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
@@ -1043,7 +1043,7 @@ fn refining_module_at(target: Term, body: Term) -> Module {
 fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
     use curios_core::{
         Atom, Cases, InductArm, InductDecl, InductParam, Many, Scope, Telescope, UniverseContext,
-        test_support::{declaring, match_ambient},
+        test_support::*,
     };
 
     let family = global("Big");
@@ -1216,9 +1216,7 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
 
 /// `induct Levelled.{u} : Type.{u + 1} | mk(x: Type.{u}) end`, whose entry carries `variances`: a payload's type mentions the level, so the walk computes it invariant.
 fn varied_family(variances: Vec<Variance>) -> Module {
-    use curios_core::{
-        Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::declaring,
-    };
+    use curios_core::{Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::*};
     use curios_utilities::Plicity;
 
     let family = global("Levelled");

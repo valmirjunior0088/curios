@@ -1,7 +1,7 @@
 //! What a declaration under way needs of its unit: a read of one not yet elaborated, a witness at the key it is spelled at, and a name a proof applies.
 
 use {
-    crate::context::test_support::{context, declare, named, unit_of_two, written},
+    crate::context::test_support::*,
     crate::*,
     curios_core::{
         ConceptDecl, Free, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
@@ -58,7 +58,7 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
         named("reader"),
     ];
     let [family, record, concept, _] = names;
-    context.begin_unit(written(&names), BTreeSet::from(names));
+    context.begin_unit(declarations(&names), BTreeSet::from(names));
     context
         .register_induct(
             &family,

@@ -1,13 +1,7 @@
 //! Data and its eliminations: variants and tuples by their registered schemas, payloads through newtypes, and each kind of match by what it erases to.
 
 use {
-    crate::{
-        test_support::{
-            bound, definition, erase, erase_alone, fresh, global, module, nat_lit, newtype_struct,
-            nominal, struct_type_of, zonked,
-        },
-        *,
-    },
+    crate::{test_support::*, *},
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };

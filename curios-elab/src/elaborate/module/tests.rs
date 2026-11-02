@@ -2,10 +2,10 @@
 
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Module, Nat,
-        Telescope, Term, Totality, UniverseContext, test_support::declaring,
+        Telescope, Term, Totality, UniverseContext, test_support::*,
     },
     curios_utilities::Qualifier,
     std::{collections::BTreeSet, rc::Rc},

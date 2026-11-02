@@ -1,9 +1,6 @@
 //! Shift counts cross exactly until they exceed every representable magnitude; only a nonzero left shift past the array's capacity refuses.
 
-use {
-    super::test_support::{run_row, table},
-    crate::tests::compile,
-};
+use {super::test_support::*, crate::tests::compile};
 
 /// Counts at both sides of a limb and the unsigned wire boundary preserve zero and the sign, including counts wider than the wire, which saturate beyond every bit the runtime can hold.
 #[test]

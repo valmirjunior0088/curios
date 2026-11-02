@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         ffi::OsStr,
         fs,

@@ -3,7 +3,7 @@
 //! Everything the library *computes* is a `test` declaration in `curios-prelude/std/Tui/tests/`, where one compile serves every test of the library. What stays here is what needs the compiler's own answer rather than a program's — a spelling that must be refused, which a test could only express by failing to compile and taking the library's every other test with it — and what needs a terminal: the session bracket and the loop run against the scripted host, whose standard input arrives in chunks a reader suspends between, exactly as a terminal delivers keystrokes.
 
 use {
-    super::test_support::Lying,
+    super::test_support::*,
     crate::tests::{run_text, typecheck},
     curios_abi::{Failure, HostOp, TtySize},
     curios_native::MockHost,

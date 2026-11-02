@@ -2,14 +2,7 @@
 //!
 //! Agreement is the differential predicate in `test_support`. Resource verdicts are deliberately outside it: a reused declaration stands on the verdict its baseline reached, under whatever budget that was, as `documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md` states.
 
-use {
-    super::test_support::{BASE, UNTAKEN},
-    super::test_support::{
-        assert_modules_agree, assert_stored_alike, compile_modules, mounted, recompile_modules,
-        recompile_over, reuses_body, unit_of, unused_binders, written,
-    },
-    curios_unit::Unit,
-};
+use {super::test_support::*, curios_unit::Unit};
 
 /// A baseline from unrelated text keeps nothing, and the recompile is then a whole compile by another route.
 #[test]

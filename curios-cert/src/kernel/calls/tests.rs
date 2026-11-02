@@ -4,10 +4,10 @@
 
 use {
     crate::{Error, Kernel, infer},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
-        Totality, Two, UniverseContext, test_support::match_ambient,
+        Totality, Two, UniverseContext, test_support::*,
     },
     curios_utilities::Qualifier,
 };

@@ -3,7 +3,7 @@
 use {
     crate::{
         Concatenated, Cut, Joining, Seam, Span, Split, join, locate, seam_window, split,
-        test_support::{Number, Toy, n},
+        test_support::*,
     },
     std::convert::Infallible,
 };

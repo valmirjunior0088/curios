@@ -1,6 +1,6 @@
 //! A unit stores the same module wherever its declarations are written.
 
-use {super::test_support::unit_of, curios_core::Sharing, curios_unit::Unit};
+use {super::test_support::*, curios_core::Sharing, curios_unit::Unit};
 
 /// One unit's declarations, each reaching some of the others: a family, a record, definitions over them, and a concept with two witnesses and a definition that resolves through both.
 const DECLARATIONS: [&str; 11] = [

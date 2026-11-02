@@ -1,11 +1,11 @@
 //! The totality walk through a real checker: every child position it reaches, where it descends from an arm, what it grades unread, and a doubling term in its own size.
 
 use {
-    super::test_support::{kernel, single_payload},
+    super::test_support::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
         Declarations, Invert, PositivityRefusal, group_totality, invert_indices,
-        positivity_vectors, test_support::SYNTAX, variance_vectors,
+        positivity_vectors, test_support::*, variance_vectors,
     },
     curios_cert::Kernel,
     curios_core::{

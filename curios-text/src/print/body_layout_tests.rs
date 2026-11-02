@@ -1,6 +1,6 @@
 //! How the rest prints as written: a numeral pattern's radix and width, a sort's word, a body riding its arrow or equals, an operator chain's continuations, and a local group's `and`.
 
-use super::test_support::render;
+use super::test_support::*;
 
 #[test]
 fn a_numeral_pattern_prints_in_the_radix_and_width_it_was_written_in() {

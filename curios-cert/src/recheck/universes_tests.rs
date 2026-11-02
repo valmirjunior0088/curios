@@ -3,13 +3,13 @@
 use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Entrypoint, Free, Global, InductDecl, Intrinsic, Item, Level,
         Many, Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
         RecMemberScopes, ReduceError, Scope, StructDecl, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseParam, test_support::declaring,
+        UniverseError, UniverseMetaId, UniverseParam, test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,

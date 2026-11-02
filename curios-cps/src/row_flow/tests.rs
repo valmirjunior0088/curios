@@ -2,7 +2,7 @@ use {
     super::{Rows, rows_reaching},
     crate::{
         Atom, Callee, Continuation, Edge, Function, FunctionId, Intrinsic, Literal, Module, Node,
-        NodeId, Row, RowId, Slot, ValueExpr, ValueId, test_support::halt_zero,
+        NodeId, Row, RowId, Slot, ValueExpr, ValueId, test_support::*,
     },
     curios_num::Natural,
     std::collections::BTreeSet,

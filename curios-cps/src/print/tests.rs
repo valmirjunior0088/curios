@@ -3,8 +3,7 @@
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, Intrinsic, Literal, Module,
-        Node, NodeId, Register, Row, Slot, ValueDef, ValueExpr,
-        test_support::{halt, halt_zero},
+        Node, NodeId, Register, Row, Slot, ValueDef, ValueExpr, test_support::*,
     },
     curios_num::{Natural, Rounding},
 };

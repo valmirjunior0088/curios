@@ -4,7 +4,7 @@ use {
     super::{analyze_calls, analyze_sccs, known_values},
     crate::{
         Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, ValueId,
-        atoms, optimize, shrink, test_support::call_graph,
+        atoms, optimize, shrink, test_support::*,
     },
     curios_num::Natural,
     std::collections::BTreeMap,

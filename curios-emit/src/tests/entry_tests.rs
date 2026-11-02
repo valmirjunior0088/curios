@@ -1,8 +1,6 @@
 //! Residual entry capability controls turn exports without changing nominal rows or dispatch needed by ordinary calls.
 
-use crate::test_support::{
-    assert_absent, assert_contains, indirect_apply, indirect_apply_discarding_result, nat, wat,
-};
+use crate::test_support::*;
 
 fn registered_entry(suspended: bool, construct: bool) -> curios_cps::Module {
     let mut module = curios_cps::Module::new();

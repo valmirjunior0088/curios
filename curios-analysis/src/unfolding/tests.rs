@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::test_support::Scope,
+    crate::test_support::*,
     curios_core::{Intrinsic, Nat},
 };
 

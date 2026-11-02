@@ -1,7 +1,7 @@
 //! A retry stands on the frames its problem holds: its locals, refinements, witnesses and guards, and an equation withheld for an arm.
 
 use {
-    crate::context::test_support::{context, nat},
+    crate::context::test_support::*,
     crate::*,
     curios_core::{Intrinsic, Nat, Term},
 };

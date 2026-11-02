@@ -1,6 +1,6 @@
 //! What a sequence read emits beside the proof its caller discharged.
 
-use super::{functions, wat};
+use super::test_support::*;
 
 /// A program reading each carrier at a run-time value, so both `$<carrier>/read` helpers are emitted. `try_get` is the spelling because it carries its own bound — the point here is what the helper emits, not how its caller discharged the proof.
 const READS_EVERY_CARRIER: &str = r#"

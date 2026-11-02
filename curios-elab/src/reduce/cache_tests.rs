@@ -1,7 +1,7 @@
 //! What invalidates a cached reduct, and what one served across universe spellings states.
 
 use {
-    super::test_support::{context, nat, nominal},
+    super::test_support::*,
     crate::*,
     curios_core::{
         Free, Intrinsic, Level, MetavarId, Quality, QualityMetaId, QualityParam, Term,

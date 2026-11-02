@@ -1,6 +1,6 @@
 //! Documentation comments: the declaration, member or module each attaches to, the line and space it takes, and the places one is refused.
 
-use {crate::parse::test_support::comments_of, crate::*};
+use {crate::parse::test_support::*, crate::*};
 
 /// A `---` block attaches to the declaration below it, line by line, with a bare `---` as a paragraph break; blank lines and plain comments between the block and the declaration are insignificant, and the plain comment stays a comment.
 #[test]

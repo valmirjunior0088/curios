@@ -3,7 +3,7 @@
 use {
     super::{Error, Overlay, RootSource, identity},
     crate::Entrypoint,
-    curios_utilities::{Qualifier, RootKind, Source, test_support::Temporary},
+    curios_utilities::{Qualifier, RootKind, Source, test_support::*},
     std::{fs, path::Path, sync::Arc},
 };
 

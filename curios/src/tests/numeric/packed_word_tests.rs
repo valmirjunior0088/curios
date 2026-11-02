@@ -1,6 +1,6 @@
 //! The packed carrier's shared vocabulary: the `/sys` fill and pointwise combinations, and the `/std` shifts and rotations derived over them.
 
-use super::test_support::folded_matches_runtime;
+use super::test_support::*;
 
 /// **Every row is tainted in an operand, never in a length.** The pointwise operations state `len(a) == len(b)` as a decided bound, so a tainted length would leave the obligation stuck and the row would not compile at all — the taint goes in a *byte* (`Nat/to_byte(Nat/and(60 + n, 255))` is a `Byte` the folder cannot see through) or in a fill's generator, both of which leave the length structural. `replicate`'s own count is safe to taint precisely because a fill carries no bound.
 #[test]

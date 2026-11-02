@@ -2,7 +2,7 @@ use {
     super::{Demand, demand_of, demands},
     crate::{
         Atom, Callee, Continuation, Edge, Function, Intrinsic, Module, Node, ValueExpr, ValueId,
-        test_support::halt_zero,
+        test_support::*,
     },
     std::collections::BTreeSet,
 };

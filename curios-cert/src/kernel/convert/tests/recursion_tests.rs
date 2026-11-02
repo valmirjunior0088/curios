@@ -3,7 +3,7 @@
 use {
     crate::kernel::convert::{Pairs, convert_intrinsic, test_support::*},
     crate::{Kernel, convert},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Free, Intrinsic, Level, Term, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam,

@@ -3,10 +3,7 @@
 use {
     crate::tests::{compile, typecheck},
     curios_abi::{HostOp, status},
-    curios_native::{
-        ForeignBindings, MockHost,
-        test_support::{RawValue, run_raw},
-    },
+    curios_native::{ForeignBindings, MockHost, test_support::*},
 };
 
 /// Run `source` against `host`, except that `op` answers `reply` raw on every call.

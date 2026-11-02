@@ -1,7 +1,7 @@
 //! `curios wonder` spoken to in the language server protocol: what it publishes from the buffer and the disk, what a save asks again, what it answers while a check runs, and what it files in the store.
 
 use {
-    super::test_support::{curios, project, stdout, temporary, write},
+    super::test_support::*,
     curios_prelude::std_module::*,
     curios_utilities::fill,
     curios_wonder::SETTLE,

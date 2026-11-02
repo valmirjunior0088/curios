@@ -4,7 +4,7 @@
 
 use {
     super::{ErasedForms, ErasedUnit},
-    crate::test_support::{ErasedFamily, ErasedField},
+    crate::test_support::*,
 };
 
 impl ErasedUnit {

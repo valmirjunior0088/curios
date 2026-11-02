@@ -4,7 +4,7 @@ use {
     super::*,
     crate::Cli,
     clap::CommandFactory,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{collections::BTreeSet, fmt::Write, fs, iter},
 };
 

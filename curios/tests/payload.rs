@@ -6,7 +6,7 @@
 
 use {
     curios_package::Target,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         fs,
         path::Path,

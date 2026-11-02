@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Free, Global, Intrinsic, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, Term,
     },

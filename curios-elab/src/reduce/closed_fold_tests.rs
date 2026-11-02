@@ -1,7 +1,8 @@
 //! The intrinsic folds over literal operands: what a closed carrier operation computes.
 
 use {
-    super::test_support::{context, qed},
+    super::test_support::*,
+    crate::test_support::*,
     crate::*,
     curios_core::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::{Binary, Floating, Integer, Rounding},

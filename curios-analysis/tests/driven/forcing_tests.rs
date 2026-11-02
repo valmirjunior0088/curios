@@ -1,7 +1,7 @@
 //! Index forcings through a real checker: a binder forced twice, a binder or family out of reach, and the outer solution a pinned binder is rewritten through.
 
 use {
-    super::test_support::{declare, kernel},
+    super::test_support::*,
     curios_analysis::{Invert, another_case, invert_indices, solve_indices},
     curios_core::{Free, Global, Intrinsic, Level, Nat, Term},
     curios_utilities::Qualifier,

@@ -2,7 +2,7 @@
 
 use {
     crate::{Context, Opened, Sort},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term},
     curios_utilities::Qualifier,
 };

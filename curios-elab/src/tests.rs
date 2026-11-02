@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Subterm, Term, UniverseMetaId},
 };
 

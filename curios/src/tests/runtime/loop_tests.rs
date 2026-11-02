@@ -3,7 +3,7 @@
 use {
     crate::tests::{compile, cps_optm, cps_optm_module, run, run_text},
     curios_cps::{Callee, Node, ValueExpr},
-    curios_native::{MockHost, test_support::run_within_heap},
+    curios_native::{MockHost, test_support::*},
     curios_utilities::fill,
     std::collections::BTreeSet,
 };

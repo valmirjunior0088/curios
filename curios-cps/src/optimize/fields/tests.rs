@@ -3,8 +3,7 @@ use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, CopyPlan, Edge, FieldGroup, Function,
         FunctionId, Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, copy_bodies,
-        optimize,
-        test_support::{halt, halt_zero},
+        optimize, test_support::*,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},

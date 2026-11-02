@@ -1,7 +1,7 @@
 //! A sort its declaration leaves to each caller: what one written `Sort` closes as, what a use states, and where the word is refused.
 
 use {
-    super::test_support::sort_parameters,
+    super::test_support::*,
     crate::tests::{error, run, typecheck},
     curios_utilities::fill,
 };

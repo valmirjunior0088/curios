@@ -1,7 +1,7 @@
 //! `curios wonder` at the command line: a question answered on standard output, a file placed in its unit or checked alone, and the exit code each outcome takes.
 
 use {
-    super::test_support::{curios, project, stdout, temporary, write},
+    super::test_support::*,
     std::{fs, process::Output},
 };
 

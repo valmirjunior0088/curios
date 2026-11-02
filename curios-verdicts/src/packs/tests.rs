@@ -1,4 +1,4 @@
-use {super::*, curios_utilities::test_support::Temporary};
+use {super::*, curios_utilities::test_support::*};
 
 /// One object of its own bytes.
 fn object(text: &str) -> Object {

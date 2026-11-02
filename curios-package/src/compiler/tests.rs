@@ -1,4 +1,4 @@
-use {super::*, curios_utilities::test_support::Temporary};
+use {super::*, curios_utilities::test_support::*};
 
 /// A store of its own, in a directory that goes away with the test, beside the guard that removes it.
 ///

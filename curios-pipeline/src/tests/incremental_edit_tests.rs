@@ -2,15 +2,7 @@
 //!
 //! Reuse is observed by allocation identity: a reused item carries the very terms the baseline holds, which no elaboration could produce twice.
 
-use {
-    super::test_support::BASE,
-    super::test_support::{
-        assert_modules_agree, assert_stored_alike, carried_variances, keeps_lowered,
-        recompile_over, reuses_body, unit_of,
-    },
-    curios_core::Variance,
-    curios_utilities::fill,
-};
+use {super::test_support::*, curios_core::Variance, curios_utilities::fill};
 
 #[test]
 fn an_unchanged_text_reuses_every_item() {

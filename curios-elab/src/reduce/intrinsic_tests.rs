@@ -1,9 +1,9 @@
 //! The intrinsic fold laws over symbolic operands, and the free-monoid peel behind them.
 
 use {
-    super::test_support::qed,
+    crate::test_support::*,
     crate::{Context, reduce},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Natural},
 };

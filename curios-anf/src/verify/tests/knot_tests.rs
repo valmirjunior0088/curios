@@ -1,7 +1,7 @@
 //! Lazy values and their knots: a reference forced through a called function or rejected as a cycle, a stepper evaluated or left dormant, an effectful initializer, and the self knots a fragment admits.
 
 use {
-    crate::verify::test_support::nat_atom,
+    crate::verify::test_support::*,
     crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_num::Natural,

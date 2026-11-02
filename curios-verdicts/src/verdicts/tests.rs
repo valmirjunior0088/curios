@@ -8,7 +8,7 @@ use {
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
     curios_text::Entrypoint,
-    curios_utilities::{Qualifier, fill, test_support::Temporary},
+    curios_utilities::{Qualifier, fill, test_support::*},
     std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
 

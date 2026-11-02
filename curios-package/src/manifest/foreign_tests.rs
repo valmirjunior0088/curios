@@ -1,9 +1,6 @@
 //! A manifest's foreign rows and host tables: a carried or fetched module, one delivery a row, the exports it answers, and what the browser and native tables serve.
 
-use {
-    super::test_support::{parse, refuse},
-    super::*,
-};
+use {super::test_support::*, super::*};
 
 /// The two deliveries a `[[foreign]]` row states, and the table naming which declaration each export answers.
 #[test]

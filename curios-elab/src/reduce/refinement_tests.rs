@@ -1,7 +1,7 @@
 //! The refinements an arm installs: read at the universe instances they hold to one, and not where their frame is set aside.
 
 use {
-    super::test_support::{context, nat},
+    super::test_support::*,
     crate::*,
     curios_core::{Intrinsic, Level, Term, UniverseMetaId, UniverseRole},
 };

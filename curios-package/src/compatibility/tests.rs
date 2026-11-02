@@ -4,7 +4,7 @@ use {
     super::*,
     crate::{Governing, Manifest, Selection, Spelling, order},
     curios_text::Overlay,
-    curios_utilities::{fill, test_support::Temporary},
+    curios_utilities::{fill, test_support::*},
     std::fs,
 };
 

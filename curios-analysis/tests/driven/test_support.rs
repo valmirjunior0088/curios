@@ -1,7 +1,7 @@
 //! What the driven suites share: a kernel, a family declared over a single payload, and the declarations a fixture states.
 
 use {
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::Kernel,
     curios_core::{Atom, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext},
     curios_utilities::{Plicity, Qualifier},

@@ -4,7 +4,7 @@ use {
     crate::{Asked, Origin, Subject, rendered},
     curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::fs,
 };
 

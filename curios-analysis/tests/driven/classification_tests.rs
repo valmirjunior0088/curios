@@ -1,10 +1,10 @@
 //! The carriers' classification and the case equations through a real checker: atoms compared in whichever order they rank, a connective leaf as written, and an equation answering a term its readers hold equal to its key.
 
 use {
-    super::test_support::kernel,
+    super::test_support::*,
     curios_analysis::{
         Answered, Classes, Judge, ScrutineeRead, answers, answers_classed, group_totality,
-        holds_no_type, one_up_to_instances, read_scrutinee, test_support::SYNTAX,
+        holds_no_type, one_up_to_instances, read_scrutinee, test_support::*,
     },
     curios_cert::Kernel,
     curios_core::{

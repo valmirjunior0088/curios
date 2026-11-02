@@ -1,10 +1,7 @@
 //! Where a comment lands. The law is that one stays where it was written — on a line of its own between the two tokens it stood between, or on the line of the token it followed — and that a second run changes nothing. It is put to every position a comment can be written in.
 
 use {
-    super::{
-        Formatted,
-        test_support::{collect_sources, formatted},
-    },
+    super::{Formatted, test_support::*},
     curios_utilities::Source,
     std::path::Path,
 };

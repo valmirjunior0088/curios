@@ -3,7 +3,7 @@
 use {
     crate::elaborate::test_support::*,
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Exhaustion, Intrinsic, MetavarId, MetavarOrigin, Minted, Mints, StructType, Subterm, Term,
         Universes,

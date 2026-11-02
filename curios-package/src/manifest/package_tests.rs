@@ -1,10 +1,6 @@
 //! A manifest's mode, name and executables: a package and an umbrella, the manifests that are neither or both, and an executable or default no package can hold.
 
-use {
-    super::test_support::{parse, refuse},
-    super::*,
-    curios_utilities::fill,
-};
+use {super::test_support::*, super::*, curios_utilities::fill};
 
 /// The package mode, whole: one row of every source, two executables, and a default.
 #[test]

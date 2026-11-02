@@ -1,7 +1,7 @@
 //! How the fold takes a baseline through the cache seam: asked for on a miss alone, offered what the fold's assembler offers and taken only by a cache, announced as a recompile, and handed to `put` as any unit is.
 
 use {
-    super::test_support::{compile, entrypoint_of, mounted, reuses_body, unit_of},
+    super::test_support::*,
     crate::{After, Cache, DEFAULT_BUDGET, Earlier, Progress, compile_entrypoint, compile_units},
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},

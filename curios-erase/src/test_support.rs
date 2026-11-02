@@ -9,7 +9,7 @@ use crate::{ErasedUnit, NamedPart, Part, declared_digest, erased_digest};
 #[cfg(test)]
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module, certify_program},
     curios_core::Zonkable,
     curios_elab::DEFAULT_BUDGET,

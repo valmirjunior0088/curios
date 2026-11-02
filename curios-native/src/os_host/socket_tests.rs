@@ -1,7 +1,7 @@
 //! Sockets: a listener's address, a loopback connect, a TLS upgrade driven by the reads and writes that follow, and how each kind of end is reported.
 
 use {
-    super::test_support::{awaited, come, loopback_listener, loopback_pair},
+    super::test_support::*,
     super::*,
     crate::{Failure, Handle},
 };

@@ -1,6 +1,6 @@
 //! Comments through formatting: a leading one before its item, a trailing one on its line, one above a clause, arm or field above it, an interior one in its construct, and documentation where it was written.
 
-use super::test_support::formatted;
+use super::test_support::*;
 
 #[test]
 fn a_leading_comment_stays_before_its_item() {

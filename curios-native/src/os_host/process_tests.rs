@@ -1,7 +1,7 @@
 //! Children: spawned or refused, their piped streams filed non-blocking, reaped through their handle, and killed.
 
 use {
-    super::test_support::awaited,
+    super::test_support::*,
     super::*,
     crate::{ChildExit, ChildHandles, Failure, Handle, StdioMode},
     std::{num::NonZeroU32, thread, time::Duration},

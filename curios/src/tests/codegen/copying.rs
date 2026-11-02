@@ -1,7 +1,7 @@
 //! Small suspension programs stay bounded before downstream optimization and run through both backend paths.
 
 use {
-    super::compile_raw_program,
+    super::structural::test_support::*,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
 };

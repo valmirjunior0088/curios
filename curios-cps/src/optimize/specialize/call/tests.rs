@@ -4,7 +4,7 @@ use {
     crate::{
         Atom, BRANCH_COPY_NODE_LIMIT, Callee, CopyBudget, CopyPlan, FunctionId, Module, Node,
         NodeId, copy_bodies, function_nodes, prune_unreachable, specialize_call_patterns,
-        test_support::{known_callee, tagged_consumer},
+        test_support::*,
     },
     std::collections::BTreeSet,
 };

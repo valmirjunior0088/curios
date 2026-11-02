@@ -1,6 +1,6 @@
 //! `/std/Byte` as the width-8 word: eight operations over `to_nat` and `of_nat`, each restating the width the runtime carrier will not.
 
-use super::test_support::folded_matches_runtime;
+use super::test_support::*;
 
 /// **The width is restated at every operation, and these rows are what says the restatement works.** `Byte` rides the same unbounded `Nat` the theory folds and the same `i31` the runtime boxes, so nothing narrows a result to eight bits on its own: `and`, `or` and `xor` inherit the width from their operands, `not` takes the distance to the all-ones byte, and everything built on a shift masks. Each operand and count below is tainted through `n`, the table's runtime zero, so what answers is the emitted instruction rather than the folder — and the helper compiles the table both ways and pins the two to the same bytes, which is what makes a row here a statement about the language rather than about one stage.
 ///

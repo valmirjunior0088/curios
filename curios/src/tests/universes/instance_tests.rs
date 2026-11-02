@@ -1,9 +1,7 @@
 //! Two instances of one name: the levels an occurrence carries, and what two of them compare as.
 
 use {
-    super::test_support::{
-        definition_variances, family_variances, signatures, universe_parameters,
-    },
+    super::test_support::*,
     crate::tests::{error, run, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_BUDGET,
     curios_utilities::fill,

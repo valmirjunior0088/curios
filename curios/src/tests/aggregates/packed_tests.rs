@@ -1,7 +1,7 @@
 //! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
 
 use {
-    super::test_support::{ARRIVAL, BYTES, extends_in_place, reads_in_every_shape},
+    super::test_support::*,
     crate::tests::{run, run_text},
     curios_native::MockHost,
 };

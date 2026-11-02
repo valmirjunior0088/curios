@@ -2,8 +2,8 @@
 
 use {
     crate::eraser::test_support::*,
-    crate::test_support::{definition, fresh, module, nat_lit, try_erase, zonked},
-    curios_analysis::test_support::SYNTAX,
+    crate::test_support::*,
+    curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
     curios_elab::DEFAULT_BUDGET,
     curios_utilities::{Plicity, grown},

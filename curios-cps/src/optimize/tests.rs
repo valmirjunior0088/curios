@@ -2,10 +2,7 @@
 
 use {
     super::optimize,
-    crate::{
-        Callee, Intrinsic, Node, ValueExpr,
-        test_support::{PolymorphicLoop, polymorphic_loop, tagged_consumer, tagged_join},
-    },
+    crate::{Callee, Intrinsic, Node, ValueExpr, test_support::*},
 };
 
 #[test]

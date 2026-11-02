@@ -1,6 +1,6 @@
 //! How a call prints: flat where it fits, an argument a line where it overflows, a trailing literal or lambda hugging it, and a curried call or a ladder breaking at its seams.
 
-use {super::test_support::render, crate::Term};
+use {super::test_support::*, crate::Term};
 
 #[test]
 fn a_fitting_application_stays_flat() {

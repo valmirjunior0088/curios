@@ -1,7 +1,7 @@
 //! What the hierarchy admits and what it refuses: cumulativity, two sorts no inversion sets apart, one declaration at two levels, the shapes Girard's, Hurkens' and Russell's paradoxes take, and the two honest programs that meet the refusal with their remedies.
 
 use {
-    super::test_support::universe_parameters,
+    super::test_support::*,
     crate::tests::{error, run},
 };
 

@@ -1,9 +1,6 @@
 //! A power's exponent crosses exactly, a base of zero or one answers at every exponent, and only a base at least two raised past the limb array's capacity refuses.
 
-use {
-    super::test_support::{run_row, table},
-    crate::tests::compile,
-};
+use {super::test_support::*, crate::tests::compile};
 
 /// An exponent wider than the wire saturates beyond every bit the runtime can hold, and a base of zero or one still answers there, as an exponent of zero does under a base of any size: none of those powers grows.
 #[test]

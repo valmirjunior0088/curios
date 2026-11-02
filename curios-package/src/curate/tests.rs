@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::{fill, test_support::Temporary},
+    curios_utilities::{fill, test_support::*},
 };
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.

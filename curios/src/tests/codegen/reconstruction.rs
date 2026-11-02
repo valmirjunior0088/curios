@@ -1,7 +1,7 @@
 //! Reconstruction disappears before lowering, and recursive transfers remain tail calls or loop backedges through raw and optimized Wasm.
 
 use {
-    super::functions,
+    super::structural::test_support::*,
     curios_abi::ForeignStore,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},

@@ -4,11 +4,7 @@ use {
     super::{granted, withheld},
     crate::{
         Cache, DEFAULT_BUDGET, Earlier, Fold, Over, compile_unit, compile_unit_over,
-        complete_records, recheck_over,
-        tests::test_support::{
-            Store, asked_stored, assert_stored_alike, compile_with_units, elaborated_above,
-            elaborated_wholesale, lowering_stored, restored, traces_stored,
-        },
+        complete_records, recheck_over, tests::test_support::*,
     },
     curios_anf::FieldShape,
     curios_core::{
@@ -17,16 +13,16 @@ use {
     },
     curios_elab::{
         Context, Error, Established, Reading, Recompile, Recompiled, elaborate_and_zonk_unit_over,
-        test_support::written_for_reader,
+        test_support::*,
     },
-    curios_erase::{ErasedUnit, test_support::part_digests},
+    curios_erase::{ErasedUnit, test_support::*},
     curios_prelude::{std_module::*, with_prelude},
     curios_text::{
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
-    curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
+    curios_utilities::{Qualifier, RootKind, digest, test_support::*},
     std::{
         cell::RefCell,
         cmp::Reverse,

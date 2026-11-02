@@ -7,9 +7,9 @@
 //! One case puts an arm's equation in, where the two sides meet it through different doors: the kernel through its arm rule, which is all its public surface offers, and the elaborator through the reducer under the equation registered as an arm registers it.
 
 use {
-    super::test_support::{context, nat, nominal},
+    super::test_support::*,
     crate::refine_head,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::Kernel,
     curios_core::{Free, Intrinsic, Reducer, Term, UniverseContext},
 };

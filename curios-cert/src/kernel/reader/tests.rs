@@ -2,7 +2,7 @@
 
 use {
     crate::{Kernel, infer},
-    curios_analysis::{Erased, test_support::SYNTAX},
+    curios_analysis::{Erased, test_support::*},
     curios_core::{
         Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Telescope,
         Term, UniverseContext, Universes,

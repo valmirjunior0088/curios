@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
         Item, Module, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
-        UniverseContext, Universes, test_support::declaring,
+        UniverseContext, Universes, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier},
     std::{

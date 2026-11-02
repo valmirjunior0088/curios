@@ -1,10 +1,7 @@
 //! One unit compiled over a baseline after an edit elsewhere: another file of the unit, or a dependency respelled, moved or given another body, and what the unit records of it.
 
 use {
-    super::test_support::{
-        assert_modules_agree, assert_stored_alike, compile_modules, keeps_lowered, read_from,
-        recompile_after, recompile_modules, restored, reuses_body, unit_after, written_files,
-    },
+    super::test_support::*,
     curios_core::{Module, Zonked},
     curios_elab::DEFAULT_BUDGET,
     curios_prelude::with_prelude,

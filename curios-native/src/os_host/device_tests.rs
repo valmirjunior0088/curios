@@ -1,13 +1,10 @@
 //! Terminals and serial ports: a terminal taken and given back with its settings, and a port opened raw, with its speed, frame and input modes, and its drain.
 
 use {
-    super::{
-        test_support::{awaited, pseudo_terminal},
-        *,
-    },
+    super::{test_support::*, *},
     crate::{Failure, Handle, Mode, SerialFlow, SerialOp, SerialParity},
     curios_abi::errno,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     rustix::{
         fs::OFlags,
         termios::{ControlModes, InputModes, LocalModes},

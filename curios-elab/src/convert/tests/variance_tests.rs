@@ -3,7 +3,7 @@
 use {
     crate::convert::test_support::*,
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Definition, DefinitionKind, Free, InductDecl, InductParam, Level, Telescope, Term,
         Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,

@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{Delivery, FileHash, Module},
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{collections::BTreeMap, os::unix},
 };
 

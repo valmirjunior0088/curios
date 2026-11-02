@@ -1,6 +1,6 @@
 //! What a fold recomputes from rows: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — and a filed stream read back from its path.
 
-use {super::*, curios_utilities::test_support::Temporary, std::fs};
+use {super::*, curios_utilities::test_support::*, std::fs};
 
 fn folded(rows: &str) -> Report {
     fold(rows.as_bytes()).expect("rows fold")

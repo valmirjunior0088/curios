@@ -1,6 +1,6 @@
 //! Writing a row into a manifest: what changes, what does not, and what is refused before anything is written.
 
-use {super::*, curios_utilities::test_support::Temporary, std::fs};
+use {super::*, curios_utilities::test_support::*, std::fs};
 
 /// A package whose manifest holds `manifest`, and where a pin standing in it writes.
 ///

@@ -1,7 +1,7 @@
 //! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, the count line, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
 use {
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
     std::{
         ffi::OsStr,
         fs,

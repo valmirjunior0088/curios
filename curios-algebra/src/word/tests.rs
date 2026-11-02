@@ -1,10 +1,7 @@
 //! Words over the toy alphabet: normalization, window fusion, the prefix strip and its verdicts, offsets and positions.
 
 use {
-    crate::{
-        Packed, Run, Segment, Stripped, Window, Word, same_position,
-        test_support::{Number, Toy, n},
-    },
+    crate::{Packed, Run, Segment, Stripped, Window, Word, same_position, test_support::*},
     curios_num::Binary,
 };
 

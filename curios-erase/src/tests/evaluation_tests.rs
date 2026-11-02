@@ -1,12 +1,9 @@
 //! What erasure computes and keeps: a bound value where it is written and no bound type, a top-level value where its unit is erased, the totality a record marks, and a unit erased over a baseline.
 
 use {
-    crate::test_support::{
-        bound, definition, erase, erase_alone, fresh, global, module, nat_lit, nominal, stating,
-        try_erase, zonked,
-    },
+    crate::test_support::*,
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module, certify_program},
     curios_elab::DEFAULT_BUDGET,
     std::collections::BTreeSet,

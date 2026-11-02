@@ -4,7 +4,7 @@ use {
     crate::{
         Atom, Continuation, ContinuationId, CopyBudget, CopyPlan, Edge, Function, Intrinsic,
         JUMP_COPY_NODE_LIMIT, Literal, Module, Node, NodeId, ValueExpr, specialize_jump_patterns,
-        test_support::{tagged_family, tagged_join},
+        test_support::*,
     },
     curios_num::Natural,
     std::collections::BTreeMap,

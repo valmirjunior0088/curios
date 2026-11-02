@@ -4,7 +4,7 @@
 
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Nat, ReduceError, Telescope, Term,
         UniverseContext,

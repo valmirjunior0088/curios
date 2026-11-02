@@ -1,7 +1,7 @@
 //! Requested construction counts stay exact until the runtime's logical length bound, and larger values refuse before allocation.
 
 use {
-    super::test_support::{run_row, table},
+    super::test_support::*,
     crate::tests::{compile, error},
     curios_utilities::fill,
 };

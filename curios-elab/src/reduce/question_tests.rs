@@ -1,7 +1,7 @@
 //! What a judgment's reduction asks of conversion: the guards and questions it answers through the shared analysis, asking nothing itself, the case equations and reducts it answers them by, and a question declined for a commit.
 
 use {
-    super::test_support::{context, nat, nominal},
+    super::test_support::*,
     crate::*,
     curios_core::{
         Free, InductDecl, Intrinsic, Level, Telescope, Term, UniverseConstraintKind,

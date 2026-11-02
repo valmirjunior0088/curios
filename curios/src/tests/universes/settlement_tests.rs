@@ -1,7 +1,7 @@
 //! Which of a declaration's levels its callers choose, and where every other one lands.
 
 use {
-    super::test_support::{definition_variances, signatures, universe_parameters},
+    super::test_support::*,
     crate::tests::{run, typecheck},
     curios_utilities::fill,
 };

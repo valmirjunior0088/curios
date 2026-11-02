@@ -1,9 +1,9 @@
 //! What a unit keeps of each of its files: a later lowering that reads a file as the text a baseline read takes what the baseline read of it, and parses the file only where a declaration of it is lowered again.
 
 use {
-    crate::into_core::{Headed, Loaded, Scan, UnitSource, into_core_unit, test_support::syntax},
+    crate::into_core::{Headed, Loaded, Scan, UnitSource, into_core_unit, test_support::*},
     crate::{RootSource, tree_of},
-    curios_utilities::{Filed, Qualifier, RootKind, Source, test_support::Temporary},
+    curios_utilities::{Filed, Qualifier, RootKind, Source, test_support::*},
     std::{collections::BTreeMap, fs, path::Path, rc::Rc, sync::Arc},
 };
 

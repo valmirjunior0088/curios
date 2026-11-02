@@ -3,10 +3,10 @@
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
-        Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::declaring,
+        Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},

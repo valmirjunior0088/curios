@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
-    curios_utilities::test_support::Temporary,
+    curios_utilities::test_support::*,
 };
 
 fn signature(text: &str) -> Signature {

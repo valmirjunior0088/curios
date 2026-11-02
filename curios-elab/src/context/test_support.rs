@@ -11,7 +11,7 @@ use {
 #[cfg(test)]
 use {
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{
         Declarations, Definition, DefinitionKind, Global, HeadKey, Intrinsic, Item, Module, Term,
         Totality, UniverseContext, WitnessKey,
@@ -47,7 +47,7 @@ pub fn named(path: &str) -> Global {
 
 /// The declarations of a unit that writes `names` in order, each a definition of its own.
 #[cfg(test)]
-pub fn written(names: &[Global]) -> Declarations {
+pub fn declarations(names: &[Global]) -> Declarations {
     let items = names
         .iter()
         .map(|name| {
@@ -78,7 +78,7 @@ pub fn written(names: &[Global]) -> Declarations {
 #[cfg(test)]
 pub fn unit_of_two(context: &mut Context) -> [Global; 2] {
     let [a, b] = [named("a"), named("b")];
-    context.begin_unit(written(&[a, b]), BTreeSet::from([a, b]));
+    context.begin_unit(declarations(&[a, b]), BTreeSet::from([a, b]));
 
     [a, b]
 }

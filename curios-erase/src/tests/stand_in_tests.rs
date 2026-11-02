@@ -1,11 +1,9 @@
 //! The stand-ins erasure puts for what it does not compute: a proof's withheld body, a decided bound's stand-in, and a function stand-in at a slot of function type.
 
 use {
-    crate::test_support::{
-        arity, bound, definition, erase, fresh, global, module, nat_lit, nominal, zonked,
-    },
+    crate::test_support::*,
     crate::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
     curios_elab::DEFAULT_BUDGET,
     curios_utilities::Qualifier,

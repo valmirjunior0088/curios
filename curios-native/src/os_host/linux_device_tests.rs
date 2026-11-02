@@ -1,10 +1,7 @@
 //! What a Linux pseudo-terminal alone answers for: a frame the device did not take refused at the open, and a drain answered once the output has left. A macOS pseudo-terminal keeps no frame, and its `tcdrain` can wait for good.
 
 use {
-    super::{
-        test_support::{come, pseudo_terminal},
-        *,
-    },
+    super::{test_support::*, *},
     crate::{Failure, Handle, SerialFlow, SerialParity},
     curios_abi::errno,
     rustix::termios::ControlModes,

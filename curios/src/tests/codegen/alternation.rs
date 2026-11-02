@@ -2,7 +2,7 @@
 
 use {
     super::{compiled_of, run},
-    curios_native::{Compiled, test_support::collected},
+    curios_native::{Compiled, test_support::*},
 };
 
 const PUSH_FIRST: &str = include_str!(concat!(

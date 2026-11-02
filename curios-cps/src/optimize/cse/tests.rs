@@ -3,8 +3,7 @@
 use {
     super::dedupe_intrinsics,
     crate::{
-        Atom, Continuation, Edge, Function, Intrinsic, Module, Node, ValueId,
-        test_support::duplicate_pair_module,
+        Atom, Continuation, Edge, Function, Intrinsic, Module, Node, ValueId, test_support::*,
     },
     std::collections::BTreeMap,
 };

@@ -3,10 +3,8 @@
 //! Each case finds the smallest budget one declaration is accepted under and puts many to it, so nothing here states a figure the library's growth would move.
 
 use {
-    super::test_support::{entrypoint_of, mounted},
-    crate::{
-        EntryTail, check_entrypoint, compile::test_support::elaborate_and_zonk, compile_units,
-    },
+    super::test_support::*,
+    crate::{EntryTail, check_entrypoint, compile::test_support::*, compile_units},
     curios_core::Zonked,
     curios_erase::{Erasures, erase_program},
     curios_prelude::with_prelude,

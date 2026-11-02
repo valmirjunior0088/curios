@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::test_support::*,
     curios_core::{DefinitionKind, Free, Intrinsic, UniverseContext},
     curios_utilities::Qualifier,
     std::collections::BTreeMap,

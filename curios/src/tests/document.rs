@@ -5,7 +5,7 @@ use {
     curios_package::{Governing, order},
     curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
-    curios_utilities::{Qualifier, test_support::Temporary},
+    curios_utilities::{Qualifier, test_support::*},
     curios_wonder::{documentation, std_documentation},
     std::fs,
 };

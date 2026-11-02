@@ -4,13 +4,13 @@
 
 use {
     crate::{Entrypoint, RootSource},
-    curios_core::test_support::unresolved,
+    curios_core::test_support::*,
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
         Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
-        SyntaxRegistry, TestSyntax, test_support::Temporary,
+        SyntaxRegistry, TestSyntax, test_support::*,
     },
     std::{fs, path::Path},
 };
