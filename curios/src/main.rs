@@ -193,16 +193,15 @@ fn dispatch() -> Result<(), Failure> {
 
                     Some(store.executing(&home.package, &home.executable))
                 });
-                let (name, files) = built(elaboration.budget, program, store)?;
+                let files = built(elaboration.budget, program, store)?;
                 let listener = bound(port.unwrap_or(PORT))?;
                 let port = listener
                     .local_addr()
                     .map_err(|error| format!("cannot read the address served on: {error}"))?
                     .port();
-                let served = Served { name, files };
 
-                serving(&served.url(port, &args));
-                serve_page(&listener, served)?;
+                serving(&url(port, &args));
+                serve_page(&listener, Served { files })?;
 
                 return Ok(());
             }
@@ -343,7 +342,7 @@ fn dispatch() -> Result<(), Failure> {
                     )?;
                 }
                 Target::Browser => {
-                    let (_, files) = built(elaboration.budget, program, store)?;
+                    let files = built(elaboration.budget, program, store)?;
 
                     emit_page(&output, &files, owned)?;
                 }

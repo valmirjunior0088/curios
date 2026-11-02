@@ -1,11 +1,10 @@
 use {super::*, std::io::Read};
 
-/// A page named `app` holding a page, its program and one file under a directory, served on a port of its own until the test's process ends.
+/// A page holding its document, its program and one file under a directory, served on a port of its own until the test's process ends.
 fn serving() -> u16 {
     let listener = bound(0).expect("a port of loopback's own");
     let port = listener.local_addr().unwrap().port();
     let served = Served {
-        name: "app".to_string(),
         files: BTreeMap::from([
             (INDEX_HTML.to_string(), b"<!doctype html>".to_vec()),
             ("index.wasm".to_string(), b"\0asm".to_vec()),
@@ -49,10 +48,10 @@ fn get(port: u16, path: &str) -> (String, Vec<String>, Vec<u8>) {
 }
 
 #[test]
-fn the_pages_directory_answers_its_page_and_a_path_inside_it_its_file() {
+fn the_root_answers_the_page_and_a_path_its_file() {
     let port = serving();
 
-    let (status, headers, body) = get(port, "/app/");
+    let (status, headers, body) = get(port, "/");
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert!(
         headers.contains(&"Content-Type: text/html; charset=utf-8".to_string()),
@@ -60,16 +59,24 @@ fn the_pages_directory_answers_its_page_and_a_path_inside_it_its_file() {
     );
     assert_eq!(body, b"<!doctype html>");
 
-    let (status, _, body) = get(port, "/app/web/a%20b.js?v=1");
+    let (status, _, body) = get(port, "/web/a%20b.js?v=1");
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert_eq!(body, b"export {};");
+}
+
+/// `index.html` is the page's own name for its document, so a request by that name is a request for the root.
+#[test]
+fn the_root_and_the_pages_own_name_for_its_document_are_one_resource() {
+    let port = serving();
+
+    assert_eq!(get(port, "/index.html"), get(port, "/"));
 }
 
 #[test]
 fn the_program_is_served_as_webassembly() {
     let port = serving();
 
-    let (_, headers, _) = get(port, "/app/index.wasm");
+    let (_, headers, _) = get(port, "/index.wasm");
 
     assert!(
         headers.contains(&"Content-Type: application/wasm".to_string()),
@@ -81,7 +88,7 @@ fn the_program_is_served_as_webassembly() {
 fn every_reply_says_no_store_and_closes() {
     let port = serving();
 
-    for path in ["/app/", "/app/missing", "/"] {
+    for path in ["/", "/missing", "/index.wasm"] {
         let (_, headers, _) = get(port, path);
 
         assert!(
@@ -96,25 +103,10 @@ fn every_reply_says_no_store_and_closes() {
 }
 
 #[test]
-fn the_root_and_the_pages_name_are_redirected_into_the_page() {
-    let port = serving();
-
-    for path in ["/", "/app"] {
-        let (status, headers, _) = get(port, path);
-
-        assert_eq!(status, "HTTP/1.1 308 Permanent Redirect", "{path}");
-        assert!(
-            headers.contains(&"Location: /app/".to_string()),
-            "{path}: {headers:?}"
-        );
-    }
-}
-
-#[test]
 fn a_path_the_page_holds_no_file_at_is_not_found() {
     let port = serving();
 
-    for path in ["/app/missing.js", "/other/", "/app/web"] {
+    for path in ["/missing.js", "/app/", "/web", "/index.html/"] {
         assert_eq!(get(port, path).0, "HTTP/1.1 404 Not Found", "{path}");
     }
 }
@@ -125,7 +117,7 @@ fn a_method_other_than_get_is_refused_naming_get() {
 
     let (status, headers, _) = asked(
         port,
-        &format!("POST /app/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"),
+        &format!("POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"),
     );
 
     assert_eq!(status, "HTTP/1.1 405 Method Not Allowed");
@@ -140,7 +132,7 @@ fn a_host_other_than_loopbacks_own_is_refused() {
     assert_eq!(
         asked(
             port,
-            &format!("GET /app/ HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n")
+            &format!("GET / HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n")
         )
         .0,
         "HTTP/1.1 200 OK"
@@ -151,7 +143,7 @@ fn a_host_other_than_loopbacks_own_is_refused() {
         String::new(),
     ] {
         assert_eq!(
-            asked(port, &format!("GET /app/ HTTP/1.1\r\nHost: {host}\r\n\r\n")).0,
+            asked(port, &format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n")).0,
             "HTTP/1.1 421 Misdirected Request",
             "{host:?}"
         );
@@ -174,16 +166,11 @@ fn a_port_another_holds_is_refused_naming_the_flag_that_picks_another() {
 
 /// The query is the loader's to decode, so every byte but the unreserved ones crosses percent-encoded, a separator of the query's own among them.
 #[test]
-fn a_url_names_the_page_and_carries_each_argument_percent_encoded() {
-    let served = Served {
-        name: "my app".to_string(),
-        files: BTreeMap::new(),
-    };
-
-    assert_eq!(served.url(8000, &[]), "http://127.0.0.1:8000/my%20app/");
+fn a_url_names_the_root_and_carries_each_argument_percent_encoded() {
+    assert_eq!(url(8000, &[]), "http://127.0.0.1:8000/");
     assert_eq!(
-        served.url(8001, &["one".into(), "a&b=c+d".into(), "é".into()]),
-        "http://127.0.0.1:8001/my%20app/?arg=one&arg=a%26b%3Dc%2Bd&arg=%C3%A9"
+        url(8001, &["one".into(), "a&b=c+d".into(), "é".into()]),
+        "http://127.0.0.1:8001/?arg=one&arg=a%26b%3Dc%2Bd&arg=%C3%A9"
     );
 }
 
@@ -191,8 +178,8 @@ fn a_url_names_the_page_and_carries_each_argument_percent_encoded() {
 fn a_path_is_decoded_before_it_is_looked_for_and_a_malformed_escape_is_refused() {
     let port = serving();
 
-    assert_eq!(get(port, "/%61pp/web/a%20b.js").0, "HTTP/1.1 200 OK");
-    for path in ["/app/web/a%2", "/app/web/a%+1.js", "/app/%FF"] {
+    assert_eq!(get(port, "/%77eb/a%20b.js").0, "HTTP/1.1 200 OK");
+    for path in ["/web/a%2", "/web/a%+1.js", "/%FF"] {
         assert_eq!(get(port, path).0, "HTTP/1.1 400 Bad Request", "{path}");
     }
 }

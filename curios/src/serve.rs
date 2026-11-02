@@ -1,6 +1,6 @@
 //! Serving a page to a browser on this machine: the files a browser build is, held in memory and answered over loopback until the process is stopped.
 //!
-//! **Only what a page needs.** A request is a `GET` of a path under `/<name>/`, answered with the file at that page path, or `index.html` for the directory itself; `/` and `/<name>` are redirected there, so the page's relative paths resolve inside it. Every reply says `Cache-Control: no-store`, since a page changes by running the command again, and `Connection: close`, so no connection outlives its one request.
+//! **Only what a page needs.** A request is a `GET` of a path, answered with the file at that page path, or with `index.html`, the page's own name for its document, for `/`; the page stands at the root, so its relative paths resolve there. Every reply says `Cache-Control: no-store`, since a page changes by running the command again, and `Connection: close`, so no connection outlives its one request.
 //!
 //! **Loopback, and only by its own name.** The server binds `127.0.0.1` and refuses a request whose `Host` is not that address or `localhost` at its port, which keeps a page some other site loads from reaching it through a name that resolves here.
 
@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_browser::{ARGUMENT, INDEX_HTML, content_type, encoded},
+    curios_browser::{ARGUMENT, INDEX_HTML, content_type},
     std::{
         collections::BTreeMap,
         ffi::OsString,
@@ -25,37 +25,34 @@ pub(crate) const PORT: u16 = 8000;
 /// The most a request's head may hold before it is refused: far past any a browser sends for a page.
 const HEAD: usize = 16 * 1024;
 
-/// A page held to serve: the name it is served under, and every file of it by its page path.
+/// A page held to serve: every file of it by its page path.
 pub(crate) struct Served {
-    pub(crate) name: String,
     pub(crate) files: BTreeMap<String, Vec<u8>>,
 }
 
-impl Served {
-    /// Where a browser opens the page served on `port`, its program handed `args`: each a pair of the query under the key the page claims, every byte but the unreserved ones percent-encoded, as the loader decodes them.
-    pub(crate) fn url(&self, port: u16, args: &[OsString]) -> String {
-        let query = args
-            .iter()
-            .map(|arg| {
-                let mut pair = format!("{ARGUMENT}=");
-                for &byte in arg.as_encoded_bytes() {
-                    match byte {
-                        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                            pair.push(char::from(byte));
-                        }
-                        _ => pair.push_str(&format!("%{byte:02X}")),
+/// Where a browser opens the page served on `port`, its program handed `args`: the root, each argument a pair of the query under the key the page claims, every byte but the unreserved ones percent-encoded, as the loader decodes them.
+pub(crate) fn url(port: u16, args: &[OsString]) -> String {
+    let query = args
+        .iter()
+        .map(|arg| {
+            let mut pair = format!("{ARGUMENT}=");
+            for &byte in arg.as_encoded_bytes() {
+                match byte {
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                        pair.push(char::from(byte));
                     }
+                    _ => pair.push_str(&format!("%{byte:02X}")),
                 }
+            }
 
-                pair
-            })
-            .collect::<Vec<_>>()
-            .join("&");
+            pair
+        })
+        .collect::<Vec<_>>()
+        .join("&");
 
-        match query.is_empty() {
-            true => format!("http://127.0.0.1:{port}/{}/", encoded(&self.name)),
-            false => format!("http://127.0.0.1:{port}/{}/?{query}", encoded(&self.name)),
-        }
+    match query.is_empty() {
+        true => format!("http://127.0.0.1:{port}/"),
+        false => format!("http://127.0.0.1:{port}/?{query}"),
     }
 }
 
@@ -100,14 +97,6 @@ impl Reply {
             status,
             headers: vec![("Content-Type", "text/plain; charset=utf-8".to_string())],
             body: format!("{body}\n").into_bytes(),
-        }
-    }
-
-    fn redirect(to: String) -> Self {
-        Self {
-            status: "308 Permanent Redirect",
-            headers: vec![("Location", to)],
-            body: Vec::new(),
         }
     }
 }
@@ -188,16 +177,14 @@ fn replied(head: &[String], served: &Served, port: u16) -> Reply {
     let Some(path) = decoded(target.split(['?', '#']).next().unwrap_or("")) else {
         return Reply::text("400 Bad Request", "the path is not percent-encoded UTF-8");
     };
-    let page = format!("/{}/", encoded(&served.name));
 
-    if path == "/" || path == format!("/{}", served.name) {
-        return Reply::redirect(page);
-    }
-
-    let file = match path.strip_prefix(&format!("/{}/", served.name)) {
-        Some("") => INDEX_HTML,
-        Some(within) => within,
-        None => return Reply::text("404 Not Found", "no page is served there"),
+    // The root is the page's document, by the page's own name for it; everything else is a file at its page path.
+    let file = match path.as_str() {
+        "/" => INDEX_HTML,
+        path => match path.strip_prefix('/') {
+            Some(within) if !within.is_empty() => within,
+            _ => return Reply::text("404 Not Found", "the page holds no file there"),
+        },
     };
 
     match served.files.get(file) {
