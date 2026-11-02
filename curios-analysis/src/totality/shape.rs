@@ -4,6 +4,9 @@
 //!
 //! Free-monoid layers are held as packed **runs** — [`Shape::UnaryRun`], [`Shape::ElemRun`] — mirroring the carriers' own packed representation: `Nat::Succ` carries its spine as a count and `Bytes` its bytes as a value, so a literal's shape costs its representation rather than its value. The subterm order on a run is decided by count arithmetic and suffix agreement; expanding a run into one nested node per layer would make both the construction and every comparison recurse as deep as the literal is large, which for a `Nat` is unbounded by the source that spelled it.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::Size,
     curios_core::{Atom, Free, Global},
