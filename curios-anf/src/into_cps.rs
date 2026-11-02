@@ -22,8 +22,6 @@ mod lowerer;
 use lowerer::*;
 
 #[cfg(test)]
-mod knot_tests;
-#[cfg(test)]
 mod tests;
 
 use {

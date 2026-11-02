@@ -2199,27 +2199,7 @@ pub fn reduce_intrinsic(
 }
 
 #[cfg(test)]
-mod compare_tests;
-#[cfg(test)]
-mod cost_tests;
-#[cfg(test)]
-mod flt_tests;
-#[cfg(test)]
-mod free_monoid_tests;
-#[cfg(test)]
-mod lattice_tests;
-#[cfg(test)]
-mod laws_tests;
-#[cfg(test)]
-mod magnitude_tests;
-#[cfg(test)]
-mod nat_tests;
-#[cfg(test)]
-mod power_tests;
+mod tests;
 
 #[cfg(test)]
-mod shift_tests;
-#[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod truth_tests;

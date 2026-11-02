@@ -15,12 +15,7 @@ use eager::*;
 mod test_support;
 
 #[cfg(test)]
-mod knot_tests;
-#[cfg(test)]
-mod shape_tests;
-
-#[cfg(test)]
-mod import_tests;
+mod tests;
 
 use {
     super::{

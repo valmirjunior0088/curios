@@ -35,15 +35,7 @@ pub use module::*;
 mod test_support;
 
 #[cfg(test)]
-mod bidirectional_tests;
-#[cfg(test)]
-mod hidden_field_tests;
-#[cfg(test)]
-mod intrinsic_tests;
-#[cfg(test)]
-mod match_tests;
-#[cfg(test)]
-mod privacy_tests;
+mod tests;
 
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},

@@ -74,21 +74,7 @@ mod parked;
 mod test_support;
 
 #[cfg(test)]
-mod awaiting_tests;
-#[cfg(test)]
-mod held_tests;
-#[cfg(test)]
-mod need_tests;
-#[cfg(test)]
-mod restriction_tests;
-#[cfg(test)]
-mod retry_tests;
-#[cfg(test)]
-mod rollback_tests;
-#[cfg(test)]
-mod spelling_tests;
-#[cfg(test)]
-mod window_tests;
+mod tests;
 
 use {
     super::{Error, UniverseMark},

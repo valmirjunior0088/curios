@@ -21,47 +21,9 @@ mod top_level;
 pub(crate) use top_level::*;
 
 #[cfg(test)]
-mod application_tests;
-#[cfg(test)]
-mod bang_tests;
-#[cfg(test)]
-mod blank_tests;
-#[cfg(test)]
-mod concept_tests;
-#[cfg(test)]
-mod documentation_tests;
-#[cfg(test)]
-mod foreign_tests;
-#[cfg(test)]
-mod grammar_tests;
-#[cfg(test)]
-mod keyword_tests;
-#[cfg(test)]
-mod let_tests;
-#[cfg(test)]
-mod local_binding_tests;
-#[cfg(test)]
-mod marks_tests;
-#[cfg(test)]
-mod match_expr_tests;
-#[cfg(test)]
-mod module_tests;
-#[cfg(test)]
-mod numeric_literal_tests;
-#[cfg(test)]
-mod recovery_tests;
-#[cfg(test)]
-mod refusal_tests;
-#[cfg(test)]
-mod spread_tests;
-#[cfg(test)]
 mod test_support;
 #[cfg(test)]
-mod text_literal_tests;
-#[cfg(test)]
-mod tuples_tests;
-#[cfg(test)]
-mod type_declaration_tests;
+mod tests;
 
 use {
     super::{Doc, Label, Name, Term},

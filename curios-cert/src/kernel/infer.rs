@@ -20,23 +20,9 @@ mod intrinsic;
 use intrinsic::*;
 
 #[cfg(test)]
-mod binding_tests;
-#[cfg(test)]
-mod declaration_tests;
-#[cfg(test)]
-mod intrinsic_tests;
-#[cfg(test)]
-mod proof_binder_tests;
-#[cfg(test)]
-mod signature_tests;
-#[cfg(test)]
-mod sort_tests;
-#[cfg(test)]
-mod structure_tests;
-#[cfg(test)]
 mod test_support;
 #[cfg(test)]
-mod typing_tests;
+mod tests;
 
 use {
     super::{

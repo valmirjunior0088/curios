@@ -1,0 +1,112 @@
+//! Structural equality modulo the identities a lowering mints.
+
+use {
+    crate::term::*,
+    crate::{Level, MetavarId, Nat, UniverseMetaId},
+    curios_utilities::Keyed,
+};
+
+fn hole(id: usize) -> Term {
+    Term::hole(MetavarId::from(id))
+}
+
+fn type_at(id: usize) -> Term {
+    Term::type_at(Level::meta(UniverseMetaId::from(id)))
+}
+
+fn arrow(domain: Term, codomain: Term) -> Term {
+    Term::func_type([(Free::local(0, Some("x")), domain)], codomain)
+}
+
+/// A renamed binder is another text: equal as a term, since a name moves no judgment, and not modulo metas, since it moves what is stored.
+#[test]
+fn a_renamed_binder_is_another_text_modulo_metas() {
+    let over = |hint: &str| {
+        Term::func_type(
+            [(
+                Free::local(0, Some(hint)),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
+            Term::intrinsic(Intrinsic::NatType),
+        )
+    };
+
+    assert_eq!(over("n"), over("m"));
+    assert!(over("n").equal_modulo_metas(&over("n"), &mut MetaRenaming::default()));
+    assert!(!over("n").equal_modulo_metas(&over("m"), &mut MetaRenaming::default()));
+}
+
+#[test]
+fn two_holes_of_different_ids_are_equal_under_a_fresh_renaming() {
+    assert_ne!(hole(1), hole(7), "by id they differ");
+    assert!(hole(1).equal_modulo_metas(&hole(7), &mut MetaRenaming::default()));
+}
+
+/// The renaming is a bijection: one id standing at two positions on one side has to stand at two positions on the other.
+#[test]
+fn a_hole_shared_on_one_side_and_split_on_the_other_is_unequal() {
+    let shared = arrow(hole(1), hole(1));
+    let split = arrow(hole(2), hole(3));
+
+    assert!(!shared.equal_modulo_metas(&split, &mut MetaRenaming::default()));
+    assert!(!split.equal_modulo_metas(&shared, &mut MetaRenaming::default()));
+    assert!(shared.equal_modulo_metas(&arrow(hole(4), hole(4)), &mut MetaRenaming::default()));
+}
+
+/// A written goal and a silent hole are two different things a lowering writes, whatever their ids.
+#[test]
+fn a_hole_and_a_goal_are_unequal() {
+    assert!(!hole(1).equal_modulo_metas(
+        &Term::goal(MetavarId::from(1)),
+        &mut MetaRenaming::default()
+    ));
+}
+
+/// A binding made while comparing one term holds for every later term compared under the same renaming, which is what lets one declaration's type and body share their ids.
+#[test]
+fn a_bound_universe_meta_is_held_to_its_binding() {
+    let mut renaming = MetaRenaming::default();
+
+    assert!(type_at(1).equal_modulo_metas(&type_at(5), &mut renaming));
+    assert!(type_at(1).equal_modulo_metas(&type_at(5), &mut renaming));
+    assert!(!type_at(1).equal_modulo_metas(&type_at(6), &mut renaming));
+    assert!(
+        !type_at(2).equal_modulo_metas(&type_at(5), &mut renaming),
+        "5 is already bound on the other side"
+    );
+}
+
+#[test]
+fn a_structural_difference_is_unequal_under_any_renaming() {
+    assert!(
+        !arrow(hole(1), type_at(1))
+            .equal_modulo_metas(&arrow(type_at(2), hole(2)), &mut MetaRenaming::default())
+    );
+    assert!(!arrow(hole(1), hole(2)).equal_modulo_metas(&hole(3), &mut MetaRenaming::default()));
+}
+
+/// Two terms whose cached hashes are made one, as a collision would make them: the hash is consulted only to refuse, so equality walks past the two roots to the operands that differ, a `Keyed` key compares the terms it holds, and a table keyed by one misses the other. A collision costs a walk and never a verdict.
+#[test]
+fn two_terms_hashed_alike_are_still_two() {
+    let x = Term::free_var(&Free::local(0, Some("x")));
+    let sum = |addend: usize| {
+        Term::intrinsic(Intrinsic::NatAdd(
+            x.clone(),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(addend))),
+        ))
+    };
+    let (one, two) = (sum(1), sum(2));
+    for term in [&one, &two] {
+        term.inner.scalars.fill(Scalars {
+            hash: 0x5eed,
+            ..Scalars::of(term.look())
+        });
+    }
+
+    assert_eq!(one.structural_hash(), two.structural_hash());
+    assert_ne!(one, two);
+    assert!(Keyed::new(one.clone()) != Keyed::new(two.clone()));
+    let table = HashMap::from([(one.clone(), ())]);
+    assert!(table.contains_key(&one));
+    assert!(!table.contains_key(&two));
+}

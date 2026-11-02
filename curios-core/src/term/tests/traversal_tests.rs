@@ -1,0 +1,539 @@
+//! Collecting and reaching over a term: free variables, metavariables, and the sharing a walk must visit once.
+
+use {
+    crate::term::test_support::*,
+    crate::*,
+    curios_utilities::{Plicity, Qualifier},
+    std::collections::BTreeSet,
+};
+
+#[test]
+fn collect_ignores_index_names() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let z = Free::local(2, Some("z"));
+    let w = Free::local(3, Some("w"));
+    let term = Term::func(
+        [(x, Term::type_ground())],
+        Term::tuple([
+            Term::free_var(&x),
+            Term::rec(
+                vec![(y, Term::type_ground(), Term::free_var(&z))],
+                Term::tuple([Term::free_var(&y), Term::free_var(&w)]),
+            ),
+        ]),
+    );
+
+    assert_eq!(
+        term.free_vars().iter().copied().collect::<BTreeSet<_>>(),
+        BTreeSet::from([w, z])
+    );
+}
+
+/// A chain-shaped term shares its single carrier child's memoized set upward instead of copying it once per link.
+#[test]
+fn free_vars_share_the_single_carrier_child_allocation() {
+    let x = Free::local(0, Some("x"));
+    let chain = Term::proj(Term::proj(Term::free_var(&x), 0), 0);
+    chain.free_vars();
+
+    let Subterm::Proj(outer) = chain.as_ref() else {
+        panic!("chain changed shape");
+    };
+    let Subterm::Proj(middle) = outer.head.as_ref() else {
+        panic!("chain changed shape");
+    };
+    assert!(
+        chain
+            .inner
+            .frees
+            .get()
+            .unwrap()
+            .shares(middle.head.inner.frees.get().unwrap())
+    );
+}
+
+#[test]
+fn metavar_is_a_closed_global_head() {
+    let m = Term::hole(7);
+    assert_eq!(m.reach(), 0);
+    assert!(m.closed());
+    assert_eq!(format!("{m}"), "?7");
+}
+
+#[test]
+fn metavars_collects_ids_across_structure() {
+    let x = Free::local(0, Some("x"));
+    // (λx. ?1)(?2, Nat.add ?3 ?1)
+    let term = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::hole(1)),
+        [
+            Term::hole(2),
+            Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
+        ],
+    );
+    assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetavarId)));
+}
+
+#[test]
+fn any_metavar_short_circuits_and_agrees_with_collection() {
+    let x = Free::local(0, Some("x"));
+    // (λx. ?1)(?2, Nat.add ?3 ?1)
+    let term = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::hole(1)),
+        [
+            Term::hole(2),
+            Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
+        ],
+    );
+
+    // A predicate over the ids agrees with the collecting walk: a present id is found, an absent one is not.
+    assert!(term.any_metavar(&mut |id| id == MetavarId(3)));
+    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
+    assert_eq!(term.any_metavar(&mut |_| true), !term.metavars().is_empty());
+
+    // Bails on the first metavariable: the head's `?1` is reached first, so an accept-anything predicate runs exactly once instead of visiting all four.
+    let mut visits = 0;
+    assert!(term.any_metavar(&mut |_| {
+        visits += 1;
+        true
+    }));
+    assert_eq!(visits, 1);
+
+    // A metavariable-free term never fires the predicate.
+    let plain = Term::func([(x, Term::type_ground())], Term::free_var(&x));
+    let mut fired = false;
+    assert!(!plain.any_metavar(&mut |_| {
+        fired = true;
+        true
+    }));
+    assert!(!fired);
+}
+
+// The elaboration-runaway pin: a metavariable below a shared node defeats the `has_metavar` prune on every ancestor, so without the walk's visited set this term — 64 levels of self-application over a metavar, a 2^64-node tree expansion of a 65-node DAG — cannot be walked at all. Terminating is the assertion; the exact id set and the single predicate firing pin that dedup skips revisits, not nodes.
+#[test]
+fn any_metavar_visits_a_shared_subterm_once() {
+    let mut term = Term::hole(1);
+    for _ in 0..64 {
+        term = Term::apply(term.clone(), [term]);
+    }
+
+    assert_eq!(term.metavars(), BTreeSet::from([MetavarId(1)]));
+
+    let mut visits = 0;
+    assert!(!term.any_metavar(&mut |_| {
+        visits += 1;
+        false
+    }));
+    assert_eq!(visits, 1);
+}
+
+#[test]
+fn deep_terms_are_searched_without_native_recursion() {
+    // The shape neither prune stops: `has_metavar` is set on every ancestor of a hole, so a spine this tall is descended in full. Descended natively, at five debug frames per link, either walk would die as a bare `SIGSEGV` — *below* the depth at which the reduction budget refuses. A regression here is a stack overflow rather than a failure.
+    let argument = Term::free_var(&Free::local(0, None));
+    let mut term = Term::hole(1);
+    for _ in 0..DEEP {
+        term = Term::apply(term, [argument.clone()]);
+    }
+
+    // The hole at the base is found, and an absent id walks the whole spine to say so.
+    assert!(term.any_metavar(&mut |id| id == MetavarId(1)));
+    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
+
+    // Its sibling, which the kernel's motive check reaches: the needle is found under the spine, and one that never occurs is refused after walking it.
+    assert!(term.mentions_term(&argument));
+    assert!(!term.mentions_term(&Term::free_var(&Free::local(1, None))));
+}
+
+#[test]
+fn has_local_free_flags_locals_not_globals() {
+    let binder_0 = Free::local(0, Some("/std/Str/step"));
+    let binder_1 = Free::local(1, Some("c#1"));
+    let binder_2 = Free::local(2, Some("x#9"));
+    fn global(path: [&str; 2]) -> Term {
+        Term::free_var(&Free::global(Qualifier::from(path)))
+    }
+
+    // A local is a discriminant, not a spelling: what makes a free variable context-dependent — the only kind that can invalidate an elaboration-cache entry across frames — is that a scope opened it.
+    assert!(Term::free_var(&Free::local(3, Some("x"))).has_local_free());
+    assert!(!global(["std", "Nat"]).has_local_free());
+
+    // A compiler-generated *global* is not context dependent and must not set the bit. A search for a marker character would misfire on every term mentioning a witness spelled `witness#N`, silently disabling the elaboration caches; the bit is a discriminant, so no spelling can.
+    assert!(
+        !Term::free_var(&Free::Global(Global::Witness(WitnessId::Unspelled {
+            module: Qualifier::from(["std"]),
+            place: 0
+        })))
+        .has_local_free()
+    );
+    assert!(!global(["std", "Nat"]).has_local_free());
+
+    // The bit is structural: a minted name anywhere in the tree sets it.
+    let inner = Term::apply(Term::free_var(&binder_0), [Term::free_var(&binder_1)]);
+    assert!(inner.has_local_free());
+
+    // A binder whose label hint carries `#` stays clean: the hint is not an occurrence, and the captured variable is bound, not free.
+    let binder = Term::func([(binder_2, Term::type_ground())], Term::free_var(&binder_2));
+    assert!(!binder.has_local_free());
+}
+
+#[test]
+fn has_metavar_flags_any_metavariable_node() {
+    let x = Free::local(0, Some("x"));
+    assert!(Term::hole(1).has_metavar());
+    assert!(
+        Term::apply(
+            Term::func([(x, Term::type_ground())], Term::free_var(&x)),
+            [Term::hole(2)],
+        )
+        .has_metavar()
+    );
+    assert!(!Term::func([(x, Term::type_ground())], Term::free_var(&x)).has_metavar());
+}
+
+#[test]
+fn metavar_is_inert_under_traversal() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    // shifting/capture must not disturb a metavariable node
+    let m = Term::hole(4);
+    assert_eq!(m.shift(3), m);
+    let scope = Scope::close(One, &[&x], Term::hole(4));
+    assert_eq!(scope.open(&[&Term::free_var(&y)]), Term::hole(4));
+}
+
+#[test]
+fn variant_collects_metavars_and_prints_as_function_call() {
+    let ctor = Term::variant(
+        nominal("Result"),
+        [Term::hole(1)],
+        "success",
+        [Term::hole(2)],
+    );
+    assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
+    assert_eq!(format!("{ctor}"), "/Result/success(?2)");
+
+    let type_ = Term::induct_type(
+        nominal("Result"),
+        [Term::intrinsic(Intrinsic::NatType), Term::hole(3)],
+        Vec::<Term>::new(),
+    );
+    assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetavarId)));
+    assert_eq!(format!("{type_}"), "/Result(Nat, ?3)");
+}
+
+#[test]
+fn inductive_variants_reach_spans_components() {
+    assert_eq!(
+        Term::induct_type(
+            nominal("Result"),
+            [Term::var(Var::bound(2))],
+            Vec::<Term>::new()
+        )
+        .reach(),
+        3
+    );
+    assert_eq!(
+        Term::variant(
+            nominal("Result"),
+            [Term::var(Var::bound(0))],
+            "success",
+            [Term::var(Var::bound(4))],
+        )
+        .reach(),
+        5
+    );
+}
+
+#[test]
+fn reach_basic_values() {
+    let x = Free::local(0, Some("x"));
+    assert_eq!(Term::type_ground().reach(), 0);
+    assert_eq!(Term::free_var(&x).reach(), 0);
+    assert_eq!(Term::var(Var::bound(0)).reach(), 1);
+    assert_eq!(Term::var(Var::bound(3)).reach(), 4);
+    // closed identity function λx.x
+    assert_eq!(
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)).reach(),
+        0
+    );
+}
+
+#[test]
+fn reach_telescope_absorbs_arity() {
+    // body references bound index 2 (reach 3); each telescope binder absorbs one. `Scope::constant` places the body without capturing, so the bound index is preserved exactly (unlike `Telescope::build`, which captures by label).
+    let f1 = Term::from(Subterm::Func(Func {
+        telescope: Telescope::cons(
+            Plicity::Explicit,
+            Term::type_ground(),
+            Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
+        ),
+    }));
+    assert_eq!(f1.reach(), 2); // one binder: (2 + 1) - 1
+
+    let f2 = Term::from(Subterm::Func(Func {
+        telescope: Telescope::cons(
+            Plicity::Explicit,
+            Term::type_ground(),
+            Scope::constant(
+                One,
+                Telescope::cons(
+                    Plicity::Explicit,
+                    Term::type_ground(),
+                    Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
+                ),
+            ),
+        ),
+    }));
+    assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
+}
+
+/// Every `Type` is a level position, a ground `Type 0` included: `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs, zero against `u` and then `u` against zero, where a walk over universe data alone would have skipped the `Type 0` and paired `u` with itself. Terms that differ only in levels report the pairs they differ in; terms that differ in anything else report none at all.
+#[test]
+fn level_differences_count_a_ground_sort_as_a_position() {
+    let u_level = Level::param(UniverseParam(0));
+    let u = Term::type_at(u_level.clone());
+    let v = Term::type_at(Level::param(UniverseParam(1)));
+    let ground = Term::type_at(Level::zero());
+
+    assert_eq!(
+        Term::tuple([ground.clone(), u.clone()])
+            .level_differences(&Term::tuple([u.clone(), ground]), |_| false, &())
+            .map(|found| found.compared),
+        Some(vec![
+            (Level::zero(), u_level.clone()),
+            (u_level.clone(), Level::zero())
+        ])
+    );
+    assert_eq!(
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)])
+            .level_differences(
+                &Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]),
+                |_| false,
+                &()
+            )
+            .map(|found| found.compared),
+        Some(vec![(u_level, Level::param(UniverseParam(1)))])
+    );
+    assert_eq!(
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
+            &Term::tuple([u, Term::intrinsic(Intrinsic::BoolType)]),
+            |_| false,
+            &()
+        ),
+        None
+    );
+}
+
+/// Two nodes apart in a sort are apart under a reading that does not pair sorts, and differ in a sort pair under one that does: a `Sort` at two open qualities, and an instance stating two.
+#[test]
+fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
+    let (u, v) = (
+        Level::meta(UniverseMetaId(0)),
+        Level::meta(UniverseMetaId(1)),
+    );
+    let (p, q) = (
+        Quality::Meta(QualityMetaId(0)),
+        Quality::Meta(QualityMetaId(1)),
+    );
+    let (this, that) = (Term::sort_at(p, u.clone()), Term::sort_at(q, v.clone()));
+
+    assert_eq!(this.level_differences(&that, |_| false, &()), None);
+    assert_eq!(
+        this.level_differences(&that, |_| false, &PairingSorts)
+            .map(|found| (found.compared, found.sorts)),
+        Some((vec![(u, v)], vec![(p, q)]))
+    );
+
+    let poly = Free::Global(nominal("poly"));
+    let instance = |quality| {
+        Term::instance_of(
+            &poly,
+            Universes {
+                levels: vec![Level::zero()],
+                qualities: vec![quality],
+            },
+        )
+    };
+    assert_eq!(
+        instance(p).level_differences(&instance(Quality::Prop), |_| false, &()),
+        None
+    );
+    assert_eq!(
+        instance(p)
+            .level_differences(&instance(Quality::Prop), |_| false, &PairingSorts)
+            .map(|found| found.sorts),
+        Some(vec![(p, Quality::Prop)])
+    );
+}
+
+/// A metavariable's answer is one level wherever it stands: the same parameter inside a group as outside it.
+///
+/// A group binds no universe ([`curios_core::RecGroup`]), so no binder stands between a term and the declaration whose parameters its levels are, and an answer substituted into both positions is shifted by nothing. A group that bound its own would have made the inner occurrence read the parameter after it — the second reading of one index that `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+#[test]
+fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
+    let meta = UniverseMetaId(0);
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let at = |outside: Level, inside: Level| {
+        Term::tuple([
+            Term::type_at(outside),
+            Term::rec_proj(
+                RecGroup::new(vec![RecMemberScopes {
+                    type_: member(Term::type_at(inside.clone())),
+                    body: member(Term::type_at(inside)),
+                }]),
+                0,
+            ),
+        ])
+    };
+
+    let substituted =
+        substitute_universe_metas(&at(Level::meta(meta), Level::meta(meta)), move |found| {
+            Ok((found == meta).then(|| Level::param(UniverseParam(0))))
+        })
+        .expect("substituting a parameter cannot overflow");
+
+    assert_eq!(
+        substituted,
+        at(
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(0))
+        )
+    );
+}
+
+/// The walk costs the graph, not the tree it unfolds to. Each side pairs a shared node with itself sixty times over, so it has sixty-one nodes and two to the sixtieth paths — the shape a reduct takes when a position built a character at a time mentions the one before it more than once. A walk per path never answers; this one reports the single differing pair once.
+#[test]
+fn level_differences_walk_the_graph_not_the_tree() {
+    let mut this = Term::type_at(Level::param(UniverseParam(0)));
+    let mut that = Term::type_at(Level::param(UniverseParam(1)));
+    for _ in 0..60 {
+        this = Term::tuple([this.clone(), this]);
+        that = Term::tuple([that.clone(), that]);
+    }
+
+    assert_eq!(
+        this.level_differences(&that, |_| false, &())
+            .map(|found| found.compared),
+        Some(vec![(
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1))
+        )])
+    );
+}
+
+/// A wildcard stands for anything, levels included: the positions it covers contribute no pair and cannot make the sides differ.
+#[test]
+fn level_differences_skip_what_a_wildcard_covers() {
+    let u = Term::type_at(Level::param(UniverseParam(0)));
+    let v = Term::type_at(Level::param(UniverseParam(1)));
+    let is_hole = |term: &Term| matches!(&**term, Subterm::Metavar(_));
+
+    assert_eq!(
+        Term::tuple([Term::hole(0), u.clone()])
+            .level_differences(
+                &Term::tuple([Term::intrinsic(Intrinsic::BoolType), v]),
+                is_hole,
+                &()
+            )
+            .map(|found| found.compared),
+        Some(vec![(
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1))
+        )])
+    );
+    assert_eq!(
+        Term::tuple([Term::hole(0), u.clone()])
+            .level_differences(&Term::tuple([u.clone(), u]), is_hole, &())
+            .map(|found| found.compared),
+        Some(Vec::new())
+    );
+}
+
+/// Equality up to a wildcard ignores exactly the wildcard positions: a hole against anything is a match, and everything else still has to agree.
+#[test]
+fn equality_up_to_a_wildcard_ignores_only_the_wildcard_positions() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let bool_ = Term::intrinsic(Intrinsic::BoolType);
+    let is_hole = |term: &Term| matches!(&**term, Subterm::Metavar(_));
+
+    assert!(
+        Term::tuple([Term::hole(0), nat.clone()])
+            .equal_up_to(&Term::tuple([nat.clone(), nat.clone()]), is_hole),
+        "a hole did not stand for the term in its position",
+    );
+    assert!(
+        !Term::tuple([Term::hole(0), nat.clone()])
+            .equal_up_to(&Term::tuple([nat.clone(), bool_.clone()]), is_hole),
+        "a difference outside the wildcard was ignored",
+    );
+    assert!(
+        !Term::tuple([nat.clone(), nat.clone()]).equal_up_to(&Term::tuple([nat, bool_]), |_| false),
+        "with no wildcards the comparison stopped being structural equality",
+    );
+}
+
+/// A term holds a group where a `Rec` node stands in it, at any depth, and nowhere else. There is one spelling: a group binds no universe, so no instance is taken of a member and an [`Instance`]'s head, being a variable, names none.
+#[test]
+fn a_term_holds_a_group_where_a_rec_node_stands() {
+    let f = Free::local(0, Some("f"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let rec = Term::rec(
+        vec![(f, nat.clone(), Term::free_var(&f))],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+    let projection = Term::rec_proj(group.clone(), 0);
+
+    assert!(rec.has_group());
+    assert!(projection.has_group());
+    assert!(Term::tuple([nat.clone(), Term::apply(projection, [nat.clone()])]).has_group());
+    assert!(!Term::tuple([nat.clone(), Term::free_var(&f)]).has_group());
+    assert!(!nat.has_group());
+}
+
+/// Every parameter a term spells is read at its own index, inside a group as outside it: a group binds no universe, so no index is shifted by one standing above it.
+#[test]
+fn universe_params_are_read_at_their_own_index() {
+    let level = |index| Level::param(UniverseParam(index));
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: member(Term::type_at(level(0))),
+        body: member(Term::type_at(level(2))),
+    }]);
+    let term = Term::tuple([Term::type_at(level(3)), Term::rec_proj(group, 0)]);
+
+    assert_eq!(
+        universe_params(&term),
+        BTreeSet::from([UniverseParam(0), UniverseParam(2), UniverseParam(3)]),
+    );
+}
+
+/// Of two names a reader picks, the first written is the one found, whichever spells first: `F(zeta(Type), alpha(Type))` finds `zeta`, and `F(alpha(Type), zeta(Type))` `alpha`.
+#[test]
+fn the_first_picked_name_is_the_first_written() {
+    let zeta = Free::global(Qualifier::from(["zeta"]));
+    let alpha = Free::global(Qualifier::from(["alpha"]));
+    let f = Free::global(Qualifier::from(["F"]));
+    let applied = |first: &Free, second: &Free| {
+        Term::apply(
+            Term::free_var(&f),
+            [
+                Term::apply(Term::free_var(first), [Term::type_ground()]),
+                Term::apply(Term::free_var(second), [Term::type_ground()]),
+            ],
+        )
+    };
+    let partial = |name: &Free| *name == zeta || *name == alpha;
+
+    assert_eq!(applied(&zeta, &alpha).first_free(partial), Some(zeta));
+    assert_eq!(applied(&alpha, &zeta).first_free(partial), Some(alpha));
+    assert_eq!(
+        applied(&zeta, &alpha).first_free(|name| *name == alpha),
+        Some(alpha)
+    );
+    assert_eq!(applied(&zeta, &alpha).first_free(|_| false), None);
+}
