@@ -239,15 +239,35 @@ fn dispatch() -> Result<(), Failure> {
                 return Err(Failure::Concluded(Concluded::Exited(code)));
             }
         }
-        // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed.
+        // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed, natively or in whatever browser opened the served run.
         Mode::Test {
+            target: TargetValue(target),
+            port,
             filter,
             elaboration,
             ..
         } => {
-            let selection = contract.admit_any(subject, manifest, &here()?)?;
+            if target == Target::Native && port.is_some() {
+                return Err(Failure::Error(
+                    "`--port` is where a page is served, and `--target native` runs the tests here: `--target browser` serves their pages".to_string(),
+                ));
+            }
 
-            if !run_tests(elaboration.budget, selection, contract.access, &filter)? {
+            let selection = contract.admit_any(subject, manifest, &here()?)?;
+            let green = match target {
+                Target::Native => {
+                    run_tests(elaboration.budget, selection, contract.access, &filter)?
+                }
+                Target::Browser => serve_tests(
+                    elaboration.budget,
+                    selection,
+                    contract.access,
+                    &filter,
+                    port.unwrap_or(PORT),
+                )?,
+            };
+
+            if !green {
                 return Err(Failure::Concluded(Concluded::Failed));
             }
         }

@@ -96,6 +96,8 @@ wasmtime = { version = "50.0.0", default-features = false }
 wasm-bindgen = { version = "0.2.126" }
 wasm-bindgen-cli-support = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
+# One row for the two crates that read the OS's randomness: `curios-native`'s host answers `/std/rand/bytes` with it, and `curios` mints the token a test serve admits reports under.
+getrandom = { version = "0.4.3" }
 
 [profile.dev]
 opt-level = 3

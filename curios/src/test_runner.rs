@@ -7,10 +7,11 @@ mod tests;
 
 use {
     crate::{
-        Access, Heading, Line, Steps, Subject, drained, fact, nested, note_unlinked, processing,
-        report,
+        Access, Failure, Heading, Line, Run, Served, Steps, Subject, bound, drained, fact, nested,
+        note_unlinked, processing, report, serve_run, serving, url,
     },
     curios::{Named, TestSubject, Tested, test_subjects},
+    curios_browser::Posted,
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
     curios_pipeline::{CompileError, TestRecord},
@@ -92,6 +93,12 @@ impl Streams {
         io::stderr()
             .write_all(&self.stderr)
             .expect("failed printing to stderr");
+    }
+
+    /// Take `other` after these, stream to stream.
+    pub(crate) fn append(&mut self, other: Streams) {
+        self.stdout.extend(other.stdout);
+        self.stderr.extend(other.stderr);
     }
 }
 
@@ -405,4 +412,111 @@ fn body(record: &TestRecord, lines: &mut String) {
     for line in record.body.lines() {
         lines.push_str(&format!("    {line}\n"));
     }
+}
+
+/// One subject of a browser run: how it is shown, and the records of the tests its page schedules, in the order the runner opens them.
+struct Planned {
+    shown: Subject,
+    records: Vec<TestRecord>,
+}
+
+/// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root and the pages beside it one subject at a time, each report taken as the step in hand's and printed as native prints a test's end. `Ok(true)` when every selected test passed.
+pub(crate) fn serve_tests(
+    budget: u64,
+    selection: Selection,
+    access: Access,
+    filters: &[String],
+    port: u16,
+) -> Result<bool, Failure> {
+    if let Selection::Program(program) = &selection {
+        note_unlinked(program, "is tested");
+    }
+    let mut printer = Printer::new(filters);
+    let mut planned = Vec::new();
+    let mut pages = Vec::new();
+
+    for subject in test_subjects(selection, drained)? {
+        let shown = shown(subject.named());
+        let store = subject.filed(|root| access.filed(root));
+        let tested = compiled(
+            budget,
+            &subject,
+            &shown,
+            store.as_ref(),
+            printer.under(),
+            Target::Browser,
+        )?;
+        printer.took(store.as_ref(), &tested);
+
+        // A subject with nothing to run reports its compile and is never served.
+        if let Some(files) = tested.page(&subject)? {
+            planned.push(Planned {
+                shown,
+                records: tested.records().to_vec(),
+            });
+            pages.push((Served { files }, tested.records().len()));
+        }
+    }
+
+    // What native says at its end is said before anything is served: a store's refusal, and a filter matching nothing, which ends the run.
+    printer.skipped();
+    printer.unmatched()?;
+    if planned.is_empty() {
+        printer.tally();
+
+        return Ok(printer.green());
+    }
+
+    let token = minted()?;
+    let listener = bound(port)?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| format!("cannot read the address served on: {error}"))?
+        .port();
+
+    serving(&url(port, &[]));
+    printer.testing(&planned[0].shown);
+
+    let run = Run::new(token, pages, |step, guest, posted| {
+        let subject = &planned[step.subject];
+        let mut written = printer.ended(
+            &subject.records[step.test],
+            outcome_of(posted),
+            Some(&guest),
+        );
+
+        // The subject's last test closes it, and opens the next subject or the run's tally, in the same reply.
+        if step.test + 1 == subject.records.len() {
+            written.append(printer.tested(&subject.shown));
+            match planned.get(step.subject + 1) {
+                Some(next) => written.append(printer.testing(&next.shown)),
+                None => written.append(printer.tally()),
+            }
+        }
+
+        written
+    });
+    serve_run(&listener, run)?;
+
+    Ok(printer.green())
+}
+
+/// How a test ended, read off what its page posted: a trap, the word its entry answered, or the exit that left it unanswered — read once here, as native's end is read into [`Outcome`] once. A page that posted none of the three, which the harness never does, is read as a trap saying so.
+fn outcome_of(posted: &Posted) -> Outcome {
+    match (&posted.trap, posted.held, posted.exit_code) {
+        (Some(trap), _, _) => Outcome::Trapped(trap.clone()),
+        (None, Some(held), _) => Outcome::Answered(held),
+        (None, None, Some(code)) => Outcome::Exited(code),
+        (None, None, None) => {
+            Outcome::Trapped("the page reported neither a word, an exit nor a trap".to_string())
+        }
+    }
+}
+
+/// A run's token: the OS's randomness in hex, rendered into the runner alone, so a page some other site loads cannot file a report.
+fn minted() -> Result<String, String> {
+    let mut bytes = [0; 32];
+    getrandom::fill(&mut bytes).map_err(|error| format!("cannot mint the run's token: {error}"))?;
+
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }

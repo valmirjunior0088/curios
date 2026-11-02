@@ -183,3 +183,212 @@ fn a_path_is_decoded_before_it_is_looked_for_and_a_malformed_escape_is_refused()
         assert_eq!(get(port, path).0, "HTTP/1.1 400 Bad Request", "{path}");
     }
 }
+
+/// A page of a run: its document and its program.
+fn page(document: &str, program: &[u8]) -> Served {
+    Served {
+        files: BTreeMap::from([
+            (INDEX_HTML.to_string(), document.as_bytes().to_vec()),
+            ("index.wasm".to_string(), program.to_vec()),
+        ]),
+    }
+}
+
+/// The token a run under test is served under.
+const TOKEN: &str = "0123abcd";
+
+/// A run of two pages, the first scheduling two tests and the second one, served on a port of its own: a report taken is answered with the guest's stdout and a line naming its step on stdout, and the posted trap, where there is one, on stderr; the thread serving the run ends once every step is taken.
+fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
+    let listener = bound(0).expect("a port of loopback's own");
+    let port = listener.local_addr().unwrap().port();
+    let served = thread::spawn(move || {
+        let run = Run::new(
+            TOKEN.to_string(),
+            vec![
+                (page("<!doctype html>first", b"\0asm1"), 2),
+                (page("<!doctype html>second", b"\0asm2"), 1),
+            ],
+            |step, guest, posted| Streams {
+                stdout: format!(
+                    "{}step {}/{}\n",
+                    String::from_utf8_lossy(&guest.stdout),
+                    step.subject,
+                    step.test
+                )
+                .into_bytes(),
+                stderr: posted.trap.clone().unwrap_or_default().into_bytes(),
+            },
+        );
+
+        serve_run(&listener, run)
+    });
+
+    (port, served)
+}
+
+/// `POST /` at `port` with `body`, under `content_type` where one is given.
+fn post(port: u16, content_type: Option<&str>, body: &str) -> (String, Vec<String>, Vec<u8>) {
+    let typed = content_type.map_or(String::new(), |content_type| {
+        format!("Content-Type: {content_type}\r\n")
+    });
+
+    asked(
+        port,
+        &format!(
+            "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{typed}Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        ),
+    )
+}
+
+/// A report of `step` under `token`: `stdout` in base64, and `trap` where there is one.
+fn report(token: &str, step: (usize, usize), stdout: &str, trap: Option<&str>) -> String {
+    let trap = trap.map_or("null".to_string(), |trap| format!("{trap:?}"));
+
+    format!(
+        "{{\"run\":\"{token}\",\"subject\":{},\"test\":{},\"outcome\":{{\"stdout\":\"{stdout}\",\"stderr\":\"\",\"exitCode\":0,\"trap\":{trap},\"held\":true}}}}",
+        step.0, step.1
+    )
+}
+
+/// The reply `body` spells: whether the report was taken, what was written on each stream, and the next step.
+fn replied_with(body: &[u8]) -> (bool, String, String, Option<Step>) {
+    let reply = Reply::parse(body).expect("a reply");
+    let (stdout, stderr) = reply.streams().expect("base64");
+
+    (
+        reply.taken,
+        String::from_utf8(stdout).unwrap(),
+        String::from_utf8(stderr).unwrap(),
+        reply.next,
+    )
+}
+
+#[test]
+fn a_run_is_the_runner_at_the_root_and_the_page_in_hand_beside_it() {
+    let (port, _served) = running();
+
+    let (status, headers, runner) = get(port, "/");
+    assert_eq!(status, "HTTP/1.1 200 OK");
+    assert!(
+        headers.contains(&"Content-Type: text/html; charset=utf-8".to_string()),
+        "{headers:?}"
+    );
+    let runner = String::from_utf8(runner).unwrap();
+    assert!(
+        runner.contains(&format!(
+            "\"token\":\"{TOKEN}\",\"next\":{{\"subject\":0,\"test\":0}}"
+        )),
+        "{runner}"
+    );
+    assert_eq!(get(port, "/index.html").2, b"<!doctype html>first");
+    assert_eq!(get(port, "/index.wasm").2, b"\0asm1");
+    assert_eq!(get(port, "/missing").0, "HTTP/1.1 404 Not Found");
+    let (status, headers, _) = asked(
+        port,
+        &format!("PUT / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    assert_eq!(status, "HTTP/1.1 405 Method Not Allowed");
+    assert!(
+        headers.contains(&"Allow: GET, POST".to_string()),
+        "{headers:?}"
+    );
+}
+
+#[test]
+fn a_report_is_refused_before_it_is_read_without_the_token_the_type_or_a_length_within_the_bound() {
+    let (port, _served) = running();
+    let json = Some("application/json");
+    let held = report(TOKEN, (0, 0), "", None);
+
+    assert_eq!(
+        post(port, json, &report("other", (0, 0), "", None)).0,
+        "HTTP/1.1 403 Forbidden"
+    );
+    assert_eq!(
+        post(port, Some("text/plain"), &held).0,
+        "HTTP/1.1 415 Unsupported Media Type"
+    );
+    assert_eq!(
+        post(port, None, &held).0,
+        "HTTP/1.1 415 Unsupported Media Type"
+    );
+    assert_eq!(post(port, json, "{").0, "HTTP/1.1 400 Bad Request");
+    assert_eq!(
+        asked(
+            port,
+            &format!(
+                "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\n\r\n"
+            )
+        )
+        .0,
+        "HTTP/1.1 411 Length Required"
+    );
+    assert_eq!(
+        asked(
+            port,
+            &format!(
+                "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                BODY + 1
+            )
+        )
+        .0,
+        "HTTP/1.1 413 Content Too Large"
+    );
+    assert_eq!(
+        asked(
+            port,
+            &format!(
+                "POST /index.html HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"
+            )
+        )
+        .0,
+        "HTTP/1.1 404 Not Found"
+    );
+    // Nothing above took a step: the first is still in hand, so the second is not.
+    assert!(!replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).0);
+}
+
+#[test]
+fn a_report_is_taken_for_the_step_in_hand_alone_and_the_run_ends_with_its_last() {
+    let (port, served) = running();
+    let json = Some("application/json");
+
+    // A step not in hand is answered with nothing and ignored.
+    assert_eq!(
+        replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2),
+        (false, String::new(), String::new(), None)
+    );
+    // The first step, its guest having written `hi`: what was written, and the next step.
+    assert_eq!(
+        replied_with(&post(port, json, &report(TOKEN, (0, 0), "aGk=", None)).2),
+        (
+            true,
+            "histep 0/0\n".to_string(),
+            String::new(),
+            Some(Step {
+                subject: 0,
+                test: 1
+            })
+        )
+    );
+    // The first page's last step switches the page in hand.
+    assert_eq!(
+        replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).3,
+        Some(Step {
+            subject: 1,
+            test: 0
+        })
+    );
+    assert_eq!(get(port, "/index.html").2, b"<!doctype html>second");
+    assert_eq!(get(port, "/index.wasm").2, b"\0asm2");
+    // A duplicate is ignored.
+    assert!(!replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).0);
+    // The last step, trapped: its trap on stderr, no next step, and the serve ends, its port closed.
+    assert_eq!(
+        replied_with(&post(port, json, &report(TOKEN, (1, 0), "", Some("boom"))).2),
+        (true, "step 1/0\n".to_string(), "boom".to_string(), None)
+    );
+    served.join().unwrap().unwrap();
+    assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
+}

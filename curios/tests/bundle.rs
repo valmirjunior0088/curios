@@ -257,7 +257,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
 
     assert!(
         refusal.contains(
-            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link"
+            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link, and `test --target browser` runs its tests against the gateway"
         ),
         "{refusal}"
     );

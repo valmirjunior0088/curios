@@ -589,6 +589,7 @@ dependencies = [
  "curios-verdicts",
  "curios-wasm",
  "curios-wonder",
+ "getrandom 0.4.3",
 ]
 
 [[package]]

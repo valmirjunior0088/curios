@@ -448,7 +448,7 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 document --std site — Nothing, store None, leaves Pages, options --std --output --budget --manifest
   takes no subject
-test SUBJECT — Any, store Write, leaves Nothing, options --filter --budget --manifest
+test SUBJECT — Any, store Write, leaves Nothing, options --target --port --filter --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

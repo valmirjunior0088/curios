@@ -166,6 +166,22 @@ pub(crate) enum Mode {
 
         #[arg(
             long,
+            value_enum,
+            value_name = "TARGET",
+            default_value_t = TargetValue(Target::Native),
+            help = "What the tests run on: `native` runs them here, `browser` serves their pages on loopback until every selected test has reported"
+        )]
+        target: TargetValue,
+
+        #[arg(
+            long,
+            value_name = "PORT",
+            help = "The loopback port the pages are served on, beside `--target browser` (default: 8000)"
+        )]
+        port: Option<u16>,
+
+        #[arg(
+            long,
             value_name = "PREFIX",
             help = "Run only the tests at or under the path PREFIX, e.g. /app/Map; repeated, a test any of them selects runs"
         )]

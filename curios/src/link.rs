@@ -91,10 +91,10 @@ fn unanswered(
         return Ok(());
     };
 
-    // A gateway is tested natively through a module standing in for it, so the native refusal names that door.
+    // A gateway is tested natively through a module standing in for it, and against the gateway itself by a test serve, so the native refusal names both doors.
     let stand_in = match target {
         Target::Native => {
-            "; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link"
+            "; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link, and `test --target browser` runs its tests against the gateway"
         }
         Target::Browser => "",
     };

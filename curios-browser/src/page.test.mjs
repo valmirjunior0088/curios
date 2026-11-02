@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -295,4 +295,125 @@ test("a row that states no browser table is refused for a browser, naming the ro
     /`\/app\/double` is answered by the foreign row "native" of app, which states no `\[foreign\.browser\]`: the browser target has nothing to link for it/,
   );
   assert.ok(!existsSync(join(root, "page")));
+});
+
+/** `curios test --target browser` started in `directory` on a port of loopback's own: the port read off its `Serving` line, its streams kept, and the command's end awaited. */
+const serving = (t, directory) => {
+  const child = spawn(
+    compiler,
+    ["test", "--target", "browser", "--port", "0"],
+    {
+      cwd: directory,
+    },
+  );
+  const out = [];
+  const err = [];
+  child.stdout.on("data", (chunk) => out.push(chunk));
+  child.stderr.on("data", (chunk) => err.push(chunk));
+  t.after(() => child.kill());
+
+  const port = new Promise((resolve) => {
+    child.stderr.on("data", (chunk) => {
+      const match = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(String(chunk));
+
+      if (match !== null) {
+        resolve(Number(match[1]));
+      }
+    });
+  });
+  const ended = new Promise((resolve) => {
+    child.on("close", (code) =>
+      resolve({
+        code,
+        stdout: Buffer.concat(out).toString(),
+        stderr: Buffer.concat(err).toString(),
+      }),
+    );
+  });
+
+  return { port, ended };
+};
+
+test("a test page served by the command answers its word through its gateway, and the run ends on its report", async (t) => {
+  const gateway = "export const twice = (n) => n * 2n;\n";
+  const root = tree(t, {
+    "app/curios.toml": manifest({
+      name: "app",
+      row: "dom",
+      path: "web/dom.js",
+      gateway,
+      answers: { double: "twice" },
+    }),
+    "app/lib.crs": `use /std/{Nat, Test};\n\n${DOUBLE}\ntest doubling = Test/equal(double(21)!, 42);\n`,
+    "app/exe.crs": DOUBLED,
+    "app/web/dom.js": gateway,
+  });
+  const { port, ended } = serving(t, join(root, "app"));
+  const base = `http://127.0.0.1:${await port}`;
+
+  // The runner at the root, with the run's token and its first step; the page beside it, fetched into a directory of its own as a browser fetches it.
+  const runner = await (await fetch(`${base}/`)).text();
+  const run = JSON.parse(
+    /<script type="application\/json" id="run">(.*?)<\/script>/.exec(runner)[1],
+  );
+  assert.deepEqual(run.next, { subject: 0, test: 0 });
+  const page = join(root, "fetched");
+  for (const path of ["index.html", "index.js", "web/dom.js"]) {
+    mkdirSync(dirname(join(page, path)), { recursive: true });
+    writeFileSync(
+      join(page, path),
+      await (await fetch(`${base}/${path}`)).text(),
+    );
+  }
+  const program = new Uint8Array(
+    await (await fetch(`${base}/index.wasm`)).arrayBuffer(),
+  );
+
+  const posted = [];
+  globalThis.parent = {
+    postMessage: (message, origin) => posted.push([message, origin]),
+  };
+  t.after(() => {
+    globalThis.parent = undefined;
+  });
+  t.mock.method(console, "log", () => {});
+  const loader = await import(pathToFileURL(join(page, "index.js")).href);
+  const outcome = await loader.start({
+    program,
+    query: `?${run.argument}=0`,
+  });
+
+  assert.equal(outcome.trap, null);
+  assert.equal(outcome.held, true);
+  assert.equal(posted[0][0].type, "started");
+  assert.equal(posted[1][0].outcome.held, true);
+
+  const reply = await (
+    await fetch(`${base}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        run: run.token,
+        subject: 0,
+        test: 0,
+        outcome: {
+          stdout: Buffer.from(posted[1][0].outcome.stdout).toString("base64"),
+          stderr: Buffer.from(posted[1][0].outcome.stderr).toString("base64"),
+          exitCode: outcome.exitCode,
+          trap: outcome.trap,
+          held: outcome.held,
+        },
+      }),
+    })
+  ).json();
+  assert.equal(reply.taken, true);
+  assert.equal(reply.next, null);
+  assert.equal(
+    Buffer.from(reply.stdout, "base64").toString(),
+    "/app/doubling: passed\n1 passed, 0 failed\n",
+  );
+
+  const { code, stdout } = await ended;
+  assert.equal(code, 0);
+  assert.equal(stdout, "/app/doubling: passed\n1 passed, 0 failed\n");
 });

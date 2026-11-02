@@ -180,7 +180,7 @@ impl Step {
             Step::CompilerTest => always(
                 Subject::Compiler,
                 Action::Test,
-                "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine: alone runs a page the compiler wrote, its gateways answering their rows",
+                "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end",
             ),
             Step::BundleBuild => always(
                 Subject::Bundle,

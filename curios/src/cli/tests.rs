@@ -49,6 +49,35 @@ fn a_target_and_a_port_before_the_subject_are_the_commands_own() {
     assert_eq!(parsed(&["run", "serve"]).0, Target::Native);
 }
 
+/// `test` takes `--target` and `--port` as `run` does, before its subject, beside its own `--filter`.
+#[test]
+fn test_takes_a_target_and_a_port_before_its_subject() {
+    let cli = Cli::try_parse_from([
+        "curios", "test", "--target", "browser", "--port", "0", "--filter", "/x", "app",
+    ])
+    .unwrap();
+    let Mode::Test {
+        target,
+        port,
+        filter,
+        subject,
+        ..
+    } = cli.mode
+    else {
+        panic!("the fixture names test");
+    };
+
+    assert_eq!(
+        (target.0, port, filter, subject),
+        (
+            Target::Browser,
+            Some(0),
+            vec!["/x".to_string()],
+            Some("app".to_string())
+        )
+    );
+}
+
 #[test]
 fn the_subject_and_program_arguments_follow_one_boundary() {
     for (words, subject, arguments) in [

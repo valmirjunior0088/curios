@@ -117,12 +117,16 @@ impl Step {
                 .leaving(Product::Compiler)
                 .into(),
             ],
-            // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
+            // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead. The runner's suite needs no compiler, and runs here as the page's does, under the same engine.
             Step::CompilerTest => vec![
                 Run::new(
                     Tool::Node,
                     Tree::Workspace,
-                    texts(["--test", "curios-browser/src/page.test.mjs"]),
+                    texts([
+                        "--test",
+                        "curios-browser/src/page.test.mjs",
+                        "curios-browser/src/runner.test.mjs",
+                    ]),
                 )
                 .with("CURIOS", Arg::Product(Product::Compiler))
                 .into(),
