@@ -1246,9 +1246,9 @@ fn applying_module() -> Module {
     Module { items, ..module }
 }
 
-/// The digest a stage outside the certifier asks a part by ([`part_digest`]) folds a unit's classification in whatever the record covers, where the certifier's own ([`read_digest`]) reads a classification only off a record that covers its unit, as [`Globals::partial`] does.
+/// One question, one answer: the digest a stage outside the certifier asks a part by ([`part_digest`]) reads a unit's classification where the certifier's own ([`read_digest`]) reads one, off a record that covers its unit and nowhere else, as [`Globals::partial`] does.
 #[test]
-fn a_part_digest_folds_a_classification_the_certifiers_own_declines_to_read() {
+fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
     use crate::{part_digest, read_digest};
 
     let module = written();
@@ -1283,8 +1283,8 @@ fn a_part_digest_folds_a_classification_the_certifiers_own_declines_to_read() {
     );
     assert_eq!(
         part_digest(&module, &places, &partial, &global("five"), false).expect("the part digests"),
-        digest((true, None, None)),
-        "where the digest a stage asks a part by folds the record's entry in unasked",
+        digest((false, None, None)),
+        "and so does the digest a stage outside the certifier asks a part by",
     );
 }
 

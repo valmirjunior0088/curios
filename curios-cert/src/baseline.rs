@@ -144,8 +144,10 @@ pub fn part_digest(
 ) -> Result<Option<String>, String> {
     // A vector is the entry's, filed for a name the unit holds one under, as a unit in scope answers it (`Globals`).
     let nominal = module.nominal(places, name).is_some();
+    // The classification is read only where the record covers its unit, as `Globals::partial` reads one: a record naming fewer definitions than the unit holds was not made by a walk over it, so what it says of a name is nothing a reader may take, here as there.
+    let classified = certification.covers(module);
     let verdicts = (
-        certification.totality(name) == Some(Totality::Partial),
+        classified && certification.totality(name) == Some(Totality::Partial),
         certification.polarities(name).filter(|_| nominal),
         certification.variances(name).filter(|_| nominal),
     );
