@@ -526,23 +526,23 @@ The program's own standard input is spent on reading the source, so a read of it
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest, in nine entries, a product's named for the target it is built for and every other for what it holds:
+Everything generated lands under one `.curios/`, beside the governing manifest — the umbrella's when one governs, so its members share it — in nine entries, a product's named for the target it is built for and every other for what it holds:
 
-| Entry | Holds | Where |
+| Entry | Holds | Under `CURIOS_CACHE` |
 | --- | --- | --- |
-| `native/<package>/<name>` | what `compile` emits for the native target | beside the project |
-| `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory | beside the project |
-| `documentation/<package>/` | what `document` emits | beside the project |
-| `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
-| `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
-| `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | shared |
-| `objects/<slot>/<pack>` | what each verdict slot names, in packs beside it named by what they hold | shared |
-| `payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own | shared |
-| `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |
+| `native/<package>/<name>` | what `compile` emits for the native target | stays |
+| `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory | stays |
+| `documentation/<package>/` | what `document` emits | stays |
+| `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | moves |
+| `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | moves |
+| `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | moves |
+| `objects/<slot>/<pack>` | what each verdict slot names, in packs beside it named by what they hold | moves |
+| `payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own | moves |
+| `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | moves |
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
+`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
 
 Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
 
