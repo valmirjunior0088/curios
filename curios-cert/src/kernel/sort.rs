@@ -24,7 +24,7 @@ mod memo_tests;
 
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},
-    crate::instantiate_universes_scoped,
+    crate::instantiate_universes,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
         Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
@@ -226,7 +226,7 @@ fn published(kernel: &mut Kernel, type_: &Term) -> Result<Option<Sort>, Error> {
     let sort = match universes {
         None => kernel.value_sort(name).cloned(),
         Some(universes) => match kernel.value_sort_at(name) {
-            Some(sort) => Some(instantiate_universes_scoped(sort, universes)?),
+            Some(sort) => Some(instantiate_universes(sort, universes)?),
             None => None,
         },
     };
@@ -434,7 +434,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             let (scheme, context) = (scheme.clone(), context.clone());
             kernel.check_instance(&context, universes)?;
 
-            Ok(Some(instantiate_universes_scoped(&scheme, universes)?))
+            Ok(Some(instantiate_universes(&scheme, universes)?))
         }
 
         Subterm::Apply(apply) => {

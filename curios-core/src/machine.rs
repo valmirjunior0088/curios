@@ -37,7 +37,7 @@ use {
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
         RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, eta_head,
-        instantiate_universes_scoped, project_literal, reduce_intrinsic,
+        instantiate_universes, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -640,8 +640,8 @@ impl Machine {
                     return Ok(Step::Value(Term::instance(var, universes)));
                 };
                 // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
-                let reduct = instantiate_universes_scoped(&reduct, &universes)
-                    .map_err(ReduceError::Universe)?;
+                let reduct =
+                    instantiate_universes(&reduct, &universes).map_err(ReduceError::Universe)?;
 
                 Ok(Step::Eval(reduct, demand))
             }

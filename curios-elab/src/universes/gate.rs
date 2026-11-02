@@ -8,7 +8,7 @@ use {
     curios_core::{
         Bound, ConceptDecl, DefinitionKind, Entrypoint, Free, Global, InductDecl, Item, Minted,
         Module, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
-        rewrite_universe_levels_scoped_shared, universe_metas,
+        rewrite_universe_levels, universe_metas,
     },
     std::{
         cell::RefCell,
@@ -22,52 +22,22 @@ fn validate_bound_universes<B: Bound>(
     parameter_count: usize,
     owner: &str,
 ) -> Result<(), Error> {
-    let nested_error = Rc::new(RefCell::new(None));
-    let error = Rc::clone(&nested_error);
-    let mut visit = Visit::rewriting_universes_shared(
-        |_, _| None,
-        Box::new(move |_, _term| {
-            // A group carries no context of its own, so a term holds none to validate: every context a module states is a declaration's or a registry entry's, which the walk below reads.
-            let contexts: Vec<&UniverseContext> = Vec::new();
-            for context in contexts {
-                if error.borrow().is_none()
-                    && let Err(found) = universe_context_validate(context)
-                {
-                    *error.borrow_mut() = Some(found);
-                }
-            }
-            None
-        }),
-    );
-    let _: B = value.traverse(&mut visit);
-    if let Some(error) = nested_error.borrow_mut().take() {
-        return Err(Error::UniverseInvariant(format!(
-            "{owner}: nested universe context is invalid: {error}"
-        )));
-    }
-
     let owner = owner.to_string();
-    let _: B = rewrite_universe_levels_scoped_shared(value, move |depth, level| {
-        let visible_parameter_count = depth
-            .checked_add(parameter_count)
-            .ok_or_else(|| format!("{owner}: universe binder depth overflow"))?;
-        if level.is_closed(visible_parameter_count) {
+    let _: B = rewrite_universe_levels(value, move |level| {
+        if level.is_closed(parameter_count) {
             Ok(level.clone())
         } else {
-            // Name the numbers. A level prints its parameters as letters that cycle (`u`..`z`, then `u1`), so neither the offending index nor the bound it broke can be read off `{level}`, and the bound itself is a sum: a nested scheme's own parameters sit innermost and the enclosing binders it may still reference follow. Which of the two is short is the whole diagnosis, and recovering it otherwise costs a rebuild.
+            // Name the numbers. A level prints its parameters as letters that cycle (`u`..`z`, then `u1`), so neither the offending index nor the bound it broke can be read off `{level}`.
             let detail = if level.metas().next().is_some() {
                 "it still holds an unsolved universe metavariable".to_string()
             } else {
                 let escaping = level
                     .params()
-                    .filter(|param| param.0 >= visible_parameter_count)
+                    .filter(|param| param.0 >= parameter_count)
                     .map(|param| param.0.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!(
-                    "parameter index {escaping} is not below {visible_parameter_count} \
-                     ({parameter_count} declared, {depth} from enclosing universe binders)"
-                )
+                format!("parameter index {escaping} is not below the {parameter_count} declared")
             };
             Err(format!(
                 "{owner}: level {level} escapes its universe parameter context: {detail}"

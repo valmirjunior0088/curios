@@ -10,8 +10,7 @@ use {
     curios_core::{
         Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
         ParameterField, Proj, Struct, StructDecl, Subterm, Term, Tuple, UniverseContext,
-        UniverseMetaId, UniverseParam, Variance, rewrite_universe_levels_scoped_shared,
-        universe_params,
+        UniverseMetaId, UniverseParam, Variance, rewrite_universe_levels, universe_params,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -363,14 +362,13 @@ fn compared_in(context: &Context, parts: &[Term]) -> Option<BTreeSet<UniverseMet
         if part.has_metavar() {
             return None;
         }
-        let lifted =
-            rewrite_universe_levels_scoped_shared(part, |_, level: &Level| level.succ()).ok()?;
+        let lifted = rewrite_universe_levels(part, |level: &Level| level.succ()).ok()?;
         let differences = part.level_differences(&lifted, |_| false, context)?;
         held.extend(
             differences
                 .compared
                 .iter()
-                .flat_map(|(_, level, _)| level.metas()),
+                .flat_map(|(level, _)| level.metas()),
         );
     }
 

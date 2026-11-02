@@ -22,7 +22,7 @@ use {
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Free, Global, Level, LevelHead, Quality, QualityMetaId,
         RecGroup, Sharing, Term, UniverseMetaId, lasting, rewrite_universe_qualities,
-        substitute_universe_metas_scoped,
+        substitute_universe_metas,
     },
     curios_utilities::{Entropy, Keyed},
     std::{
@@ -858,7 +858,7 @@ impl Caches {
 ///
 /// **Proposed by the walk over the pair, accepted by the contract.** The substitution is read off the pairs the two spellings differ in, by the walk conversion reads levels by ([`Term::level_differences`]) under [`EveryPosition`]: a pair whose stored side is no bare metavariable, a pair under a universe binder, which is its group's to read, and a metavariable sent to two levels each decline ([`Self::between`]). The hit is served only where the stored spelling carried *is* the asking one, which holds what the walk does not report: a metavariable the asking spelling keeps where the substitution would move it, and a level kept as it stands that names a metavariable the substitution moves. Two spellings apart in more than their universes, a recursive group that binds its own levels against one that binds none among them, the walk refuses.
 ///
-/// **Carried as a solution is.** A level a metavariable is sent to is stated at universe-binder depth zero, and is shifted past the binders above each place it lands at by the walk the solver's zonk runs ([`substitute_universe_metas_scoped`]).
+/// **Carried as a solution is.** A level a metavariable is sent to is stated at universe-binder depth zero, and is shifted past the binders above each place it lands at by the walk the solver's zonk runs ([`substitute_universe_metas`]).
 ///
 /// **A sort an instance states is a payload as a level is.** The erased projection drops an instance whole, the sorts it states with its levels, so two spellings it equates may state different sorts: an occurrence of a family at `Prop` beside one at `Type`, or two whose sorts are metavariables of their own. No reduction rule reads one, and the reduct holds them, so they are mapped as the levels are: a stored metavariable to the one sort the asking spelling states in its place, and a stored `Prop`, `Type` or parameter to nothing but itself. Served with the stored sorts, the second occurrence would be read at the first one's.
 struct AcrossUniverses {
@@ -876,10 +876,7 @@ impl AcrossUniverses {
         let differences = key.level_differences(query, |_| false, &EveryPosition)?;
 
         let mut levels: HashMap<UniverseMetaId, Level> = HashMap::new();
-        for (depth, stored, asked) in differences.compared {
-            if depth > 0 {
-                return None;
-            }
+        for (stored, asked) in differences.compared {
             match levels.insert(bare_meta(&stored)?, asked.clone()) {
                 Some(previous) if previous != asked => return None,
                 _ => {}
@@ -918,8 +915,7 @@ impl AcrossUniverses {
             true => term.clone(),
             false => {
                 let levels = Rc::clone(&self.levels);
-                substitute_universe_metas_scoped(term, move |meta| Ok(levels.get(&meta).cloned()))
-                    .ok()?
+                substitute_universe_metas(term, move |meta| Ok(levels.get(&meta).cloned())).ok()?
             }
         };
         if self.sorts.is_empty() {

@@ -120,7 +120,7 @@ fn own(subterm: &Subterm) -> (u64, Vec<(Identity, u64)>) {
                 }
                 _ => parts.push(mix(&[NODE, hashed(&masked)])),
             }
-            for (slot, (_, level)) in levels.iter().enumerate() {
+            for (slot, level) in levels.iter().enumerate() {
                 parts.push(u64::from(level.constant));
                 let mut metas = Vec::new();
                 for (head, offset) in &level.atoms {

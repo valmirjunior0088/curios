@@ -26,7 +26,7 @@ mod test_support;
 use {
     super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
     crate::{
-        accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
+        accelerable, answers, answers_classed, atoms_within, instantiate_universes,
         probe_spellings, read_operands, read_scrutinee, read_scrutinee_classed, reduce_closed,
         reduce_intrinsic, refold, weak_head_value,
     },
@@ -619,7 +619,7 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
     Ok(Step::Continue(
-        instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
+        instantiate_universes(&reduct, &universes).map_err(ReduceError::Universe)?,
     ))
 }
 

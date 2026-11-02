@@ -8,8 +8,7 @@ use {
     },
     curios_core::{
         CalleeId, Free, Global, ImplicitOrigin, Probe, Struct, StructDecl, StructEntry, StructType,
-        Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
-        instantiate_universes_scoped,
+        Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin, instantiate_universes,
     },
     curios_utilities::Plicity,
 };
@@ -37,7 +36,7 @@ fn instantiate_struct_decl(
     };
     let arguments = universes.clone();
     let result_sort =
-        instantiate_universes_scoped(&struct_decl.result_sort, &arguments).map_err(Error::from)?;
+        instantiate_universes(&struct_decl.result_sort, &arguments).map_err(Error::from)?;
     Ok((
         StructDecl {
             universe_context: UniverseContext::empty(),
@@ -86,8 +85,7 @@ pub fn elaborate_struct_type(
         };
         let (parameters, universes) =
             context.instantiate_universe_bound(&universe_context, &written, Some(occurrence))?;
-        let result_sort =
-            instantiate_universes_scoped(&written_sort, &universes).map_err(Error::from)?;
+        let result_sort = instantiate_universes(&written_sort, &universes).map_err(Error::from)?;
         (parameters, result_sort, universes)
     } else {
         let (parameters, result_sort) = context

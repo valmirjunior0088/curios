@@ -56,8 +56,8 @@ use {
         Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited, bytes_of,
         check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
         check_struct_decl, define_as_stated, free_locals_of, held_digest, open_quality,
-        positivity_vectors, read_digest, rewrite_universe_levels_scoped_shared, universe_metas,
-        universe_verdict, variance_vectors,
+        positivity_vectors, read_digest, rewrite_universe_levels, universe_metas, universe_verdict,
+        variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
@@ -314,13 +314,12 @@ fn open_sort<B: Bound>(value: &B, sorts: usize) -> Option<Error> {
 ///
 /// A declaration's universe scheme promises that every level it mentions is ground or one of the parameters it declares, so a use site fully determines it. [`universe_residue`] above checks half of that promise — no unsolved metavariable — and this checks the other half: no parameter index past the declaration's own count. `closed` sees a `UniverseContext`'s constraints and not a level sitting in a term, so the two are the same omission at different depths.
 ///
-/// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universes_scoped` substitutes what the instance supplies and *renumbers* the rest down by the instance's width. For a well-scoped term that is the correct de Bruijn shift, since an index at or above the width names an enclosing binder. For an ill-scoped one it is a capture — `Type.{param 1}` and `Type.{param 0}` both instantiate at `[param 0]` to the same level — so two distinct levels become one and every cumulativity question after that is answered about the wrong one.
+/// It is a soundness rule rather than a tidiness one because of what instantiation does with an out-of-range index: `instantiate_universes` substitutes what the instance supplies and leaves any other index as it stands, so a parameter past the scheme reaches the use site naming the use site's own parameter of that index. That is a capture: `Type.{param 1}` in a one-parameter scheme stays `Type.{param 1}` at the instance `[v]`, a level of the reader's that the scheme never had, and every cumulativity question after that is answered about it.
 ///
-/// Scoped rather than flat: a nested scheme binds its own parameters innermost, so the bound at any point is the enclosing binder depth plus the declaration's count, exactly as `curios-elab`'s `validate_bound_universes` computes it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
+/// Flat: a level names only the parameters of the declaration it stands in, so the bound is that declaration's count wherever the level stands, as `curios-elab`'s `validate_bound_universes` reads it. Metavariables are left to [`universe_residue`] so the two diagnostics stay distinct.
 fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Error> {
-    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
-        let visible = depth.checked_add(parameter_count).ok_or(())?;
-        match level.params().any(|param| param.0 >= visible) {
+    rewrite_universe_levels(value, move |level| {
+        match level.params().any(|param| param.0 >= parameter_count) {
             true => Err(()),
             false => Ok(level.clone()),
         }

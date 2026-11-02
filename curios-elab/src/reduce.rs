@@ -36,7 +36,7 @@ use {
         Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Quality,
         Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope,
         Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Var, Variant,
-        Visit, accelerable, eta_head, instantiate_universes_scoped, probe_spellings,
+        Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
         project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
         weak_head_value,
     },
@@ -816,8 +816,7 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
     };
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
-    let reduct =
-        instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?;
+    let reduct = instantiate_universes(&reduct, &universes).map_err(ReduceError::Universe)?;
 
     Ok(Reduce::Continue(reduct))
 }

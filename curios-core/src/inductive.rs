@@ -1,7 +1,7 @@
 use {
     super::{
         Atom, Polarity, Quality, Telescope, Term, UniverseContext, UniverseError, Universes,
-        Variance, instantiate_qualities, instantiate_universes_scoped,
+        Variance, instantiate_qualities, instantiate_universes,
     },
     crate::Sharing,
     curios_utilities::{Plicity, Qualifier},
@@ -299,7 +299,7 @@ impl<'d> InductInstance<'d> {
 
     /// The parameter telescope ending in the index telescope, at these universes.
     pub fn arity(&self) -> Result<Telescope<Telescope<()>>, UniverseError> {
-        instantiate_universes_scoped(&self.declaration.arity, self.universes)
+        instantiate_universes(&self.declaration.arity, self.universes)
     }
 
     /// The index telescope at `params`, at these universes ([`InductDecl::indices_at`]).
@@ -309,14 +309,14 @@ impl<'d> InductInstance<'d> {
 
     /// The declared result sort, at these universes.
     pub fn result_sort(&self) -> Result<Term, UniverseError> {
-        instantiate_universes_scoped(&self.declaration.result_sort, self.universes)
+        instantiate_universes(&self.declaration.result_sort, self.universes)
     }
 
     /// `tag`'s signature at these universes, or `None` where `tag` is no case of the declaration.
     pub fn constructor(&self, tag: &Atom) -> Option<Result<InductParam, UniverseError>> {
         let param = self.declaration.constructor(tag)?;
         Some(
-            instantiate_universes_scoped(&param.telescope, self.universes)
+            instantiate_universes(&param.telescope, self.universes)
                 .map(|telescope| InductParam { telescope }),
         )
     }
@@ -339,8 +339,7 @@ impl<'d> InductInstance<'d> {
         instantiated.arity = self.arity()?;
         instantiated.result_sort = self.result_sort()?;
         for constructor in instantiated.signatures_mut() {
-            constructor.telescope =
-                instantiate_universes_scoped(&constructor.telescope, self.universes)?;
+            constructor.telescope = instantiate_universes(&constructor.telescope, self.universes)?;
         }
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)

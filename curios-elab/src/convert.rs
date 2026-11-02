@@ -2811,7 +2811,6 @@ impl Convert {
                     }
                     Identification::Distinct
                     | Identification::GroundUnequal
-                    | Identification::UnderBinder
                     | Identification::Withheld => {}
                 }
             }
@@ -3119,7 +3118,7 @@ impl Convert {
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
-                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is. They are posed at `Type`, where no eta opens them into the two calls again, so the problem parks where it is posed — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
+                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is. They are posed at `Type`, where no eta opens them into the two calls again, so the problem parks where it is posed — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
                     let instances = match (&this_head, &that_head) {
                         (Some((this_group, index)), Some((that_group, that_index)))
                             if index == that_index && this_group != that_group =>
@@ -3172,11 +3171,7 @@ impl Convert {
                         }
                         _ if matches!(
                             instances,
-                            Some(
-                                LevelQuestion::GroundUnequal
-                                    | LevelQuestion::UnderBinder
-                                    | LevelQuestion::Withheld
-                            )
+                            Some(LevelQuestion::GroundUnequal | LevelQuestion::Withheld)
                         ) =>
                         {
                             false
@@ -3282,9 +3277,9 @@ impl Convert {
                                 false => None,
                                 true => match level_question(context, &this_term, &that_term)? {
                                     LevelQuestion::Identified => Some(true),
-                                    LevelQuestion::GroundUnequal
-                                    | LevelQuestion::UnderBinder
-                                    | LevelQuestion::Withheld => Some(false),
+                                    LevelQuestion::GroundUnequal | LevelQuestion::Withheld => {
+                                        Some(false)
+                                    }
                                     LevelQuestion::Blocked => {
                                         self.blocked.push(raw_problem(&type_));
                                         continue;
@@ -3586,12 +3581,11 @@ fn declared_facet<T>(
         .map_err(ReduceError::Universe)
 }
 
-/// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s five verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.
+/// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s four verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LevelQuestion {
     Identified,
     GroundUnequal,
-    UnderBinder,
     Withheld,
     Blocked,
     Distinct,
@@ -3609,7 +3603,6 @@ fn level_question(
     match identify_universe_levels(context, &this, &that, Curried::Compared)? {
         Identification::Identified => return Ok(LevelQuestion::Identified),
         Identification::GroundUnequal => return Ok(LevelQuestion::GroundUnequal),
-        Identification::UnderBinder => return Ok(LevelQuestion::UnderBinder),
         Identification::Withheld => return Ok(LevelQuestion::Withheld),
         // No curried pair is set apart under the reading asked for, so the second is never answered.
         Identification::Distinct | Identification::Curried(_) => {}

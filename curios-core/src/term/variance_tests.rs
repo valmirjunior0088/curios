@@ -46,14 +46,14 @@ fn named(path: &str, levels: &[u32]) -> Term {
     )
 }
 
-fn pair(this: u32, that: u32) -> (usize, Level, Level) {
-    (0, at(this), at(that))
+fn pair(this: u32, that: u32) -> (Level, Level) {
+    (at(this), at(that))
 }
 
 /// What the walk answers for two terms that differ in levels alone and hold no curried head: the pairs it compares, and the ones it sets apart as irrelevant.
 fn found(
-    compared: Vec<(usize, Level, Level)>,
-    irrelevant: Vec<(usize, Level, Level)>,
+    compared: Vec<(Level, Level)>,
+    irrelevant: Vec<(Level, Level)>,
 ) -> Option<LevelDifferences> {
     Some(LevelDifferences {
         compared,
@@ -64,7 +64,7 @@ fn found(
 }
 
 /// What the walk answers for two terms whose every differing pair sits at a curried head.
-fn left_to_the_type(curried: Vec<(usize, Level, Level)>) -> Option<LevelDifferences> {
+fn left_to_the_type(curried: Vec<(Level, Level)>) -> Option<LevelDifferences> {
     Some(LevelDifferences {
         curried,
         ..LevelDifferences::default()

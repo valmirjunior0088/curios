@@ -302,8 +302,8 @@ fn level_differences_count_a_ground_sort_as_a_position() {
             .level_differences(&Term::tuple([u.clone(), ground]), |_| false, &())
             .map(|found| found.compared),
         Some(vec![
-            (0, Level::zero(), u_level.clone()),
-            (0, u_level.clone(), Level::zero())
+            (Level::zero(), u_level.clone()),
+            (u_level.clone(), Level::zero())
         ])
     );
     assert_eq!(
@@ -314,7 +314,7 @@ fn level_differences_count_a_ground_sort_as_a_position() {
                 &()
             )
             .map(|found| found.compared),
-        Some(vec![(0, u_level, Level::param(UniverseParam(1)))])
+        Some(vec![(u_level, Level::param(UniverseParam(1)))])
     );
     assert_eq!(
         Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
@@ -343,7 +343,7 @@ fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
     assert_eq!(
         this.level_differences(&that, |_| false, &PairingSorts)
             .map(|found| (found.compared, found.sorts)),
-        Some((vec![(0, u, v)], vec![(p, q)]))
+        Some((vec![(u, v)], vec![(p, q)]))
     );
 
     let poly = Free::Global(nominal("poly"));
@@ -389,7 +389,7 @@ fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
     };
 
     let substituted =
-        substitute_universe_metas_scoped(&at(Level::meta(meta), Level::meta(meta)), move |found| {
+        substitute_universe_metas(&at(Level::meta(meta), Level::meta(meta)), move |found| {
             Ok((found == meta).then(|| Level::param(UniverseParam(0))))
         })
         .expect("substituting a parameter cannot overflow");
@@ -417,7 +417,6 @@ fn level_differences_walk_the_graph_not_the_tree() {
         this.level_differences(&that, |_| false, &())
             .map(|found| found.compared),
         Some(vec![(
-            0,
             Level::param(UniverseParam(0)),
             Level::param(UniverseParam(1))
         )])
@@ -440,7 +439,6 @@ fn level_differences_skip_what_a_wildcard_covers() {
             )
             .map(|found| found.compared),
         Some(vec![(
-            0,
             Level::param(UniverseParam(0)),
             Level::param(UniverseParam(1))
         )])

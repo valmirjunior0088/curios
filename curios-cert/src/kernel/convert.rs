@@ -42,9 +42,7 @@ mod variance_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    crate::{
-        case_target_indices, instantiate_universes_scoped, pinned_instance, struct_reaches_itself,
-    },
+    crate::{case_target_indices, instantiate_universes, pinned_instance, struct_reaches_itself},
     curios_analysis::{Classes, Within},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
@@ -921,7 +919,7 @@ fn induct_params(
 ) -> Option<Telescope<Telescope<()>>> {
     let arity = kernel.induct_decl(name)?.arity.clone();
 
-    instantiate_universes_scoped(&arity, universes).ok()
+    instantiate_universes(&arity, universes).ok()
 }
 
 /// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Same(@P)(p, q)`, a family indexed by two proofs of a `P : Prop`, converts with `Same(@P)(p, p)`, because no proof of a proposition is distinguishable from another. The struct and constructor analogs are [`params_at`]'s, which reads the same outer telescope this does.
@@ -947,7 +945,7 @@ fn induct_type_args(
             );
         }
     };
-    let arity = instantiate_universes_scoped(&arity, universes)?;
+    let arity = instantiate_universes(&arity, universes)?;
 
     // The parameters, against the outer telescope; each one opens what follows, because a later domain may name it.
     let mut cursor = arity.cursor();
@@ -1150,9 +1148,7 @@ fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
             differences
                 .compared
                 .iter()
-                .all(|(depth, this_level, that_level)| {
-                    *depth == 0 && kernel.level_eq(this_level, that_level)
-                })
+                .all(|(this_level, that_level)| kernel.level_eq(this_level, that_level))
         })
 }
 

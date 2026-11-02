@@ -8,7 +8,7 @@ use {
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced, Quality,
-        ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes_scoped,
+        ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes,
     },
 };
 
@@ -467,7 +467,7 @@ impl Sort {
         };
         let sort = match universes {
             Some(universes) => {
-                instantiate_universes_scoped(&sort, universes).map_err(ReduceError::Universe)?
+                instantiate_universes(&sort, universes).map_err(ReduceError::Universe)?
             }
             None => sort,
         };

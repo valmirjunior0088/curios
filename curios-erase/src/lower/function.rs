@@ -318,9 +318,7 @@ impl Lowering<'_> {
             return Ok(None);
         };
         let body = match universes {
-            Some(universes) => {
-                curios_core::instantiate_universes_scoped(&definition.body, universes)?
-            }
+            Some(universes) => curios_core::instantiate_universes(&definition.body, universes)?,
             None => definition.body.clone(),
         };
         let curios_core::Subterm::Func(wrapper) = &*body else {

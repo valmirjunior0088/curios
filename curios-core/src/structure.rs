@@ -4,7 +4,7 @@ mod tests;
 use {
     super::{
         Field, Polarity, Quality, Telescope, Term, UniverseContext, UniverseError, Universes,
-        Variance, instantiate_qualities, instantiate_universes_scoped, open_field,
+        Variance, instantiate_qualities, instantiate_universes, open_field,
     },
     crate::Sharing,
     curios_utilities::Qualifier,
@@ -120,18 +120,18 @@ impl<'d> StructInstance<'d> {
 
     /// The parameter telescope at these universes, the fields beneath it left out: what an occurrence's parameters are checked against.
     pub fn parameters(&self) -> Result<Telescope<()>, UniverseError> {
-        instantiate_universes_scoped(&self.declaration.arity.prefix(), self.universes)
+        instantiate_universes(&self.declaration.arity.prefix(), self.universes)
     }
 
     /// The declared result sort, at these universes.
     pub fn result_sort(&self) -> Result<Term, UniverseError> {
-        instantiate_universes_scoped(&self.declaration.result_sort, self.universes)
+        instantiate_universes(&self.declaration.result_sort, self.universes)
     }
 
     /// The field telescope at these universes and `params` ([`StructDecl::fields_at`]): what a reader of every field takes.
     pub fn fields_at(&self, params: &[Term]) -> Result<Telescope<()>, UniverseError> {
         Ok(
-            instantiate_universes_scoped(&self.declaration.arity, self.universes)?
+            instantiate_universes(&self.declaration.arity, self.universes)?
                 .open(&params.iter().collect::<Vec<_>>()),
         )
     }
@@ -155,7 +155,7 @@ impl<'d> StructInstance<'d> {
             return Ok(None);
         };
         // The levels first, of the declaration's own type: a parameter stands at the occurrence's.
-        let instantiated = instantiate_universes_scoped(written, self.universes)?;
+        let instantiated = instantiate_universes(written, self.universes)?;
 
         Ok(Some(open_field(&instantiated, index, params, value, field)))
     }
@@ -163,7 +163,7 @@ impl<'d> StructInstance<'d> {
     /// Every facet at these universes: what a reader of the whole declaration — a structure literal's fields, a derivation — takes.
     pub fn whole(&self) -> Result<StructDecl, UniverseError> {
         let mut instantiated = self.declaration.clone();
-        instantiated.arity = instantiate_universes_scoped(&self.declaration.arity, self.universes)?;
+        instantiated.arity = instantiate_universes(&self.declaration.arity, self.universes)?;
         instantiated.result_sort = self.result_sort()?;
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)

@@ -154,7 +154,7 @@ fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
     }
 }
 
-/// A universe parameter past the scheme, carried in a stated value sort where reduction discards it, is refused at the boundary — the escape the instance route (`value_sort_at`, then `instantiate_universes_scoped`) would renumber into a capture.
+/// A universe parameter past the scheme, carried in a stated value sort where reduction discards it, is refused at the boundary — the escape the instance route (`value_sort_at`, then `instantiate_universes`) would carry to the use site as a capture.
 ///
 /// The level sits in the domain of a redex whose body drops its binder, so the stated sort reduces to `Type 0`, which is the value's own sort: `hold_value_sort`'s conversion passes, exactly as it passes a free local reduction discards. The boundary's `universe_escape` over the unreduced sort is the sole guard, as `free_locals_of` is for the free local. Mutation-checked: dropping the `universe_escape` over `value_sort` certifies the definition.
 #[test]

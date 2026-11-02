@@ -3,12 +3,12 @@
 use {
     crate::{
         Context, Error, Occurrence, UniverseMutation, UniverseSolver, UniverseStateToken,
-        stamp_if_moved, zonk_universe_levels_scoped,
+        stamp_if_moved, zonk_universe_levels,
     },
     curios_core::{
         Bound, Extent, Free, Global, InductDecl, InductInstance, Level, Quality, StructDecl,
         StructInstance, Term, UniverseContext, UniverseError, UniverseMetaId, Universes,
-        instantiate_universes_scoped,
+        instantiate_universes,
     },
     std::collections::BTreeSet,
 };
@@ -62,7 +62,7 @@ impl<'s> Context<'s> {
         let universes = self
             .universes_mut()
             .instantiate(&universe_context, Occurrence::naming(name, extent))?;
-        let type_ = instantiate_universes_scoped(&type_, &universes)?;
+        let type_ = instantiate_universes(&type_, &universes)?;
         Ok(Some((type_, universes)))
     }
 
@@ -110,7 +110,7 @@ impl<'s> Context<'s> {
                 Occurrence::naming(name, extent),
             )
             .map_err(Error::from)?;
-        let type_ = instantiate_universes_scoped(&type_, universes).map_err(Error::from)?;
+        let type_ = instantiate_universes(&type_, universes).map_err(Error::from)?;
         Ok(Some(type_))
     }
 
@@ -127,7 +127,7 @@ impl<'s> Context<'s> {
             .universes_mut()
             .instantiate(universe_context, occurrence)
             .map_err(Error::from)?;
-        let value = instantiate_universes_scoped(value, &universes).map_err(Error::from)?;
+        let value = instantiate_universes(value, &universes).map_err(Error::from)?;
         Ok((value, universes))
     }
 
@@ -148,7 +148,7 @@ impl<'s> Context<'s> {
         }
         self.universes_mut()
             .instantiate_at(universe_context, universes, None)?;
-        instantiate_universes_scoped(value, universes)
+        instantiate_universes(value, universes)
     }
 
     pub(crate) fn instantiate_induct_decl_at(
@@ -233,9 +233,8 @@ impl<'s> Context<'s> {
         self.universes_mut()
             .instantiate_at(&struct_decl.universe_context, universes, None)?;
         let mut instantiated = struct_decl.clone();
-        instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
-        instantiated.result_sort =
-            instantiate_universes_scoped(&instantiated.result_sort, universes)?;
+        instantiated.arity = instantiate_universes(&instantiated.arity, universes)?;
+        instantiated.result_sort = instantiate_universes(&instantiated.result_sort, universes)?;
         instantiated.universe_context = UniverseContext::empty();
         Ok(instantiated)
     }
@@ -349,7 +348,7 @@ impl<'s> Context<'s> {
         let solver = &self.underway.attempt.universe_solver;
         let terms = terms
             .iter()
-            .map(|term| zonk_universe_levels_scoped(*term, solver).map_err(Error::from))
+            .map(|term| zonk_universe_levels(*term, solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(terms)
@@ -422,7 +421,6 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
-        zonk_universe_levels_scoped(value, &self.underway.attempt.universe_solver)
-            .map_err(Error::from)
+        zonk_universe_levels(value, &self.underway.attempt.universe_solver).map_err(Error::from)
     }
 }

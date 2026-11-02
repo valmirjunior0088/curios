@@ -1687,22 +1687,17 @@ impl Term {
         };
 
         let mut differences = LevelDifferences::default();
-        // Each pair with its universe-binder depth and whether it stands inside a curried former, whose every level is the caller's to decide.
-        let mut work = vec![(0, false, self.clone(), other.clone())];
-        let mut entered: HashSet<(*const Node, *const Node, usize, bool)> = HashSet::new();
+        // Each pair with whether it stands inside a curried former, whose every level is the caller's to decide.
+        let mut work = vec![(false, self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node, bool)> = HashSet::new();
 
-        while let Some((depth, curried, this, that)) = work.pop() {
+        while let Some((curried, this, that)) = work.pop() {
             if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
                 continue;
             }
             if held_twice(&this)
                 && held_twice(&that)
-                && !entered.insert((
-                    Rc::as_ptr(&this.inner),
-                    Rc::as_ptr(&that.inner),
-                    depth,
-                    curried,
-                ))
+                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner), curried))
             {
                 continue;
             }
@@ -1718,13 +1713,9 @@ impl Term {
                 {
                     return None;
                 }
-                for ((below, this_level), (_, that_level)) in
-                    this_levels.into_iter().zip(that_levels)
-                {
+                for (this_level, that_level) in this_levels.into_iter().zip(that_levels) {
                     if this_level != that_level {
-                        differences
-                            .curried
-                            .push((depth + below, this_level, that_level));
+                        differences.curried.push((this_level, that_level));
                     }
                 }
                 differences.sorts.extend(
@@ -1738,7 +1729,7 @@ impl Term {
                         .into_iter()
                         .zip(that_children)
                         .rev()
-                        .map(|((below, this), (_, that))| (depth + below, true, this, that)),
+                        .map(|(this, that)| (true, this, that)),
                 );
                 continue;
             }
@@ -1748,13 +1739,13 @@ impl Term {
                 && let (Some(this_node), Some(that_node)) =
                     (this.applied_former(), that.applied_former())
             {
-                work.push((depth, false, this_node, that_node));
+                work.push((false, this_node, that_node));
                 continue;
             }
 
             // Two projections of a former short of its full application: read level by level they differ in their binders' annotations too, which eta never compares, so the whole pair is the caller's.
             if families.sets_curried_apart() && this.curried_former() && that.curried_former() {
-                work.push((depth, true, this, that));
+                work.push((true, this, that));
                 continue;
             }
 
@@ -1771,7 +1762,6 @@ impl Term {
                     let name = this_forwarded.name;
                     pair_instances(
                         &mut differences,
-                        depth,
                         this_forwarded.universes,
                         that_forwarded.universes,
                         pairs_sorts,
@@ -1780,7 +1770,7 @@ impl Term {
                 }
                 let this_field = this_forwarded.map_or_else(|| this.clone(), |f| f.field);
                 let that_field = that_forwarded.map_or_else(|| that.clone(), |f| f.field);
-                work.push((depth, false, this_field, that_field));
+                work.push((false, this_field, that_field));
                 continue;
             }
 
@@ -1798,7 +1788,6 @@ impl Term {
                 let vector = this_projected.vector;
                 pair_instances(
                     &mut differences,
-                    depth,
                     this_projected.universes,
                     that_projected.universes,
                     pairs_sorts,
@@ -1810,7 +1799,7 @@ impl Term {
                         .into_iter()
                         .zip(that_projected.arguments)
                         .rev()
-                        .map(|(this, that)| (depth, false, this.clone(), that.clone())),
+                        .map(|(this, that)| (false, this.clone(), that.clone())),
                 );
                 continue;
             }
@@ -1827,7 +1816,6 @@ impl Term {
                 let name = this_applied.name;
                 pair_instances(
                     &mut differences,
-                    depth,
                     this_applied.universes,
                     that_applied.universes,
                     pairs_sorts,
@@ -1839,7 +1827,7 @@ impl Term {
                         .into_iter()
                         .zip(that_applied.arguments)
                         .rev()
-                        .map(|(this, that)| (depth, false, this.clone(), that.clone())),
+                        .map(|(this, that)| (false, this.clone(), that.clone())),
                 );
                 continue;
             }
@@ -1866,7 +1854,7 @@ impl Term {
                 true => this.look().instance_name(),
                 false => None,
             };
-            for (position, ((below, this_level), (_, that_level))) in
+            for (position, (this_level, that_level)) in
                 this_levels.into_iter().zip(that_levels).enumerate()
             {
                 if this_level == that_level {
@@ -1874,7 +1862,7 @@ impl Term {
                 }
                 let irrelevant =
                     |name: &Global| families.variance(name, position) == Variance::Irrelevant;
-                let pair = (depth + below, this_level, that_level);
+                let pair = (this_level, that_level);
                 if family.is_some_and(irrelevant) {
                     differences.irrelevant.push(pair);
                 } else if partial.is_some_and(irrelevant) {
@@ -1895,9 +1883,7 @@ impl Term {
                     .zip(that_children)
                     .enumerate()
                     .rev()
-                    .map(|(position, ((below, this), (_, that)))| {
-                        (depth + below, position < annotations, this, that)
-                    }),
+                    .map(|(position, (this, that))| (position < annotations, this, that)),
             );
         }
 
@@ -2000,15 +1986,15 @@ impl Term {
     }
 }
 
-/// The level pairs two terms that differ in nothing else differ in, each with its universe-binder depth, in traversal order, and the sort pairs where the reading pairs them: what [`Term::level_differences`] answers.
+/// The level pairs two terms that differ in nothing else differ in, in traversal order, and the sort pairs where the reading pairs them: what [`Term::level_differences`] answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LevelDifferences {
     /// The pairs at positions whose levels are part of the term: two terms are one only where every one of these is one level.
-    pub compared: Vec<(usize, Level, Level)>,
+    pub compared: Vec<(Level, Level)>,
     /// The pairs at positions a vector calls irrelevant, a family's, a definition's applied in full or a field's of one, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
-    pub irrelevant: Vec<(usize, Level, Level)>,
+    pub irrelevant: Vec<(Level, Level)>,
     /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, every pair of two curried projections of one former, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
-    pub curried: Vec<(usize, Level, Level)>,
+    pub curried: Vec<(Level, Level)>,
     /// The sort pairs two nodes differ in, where the reading pairs sorts ([`Families::pairs_sorts`]); empty under every other reading, which finds two nodes apart in a sort apart.
     pub sorts: Vec<(Quality, Quality)>,
 }
@@ -2065,7 +2051,6 @@ impl<'a> Forwarded<'a> {
 /// Two instances of one head paired level by level, as `variance` reads each position, and their sorts where the reading pairs them: `None` where they are apart in more than levels, with nothing recorded.
 fn pair_instances(
     differences: &mut LevelDifferences,
-    depth: usize,
     this: &Universes,
     that: &Universes,
     pairs_sorts: bool,
@@ -2088,7 +2073,7 @@ fn pair_instances(
     differences.sorts.extend(sorts_apart);
     for (position, (this_level, that_level)) in this.levels.iter().zip(&that.levels).enumerate() {
         if this_level != that_level {
-            let pair = (depth, this_level.clone(), that_level.clone());
+            let pair = (this_level.clone(), that_level.clone());
             match variance(position) {
                 Variance::Invariant => differences.compared.push(pair),
                 Variance::Irrelevant => differences.irrelevant.push(pair),

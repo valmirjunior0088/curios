@@ -201,7 +201,7 @@ fn a_shared_level_walk_asks_each_level_once_per_node() {
     let asked = Rc::new(std::cell::Cell::new(0));
     let counter = Rc::clone(&asked);
 
-    let rewritten: Term = rewrite_universe_levels_scoped_shared(&term, move |_, level| {
+    let rewritten: Term = rewrite_universe_levels(&term, move |level| {
         counter.set(counter.get() + 1);
         level.substitute(|head| match head {
             LevelHead::Meta(found) if found == meta => Some(Level::zero()),
@@ -228,7 +228,7 @@ fn the_shared_level_walk_rebuilds_each_node_at_its_substituted_levels() {
     };
     let term = doubled(base(Level::meta(first), Level::meta(second)), 4);
 
-    let shared: Term = rewrite_universe_levels_scoped_shared(&term, move |_, level| {
+    let shared: Term = rewrite_universe_levels(&term, move |level| {
         level.substitute(|head| match head {
             LevelHead::Meta(found) if found == first => Some(Level::zero()),
             LevelHead::Meta(found) if found == second => Some(Level::constant(1)),
@@ -365,7 +365,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         (
             "the shared level rewrite",
             root_operands_shared(
-                &rewrite_universe_levels_scoped_shared(&term, move |_, level| {
+                &rewrite_universe_levels(&term, move |level| {
                     level.substitute(|head| match head {
                         LevelHead::Meta(found) if found == meta => Some(Level::zero()),
                         _ => None,
@@ -377,7 +377,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         (
             "the universe metavariable substitution",
             root_operands_shared(
-                &substitute_universe_metas_scoped(&term, move |found| {
+                &substitute_universe_metas(&term, move |found| {
                     Ok((found == meta).then(Level::zero))
                 })
                 .expect("substituting a ground level cannot overflow"),

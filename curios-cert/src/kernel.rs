@@ -919,7 +919,7 @@ impl<'s> Kernel<'s> {
     ///
     /// A constraint level naming a parameter the instance does not supply is refused rather than kept: an unsubstituted scheme parameter would be misread as one of the ambient item's, which is the accepting direction.
     ///
-    /// The instance's *width* is checked first, and separately, because the constraint loop cannot see it. A scheme with an empty constraint set never enters the guard above at all, and the guard only ever covered levels appearing in constraints — while every one of the declaration's own terms is instantiated at these same levels by the callers below. There an unsupplied parameter is not refused but renumbered: `instantiate_universes_scoped` shifts it down by the instance's width, which is the correct de Bruijn step for a full instance and a capture for a short one, landing the declaration's parameter on the ambient item's. This is the same hazard the paragraph above names, at the position it does not reach.
+    /// The instance's *width* is checked first, and separately, because the constraint loop cannot see it. A scheme with an empty constraint set never enters the guard above at all, and the guard only ever covered levels appearing in constraints — while every one of the declaration's own terms is instantiated at these same levels by the callers below. There an unsupplied parameter is not refused but left as it stands by `instantiate_universes`, which for a short instance is a capture, landing the declaration's parameter on the ambient item's of the same index. This is the same hazard the paragraph above names, at the position it does not reach.
     pub(crate) fn check_instance(
         &self,
         context: &UniverseContext,

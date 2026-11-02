@@ -6,7 +6,7 @@ use {
     },
     curios_core::{
         Bound, Extent, Field, InductType, Level, Proj, Quality, SelfReference, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant, instantiate_universes_scoped,
+        Telescope, Term, Tuple, TupleType, Variant, instantiate_universes,
         stamp_declaration_instance,
     },
     curios_utilities::Plicity,
@@ -316,8 +316,7 @@ pub fn elaborate_induct_type(
         };
         let (arity, universes) =
             context.instantiate_universe_bound(&universe_context, &arity, Some(occurrence))?;
-        let result_sort =
-            instantiate_universes_scoped(&result_sort, &universes).map_err(Error::from)?;
+        let result_sort = instantiate_universes(&result_sort, &universes).map_err(Error::from)?;
         (arity, result_sort, universes)
     } else {
         let (arity, result_sort) = context

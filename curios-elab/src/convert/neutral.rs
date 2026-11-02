@@ -10,7 +10,7 @@ use {
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, Level, Match, MatchResult,
         Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, instantiate_universes_scoped,
+        UniverseConstraintOrigin, instantiate_universes,
     },
     std::{collections::HashMap, rc::Rc},
 };
@@ -41,7 +41,6 @@ pub fn identify_universe_levels(
             ..
         } => (compared, irrelevant),
         Alignment::Distinct => return Ok(Identification::Distinct),
-        Alignment::UnderBinder => return Ok(Identification::UnderBinder),
         Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
         Alignment::Curried { apart, .. } => {
             curios_profile::sample!("identify::curried", apart.len());
@@ -161,18 +160,9 @@ fn align_universe_levels(
         return Ok(Alignment::Distinct);
     };
 
-    let irrelevant = differences
-        .irrelevant
-        .into_iter()
-        .filter(|(depth, _, _)| *depth == 0)
-        .map(|(_, this_level, that_level)| (this_level, that_level))
-        .collect();
+    let irrelevant = differences.irrelevant;
     let mut compared = Vec::new();
-    for (depth, this_level, that_level) in differences.compared {
-        if depth > 0 {
-            return Ok(Alignment::UnderBinder);
-        }
-
+    for (this_level, that_level) in differences.compared {
         let this_level = context
             .universes()
             .zonk(&this_level)
@@ -192,14 +182,8 @@ fn align_universe_levels(
     }
 
     let mut apart = Vec::new();
-    let mut under_binder = false;
     let mut decided = false;
-    for (depth, this_level, that_level) in differences.curried {
-        if depth > 0 {
-            under_binder = true;
-            continue;
-        }
-
+    for (this_level, that_level) in differences.curried {
         let this_level = context
             .universes()
             .zonk(&this_level)
@@ -214,7 +198,7 @@ fn align_universe_levels(
         decided |= this_level.atoms.is_empty() && that_level.atoms.is_empty();
         apart.push((this_level, that_level));
     }
-    if under_binder || !apart.is_empty() {
+    if !apart.is_empty() {
         return Ok(Alignment::Curried { apart, decided });
     }
 
@@ -228,9 +212,8 @@ fn align_universe_levels(
 /// What [`align_universe_levels`] found, before anybody decides what to do about it.
 enum Alignment {
     Distinct,
-    UnderBinder,
     GroundUnequal,
-    /// A head short of its full application is apart in levels that only its type can call a difference or none: the zonked pairs outside every universe binder, and `decided` where one of them is two unequal ground levels.
+    /// A head short of its full application is apart in levels that only its type can call a difference or none: the zonked pairs, and `decided` where one of them is two unequal ground levels.
     Curried {
         apart: Vec<(Level, Level)>,
         decided: bool,
@@ -243,13 +226,12 @@ enum Alignment {
     },
 }
 
-/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain; a differing pair is withheld, the question in hand committing nothing; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
+/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair is withheld, the question in hand committing nothing; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Identification {
     Identified,
     Distinct,
     GroundUnequal,
-    UnderBinder,
     Withheld,
     Curried(Vec<(Level, Level)>),
 }
@@ -426,7 +408,7 @@ pub fn synth_neutral(
             let Some(scheme) = context.assumption(name).cloned() else {
                 return Ok(None);
             };
-            instantiate_universes_scoped(&scheme, universes)
+            instantiate_universes(&scheme, universes)
                 .map(Some)
                 .map_err(ReduceError::Universe)
         }

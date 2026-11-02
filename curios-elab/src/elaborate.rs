@@ -49,7 +49,7 @@ use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
         Ascribed, Free, Func, FuncType, Subterm, Term, Transient, Universes, Var, foreign_operands,
-        foreign_produced, former_spelling, instantiate_universes_scoped, intrinsic_former,
+        foreign_produced, former_spelling, instantiate_universes, intrinsic_former,
     },
     curios_utilities::{Plicity, recurse},
     std::sync::Arc,
@@ -329,7 +329,7 @@ fn spelled_former(
     if let Some((_, body)) = spelled {
         return Ok(Some(match universes.is_empty() {
             true => body,
-            false => instantiate_universes_scoped(&body, universes).map_err(Error::from)?,
+            false => instantiate_universes(&body, universes).map_err(Error::from)?,
         }));
     }
 

@@ -304,36 +304,27 @@ pub(crate) fn oldest_local(binders: &[&Free]) -> Option<u64> {
     })
 }
 
-/// [`rewrite_universe_levels_scoped_shared`] for a hook that reads no depth.
-pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
-    value: &B,
-    rewrite: impl FnMut(&Level) -> Result<Level, E> + 'static,
-) -> Result<B, E> {
-    let mut rewrite = rewrite;
-    rewrite_universe_levels_scoped_shared(value, move |_, level| rewrite(level))
-}
-
 /// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-ANF lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over the atoms of a carrier whose values hold no type ([`same_atom`](crate::same_atom)), where no level can reach the value, and `documentation/design/soundness/case-equations-and-their-key.md` records the route it admits anywhere else.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
 
-/// Every level `value` carries through `rewrite`, at the universe binder depth it stands at, once per node and depth: for a hook whose answer is a function of the level and the depth — a substitution, an instantiation, a check — or whose effect is idempotent. Every such caller walks what finalization and certification walk, and a solution stored as a reduct is a graph whose tree can be exponential in its depth. The first error `rewrite` answers in walk order is the result, and no level is asked after it; skipping a revisit leaves the order first occurrences are met in unchanged.
-pub fn rewrite_universe_levels_scoped_shared<B: Bound, E: 'static>(
+/// Every level `value` carries through `rewrite`, once per node: for a hook whose answer is a function of the level — a substitution, an instantiation, a check — or whose effect is idempotent. Every such caller walks what finalization and certification walk, and a solution stored as a reduct is a graph whose tree can be exponential in its depth. The first error `rewrite` answers in walk order is the result, and no level is asked after it; skipping a revisit leaves the order first occurrences are met in unchanged.
+pub fn rewrite_universe_levels<B: Bound, E: 'static>(
     value: &B,
-    rewrite: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+    rewrite: impl FnMut(&Level) -> Result<Level, E> + 'static,
 ) -> Result<B, E> {
     let rewrite = Rc::new(RefCell::new(rewrite));
     let error = Rc::new(RefCell::new(None));
     let rewrite_for_visit = Rc::clone(&rewrite);
     let error_for_visit = Rc::clone(&error);
-    let mut visit = Visit::rewriting_levels_scoped_shared(
+    let mut visit = Visit::rewriting_levels_shared(
         |_, _| None,
-        Box::new(move |depth, level| {
+        Box::new(move |level| {
             if error_for_visit.borrow().is_some() {
                 return level.clone();
             }
-            match rewrite_for_visit.borrow_mut()(depth, level) {
+            match rewrite_for_visit.borrow_mut()(level) {
                 Ok(level) => level,
                 Err(found) => {
                     *error_for_visit.borrow_mut() = Some(found);
@@ -341,6 +332,7 @@ pub fn rewrite_universe_levels_scoped_shared<B: Bound, E: 'static>(
                 }
             }
         }),
+        Qualities::Kept,
     );
     let rewritten = value.traverse(&mut visit);
     match error.borrow_mut().take() {
@@ -361,9 +353,9 @@ pub fn rewrite_universe_qualities<B: Bound, E: 'static>(
     let error = Rc::new(RefCell::new(None));
     let error_for_visit = Rc::clone(&error);
     let unchanged: Unchanged = |_, _| None;
-    let mut visit = Visit::rewriting_universes_scoped_shared(
+    let mut visit = Visit::rewriting_levels_shared(
         unchanged,
-        Box::new(|_, level| level.clone()),
+        Box::new(|level| level.clone()),
         Qualities::Rewritten(Box::new(move |quality| {
             if error_for_visit.borrow().is_some() {
                 return *quality;
@@ -394,26 +386,16 @@ pub fn open_quality<B: Bound>(value: &B, declared: usize) -> Option<Quality> {
     .err()
 }
 
-pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, UniverseError> {
-    level.substitute(|head| match head {
-        LevelHead::Param(UniverseParam(index)) => index
-            .checked_add(amount)
-            .map(UniverseParam)
-            .map(Level::param),
-        LevelHead::Meta(_) => None,
-    })
-}
-
-/// Every universe metavariable of `value` that `answer` answers for, replaced by the answer shifted past the universe binders above the occurrence ([`shift_universe_params`]). An answer is stated at universe-binder depth zero, as a solution is, so a parameter in it names the same parameter wherever it lands. Once per node and depth; the first error is the result.
-pub fn substitute_universe_metas_scoped<B: Bound>(
+/// Every universe metavariable of `value` that `answer` answers for, replaced by the answer. A parameter in an answer names the same parameter wherever it lands, since every level a declaration holds is read at that declaration's own context. Once per node; the first error is the result.
+pub fn substitute_universe_metas<B: Bound>(
     value: &B,
     mut answer: impl FnMut(UniverseMetaId) -> Result<Option<Level>, UniverseError> + 'static,
 ) -> Result<B, UniverseError> {
-    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
+    rewrite_universe_levels(value, move |level| {
         let mut replacements = BTreeMap::new();
         for meta in level.metas() {
             if let Some(found) = answer(meta)? {
-                replacements.insert(meta, shift_universe_params(&found, depth)?);
+                replacements.insert(meta, found);
             }
         }
         level.substitute(|head| match head {
@@ -423,23 +405,23 @@ pub fn substitute_universe_metas_scoped<B: Bound>(
     })
 }
 
-/// [`rewrite_universe_levels_scoped_shared`] with each quality parameter of `value` as `qualities` states it beside the levels: the one walk that reads a declaration at an instance or at an assignment, after which no parameter is left ([`Qualities::Stated`]).
-fn state_universes_scoped_shared<B: Bound, E: 'static>(
+/// [`rewrite_universe_levels`] with each quality parameter of `value` as `qualities` states it beside the levels: the one walk that reads a declaration at an instance or at an assignment, after which no parameter is left ([`Qualities::Stated`]).
+fn state_universes<B: Bound, E: 'static>(
     value: &B,
-    levels: impl FnMut(usize, &Level) -> Result<Level, E> + 'static,
+    levels: impl FnMut(&Level) -> Result<Level, E> + 'static,
     qualities: impl FnMut(&Quality) -> Quality + 'static,
 ) -> Result<B, E> {
     let mut levels = levels;
     let error = Rc::new(RefCell::new(None));
     let error_for_visit = Rc::clone(&error);
     let unchanged: Unchanged = |_, _| None;
-    let mut visit = Visit::rewriting_universes_scoped_shared(
+    let mut visit = Visit::rewriting_levels_shared(
         unchanged,
-        Box::new(move |depth, level| {
+        Box::new(move |level| {
             if error_for_visit.borrow().is_some() {
                 return level.clone();
             }
-            match levels(depth, level) {
+            match levels(level) {
                 Ok(level) => level,
                 Err(found) => {
                     *error_for_visit.borrow_mut() = Some(found);
@@ -459,9 +441,9 @@ fn state_universes_scoped_shared<B: Bound, E: 'static>(
 /// `value` with each of its declaration's quality parameters as the quality `qualities` states for it, its levels left as they are: the declaration at one assignment of the sorts it leaves open.
 pub fn instantiate_qualities<B: Bound>(value: &B, qualities: &[Quality]) -> B {
     let qualities = qualities.to_vec();
-    let instantiated: Result<B, std::convert::Infallible> = state_universes_scoped_shared(
+    let instantiated: Result<B, std::convert::Infallible> = state_universes(
         value,
-        |_, level| Ok(level.clone()),
+        |level| Ok(level.clone()),
         move |quality| quality.instantiate(&qualities),
     );
 
@@ -473,37 +455,27 @@ pub fn instantiate_qualities<B: Bound>(value: &B, qualities: &[Quality]) -> B {
 
 /// Substitute a scheme's own universe parameters by `arguments`: its level parameters by the levels the instance states, and its quality parameters by the qualities.
 ///
-/// Universe parameters are innermost-first: beneath the `depth` universe binders this walk has crossed, the scheme's own parameters occupy `depth .. depth + arguments.len()`. An index above that range belongs to an *enclosing* scheme and is shifted down by the parameters this instantiation discharges, exactly as `curios-elab`'s `UniverseSolver::instantiate_at` rewrites the outer references in a nested residual context.
+/// A level parameter the instance supplies is replaced by the level it states, and every other level is left as it stands: a closed term names no parameter past its declaration's count, and an instance states every one of them (`curios-cert`'s `universe_escape` and `Kernel::check_instance`).
 ///
-/// Instance arity is the owning `UniverseContext`'s contract and is checked against its declared `parameter_count`. Rejecting an out-of-range index here instead would misread every legitimate outer-scheme reference as a missing argument.
-pub fn instantiate_universes_scoped<B: Bound>(
+/// Instance arity is the owning `UniverseContext`'s contract, checked against its declared `parameter_count` where the instance is typed.
+pub fn instantiate_universes<B: Bound>(
     value: &B,
     arguments: &Universes,
 ) -> Result<B, UniverseError> {
     let levels = arguments.levels.clone();
-    let instantiate = move |depth: usize, level: &Level| {
-        let arguments = levels
-            .iter()
-            .map(|argument| shift_universe_params(argument, depth))
-            .collect::<Result<Vec<_>, _>>()?;
+    let instantiate = move |level: &Level| {
         level.substitute(|head| match head {
-            LevelHead::Param(UniverseParam(index)) if index < depth => None,
-            LevelHead::Param(UniverseParam(index)) => Some(
-                arguments
-                    .get(index - depth)
-                    .cloned()
-                    .unwrap_or_else(|| Level::param(UniverseParam(index - arguments.len()))),
-            ),
+            LevelHead::Param(UniverseParam(index)) => levels.get(index).cloned(),
             LevelHead::Meta(_) => None,
         })
     };
 
-    // A quality parameter is flat, bound by the top-level declaration alone, so it is read by its index at every depth.
+    // A quality parameter is bound by the top-level declaration alone, as a level parameter is.
     match arguments.qualities.is_empty() {
-        true => rewrite_universe_levels_scoped_shared(value, instantiate),
+        true => rewrite_universe_levels(value, instantiate),
         false => {
             let qualities = arguments.qualities.clone();
-            state_universes_scoped_shared(value, instantiate, move |quality| {
+            state_universes(value, instantiate, move |quality| {
                 quality.instantiate(&qualities)
             })
         }
@@ -522,20 +494,14 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
-/// The universe parameters `value` mentions that no universe binder inside it binds, each as its own scheme's index: a parameter met beneath `depth` binders is the scheme's own from `depth` up, and is reported shifted back.
+/// The universe parameters `value` mentions.
 pub fn universe_params<B: Bound>(value: &B) -> BTreeSet<UniverseParam> {
     let params = Rc::new(RefCell::new(BTreeSet::new()));
     let found = Rc::clone(&params);
-    let _: Result<_, Infallible> =
-        rewrite_universe_levels_scoped_shared(value, move |depth, level| {
-            found.borrow_mut().extend(
-                level
-                    .params()
-                    .filter(|param| param.0 >= depth)
-                    .map(|param| UniverseParam(param.0 - depth)),
-            );
-            Ok(level.clone())
-        });
+    let _: Result<_, Infallible> = rewrite_universe_levels(value, move |level| {
+        found.borrow_mut().extend(level.params());
+        Ok(level.clone())
+    });
     Rc::try_unwrap(params)
         .expect("the universe collector releases its traversal closure")
         .into_inner()
@@ -942,7 +908,8 @@ impl Sharing {
 
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
-type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
+/// A level-level hook for [`Visit`], asked at every level of a node that carries universe data. It reads no depth: only a top-level item binds a universe, so a parameter names one thing wherever it stands.
+type LevelRewrite = Box<dyn FnMut(&Level) -> Level>;
 /// A quality-level hook for [`Visit`], asked at every sort a level hook is asked at. It reads no depth: only a top-level item binds a quality, so a parameter names one thing wherever it stands.
 type QualityRewrite = Box<dyn FnMut(&Quality) -> Quality>;
 
@@ -959,19 +926,18 @@ enum Qualities {
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables (`Mode`).
 pub struct Visit<F> {
     term_depth: usize,
-    universe_depth: usize,
     visit: F,
     mode: Mode,
     memo: Memo,
-    /// The spines this visit rewrote, where it remembers them, by their entries' version and the depths it stood at, each held beside its rewrite since a version is an address: every metavariable born under one scope shares that scope's spine, and a codomain holding an operator a parameter mints a metavariable each, so a capture of it would otherwise rewrite the one spine once for each.
-    spines: HashMap<(usize, usize, usize), (MetavarSpine, Option<MetavarSpine>)>,
+    /// The spines this visit rewrote, where it remembers them, by their entries' version and the binder depth it stood at, each held beside its rewrite since a version is an address: every metavariable born under one scope shares that scope's spine, and a codomain holding an operator a parameter mints a metavariable each, so a capture of it would otherwise rewrite the one spine once for each.
+    spines: HashMap<(usize, usize), (MetavarSpine, Option<MetavarSpine>)>,
 }
 
-/// What one node of [`Term::level_differences`]'s walk stood down: its children and its own levels, each with the universe-binder depth it sits at below the node, and its own sorts where the walk stands them down too, in traversal order.
+/// What one node of [`Term::level_differences`]'s walk stood down: its children, its own levels, and its own sorts where the walk stands them down too, in traversal order.
 #[derive(Default)]
 pub(crate) struct MaskedLevels {
-    pub(crate) children: Vec<(usize, Term)>,
-    pub(crate) levels: Vec<(usize, Level)>,
+    pub(crate) children: Vec<Term>,
+    pub(crate) levels: Vec<Level>,
     pub(crate) qualities: Vec<Quality>,
 }
 
@@ -992,9 +958,9 @@ enum Memo {
     /// Keyed on input node identity. Addresses are stable for the traversal because the caller's value holds every node alive.
     ByNode(HashMap<usize, Remembered>),
     /// [`Memo::ByNodeAndDepth`] for the nodes more than one owner holds, and nothing for the rest: `shift` and `release` run at every β step over terms a few nodes large, where a table entry per node would cost more than the walk, and a node is met twice only where two owners hold it. Lean's kernel keeps the same rule in the `replace` its substitution and lifting go through — a cache of the shared subterms, by offset.
-    SharedByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
-    /// Keyed on input node identity *and* both binder depths, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices. The universe binder depth is in the key beside the term's because a level rewrite reads it: a node under a `rec` group's universe context sits one universe binder deeper at the same term depth.
-    ByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
+    SharedByNodeAndDepth(HashMap<(usize, usize), Remembered>),
+    /// Keyed on input node identity *and* the binder depth, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices.
+    ByNodeAndDepth(HashMap<(usize, usize), Remembered>),
 }
 
 /// One memo entry: a node's rebuild, and the extent of the occurrence whose visit filled it — see [`Memo`] for why a hit needs the second.
@@ -1082,13 +1048,13 @@ enum Mode {
     RewritingUniverses(Rewrite),
     /// A level-level hook, visiting only nodes that carry universe data, and what the walk does with a quality beside it.
     RewritingLevels(LevelRewrite, Qualities),
-    /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children each with the universe-binder depth it sits at below the node, and the levels each with theirs. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
+    /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children and the levels, in traversal order. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
     ///
     /// `qualities` is `Some` for a walk that stands the node's sorts down beside its levels, keeping them in traversal order, and `None` for one that leaves them in the masked node, where two nodes apart in a sort compare apart.
     MaskingLevels {
         placeholder: Term,
-        children: Vec<(usize, Term)>,
-        levels: Vec<(usize, Level)>,
+        children: Vec<Term>,
+        levels: Vec<Level>,
         qualities: Option<Vec<Quality>>,
     },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
@@ -1117,7 +1083,6 @@ where
     fn capturing(oldest: Option<u64>, visit: F) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: match oldest {
                 Some(oldest) => Mode::Capturing { oldest },
@@ -1132,7 +1097,6 @@ where
     fn pruning(visit: F) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Pruning,
             // `shift` and `release` are pure in the node and the depth, and the read `Scope::uses` rides on them latches, so a depth-keyed memo is legal. A closed subterm never reaches it — `reach` answers that one first — so it is asked only over an *open* shared term: a body under its binders that holds one node twice, which each walked once per path without it.
@@ -1145,7 +1109,6 @@ where
     pub fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Rewriting(rewrite),
             // The unmemoized rewrite. Four of its callers serve operands by position and one pushes into a `Vec`, so their answers differ per occurrence — see [`Memo`].
@@ -1158,7 +1121,6 @@ where
     pub fn masking(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Masking {
                 placeholder,
@@ -1175,7 +1137,6 @@ where
     pub(crate) fn masking_labels(visit: F, placeholder: Term) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Masking {
                 placeholder,
@@ -1195,7 +1156,6 @@ where
     pub fn rewriting_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Rewriting(rewrite),
             memo: Memo::ByNode(HashMap::new()),
@@ -1207,7 +1167,6 @@ where
     pub fn rewriting_universes_shared(visit: F, rewrite: Rewrite) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::RewritingUniverses(rewrite),
             memo: Memo::ByNode(HashMap::new()),
@@ -1215,27 +1174,10 @@ where
         }
     }
 
-    /// A level hook at every level of every node that carries universe data, memoized on node identity and both binder depths: for a hook whose answer is a function of the level and the universe depth it stands at, or whose effect is idempotent.
-    pub(crate) fn rewriting_levels_scoped_shared(visit: F, rewrite: LevelRewrite) -> Self {
+    /// A level hook at every level of every node that carries universe data, and what the walk does with a quality beside it, memoized on node identity and the binder depth: for hooks each a function of what it is handed, or whose effect is idempotent.
+    fn rewriting_levels_shared(visit: F, levels: LevelRewrite, qualities: Qualities) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
-            visit,
-            mode: Mode::RewritingLevels(rewrite, Qualities::Kept),
-            memo: Memo::ByNodeAndDepth(HashMap::new()),
-            spines: HashMap::new(),
-        }
-    }
-
-    /// [`rewriting_levels_scoped_shared`](Self::rewriting_levels_scoped_shared) with a quality hook beside the level one: for a walk that instantiates or solves both, each hook a function of what it is handed.
-    fn rewriting_universes_scoped_shared(
-        visit: F,
-        levels: LevelRewrite,
-        qualities: Qualities,
-    ) -> Self {
-        Self {
-            term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::RewritingLevels(levels, qualities),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
@@ -1247,7 +1189,6 @@ where
     pub(crate) fn masking_levels(visit: F, placeholder: Term, sorts: bool) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::MaskingLevels {
                 placeholder,
@@ -1264,7 +1205,6 @@ where
     fn erasing_universes(visit: F) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::ErasingUniverses,
             // A comparison projects both operands through this at every `Nat` comparison, and the projection walks the whole term: unmemoized it would be `2^n` in the operand's width while the unit budget read linear.
@@ -1279,7 +1219,6 @@ where
     pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
         Self {
             term_depth: 0,
-            universe_depth: 0,
             visit,
             mode: Mode::Sharing {
                 table,
@@ -1314,11 +1253,10 @@ where
             // Every other level-bearing container is removed structurally in `Subterm::traverse`; this is the unavoidable payload of Core's level-indexed `Type` variant, not an erasure sentinel.
             return Level::zero();
         }
-        let universe_depth = self.universe_depth;
         match &mut self.mode {
-            Mode::RewritingLevels(rewrite, _) => rewrite(universe_depth, level),
+            Mode::RewritingLevels(rewrite, _) => rewrite(level),
             Mode::MaskingLevels { levels, .. } => {
-                levels.push((universe_depth, level.clone()));
+                levels.push(level.clone());
                 Level::constant(1)
             }
             _ => level.clone(),
@@ -1365,7 +1303,6 @@ where
 
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
         let term_depth = self.term_depth;
-        let universe_depth = self.universe_depth;
         match &mut self.mode {
             Mode::Rewriting(rewrite) | Mode::RewritingUniverses(rewrite) => {
                 rewrite(term_depth, term)
@@ -1383,7 +1320,7 @@ where
                 children,
                 ..
             } => {
-                children.push((universe_depth, term.clone()));
+                children.push(term.clone());
                 Some(placeholder.clone())
             }
             Mode::Plain
@@ -1472,13 +1409,13 @@ where
         }
     }
 
-    /// The memoized rebuild of the input node at `key`, at the depths this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its extent.
+    /// The memoized rebuild of the input node at `key`, at the binder depth this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its extent.
     pub(crate) fn memo_get(&self, key: usize, at: &Term) -> Option<Term> {
         let remembered = match &self.memo {
             Memo::None => None,
             Memo::ByNode(memo) => memo.get(&key),
             Memo::SharedByNodeAndDepth(memo) | Memo::ByNodeAndDepth(memo) => {
-                memo.get(&(key, self.term_depth, self.universe_depth))
+                memo.get(&(key, self.term_depth))
             }
         }?;
 
@@ -1490,23 +1427,21 @@ where
         matches!(self.memo, Memo::ByNode(_) | Memo::ByNodeAndDepth(_))
     }
 
-    /// The rewrite of `spine` this visit already made at the depths it stands at, where it remembers spines ([`Visit::remembers_spines`]): `Some(None)` for a spine it left as it stood.
+    /// The rewrite of `spine` this visit already made at the binder depth it stands at, where it remembers spines ([`Visit::remembers_spines`]): `Some(None)` for a spine it left as it stood.
     pub(crate) fn spine_get(&self, spine: &MetavarSpine) -> Option<Option<MetavarSpine>> {
         if !self.remembers_spines() {
             return None;
         }
-        let (_, rewritten) =
-            self.spines
-                .get(&(spine.version(), self.term_depth, self.universe_depth))?;
+        let (_, rewritten) = self.spines.get(&(spine.version(), self.term_depth))?;
 
         Some(rewritten.clone())
     }
 
-    /// Remember `rewritten` as what this visit made of `spine` at the depths it stands at, where it remembers spines, under the same law as its memo of nodes: the visit is pure in the node and the depth, and one version of a spine is one list of entries.
+    /// Remember `rewritten` as what this visit made of `spine` at the binder depth it stands at, where it remembers spines, under the same law as its memo of nodes: the visit is pure in the node and the depth, and one version of a spine is one list of entries.
     pub(crate) fn spine_put(&mut self, spine: &MetavarSpine, rewritten: Option<MetavarSpine>) {
         if self.remembers_spines() {
             self.spines.insert(
-                (spine.version(), self.term_depth, self.universe_depth),
+                (spine.version(), self.term_depth),
                 (spine.clone(), rewritten),
             );
         }
@@ -1524,7 +1459,7 @@ where
                 memo.insert(key, remembered);
             }
             Memo::SharedByNodeAndDepth(memo) | Memo::ByNodeAndDepth(memo) => {
-                memo.insert((key, self.term_depth, self.universe_depth), remembered);
+                memo.insert((key, self.term_depth), remembered);
             }
         }
     }

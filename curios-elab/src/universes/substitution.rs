@@ -3,9 +3,8 @@
 use {
     crate::{Context, UniverseSolver},
     curios_core::{
-        Bound, Level, Quality, UniverseError, UniverseMetaId,
-        rewrite_universe_levels_scoped_shared, rewrite_universe_qualities,
-        substitute_universe_metas_scoped,
+        Bound, Level, Quality, UniverseError, UniverseMetaId, rewrite_universe_levels,
+        rewrite_universe_qualities, substitute_universe_metas,
     },
     std::{
         cell::RefCell,
@@ -41,11 +40,11 @@ pub fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
 /// Replace every solved universe metavariable under `value`'s binders by its recursively zonked solution, shifting each solution past the binders it crosses.
 ///
 /// Lives here rather than beside the scoped-rewrite traversals it calls: those are representation, while [`UniverseSolver`] is elaboration state.
-/// The level metavariables `value` holds, read by the walk [`substitute_universe_metas_scoped`] substitutes them by, which visits a node many terms share once.
+/// The level metavariables `value` holds, read by the walk [`substitute_universe_metas`] substitutes them by, which visits a node many terms share once.
 fn held_universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
     let metas = Rc::new(RefCell::new(BTreeSet::new()));
     let found = Rc::clone(&metas);
-    let _: Result<_, Infallible> = rewrite_universe_levels_scoped_shared(value, move |_, level| {
+    let _: Result<_, Infallible> = rewrite_universe_levels(value, move |level| {
         found.borrow_mut().extend(level.metas());
         Ok(level.clone())
     });
@@ -54,7 +53,7 @@ fn held_universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
-pub fn zonk_universe_levels_scoped<B: Bound>(
+pub fn zonk_universe_levels<B: Bound>(
     value: &B,
     solver: &UniverseSolver,
 ) -> Result<B, UniverseError> {
@@ -67,8 +66,7 @@ pub fn zonk_universe_levels_scoped<B: Bound>(
             zonked.insert(meta, solver.zonk(&Level::meta(meta))?);
         }
     }
-    let levelled =
-        substitute_universe_metas_scoped(value, move |meta| Ok(zonked.get(&meta).cloned()))?;
+    let levelled = substitute_universe_metas(value, move |meta| Ok(zonked.get(&meta).cloned()))?;
 
     match qualities {
         Some(table) => rewrite_universe_qualities(&levelled, move |quality| {
