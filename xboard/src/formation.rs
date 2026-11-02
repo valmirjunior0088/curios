@@ -1,3 +1,4 @@
+mod a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers;
 mod a_groups_instance_is_held_to_the_groups_constraints_and_its_bodies_were_checked_under_the_enclosing_declarations;
 mod a_parameter_named_through_an_instance_is_an_occurrence_positivity_does_not_see;
 
@@ -9,5 +10,6 @@ pub(super) const PART: Part = Part {
     tickets: &[
         a_parameter_named_through_an_instance_is_an_occurrence_positivity_does_not_see::TICKET,
         a_groups_instance_is_held_to_the_groups_constraints_and_its_bodies_were_checked_under_the_enclosing_declarations::TICKET,
+        a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers::TICKET,
     ],
 };
