@@ -2,10 +2,10 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::{Counted, Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Module, Quality,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Module, Nat, Quality,
         Scope, Subterm, Telescope, Term, UniverseContext, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
@@ -431,5 +431,161 @@ fn an_arm_is_not_excused_by_an_irrelevant_level() {
     assert_eq!(
         fixture_verdicts(&covered, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
+    );
+}
+
+/// `induct Pinned : (n : Nat, m : Nat) -> Prop | mk(x : Nat) : (x, x) end` beside an empty proposition, and one definition eliminating `Pinned(0, 1)` with `mk` as its only arm, `binders` naming its payload.
+///
+/// The stated instance is one no value of the family stands at: `mk` targets `(x, x)`, so the payload its indices pin is `x := 0` and the instance it builds at that payload is `Pinned(0, 0)`. That is what the open branch of the sole-arm rule compares — `unread_payload`'s `grounded`, which answers no here, leaving the match standing — and what the closed branch does not compare at all, `stated_payload` handing the payload over on the ground that a closed proof of a one-constructor family is that constructor.
+///
+/// With `over` naming a binder the definition is a function of a proof of the stated instance and the scrutinee is that binder, which is the open branch; with none the scrutinee is a metavariable, which the gate reads as closed.
+fn pinned_sole_arm_module(over: Option<Free>, binders: Vec<(Plicity, Free)>) -> Module {
+    let pinned = Global::Authored(Qualifier::from(["Pinned"]));
+    let falsehood = Global::Authored(Qualifier::from(["False"]));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let literal = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let payload = Free::local(770, Some("x"));
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [
+                (Free::local(771, Some("n")), nat()),
+                (Free::local(772, Some("m")), nat()),
+            ],
+            (),
+        )),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build(
+                    [(payload, nat())],
+                    vec![Term::free_var(&payload), Term::free_var(&payload)],
+                ),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let at = |left: usize, right: usize| {
+        Term::induct_type(pinned, Vec::<Term>::new(), [literal(left), literal(right)])
+    };
+    let false_type = || Term::induct_type(falsehood, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let eliminated = Term::induct_match_scoped_marked(
+        match over {
+            Some(binder) => Term::free_var(&binder),
+            None => Term::hole(0usize),
+        },
+        Scope::constant(Many(3), false_type()),
+        [(Atom::from("mk"), binders, Term::prop())],
+        None,
+    )
+    .stating(at(0, 1));
+    let (type_, body) = match over {
+        Some(binder) => (
+            Term::func_type([(binder, at(0, 1))], false_type()),
+            Term::func([(binder, at(0, 1))], eliminated),
+        ),
+        None => (false_type(), eliminated),
+    };
+
+    declaring(
+        Module {
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["bad"])),
+                type_,
+                body,
+            )]
+            .into(),
+            ..Module::default()
+        },
+        BTreeMap::from([(pinned, declaration), (falsehood, proposition(Vec::new()))]),
+        [],
+        [],
+    )
+}
+
+/// A metavariable in the kernel's input must be refused, though the Match-arm rule's gate reads it as closed.
+///
+/// `whnf`'s gate is `!term.has_local_free()`, where the closed machine's `accelerable` and `curios-elab`'s own `closed` also require no metavariable. So a match whose scrutinee is a metavariable and whose other parts name no local is closed to this reducer and open to the other two, and the closed branch of the sole-arm rule is the one with no comparison in it: `stated_payload` hands the payload over where `unread_payload` would put the stated instance beside the one the constructor builds and decline. What keeps the two from parting over a verdict is not the gate but the boundary in front of it — `Zonked::project` refuses a program carrying elaboration's own syntax, and `infer` refuses a `Metavar` with `NotCore` where a judgment meets one — and this holds that boundary, the fixture reaching the walk with `Zonked` bypassed as every fixture here does.
+#[test]
+fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
+    let verdicts = fixture_verdicts(
+        &pinned_sole_arm_module(None, vec![(Plicity::Explicit, Free::local(770, Some("x")))]),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
+        "elaboration's own syntax must be refused where a judgment meets it: {verdicts:?}",
+    );
+}
+
+/// An arm whose arity its constructor's payload denies must be refused, which is what keeps the sole-arm rule's payload from ever being opened at the wrong count.
+///
+/// The open branch of the kernel's rule filters on `payload.len() == arm.arity()` before it opens the arm, where `curios-elab`'s fires `unread()` ahead of that comparison. The two can only part on a module the kernel refuses outright, and this is the refusal: the payload a stated instance yields is as long as the constructor's signature, and `check_induct_arms` holds every arm's arity to that signature. The scrutinee is a binder, so the open branch is the one reduction takes.
+#[test]
+fn an_arm_whose_arity_its_constructor_denies_is_refused() {
+    let proof = Free::local(773, Some("p"));
+    let verdicts = fixture_verdicts(
+        &pinned_sole_arm_module(
+            Some(proof),
+            vec![
+                (Plicity::Explicit, Free::local(770, Some("x"))),
+                (Plicity::Explicit, Free::local(774, Some("y"))),
+            ],
+        ),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            Error::Arity {
+                counted: Counted::ArmBinders,
+                ..
+            }
+        )),
+        "an arm must be held to its constructor's payload: {verdicts:?}",
+    );
+}
+
+/// The control: the same elimination with the arm at its constructor's arity stays refused for the stated instance alone, never for the arity.
+///
+/// `Pinned(0, 1)` is a proposition no value stands at, so the arm the indices rule out is what coverage decides and the arity is no part of it. Reading the refusal above as the arity's needs this beside it, or a clause that refused every sole-arm elimination would pass the one and the other alike.
+#[test]
+fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
+    let proof = Free::local(773, Some("p"));
+    let verdicts = fixture_verdicts(
+        &pinned_sole_arm_module(
+            Some(proof),
+            vec![(Plicity::Explicit, Free::local(770, Some("x")))],
+        ),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        !verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            Error::Arity {
+                counted: Counted::ArmBinders,
+                ..
+            }
+        )),
+        "an arm at its constructor's arity is held to nothing about its arity: {verdicts:?}",
     );
 }
