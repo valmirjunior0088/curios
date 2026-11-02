@@ -18,7 +18,6 @@ use {
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=compile.rs");
-    println!("cargo:rerun-if-changed=src/library.rs");
 
     // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the library that includes them is their one reader: nothing outside the build opens an image.
     let out = PathBuf::from(
