@@ -9,9 +9,9 @@ use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
-        Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
-        Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        InductDecl, InductParam, Instance, InstanceHead, Intrinsic, Item, Level, Many, Module, Nat,
+        Nominal, Places, Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl,
+        StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
         test_support::declaring,
     },
@@ -3876,6 +3876,291 @@ pub(super) fn excused_arm_module(with_arm: bool) -> (Global, Module) {
     );
 
     (family, module)
+}
+
+/// `induct Fam.{i, o | i + 1 ≤ o} : Type o | mk(A : Type i, f : (A) -> Fam.{i, o}) end`, carried with `variances`: Russell's carrier, universe-polymorphic in the level its payload holds and in the level it stands at.
+///
+/// The second level stands in the result sort and at `Fam`'s own position in the forward field's codomain, and nowhere else the walk reads, so the fixpoint grants it irrelevant: the two instances' telescopes convert entry by entry, which is what irrelevance claims. What keeps the self-application out is the payload's own level, which the walk calls invariant and the declaration's constraint holds a rung below the sort.
+pub(super) fn russell_carrier(family: Global, variances: Vec<Variance>) -> InductDecl {
+    let payload_level = Level::param(UniverseParam(0));
+    let own_level = Level::param(UniverseParam(1));
+    let carrier = Free::local(70, Some("A"));
+    let forward = Free::local(71, Some("f"));
+    let member = Free::local(72, Some("x"));
+
+    InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            quality_count: 0,
+            constraints: vec![UniverseConstraint {
+                lower: payload_level.succ().expect("a parameter has a successor"),
+                upper: own_level.clone(),
+                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+            }],
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build(
+                    [
+                        (carrier, Term::type_at(payload_level.clone())),
+                        (
+                            forward,
+                            Term::func_type(
+                                [(member, Term::free_var(&carrier))],
+                                russell_at(family, [payload_level, own_level.clone()]),
+                            ),
+                        ),
+                    ],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit, Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(own_level),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances,
+    }
+}
+
+/// [`russell_carrier`]'s family at `levels`.
+pub(super) fn russell_at(family: Global, levels: [Level; 2]) -> Term {
+    Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new())
+}
+
+/// The name [`russell_module`] and its siblings put [`russell_carrier`] under.
+pub(super) fn russell_name() -> Global {
+    Global::Authored(Qualifier::from(["Fam"]))
+}
+
+/// [`russell_carrier`] beside `coerce : (x : Fam.{0, from}) -> Fam.{0, to} = (x) => x`: the identity across two instances apart in the level the walk calls irrelevant alone, both well formed since each satisfies `0 + 1 ≤ o`.
+pub(super) fn russell_coercion_module(variances: Vec<Variance>, from: u32, to: u32) -> Module {
+    let family = russell_name();
+    let at = |level: u32| russell_at(family, [Level::zero(), Level::constant(level)]);
+
+    module_of(
+        vec![coercion(at(from), at(to))],
+        BTreeMap::from([(family, russell_carrier(family, variances))]),
+        BTreeMap::new(),
+    )
+}
+
+/// [`russell_carrier`] beside `russell : Fam.{0, 1} = Fam.{0, 1}/mk(Fam.{0, 1}, (x) => x)`: the family's own type, a `Type 1`, handed to the payload that stands at `Type 0`.
+///
+/// Russell's self-application over a carrier whose own level conversion compares at nothing. The irrelevance makes `Fam.{0, 1}` and `Fam.{0, o}` one type for every `o`, so no instance of the family has to be spelled at the sort the payload wants; what the payload is held to is the sort the declaration states at the instance written, which the irrelevance does not move.
+pub(super) fn russell_module(variances: Vec<Variance>) -> (Global, Module) {
+    let family = russell_name();
+    let name = Global::Authored(Qualifier::from(["russell"]));
+    let fam = russell_at(family, [Level::zero(), Level::constant(1)]);
+    let member = Free::local(73, Some("x"));
+    let body = Term::variant_at(
+        family,
+        [Level::zero(), Level::constant(1)],
+        Vec::<Term>::new(),
+        "mk",
+        [
+            fam.clone(),
+            Term::func([(member, fam.clone())], Term::free_var(&member)),
+        ],
+    );
+
+    let module = module_of(
+        vec![authored(&name, fam, body)],
+        BTreeMap::from([(family, russell_carrier(family, variances))]),
+        BTreeMap::new(),
+    );
+
+    (name, module)
+}
+
+/// [`russell_carrier`] beside `lowered : Type 1 = Fam.{0, 2}`: the higher of two instances the walk calls one type, put at the sort the lower one states.
+pub(super) fn lowered_sort_module(variances: Vec<Variance>) -> (Global, Module) {
+    let family = russell_name();
+    let name = Global::Authored(Qualifier::from(["lowered"]));
+    let module = module_of(
+        vec![authored(
+            &name,
+            Term::type_at(Level::constant(1)),
+            russell_at(family, [Level::zero(), Level::constant(2)]),
+        )],
+        BTreeMap::from([(family, russell_carrier(family, variances))]),
+        BTreeMap::new(),
+    );
+
+    (name, module)
+}
+
+/// `held : Type <n> = rec m.{p | constraints} : <type> = <body> end.0.{0}` — a group inside a term, projected at one instance, carrying a universe context of its own.
+///
+/// `raised` puts the member's body a rung above its declared type, so checking it asks `p + 2 ≤ p`, which only a looping hypothesis set could grant; without it the member stands and the fixture is sound. `recheck_module_verdicts` decides the context of every registry entry and every definition before it assumes any, an unsatisfiable set being a hypothesis set from which level questions stop being answered by the hierarchy; a group inside a term is reached by no such clause, and its context is what `infer` assumes while it certifies the group.
+pub(super) fn group_context_module(
+    constraints: Vec<UniverseConstraint>,
+    raised: bool,
+) -> (Global, Module) {
+    let name = Global::Authored(Qualifier::from(["held"]));
+    let level = Level::param(UniverseParam(0));
+    let above = level.succ().expect("a parameter has a successor");
+    let member = Free::local(80, Some("m"));
+    let members = [&member];
+    let scoped = |term: Term| Scope::close(Many(1), &members, term);
+    let (declared, defined) = match raised {
+        true => (level, above),
+        false => (above, level),
+    };
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: scoped(Term::type_at(declared)),
+        body: scoped(Term::type_at(defined)),
+    }])
+    .with_universe_context(UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints,
+    });
+    let projected = Term::from(Subterm::Instance(Instance {
+        head: InstanceHead::RecProj(group, 0),
+        universes: vec![Level::zero()].into(),
+    }));
+    // The member's declared type at the instance `[0]`, which is what the definition states.
+    let at_zero = match raised {
+        true => Term::type_at(Level::zero()),
+        false => Term::type_at(Level::constant(1)),
+    };
+
+    let module = module_of(
+        vec![authored(&name, at_zero, projected)],
+        BTreeMap::new(),
+        BTreeMap::new(),
+    );
+
+    (name, module)
+}
+
+/// `struct Through.{u}(A : Type u) { held : A.{u} }`, carried with `variances`, beside `coerce` between `Through.{from}(Nat)` and `Through.{to}(Nat)`; with `bare` the field is the plain `A`.
+///
+/// An instance whose head is a local states no scheme: `synth_neutral` hands back the binder's own type and the levels say nothing, `check_instance` is reached at no local, so the field is `A` to every judgment and the two instances have the same inhabitants whatever the level. There is no family whose vector could answer for such a head, and the walk reads an instance that survived forcing as a bare or partly applied former and marks every level it carries — the refusing answer, which costs the sound conversion and admits nothing.
+pub(super) fn through_instance_module(
+    variances: Vec<Variance>,
+    bare: bool,
+    from: u32,
+    to: u32,
+) -> (Global, Module) {
+    let name = Global::Authored(Qualifier::from(["Through"]));
+    let level = Level::param(UniverseParam(0));
+    let carrier = Free::local(90, Some("A"));
+    let held = match bare {
+        true => Term::free_var(&carrier),
+        false => Term::instance_of(&carrier, vec![level.clone()]),
+    };
+
+    let declaration = StructDecl {
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::build(
+            [(carrier, Term::type_at(level.clone()))],
+            Telescope::build([(Free::local(91, Some("held")), held)], ()),
+        ),
+        result_sort: Term::type_at(level),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances,
+    };
+    let at = |level: u32| {
+        Term::struct_type_at(
+            name,
+            [Level::constant(level)],
+            [Term::intrinsic(Intrinsic::NatType)],
+        )
+    };
+
+    let module = module_of(
+        vec![coercion(at(from), at(to))],
+        BTreeMap::new(),
+        BTreeMap::from([(name, declaration)]),
+    );
+
+    (name, module)
+}
+
+/// `shared : {a : Type p1, b : Type p1} = {Type p0, rec m.{q0, q1} : Type q1 = Type q0 end.0.{p0, p1}}` under `held@{p0, p1 | p0 + 1 ≤ p1}`, the two components in the order `group_first` names.
+///
+/// One spelling, two meanings: the component outside the group and the group's own member are the term `Type (param 0)` checked at `Type (param 1)`, which the item's constraints grant and the group's empty context does not. A level parameter is positional, so the group's check reads the item's spelling of a level and means another, and what keeps the item's answer from standing for the group's is that `Kernel::under_universes` discards every memo on the way in and on the way out. The group states no constraint, so `check_instance` discharges nothing and the instance stands: the member's own judgment is the whole of what refuses the term.
+pub(super) fn shared_level_spelling_module(
+    with_group: bool,
+    group_first: bool,
+) -> (Global, Module) {
+    let name = Global::Authored(Qualifier::from(["shared"]));
+    let (below, above) = (
+        Level::param(UniverseParam(0)),
+        Level::param(UniverseParam(1)),
+    );
+    let member = Free::local(92, Some("m"));
+    let members = [&member];
+    let scoped = |term: Term| Scope::close(Many(1), &members, term);
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: scoped(Term::type_at(above.clone())),
+        body: scoped(Term::type_at(below.clone())),
+    }])
+    .with_universe_context(UniverseContext {
+        parameter_count: 2,
+        quality_count: 0,
+        constraints: Vec::new(),
+    });
+    let projected = Term::from(Subterm::Instance(Instance {
+        head: InstanceHead::RecProj(group, 0),
+        universes: vec![below.clone(), above.clone()].into(),
+    }));
+    let plain = Term::type_at(below.clone());
+    let judged = match with_group {
+        true => projected,
+        false => plain.clone(),
+    };
+    let fields = match group_first {
+        true => [judged, plain],
+        false => [plain, judged],
+    };
+    let type_ = Term::tuple_type([
+        (Free::local(93, Some("a")), Term::type_at(above.clone())),
+        (Free::local(94, Some("b")), Term::type_at(above.clone())),
+    ]);
+
+    let item = Item::Let(Box::new(Definition {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            quality_count: 0,
+            constraints: vec![cumulativity(
+                below.succ().expect("a parameter has a successor"),
+                above,
+            )],
+        },
+        type_,
+        body: Term::tuple(fields),
+        ..match authored(&name, Term::type_ground(), Term::type_ground()) {
+            Item::Let(definition) => *definition,
+            _ => unreachable!("`authored` builds a `let`"),
+        }
+    }));
+
+    (
+        name,
+        module_of(vec![item], BTreeMap::new(), BTreeMap::new()),
+    )
+}
+
+/// `lower ≤ upper` as a declaration states one.
+pub(super) fn cumulativity(lower: Level, upper: Level) -> UniverseConstraint {
+    UniverseConstraint {
+        lower,
+        upper,
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    }
 }
 
 pub(super) trait Walked {

@@ -271,3 +271,109 @@ fn a_level_reached_through_a_definition_the_walk_unfolds_is_invariant() {
     let (family, lying) = picked_module(vec![Variance::Irrelevant; 2], [0, 0], [1, 0]);
     assert!(denied(&refusals(&lying), family, 0));
 }
+
+/// Whether `name` was refused for a conversion that did not hold.
+fn mismatched(verdicts: &[Verdict], name: Global) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.name == Some(name) && matches!(verdict.error, Error::Mismatch { .. })
+    })
+}
+
+// Russell's carrier, `Fam.{i, o | i + 1 ≤ o} : Type o | mk(A : Type i, f : (A) -> Fam.{i, o})`, reaches its second level in its result sort and at its own position in the forward field's codomain, and the fixpoint grants that level irrelevant: the two instances' telescopes convert entry by entry, so `Fam.{0, 1}` and `Fam.{0, 2}` are one type and the identity across them stands. Carried as irrelevant in the payload's level as well the declaration is denied, which is the level the payload's `Type` holds.
+#[test]
+fn the_level_a_carrier_stands_at_is_irrelevant_where_its_payloads_level_is_not() {
+    let honest = || vec![Variance::Invariant, Variance::Irrelevant];
+
+    assert_eq!(
+        refusals(&russell_coercion_module(honest(), 1, 2)),
+        Vec::new()
+    );
+    assert_eq!(
+        refusals(&russell_coercion_module(honest(), 2, 1)),
+        Vec::new()
+    );
+
+    let lying = russell_coercion_module(vec![Variance::Irrelevant; 2], 1, 2);
+    assert!(denied(&refusals(&lying), russell_name(), 0));
+}
+
+// Russell's self-application over that carrier: `Fam.{0, 1}/mk(Fam.{0, 1}, (x) => x)` hands the family's own type, a `Type 1`, to the payload the declaration stands at `Type 0`. The irrelevance makes `Fam.{0, 1}` one type with `Fam.{0, o}` for every `o`, so the paradox needs no instance spelled at the payload's sort; what refuses it is the sort the declaration states at the instance written, which conversion comparing nothing at the level does not move, and the declaration itself stands.
+#[test]
+fn russells_self_application_is_refused_at_the_sort_its_instance_states() {
+    let (russell, module) = russell_module(vec![Variance::Invariant, Variance::Irrelevant]);
+    let verdicts = refusals(&module);
+
+    assert!(mismatched(&verdicts, russell), "{verdicts:?}");
+    assert!(!denied(&verdicts, russell_name(), 1), "{verdicts:?}");
+}
+
+// The two instances convert, and their sorts do not: `Fam.{0, 2}` is no inhabitant of `Type 1`, though `Fam.{0, 1}` is and the two are one type. A level conversion reads at nothing is still read where the declaration states the sort, so the irrelevance transports terms between the two types and never the types between the two sorts.
+#[test]
+fn an_irrelevant_levels_higher_instance_is_no_type_at_the_lower_instances_sort() {
+    let (lowered, module) = lowered_sort_module(vec![Variance::Invariant, Variance::Irrelevant]);
+    let verdicts = refusals(&module);
+
+    assert!(mismatched(&verdicts, lowered), "{verdicts:?}");
+}
+
+// A field reaching a level only inside an instance whose head is the declaration's own parameter: no family's vector can answer for such a head, and `Invariant` is the answer the walk takes there, marking every level the instance carries. So the level is compared though the field is `A` to every judgment — `check_instance` is reached at no local and the levels an instance of one states say nothing — and the two instances, which have the same inhabitants, are held apart. Spelled as the plain `A` the same declaration is irrelevant in the level and the two convert, so the instance is what marks it; carried as irrelevant over the instance the declaration is denied.
+#[test]
+fn a_level_an_instance_of_a_parameter_carries_is_invariant() {
+    let (_, through) = through_instance_module(vec![Variance::Invariant], false, 0, 1);
+    assert!(only_the_coercion_refused(&refusals(&through)));
+
+    let (_, plain) = through_instance_module(vec![Variance::Irrelevant], true, 0, 1);
+    assert_eq!(refusals(&plain), Vec::new());
+
+    let (family, lying) = through_instance_module(vec![Variance::Irrelevant], false, 0, 1);
+    assert!(denied(&refusals(&lying), family, 0));
+}
+
+/// Whether `name` was refused for an instance whose levels do not satisfy the scheme they instantiate.
+fn refused_instance(verdicts: &[Verdict], name: Global) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.name == Some(name) && matches!(verdict.error, Error::UniverseInstance { .. })
+    })
+}
+
+// One spelling of a level, two meanings inside one declaration: `Type (param 0)` checked at `Type (param 1)` is granted outside the group, where the item assumes `p0 + 1 ≤ p1`, and is the group's own member, where the group's empty context grants nothing. A level parameter is positional, so the two readings share a spelling, and the group states no constraint, so `check_instance` discharges nothing and the instance stands — leaving the member's own judgment the whole of what refuses the term. It is refused in either order of the two components, so the answer the item's reading gave does not stand for the group's, and with the group replaced by the same term outside it the declaration stands in both orders.
+#[test]
+fn one_spelling_of_a_level_is_judged_again_under_a_groups_own_context() {
+    for group_first in [false, true] {
+        let (shared, module) = shared_level_spelling_module(true, group_first);
+        let verdicts = refusals(&module);
+        assert!(mismatched(&verdicts, shared), "{group_first}: {verdicts:?}");
+
+        let (_, outside) = shared_level_spelling_module(false, group_first);
+        assert_eq!(refusals(&outside), Vec::new(), "{group_first}");
+    }
+}
+
+// A group inside a term carries a universe context of its own, which `infer` assumes while it certifies the group and which the walk's universe verdict — closed and satisfiable, decided before anything is assumed — reaches at no registry entry and no definition. Carrying the loop `p + 1 ≤ p`, a set with no instance in the naturals, the group's own member is granted a body a rung above its declared type, which asks `p + 2 ≤ p` and is refused with nothing assumed. So the loop is assumed and does grant it, and what refuses the term is the instance alone: `check_instance` holds `[0]` to the group's constraints under the item's, where `0 + 1 ≤ 0` does not hold. An unsatisfiable set has no instance any satisfiable item can discharge, which is what keeps the gap this states out of a verdict.
+#[test]
+fn a_groups_own_universe_context_is_assumed_and_only_its_instance_refuses_it() {
+    let loop_ = || {
+        vec![cumulativity(
+            Level::param(UniverseParam(0))
+                .succ()
+                .expect("a parameter has a successor"),
+            Level::param(UniverseParam(0)),
+        )]
+    };
+
+    let (held, raised) = group_context_module(loop_(), true);
+    let verdicts = refusals(&raised);
+    assert!(refused_instance(&verdicts, held), "{verdicts:?}");
+    assert!(!mismatched(&verdicts, held), "{verdicts:?}");
+
+    let (held, plain) = group_context_module(Vec::new(), true);
+    let verdicts = refusals(&plain);
+    assert!(mismatched(&verdicts, held), "{verdicts:?}");
+
+    let (held, honest) = group_context_module(loop_(), false);
+    let verdicts = refusals(&honest);
+    assert!(refused_instance(&verdicts, held), "{verdicts:?}");
+
+    let (_, bare) = group_context_module(Vec::new(), false);
+    assert_eq!(refusals(&bare), Vec::new());
+}
