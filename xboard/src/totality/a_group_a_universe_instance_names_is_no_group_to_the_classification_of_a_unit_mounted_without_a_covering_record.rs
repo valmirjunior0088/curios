@@ -11,7 +11,7 @@ use {
 pub(super) const TICKET: Ticket = Ticket {
     title: "A group a universe instance names is no group to the classification of a unit mounted without a covering record",
     found_on: Date::new(2026, 11, 2),
-    status: Status::Open,
+    status: Status::Fixed,
     witnesses: &[Witness {
         what: "`False` projected out of a partial definition a unit in scope reads as total",
         proof: Proof::Mounted(a_group_a_universe_instance_names),

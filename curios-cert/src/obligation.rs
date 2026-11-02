@@ -49,15 +49,6 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
     )
 }
 
-/// Whether a term holds a `rec` group anywhere — which, for an item this walk did not type, is a group with no verdict here, and so one that does not descend.
-fn holds_a_group(term: &Term) -> bool {
-    term.walk(
-        &mut (),
-        |_, _| Enter::Descend,
-        |_, term, mut children| matches!(&**term, Subterm::Rec(_)) || children.any(|child| child),
-    )
-}
-
 /// The definitions not known to terminate, as a walk comes to know them: the environment's, then each judged item's as it is classified.
 ///
 /// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
@@ -151,7 +142,8 @@ impl<'g> Totals<'g> {
                 (true, Item::Let(_)) => {
                     kernel.definition_encloses_partial(&Free::from(&definition.name))
                 }
-                (false, _) => holds_a_group(&definition.body) || holds_a_group(&definition.type_),
+                // A group stands in a term as a `Rec` node or as the member a universe instance is taken of, and `Term::has_group` is where that relation is stated: either is a group with no verdict here, and so one that does not descend.
+                (false, _) => definition.body.has_group() || definition.type_.has_group(),
             };
             if rejected
                 || encloses
