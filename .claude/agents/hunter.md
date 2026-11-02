@@ -1,6 +1,6 @@
 ---
 name: hunter
-description: Hunts one charter for the gatherer of a hunt command — reads the tree, probes the compiler, changes nothing outside a worktree of its own, and sends each thing found to the main conversation as one unit a message. Spawned only by a hunt command of `.claude/commands/` with a count above zero, never on the model's own judgment.
+description: Hunts one charter for the gatherer of a hunt command — reads the tree, probes the compiler, changes nothing outside a worktree of its own, and sends each thing found to the main conversation as one unit a message. Spawned only by a hunt command of `.claude/commands/`, never on the model's own judgment.
 tools: Read, Grep, Glob, Bash, Write, Edit, SendMessage
 model: opus
 maxTurns: 500 # twice the 243 turns one rule of six premises took at 66de85ff6; a report cut here is partial and resumes
