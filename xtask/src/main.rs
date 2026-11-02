@@ -129,10 +129,7 @@ enum Asked {
     },
 
     #[command(about = "Run the prelude's build under a recorder, and fold what it filed")]
-    ProfilePrelude {
-        #[arg(value_name = "PATH", help = "Where the stream is filed")]
-        stream: PathBuf,
-    },
+    ProfilePrelude,
 
     #[command(
         about = "Remove everything git does not track, including the build products, except the worktrees under .claude/worktrees"
@@ -272,7 +269,7 @@ fn main() -> ExitCode {
             source,
             profile: build,
         } => profile(&source, build),
-        Asked::ProfilePrelude { stream } => profile_prelude(&stream),
+        Asked::ProfilePrelude => profile_prelude(),
         Asked::Clean => clean(),
     };
 

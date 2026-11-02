@@ -493,17 +493,12 @@ pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> 
     Ok(())
 }
 
-/// Run the prelude's build under a recorder, its stream filed at `stream`: `/sys` and `/std` lowered, elaborated, certified and erased, each imaged as its certified unit.
+/// Run the prelude's build under a recorder, its stream filed where the program says: `/sys` and `/std` lowered, elaborated, certified and erased, each imaged as its certified unit.
 ///
 /// **A program is asked, and no build is.** The prelude's build script records nothing: a build script takes no argument, so nothing can ask one. Its work is a module it shares with a program standing beside it, which runs that work again under `curios-profile`'s recorder, into a directory of its own, and prints the fold of what it filed.
 ///
 /// **Release**, which compiles the compiler's front half at the level a build script's copy is compiled at under either profile, so the program measures what the build runs.
-///
-/// `stream` is taken from where the recipe was run, as a path typed there means, and handed on whole: cargo runs the program from the workspace root.
-pub(crate) fn profile_prelude(stream: &Path) -> Result<(), String> {
-    let stream =
-        std::path::absolute(stream).map_err(|error| format!("{}: {error}", stream.display()))?;
-
+pub(crate) fn profile_prelude() -> Result<(), String> {
     cargo(&[
         "run",
         "--release",
@@ -513,8 +508,6 @@ pub(crate) fn profile_prelude(stream: &Path) -> Result<(), String> {
         "profile-prelude",
         "--features",
         "profile",
-        "--",
-        &stream.to_string_lossy(),
     ])
 }
 
