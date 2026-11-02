@@ -4,8 +4,7 @@ use {
     super::test_support::*,
     crate::{Error, convert},
     curios_core::{
-        Free, FuncType, InstanceHead, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext,
-        Universes, Var,
+        Free, FuncType, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext, Universes, Var,
     },
     curios_utilities::Plicity,
 };
@@ -341,7 +340,7 @@ fn one_operation_at_two_universe_instances_is_one_number() {
     let mut kernel = kernel();
     let length = |operand: &Free, level: u32| {
         Term::intrinsic(Intrinsic::bytes_len(Term::instance(
-            InstanceHead::Var(Var::free(*operand)),
+            Var::free(*operand),
             vec![Level::constant(level)],
         )))
     };

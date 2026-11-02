@@ -449,11 +449,10 @@ impl<'s> Lowering<'s> {
             | curios_core::Subterm::InductType(_)
             | curios_core::Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
             // An instance is its head at the sorts it states: a level carries nothing at run time, and a declaration that leaves sorts open is bound at each of them apart.
-            curios_core::Subterm::Instance(instance) => match &instance.head {
-                curios_core::InstanceHead::Var(var) => {
-                    self.erase_name(var.unwrap(), Sorts::of(&instance.universes.qualities))
-                }
-            },
+            curios_core::Subterm::Instance(instance) => self.erase_name(
+                instance.head.unwrap(),
+                Sorts::of(&instance.universes.qualities),
+            ),
             curios_core::Subterm::Var(var) => self.erase_name(var.unwrap(), Sorts::NONE),
             curios_core::Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
             curios_core::Subterm::Match(m) => self.erase_match(context, m, hint),

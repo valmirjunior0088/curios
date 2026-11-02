@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
-        MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm,
-        Telescope, Term, eta_head, instantiate_universes_scoped, project_literal, reduce_intrinsic,
+        Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, eta_head,
+        instantiate_universes_scoped, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -635,19 +635,13 @@ impl Machine {
 
             Subterm::Instance(instance) => {
                 let universes = instance.universes;
-                let reduct = match instance.head {
-                    InstanceHead::Var(var) => {
-                        let Some(reduct) = host.closed_body_at(var.unwrap()).cloned() else {
-                            return Ok(Step::Value(Term::instance(
-                                InstanceHead::Var(var),
-                                universes,
-                            )));
-                        };
-                        // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
-                        instantiate_universes_scoped(&reduct, &universes)
-                            .map_err(ReduceError::Universe)?
-                    }
+                let var = instance.head;
+                let Some(reduct) = host.closed_body_at(var.unwrap()).cloned() else {
+                    return Ok(Step::Value(Term::instance(var, universes)));
                 };
+                // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
+                let reduct = instantiate_universes_scoped(&reduct, &universes)
+                    .map_err(ReduceError::Universe)?;
 
                 Ok(Step::Eval(reduct, demand))
             }
@@ -873,13 +867,7 @@ impl Machine {
             .map(|(proof, argument)| {
                 proof
                     || argument.plicity == Plicity::Witness
-                        && matches!(
-                            &*argument.term,
-                            Subterm::Instance(Instance {
-                                head: InstanceHead::Var(_),
-                                ..
-                            })
-                        )
+                        && matches!(&*argument.term, Subterm::Instance(_))
             })
             .collect();
         self.args(

@@ -8,9 +8,9 @@ mod tests;
 use {
     crate::{Context, EveryPosition, Structural, reduce, reduce_forced},
     curios_core::{
-        Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
-        Match, MatchResult, Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType,
-        UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universes_scoped,
+        Argument, Families, Field, Free, FuncType, InductType, Instance, Level, Match, MatchResult,
+        Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, instantiate_universes_scoped,
     },
     std::{collections::HashMap, rc::Rc},
 };
@@ -415,20 +415,21 @@ pub fn synth_neutral(
             }
         }
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
-        Subterm::Instance(Instance { head, universes }) => match head {
-            InstanceHead::Var(var) => {
-                let name = var.unwrap();
-                if let Some(type_) = opened.type_of(name) {
-                    return Ok(Some(type_.clone()));
-                }
-                let Some(scheme) = context.assumption(name).cloned() else {
-                    return Ok(None);
-                };
-                instantiate_universes_scoped(&scheme, universes)
-                    .map(Some)
-                    .map_err(ReduceError::Universe)
+        Subterm::Instance(Instance {
+            head: var,
+            universes,
+        }) => {
+            let name = var.unwrap();
+            if let Some(type_) = opened.type_of(name) {
+                return Ok(Some(type_.clone()));
             }
-        },
+            let Some(scheme) = context.assumption(name).cloned() else {
+                return Ok(None);
+            };
+            instantiate_universes_scoped(&scheme, universes)
+                .map(Some)
+                .map_err(ReduceError::Universe)
+        }
 
         Subterm::Apply(apply) => {
             let Some(head_type) = synth_neutral(context, binders, opened, &apply.head)? else {

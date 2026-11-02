@@ -14,9 +14,9 @@ use {
     },
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
-        Global, InductArm, InductType, Infix, Instance, InstanceHead, Intrinsic, Let, LetBinding,
-        Many, Match, MatchResult, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
-        Term, Three, Transient, TupleType, Var, Visit, WitnessOrigin,
+        Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
+        MatchResult, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
+        Transient, TupleType, Var, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     curios_utilities::{Plicity, recurse},
@@ -966,10 +966,7 @@ impl Writing {
 /// `head` as a program names it: a reference at levels of its own, as a name is read where it is written, and not at the instance elaboration settled for it.
 fn as_named(head: &Term) -> Term {
     match &**head {
-        Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
-            ..
-        }) => Term::var(var.clone()),
+        Subterm::Instance(Instance { head: var, .. }) => Term::var(var.clone()),
         Subterm::Apply(Apply { head, arguments }) => Term::from(Subterm::Apply(Apply {
             head: as_named(head),
             arguments: arguments.clone(),

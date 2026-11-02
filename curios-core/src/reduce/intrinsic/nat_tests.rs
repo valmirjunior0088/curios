@@ -258,7 +258,7 @@ fn euclid_split_is_a_euclidean_division() {
 fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::InstanceHead::Var(crate::Var::free(Free::local(0, Some("g")))),
+            crate::Var::free(Free::local(0, Some("g"))),
             vec![crate::Level::constant(level)],
         )
     };
@@ -291,7 +291,7 @@ fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
 fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::InstanceHead::Var(crate::Var::free(Free::local(0, Some("g")))),
+            crate::Var::free(Free::local(0, Some("g"))),
             vec![crate::Level::constant(level)],
         )
     };

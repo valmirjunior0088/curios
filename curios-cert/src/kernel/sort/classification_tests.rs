@@ -182,7 +182,7 @@ fn a_value_in_type_position_is_refused() {
 
 // === The `Instance` arm, which reads its levels ==========================
 //
-// `Sort::of` classifies a universe instance as the neutral it is, at the levels the occurrence states, over each head. `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it, and a rec-projection head steps to an instantiated projection. The three fixtures below hold one leg each.
+// `Sort::of` classifies a universe instance as the neutral it is, at the levels the occurrence states. `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it.
 
 /// The one production-reachable head: a local. A local is monomorphic — it was opened at one type, so there is no scheme to instantiate — and its sort is its binder's, whatever levels the wrapper states and however many. The width-2 vector is deliberate: even an instance no typing rule would admit cannot move the lookup, because a local head is answered from its binder before any instance is checked.
 #[test]

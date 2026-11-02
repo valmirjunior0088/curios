@@ -20,8 +20,8 @@ use {
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
-        ImplicitOrigin, Instance, InstanceHead, Metavar, MetavarId, StructType, Subterm, Term,
-        UniverseContext, Universes, WitnessKey, WitnessOrigin,
+        ImplicitOrigin, Instance, Metavar, MetavarId, StructType, Subterm, Term, UniverseContext,
+        Universes, WitnessKey, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxName},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -288,10 +288,7 @@ pub fn written_monad(type_: &Term) -> Option<Term> {
 fn named(head: &Term) -> Option<&Free> {
     match &**head {
         Subterm::Var(var) => var.as_free(),
-        Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
-            ..
-        }) => var.as_free(),
+        Subterm::Instance(Instance { head: var, .. }) => var.as_free(),
         _ => None,
     }
 }

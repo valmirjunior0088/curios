@@ -48,9 +48,8 @@ mod privacy_tests;
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
-        Ascribed, Free, Func, FuncType, InstanceHead, Subterm, Term, Transient, Universes, Var,
-        foreign_operands, foreign_produced, former_spelling, instantiate_universes_scoped,
-        intrinsic_former,
+        Ascribed, Free, Func, FuncType, Subterm, Term, Transient, Universes, Var, foreign_operands,
+        foreign_produced, former_spelling, instantiate_universes_scoped, intrinsic_former,
     },
     curios_utilities::{Plicity, recurse},
     std::sync::Arc,
@@ -193,11 +192,13 @@ fn elaborate_subterm(
             )
         }
         Subterm::Instance(instance) => {
-            let type_ = match &instance.head {
-                InstanceHead::Var(var) => context
-                    .instantiate_assumption_at(var.unwrap(), &instance.universes, term.extent())?
-                    .ok_or_else(|| context.unbound_variable(instance.head.to_term()))?,
-            };
+            let type_ = context
+                .instantiate_assumption_at(
+                    instance.head.unwrap(),
+                    &instance.universes,
+                    term.extent(),
+                )?
+                .ok_or_else(|| context.unbound_variable(Term::var(instance.head.clone())))?;
             (term.clone(), type_)
         }
         Subterm::Intrinsic(intrinsic) => {
@@ -223,8 +224,8 @@ fn elaborate_subterm(
                     } else if universes.is_empty() {
                         term.clone()
                     } else {
-                        // The occurrence's extent moves onto the wrapping instance: the typed head carries none.
-                        let instance = Term::instance(InstanceHead::Var(var.clone()), universes);
+                        // The occurrence's extent moves onto the wrapping instance: the head carries none.
+                        let instance = Term::instance(var.clone(), universes);
                         match term.extent() {
                             Some(extent) => instance.with_extent(extent),
                             None => instance,

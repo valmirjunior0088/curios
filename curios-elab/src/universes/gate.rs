@@ -6,9 +6,9 @@ mod tests;
 use {
     crate::{Error, universe_context_validate},
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, Entrypoint, Free, Global, InductDecl, InstanceHead,
-        Item, Minted, Module, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId,
-        Visit, rewrite_universe_levels_scoped_shared, universe_metas,
+        Bound, ConceptDecl, DefinitionKind, Entrypoint, Free, Global, InductDecl, Item, Minted,
+        Module, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
+        rewrite_universe_levels_scoped_shared, universe_metas,
     },
     std::{
         cell::RefCell,
@@ -105,20 +105,20 @@ fn validate_instance_arities<B: Bound>(
                 })
             };
             let invalid = match &**term {
-                Subterm::Instance(instance) => match &instance.head {
-                    InstanceHead::Var(var) => {
-                        var.as_free().and_then(Free::as_global).and_then(|name| {
-                            definitions.get(name).and_then(|expected| {
-                                mismatch(
-                                    "definition instance",
-                                    &name.faithful().to_string(),
-                                    *expected,
-                                    instance.universes.levels.len(),
-                                )
-                            })
+                Subterm::Instance(instance) => instance
+                    .head
+                    .as_free()
+                    .and_then(Free::as_global)
+                    .and_then(|name| {
+                        definitions.get(name).and_then(|expected| {
+                            mismatch(
+                                "definition instance",
+                                &name.faithful().to_string(),
+                                *expected,
+                                instance.universes.levels.len(),
+                            )
                         })
-                    }
-                },
+                    }),
                 Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
                     mismatch(
                         "inductive occurrence",

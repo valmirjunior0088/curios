@@ -441,7 +441,7 @@ fn a_hard_error_beside_a_goal_is_reported_with_it() {
     );
 }
 
-/// The reference's own span survives the instance wrapper elaboration mints around a polymorphic occurrence: the typed head is a bare `Var` with no span of its own, so the wrapper carries the occurrence's, and the mismatch renders with its source snippet and a caret under the reference rather than arriving unlocated.
+/// The reference's own span survives the instance wrapper elaboration mints around a polymorphic occurrence: the head is a bare `Var` with no span of its own, so the wrapper carries the occurrence's, and the mismatch renders with its source snippet and a caret under the reference rather than arriving unlocated.
 #[test]
 fn a_mismatch_at_a_polymorphic_reference_keeps_its_caret() {
     let source = r#"

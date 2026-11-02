@@ -7,9 +7,8 @@ use {
     super::probe_level_fallback,
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
-        Produced, Quality, ReduceError, StructType, Subterm, Term, TupleType,
-        instantiate_universes_scoped,
+        Bound, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced, Quality,
+        ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes_scoped,
     },
 };
 
@@ -359,7 +358,7 @@ impl Sort {
             }
             Subterm::Sort(_, level) => Sort::type_at(level.succ().map_err(ReduceError::Universe)?),
             Subterm::Instance(instance) => {
-                Sort::of_under(context, binders, opened, &instance.head.to_term())?
+                Sort::of_under(context, binders, opened, &Term::var(instance.head.clone()))?
             }
             // An unsolved metavariable is classified by the sort its own type states, which no solution changes: one whose type is `Prop` is a proposition before it is solved, so `@P: Prop, @p: P` makes `p` a bound before `P` is known, and one whose type's quality is open has that quality, for a reader that decides it or takes its own safe answer. A solved one never reaches here, since reduction substitutes its solution, and a sort is closed, so the spine an occurrence carries changes nothing. Its level is the one that sort states: the solution is held under it where it is committed, so a former over the metavariable is sized by a level that follows what the metavariable comes to. Read as zero, a list of an open element is small whatever the element is, and a level the list is handed to never learns the element's.
             Subterm::Metavar(metavar) => {
@@ -429,10 +428,7 @@ impl Sort {
         }
         let name = match &**head {
             Subterm::Var(var) => var.unwrap(),
-            Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                ..
-            }) => var.unwrap(),
+            Subterm::Instance(Instance { head: var, .. }) => var.unwrap(),
             _ => return Ok(None),
         };
         let declared = matches!(&**type_, Subterm::Apply(_))
@@ -458,7 +454,7 @@ impl Sort {
         let (var, universes) = match &**type_ {
             Subterm::Var(var) => (var, None),
             Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
+                head: var,
                 universes,
             }) => (var, Some(universes)),
             _ => return Ok(None),

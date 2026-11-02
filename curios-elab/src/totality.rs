@@ -56,7 +56,7 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
         |seen: &mut HashSet<Term>, term| {
             let named = match &**term {
                 Subterm::Var(var) => var.as_free(),
-                Subterm::Instance(instance) => instance.head.head_name(),
+                Subterm::Instance(instance) => instance.head.as_free(),
                 _ => None,
             };
             match (named.and_then(|free| free.as_global()), term.extent()) {

@@ -846,39 +846,9 @@ impl Metavar {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Instance {
-    pub head: InstanceHead,
+    /// The binding this occurrence instantiates. A variable, so that an ill-formed head is unrepresentable rather than refused; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
+    ///
+    /// A projection out of a recursive group is no such head, and there is no other shape one can take. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; a head that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+    pub head: Var,
     pub universes: Universes,
-}
-
-/// The shape that denotes a universe-polymorphic binding: a not-yet-reduced reference to one. Typed rather than held as a general term so an ill-formed head is unrepresentable; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
-///
-/// A projection out of a recursive group is no such shape. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; a head that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub enum InstanceHead {
-    Var(Var),
-}
-
-impl InstanceHead {
-    /// This head spelled as the term it abbreviates. The spelling is without a position; an occurrence's extent lives on the wrapping instance term.
-    pub fn to_term(&self) -> Term {
-        match self {
-            InstanceHead::Var(var) => Term::var(var.clone()),
-        }
-    }
-
-    /// The free name a variable head references, mirroring `Term::head_name`.
-    pub fn head_name(&self) -> Option<&Free> {
-        match self {
-            InstanceHead::Var(var) => var.as_free(),
-        }
-    }
-
-    /// Classify a term as a head, where it has the head shape.
-    pub fn from_subterm(subterm: &Subterm) -> Option<Self> {
-        match subterm {
-            Subterm::Var(var) => Some(InstanceHead::Var(var.clone())),
-            _ => None,
-        }
-    }
 }

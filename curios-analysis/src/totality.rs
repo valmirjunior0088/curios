@@ -472,7 +472,7 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Proj(Proj { head, .. }) => self.walk_term(head),
 
-            Subterm::Instance(Instance { head, .. }) => self.walk_term(&head.to_term()),
+            Subterm::Instance(Instance { head, .. }) => self.walk_term(&Term::var(head.clone())),
 
             Subterm::InductType(InductType {
                 params, indices, ..
@@ -573,7 +573,7 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
                 arguments = prefix;
                 head = apply.head.clone();
             }
-            Subterm::Instance(Instance { head: inner, .. }) => head = inner.to_term(),
+            Subterm::Instance(Instance { head: inner, .. }) => head = Term::var(inner.clone()),
             _ => return (head, arguments),
         }
     }

@@ -24,9 +24,8 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Instance,
-        InstanceHead, Intrinsic, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope,
-        Term, TupleType,
+        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Instance, Intrinsic,
+        Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     curios_utilities::recurse,
     std::{
@@ -709,11 +708,7 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Sort(..) => {}
 
             // A variable head is the occurrence itself, the levels spelling it rather than standing between the walk and it — the reading `Subterm::has_local_free` already takes, and the one place `opaque` cannot serve: `any_child_term` reports no child here, the head being the node's own data exactly as a `Var`'s identity is, so the descent would find nothing and a parameter named this way would keep the `Unused` the fixpoint seeds it at. A projection head is no variable and keeps the opaque reading below.
-            Subterm::Var(var)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                ..
-            }) => {
+            Subterm::Var(var) | Subterm::Instance(Instance { head: var, .. }) => {
                 if let Some(free) = var.as_free()
                     && let Some(index) = self.params.iter().position(|param| param == free)
                 {

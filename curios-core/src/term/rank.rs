@@ -13,9 +13,7 @@ mod tests;
 
 use {
     super::{Subterm, Term},
-    crate::{
-        Bound, Free, Instance, InstanceHead, LevelHead, MaskedLevels, Metavar, Quality, Visit,
-    },
+    crate::{Bound, Free, Instance, LevelHead, MaskedLevels, Metavar, Quality, Visit},
     curios_algebra::Tie,
     curios_utilities::Sorted,
     std::{
@@ -110,10 +108,9 @@ fn own(subterm: &Subterm) -> (u64, Vec<(Identity, u64)>) {
             let mut identities = Vec::new();
             // An instance's variable head is this node's own identity, as a bare `Var`'s is, and the masked node would spell it by its value.
             match subterm {
-                Subterm::Instance(Instance {
-                    head: InstanceHead::Var(var),
-                    ..
-                }) if var.as_free().and_then(Free::local_index).is_some() => {
+                Subterm::Instance(Instance { head: var, .. })
+                    if var.as_free().and_then(Free::local_index).is_some() =>
+                {
                     parts.push(INSTANCE_OF_LOCAL);
                     let index = var
                         .as_free()

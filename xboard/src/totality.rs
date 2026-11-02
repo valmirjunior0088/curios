@@ -7,7 +7,7 @@ use crate::Part;
 
 /// Does this recursion end, and is what is erased total? The erasure obligations and the descent they rest on.
 ///
-/// One ticket of this part was retired rather than fixed: `a_group_a_universe_instance_names_is_no_group_to_the_classification_of_a_unit_mounted_without_a_covering_record` spelled a member at a universe instance, and a group binds no universe, so no such spelling exists to classify ([`curios_core::InstanceHead`]). What it showed of `Totals::seeded` — that a classification reads a group whichever way one is spelled — stands in `curios-cert`'s `recheck::totality_tests`.
+/// One ticket of this part was retired rather than fixed: `a_group_a_universe_instance_names_is_no_group_to_the_classification_of_a_unit_mounted_without_a_covering_record` spelled a member at a universe instance, and a group binds no universe, so no such spelling exists to classify ([`curios_core::Instance::head`]). What it showed of `Totals::seeded` — that a classification reads a group whichever way one is spelled — stands in `curios-cert`'s `recheck::totality_tests`.
 pub(super) const PART: Part = Part {
     name: "totality",
     tickets: &[

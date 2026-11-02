@@ -296,7 +296,7 @@ fn closing_and_opening_a_variable_headed_instance_round_trips() {
 
 /// The seam's total answer for every replacement that is not a head shape: a binder no scheme governs substituted by an arbitrary value, a group's member projection among them. The instance dissolves to the replacement — the levels-inert reading the kernel's sort fixtures pin for local heads — because a reducer that promises totality on arbitrary terms may not abort here.
 ///
-/// A projection was once the one replacement that re-entered the typed head, when a head could name a member. It cannot: a group binds no universe, so there is no scheme for an instance of a member to satisfy ([`curios_core::InstanceHead`]).
+/// A projection was once the one replacement that re-entered an instance's head, when a head could name a member. It cannot: a group binds no universe, so there is no scheme for an instance of a member to satisfy, and an [`Instance`]'s head is a variable ([`Instance::head`]).
 #[test]
 fn a_replacement_that_is_not_a_head_shape_dissolves_the_instance() {
     let f = Free::local(42, Some("f"));

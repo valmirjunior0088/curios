@@ -476,7 +476,7 @@ fn equality_up_to_a_wildcard_ignores_only_the_wildcard_positions() {
     );
 }
 
-/// A term holds a group where a `Rec` node stands in it, at any depth, and nowhere else. There is one spelling: a group binds no universe, so no instance is taken of a member and `InstanceHead` names none.
+/// A term holds a group where a `Rec` node stands in it, at any depth, and nowhere else. There is one spelling: a group binds no universe, so no instance is taken of a member and an [`Instance`]'s head, being a variable, names none.
 #[test]
 fn a_term_holds_a_group_where_a_rec_node_stands() {
     let f = Free::local(0, Some("f"));

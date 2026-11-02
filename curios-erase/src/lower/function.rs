@@ -293,7 +293,7 @@ fn named_head(
     match &**head {
         curios_core::Subterm::Var(var) => Some((var.as_free()?.as_global()?, None)),
         curios_core::Subterm::Instance(curios_core::Instance {
-            head: curios_core::InstanceHead::Var(var),
+            head: var,
             universes,
         }) => Some((var.as_free()?.as_global()?, Some(universes))),
         _ => None,

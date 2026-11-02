@@ -40,7 +40,7 @@ pub fn declaration_instance(value: &Term, name: &Global) -> Option<Universes> {
                 Subterm::Instance(instance)
                     if instance
                         .head
-                        .head_name()
+                        .as_free()
                         .and_then(Free::as_global)
                         .is_some_and(|head| *head == name) =>
                 {

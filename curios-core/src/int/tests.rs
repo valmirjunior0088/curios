@@ -64,7 +64,7 @@ fn a_product_of_symbols_has_one_factor_order() {
 fn a_product_is_one_number_at_every_universe_instance_of_its_factors() {
     let instanced = |level: u32| {
         Term::instance(
-            crate::InstanceHead::Var(crate::Var::free(crate::Free::local(0, Some("g")))),
+            crate::Var::free(crate::Free::local(0, Some("g"))),
             vec![crate::Level::constant(level)],
         )
     };

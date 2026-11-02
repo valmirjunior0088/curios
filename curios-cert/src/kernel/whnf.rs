@@ -33,9 +33,8 @@ use {
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
-        FreeMonoid, Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat,
-        Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var,
-        Variant, Visit,
+        FreeMonoid, Func, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj,
+        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
     },
     curios_utilities::recurse,
 };
@@ -613,11 +612,9 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
 fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
     let Instance { head, universes } = instance;
 
-    let reduct = match &head {
-        InstanceHead::Var(var) => match kernel.value_at(var.unwrap()).cloned() {
-            Some(reduct) => reduct,
-            None => return Ok(Step::Stop(Term::instance(head, universes))),
-        },
+    let reduct = match kernel.value_at(head.unwrap()).cloned() {
+        Some(reduct) => reduct,
+        None => return Ok(Step::Stop(Term::instance(head, universes))),
     };
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.

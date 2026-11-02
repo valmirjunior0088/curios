@@ -6,9 +6,9 @@ use {
     super::{Frees, Union},
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
-        InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat,
-        Proj, Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple,
-        TupleType, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
+        Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat, Proj, Quality,
+        Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
+        UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
@@ -88,10 +88,7 @@ impl Subterm {
     /// The global an instance node is of, where its head is a name: a family's, or a definition's.
     pub(super) fn instance_name(&self) -> Option<&Global> {
         match self {
-            Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                ..
-            }) => var.as_free()?.as_global(),
+            Subterm::Instance(Instance { head: var, .. }) => var.as_free()?.as_global(),
             _ => None,
         }
     }
@@ -106,11 +103,8 @@ impl Subterm {
             Subterm::Intrinsic(intrinsic) => intrinsic
                 .result_universes()
                 .is_some_and(|universes| universes.levels.iter().any(level_matches)),
-            Subterm::Instance(Instance { head, universes }) => {
+            Subterm::Instance(Instance { universes, .. }) => {
                 universes.levels.iter().any(&mut level_matches)
-                    || match head {
-                        InstanceHead::Var(_) => false,
-                    }
             }
             Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
@@ -165,10 +159,7 @@ impl Subterm {
 
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
-            Subterm::Sort(..) | Subterm::Var(_) => {}
-            Subterm::Instance(Instance { head, .. }) => match head {
-                InstanceHead::Var(_) => {}
-            },
+            Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) => {}
             Subterm::Transient(transient) => {
                 transient
                     .subterms()
@@ -338,10 +329,8 @@ impl Subterm {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
             Subterm::Sort(..) | Subterm::Var(_) => false,
-            // A variable head is this node's own data, like `Var`'s identity; a projection head's children are its group's scope bodies, exactly `Rec`'s minus the tail (a projection's tail is a bare member variable, which contributes to no child predicate).
-            Subterm::Instance(Instance { head, .. }) => match head {
-                InstanceHead::Var(_) => false,
-            },
+            // A head is this node's own data, as `Var`'s identity is, so an instance has no child term for a predicate to reach.
+            Subterm::Instance(_) => false,
             Subterm::Transient(transient) => {
                 let mut children = transient.subterms();
                 children.any(&mut *pred)
@@ -426,11 +415,9 @@ impl Subterm {
     /// A local is a [`Free::Local`], so this is a discriminant test rather than a search for a marker character in the spelling, which a compiler-made *global* could set by accident.
     pub(crate) fn newest_local(&self) -> Option<u64> {
         match self {
-            Subterm::Var(var)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                ..
-            }) => var.as_free().and_then(Free::as_local).map(Mint::index),
+            Subterm::Var(var) | Subterm::Instance(Instance { head: var, .. }) => {
+                var.as_free().and_then(Free::as_local).map(Mint::index)
+            }
             Subterm::Metavar(Metavar { spine, .. }) => spine.newest_local(),
             _ => {
                 let mut newest = None;
@@ -569,11 +556,7 @@ impl Subterm {
     /// This subterm's free-variable set, read off what its children have filled: a free `Var`'s is its own name, a metavariable's is its spine's, and any other node's is its children's merged smaller into larger ([`Union`]), so a node whose children add nothing to its largest child's set holds that set itself. [`Term::get_or_init_free_vars`] fills a deep spine with it bottom-up, each node paying for the names it adds.
     pub(super) fn free_vars_from_children(&self) -> Frees {
         // An instance's variable head is this node's own identity exactly as a bare `Var`'s is, and in both shapes a variable head means there are no child terms to union.
-        if let Subterm::Var(var)
-        | Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
-            ..
-        }) = self
+        if let Subterm::Var(var) | Subterm::Instance(Instance { head: var, .. }) = self
             && let Some(name) = var.as_free()
         {
             return Frees::single(*name);
@@ -786,20 +769,16 @@ impl Bound for Subterm {
                 tail: visit.visit_scope(tail),
             }),
             // Erasure unwraps to the head's own spelling: the variable takes the ordinary `Var` route through the hook, and a projection rebuilds the `Rec` it abbreviates over the erased group. The projection's tail is a member variable below every hook's depth, so building it unvisited is the same as visiting it.
-            Subterm::Instance(Instance { head, .. }) if visit.erases_universes() => match head {
-                InstanceHead::Var(var) => {
-                    visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone()))
-                }
-            },
+            Subterm::Instance(Instance { head, .. }) if visit.erases_universes() => visit
+                .call(head)
+                .unwrap_or_else(|| Subterm::Var(head.clone())),
             Subterm::Instance(Instance { head, universes }) => {
-                let head = match head {
-                    InstanceHead::Var(var) => match visit.call(var) {
-                        None => InstanceHead::Var(var.clone()),
-                        Some(replacement) => match InstanceHead::from_subterm(&replacement) {
-                            Some(head) => head,
-                            // A replacement that is not a head shape can only arrive through a binder no scheme governs — a crafted module's `let` or lambda, never an elaborated term, since locals are never generalized. The kernel types a local-headed instance as its bare head with the levels inert (`curios-cert`'s sort fixtures pin this), so substitution resolves it the same way: the instance dissolves to the replacement. Anything but a total answer here would let a hand-built module abort a reducer that promises totality on arbitrary terms.
-                            None => return replacement,
-                        },
+                let head = match visit.call(head) {
+                    None => head.clone(),
+                    Some(replacement) => match &replacement {
+                        Subterm::Var(var) => var.clone(),
+                        // A replacement that is not a variable can only arrive through a binder no scheme governs — a crafted module's `let` or lambda, never an elaborated term, since locals are never generalized. The kernel types a local-headed instance as its bare head with the levels inert (`curios-cert`'s sort fixtures pin this), so substitution resolves it the same way: the instance dissolves to the replacement. Anything but a total answer here would let a hand-built module abort a reducer that promises totality on arbitrary terms.
+                        _ => return replacement,
                     },
                 };
                 Subterm::Instance(Instance {
@@ -847,12 +826,10 @@ impl Bound for Subterm {
                 .map(|child| child.reach())
                 .fold(0, usize::max),
             Subterm::Metavar(Metavar { spine, .. }) => spine.reach(),
-            // A variable head reaches like a bare `Var`; a projection head like the `Rec` it abbreviates, whose tail — a member variable under the group's own binders — contributes nothing past the block boundary.
-            Subterm::Instance(Instance { head, .. }) => match head {
-                InstanceHead::Var(var) => match var.as_bound() {
-                    Some(index) => index + 1,
-                    None => 0,
-                },
+            // A head reaches as a bare `Var` does, being one.
+            Subterm::Instance(Instance { head, .. }) => match head.as_bound() {
+                Some(index) => index + 1,
+                None => 0,
             },
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,

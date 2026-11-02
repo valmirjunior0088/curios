@@ -64,11 +64,11 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Frees, Func, FuncType, Global, InductInstance, InductType, Instance, InstanceHead,
-        Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin,
-        Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, Universes, Variance, Variant,
+        Frees, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
+        Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
+        Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, Universes, Variance, Variant,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -1014,10 +1014,7 @@ impl Convert {
                 .as_free()
                 .and_then(Free::as_global)
                 .map(|global| (*global, false)),
-            Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                ..
-            }) => var
+            Subterm::Instance(Instance { head: var, .. }) => var
                 .as_free()
                 .and_then(Free::as_global)
                 .map(|global| (*global, true)),
@@ -2635,7 +2632,7 @@ impl Convert {
             return Some((*name, universes.clone()));
         }
         let Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
+            head: var,
             universes,
         }) = &**term
         else {
@@ -3089,7 +3086,11 @@ impl Convert {
                     if !Self::compare_universes(context, &this.universes, &that.universes)? {
                         false
                     } else {
-                        self.enqueue(type_, this.head.to_term(), that.head.to_term());
+                        self.enqueue(
+                            type_,
+                            Term::var(this.head.clone()),
+                            Term::var(that.head.clone()),
+                        );
                         true
                     }
                 }

@@ -457,7 +457,7 @@ impl Term {
             Subterm::Instance(instance)
                 if instance
                     .head
-                    .head_name()
+                    .as_free()
                     .and_then(Free::as_global)
                     .is_some_and(|name| names.contains(name)) =>
             {
@@ -471,7 +471,7 @@ impl Term {
                         .is_some_and(|name| names.contains(name)) =>
             {
                 // The occurrence's extent moves onto the wrapping instance: the head is a bare `Var` with no extent of its own.
-                let stamped = Term::instance(InstanceHead::Var(var.clone()), universes.clone());
+                let stamped = Term::instance(var.clone(), universes.clone());
                 return Some(match self.extent() {
                     Some(extent) => stamped.with_extent(extent),
                     None => stamped,
@@ -504,7 +504,7 @@ impl Term {
     pub fn head_name(&self) -> Option<&Free> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
-            Subterm::Instance(Instance { head, .. }) => head.head_name(),
+            Subterm::Instance(Instance { head, .. }) => head.as_free(),
             Subterm::Var(var) => var.as_free(),
             _ => None,
         }
@@ -716,7 +716,7 @@ impl Term {
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
-            Subterm::Instance(Instance { head, .. }) => head.head_name().map(HeadTag::Name),
+            Subterm::Instance(Instance { head, .. }) => head.as_free().map(HeadTag::Name),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
             // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key could be registered but never looked up, and an operator-spelled scrutinee would lose its arm refinement where the equivalent `Nat/le(a, b)` keeps it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
@@ -836,14 +836,14 @@ impl Term {
 
     /// An instance whose head references `name` — the shape elaboration mints for every occurrence of a universe-polymorphic binding.
     pub fn instance_of(name: &Free, universes: impl Into<Universes>) -> Self {
-        Self::instance(InstanceHead::Var(Var::free(*name)), universes)
+        Self::instance(Var::free(*name), universes)
     }
 
-    /// Instantiate a generalized binding at occurrence-specific levels. The result is without a position; a call site holding the occurrence lifts its extent onto the wrapper, since the typed head carries none.
-    pub fn instance(head: InstanceHead, universes: impl Into<Universes>) -> Self {
+    /// Instantiate a generalized binding at occurrence-specific levels. The result is without a position; a call site holding the occurrence lifts its extent onto the wrapper, since the head carries none.
+    pub fn instance(head: Var, universes: impl Into<Universes>) -> Self {
         let universes = universes.into();
         if universes.is_empty() {
-            head.to_term()
+            Self::var(head)
         } else {
             Self::from(Subterm::Instance(Instance { head, universes }))
         }
@@ -2025,7 +2025,7 @@ struct Applied<'a> {
 /// The global an instance names, with its levels: the head [`Applied`] and [`Projected`] read a spine by.
 fn named(head: &Term) -> Option<(&Global, &Universes)> {
     let Subterm::Instance(Instance {
-        head: InstanceHead::Var(var),
+        head: var,
         universes,
     }) = head.look()
     else {
@@ -2835,7 +2835,7 @@ impl Term {
                 }
                 let named = match &**term {
                     Subterm::Var(var) => var.as_free(),
-                    Subterm::Instance(instance) => instance.head.head_name(),
+                    Subterm::Instance(instance) => instance.head.as_free(),
                     _ => None,
                 };
                 if let Some(name) = named

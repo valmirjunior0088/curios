@@ -33,12 +33,12 @@ use {
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
         Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
-        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe,
-        Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, Var, Variant, Visit, accelerable, eta_head,
-        instantiate_universes_scoped, probe_spellings, project_erased_universes, project_literal,
-        reduce_closed, reduce_intrinsic, weak_head_value,
+        Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Quality,
+        Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Var, Variant,
+        Visit, accelerable, eta_head, instantiate_universes_scoped, probe_spellings,
+        project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
+        weak_head_value,
     },
     curios_utilities::{SyntaxRegistry, recurse},
     std::{
@@ -810,11 +810,9 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, ReduceError> {
     let Instance { head, universes } = instance;
 
-    let reduct = match &head {
-        InstanceHead::Var(var) => match context.var_reduct_at(var.unwrap()).cloned() {
-            Some(reduct) => reduct,
-            None => return Ok(Reduce::Break(Term::instance(head, universes))),
-        },
+    let reduct = match context.var_reduct_at(head.unwrap()).cloned() {
+        Some(reduct) => reduct,
+        None => return Ok(Reduce::Break(Term::instance(head, universes))),
     };
 
     // A stored value holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.
@@ -1686,11 +1684,7 @@ pub fn applied_head(term: &Term) -> &Term {
 fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
     matches!(
         &**applied_head(written),
-        Subterm::Var(_)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::Var(_),
-                ..
-            })
+        Subterm::Var(_) | Subterm::Instance(_)
     ) && matches!(
         &**applied_head(reduced),
         Subterm::Rec(_) | Subterm::Match(_) | Subterm::Func(_) | Subterm::Let(_)

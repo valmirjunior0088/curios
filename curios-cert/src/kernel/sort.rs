@@ -26,9 +26,8 @@ use {
     super::{Counted, Error, Kernel, infer_type, whnf},
     crate::instantiate_universes_scoped,
     curios_core::{
-        Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
-        MatchResult, Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term,
-        TupleType,
+        Bound, Field, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
+        Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
     },
     curios_utilities::recurse,
 };
@@ -216,7 +215,7 @@ fn published(kernel: &mut Kernel, type_: &Term) -> Result<Option<Sort>, Error> {
     let (name, universes) = match &**type_ {
         Subterm::Var(var) => (var.unwrap(), None),
         Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
+            head: var,
             universes,
         }) => (var.unwrap(), Some(universes)),
         _ => return Ok(None),
@@ -244,10 +243,7 @@ fn heads_a_declaration(kernel: &Kernel, term: &Term) -> bool {
 
     let name = match &**head {
         Subterm::Var(var) => var.unwrap(),
-        Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
-            ..
-        }) => var.unwrap(),
+        Subterm::Instance(Instance { head: var, .. }) => var.unwrap(),
         _ => return false,
     };
 
@@ -421,24 +417,25 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap())?.cloned()),
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
-        Subterm::Instance(Instance { head, universes }) => match head {
-            InstanceHead::Var(var) => {
-                let name = var.unwrap();
+        Subterm::Instance(Instance {
+            head: var,
+            universes,
+        }) => {
+            let name = var.unwrap();
 
-                // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
-                if let Some(type_) = kernel.local_type(name) {
-                    return Ok(Some(type_.clone()));
-                }
-
-                let Some((scheme, context)) = kernel.scheme_of(name) else {
-                    return Ok(None);
-                };
-                let (scheme, context) = (scheme.clone(), context.clone());
-                kernel.check_instance(&context, universes)?;
-
-                Ok(Some(instantiate_universes_scoped(&scheme, universes)?))
+            // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
+            if let Some(type_) = kernel.local_type(name) {
+                return Ok(Some(type_.clone()));
             }
-        },
+
+            let Some((scheme, context)) = kernel.scheme_of(name) else {
+                return Ok(None);
+            };
+            let (scheme, context) = (scheme.clone(), context.clone());
+            kernel.check_instance(&context, universes)?;
+
+            Ok(Some(instantiate_universes_scoped(&scheme, universes)?))
+        }
 
         Subterm::Apply(apply) => {
             let Some(head_type) = synth_neutral(kernel, &apply.head)? else {

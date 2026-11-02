@@ -10,9 +10,7 @@ mod tests;
 use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
-    curios_core::{
-        Free, Instance, InstanceHead, Names, Quality, Subterm, Telescope, Term, peel_intrinsic,
-    },
+    curios_core::{Free, Names, Quality, Subterm, Telescope, Term, peel_intrinsic},
     curios_utilities::recurse,
     std::collections::{BTreeSet, HashMap},
 };
@@ -253,12 +251,7 @@ fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<
 fn key_shaped(actual: &Term) -> bool {
     matches!(
         &**actual,
-        Subterm::Var(_)
-            | Subterm::Proj(_)
-            | Subterm::Instance(Instance {
-                head: InstanceHead::Var(_),
-                ..
-            })
+        Subterm::Var(_) | Subterm::Proj(_) | Subterm::Instance(_)
     )
 }
 

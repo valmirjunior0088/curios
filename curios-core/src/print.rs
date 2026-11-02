@@ -2068,7 +2068,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             }
         }
         Subterm::Instance(instance) => flat([
-            sub(instance.head.to_term(), frame),
+            sub(Term::var(instance.head.clone()), frame),
             pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),

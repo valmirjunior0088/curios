@@ -149,7 +149,7 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
             curios_core::Subterm::Apply(apply) => head_of(&apply.head),
             curios_core::Subterm::Instance(inst) => inst
                 .head
-                .head_name()
+                .as_free()
                 .and_then(|free| free.as_global())
                 .cloned(),
             curios_core::Subterm::Var(var) => {
