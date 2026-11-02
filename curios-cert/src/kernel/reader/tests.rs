@@ -258,7 +258,7 @@ fn a_reader_binds_a_fresh_local_within_its_frame() {
     });
 }
 
-/// The lookups read the kernel's environment and note what they read: a family's declaration as a signature, a definition's body as a body.
+/// The lookups read the kernel's environment and note what they read: a family's declaration as a signature, and a definition's body as a body where a reduction opens it.
 #[test]
 fn a_reader_looks_up_and_notes_what_it_read() {
     let mut kernel = kernel();
@@ -276,7 +276,10 @@ fn a_reader_looks_up_and_notes_what_it_read() {
 
     kernel.read(|reader| {
         assert!(reader.induct_decl(&family).is_some());
-        assert_eq!(reader.value(&Free::Global(name)), Some(&nat(3)));
+        assert_eq!(
+            reader.head(&Term::instance(name, Universes::default())),
+            Ok(nat(3))
+        );
         let reads = reader.take_reads();
 
         assert!(reads.signatures.contains(&family));

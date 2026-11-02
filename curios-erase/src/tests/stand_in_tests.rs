@@ -10,7 +10,7 @@ use {
     std::collections::BTreeMap,
 };
 
-/// Erasure's reader is handed no proof's body either: the kernel it reads through defines a definition marked a proof as unfolding to nothing, and the definition beside it to its body.
+/// Erasure's reader is handed no proof's body either: the kernel it reads through defines a definition marked a proof as unfolding to nothing, so a reduction leaves its name standing, and the definition beside it to its body.
 #[test]
 fn a_proofs_body_is_withheld_from_erasures_reader() {
     let p = fresh(Some("P"));
@@ -55,9 +55,10 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     let globals = Globals::default();
     let (rechecked, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+    let named = |path: &str| curios_core::Term::free_var(&global(path));
     kernel.read(|reader| {
-        assert!(reader.value(&global("lemma")).is_none());
-        assert!(reader.value(&global("two")).is_some());
+        assert_eq!(reader.head(&named("lemma")), Ok(named("lemma")));
+        assert_eq!(reader.head(&named("two")), Ok(nat_lit(2)));
     });
 }
 

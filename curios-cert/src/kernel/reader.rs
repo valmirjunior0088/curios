@@ -139,11 +139,6 @@ impl<'s> Reader<'_, 's> {
         self.kernel.struct_decl(name)
     }
 
-    /// The body of the definition `name`, noted as read.
-    pub fn value(&self, name: &Free) -> Option<&Term> {
-        self.kernel.value_at(name)
-    }
-
     /// What the reader's lookups and reductions have read since the last take.
     pub fn take_reads(&mut self) -> Reads {
         self.kernel.take_reads()
