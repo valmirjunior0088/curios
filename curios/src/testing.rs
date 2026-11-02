@@ -395,7 +395,7 @@ impl Tested {
         Ok(Some(TestRun {
             compiled,
             bindings,
-            // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/Process/args` promises opaque byte strings.
+            // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/Proc/args` promises opaque byte strings.
             argv0: subject.entry.as_os_str().as_encoded_bytes().to_vec(),
         }))
     }

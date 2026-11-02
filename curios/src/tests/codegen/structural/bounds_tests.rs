@@ -4,14 +4,14 @@ use super::test_support::*;
 
 /// A program reading each carrier at a run-time value, so both `$<carrier>/read` helpers are emitted. `try_get` is the spelling because it carries its own bound — the point here is what the helper emits, not how its caller discharged the proof.
 const READS_EVERY_CARRIER: &str = r#"
-    use /std/{Nat, Byte, Bytes, List, Option, Io, Process};
+    use /std/{Nat, Byte, Bytes, List, Option, Io, Proc};
 
-    Io/bind(Process/args(), (args) =>
+    Io/bind(Proc/args(), (args) =>
         let values = List/map(args, (a) => 1);
         let bytes = Bytes/join(x[], args);
         let from_list = Option/unwrap_or(List/try_get(values, 0), 0);
         let from_bytes = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
-        Process/exit(Nat/to_byte((from_list + from_bytes) % 256)))
+        Proc/exit(Nat/to_byte((from_list + from_bytes) % 256)))
     "#;
 
 /// Every carrier's read refuses a position past the value's own length, and the two agree.

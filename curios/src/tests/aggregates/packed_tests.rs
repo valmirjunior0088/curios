@@ -118,7 +118,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             end;
 
         let entry() -> /std/Io({}) =
-            let standard_input = /std/Io/Reader/new(/std/Process/stdin)!;
+            let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input: (_) => Io({})
             | some(bytes) =>
@@ -161,13 +161,13 @@ fn a_packed_run_extended_in_place_reads_as_it_was_written() {
 #[test]
 fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
     let source = r#"
-        use /std/{Bytes, Io, Try, Process};
+        use /std/{Bytes, Io, Try, Proc};
 
         let settled(run: Bytes) -> Bytes =
             Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00));
 
         let main() -> Io({}) =
-            let arrived = Try/run(Io/read(Process/stdin, 64))!;
+            let arrived = Try/run(Io/read(Proc/stdin, 64))!;
             match arrived
             | success(bytes(leaf)) =>
                 let two = x[..leaf, ..leaf];
@@ -176,8 +176,8 @@ fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
                 let flat_three = settled(three);
                 let left = x[..three, ..leaf];
                 let flat_left = settled(left);
-                let _ = Try/run(Io/write(Process/stdout, x[..flat_two, ..flat_three, ..flat_left]))!;
-                let _ = Try/run(Io/write(Process/stdout, left))!;
+                let _ = Try/run(Io/write(Proc/stdout, x[..flat_two, ..flat_three, ..flat_left]))!;
+                let _ = Try/run(Io/write(Proc/stdout, left))!;
                 Io/pure(())
             | _ => Io/pure(())
             end;

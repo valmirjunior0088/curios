@@ -1,4 +1,4 @@
-//! The process surface through `/std/Process`: argv, environment and exit, and children started from a `Process` and reaped as a `Process/Child`.
+//! The process surface through `/std/Proc`: argv, environment and exit, and children started from a `Proc` and reaped as a `Proc/Child`.
 
 use {
     crate::tests::{run, run_text, typecheck},
@@ -16,7 +16,7 @@ fn args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Process/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/Process/args()!, 1), x[])))!;
+    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/Proc/args()!, 1), x[])))!;
     /std/Io/pure(());
 entry()
 "#,
@@ -34,8 +34,8 @@ fn env_found_unwraps_to_some() {
         r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/Process/env("HOME")! : (_) => Io({})
-            | some(v) => let _ = Try/run(std/Io/write(std/Process/stdout, v))!; /std/Io/pure(())
+            match /std/Proc/env("HOME")! : (_) => Io({})
+            | some(v) => let _ = Try/run(std/Io/write(std/Proc/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -53,8 +53,8 @@ fn env_absent_is_none() {
         run(r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/Process/env("NOPE")! : (_) => Io({})
-            | some(v) => let _ = Try/run(std/Io/write(std/Process/stdout, v))!; /std/Io/pure(())
+            match /std/Proc/env("NOPE")! : (_) => Io({})
+            | some(v) => let _ = Try/run(std/Io/write(std/Proc/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -68,7 +68,7 @@ fn exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; the function's local binder may carry the same annotation.
     let entrypoint = r#"
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, 7)!;
+            let _ = /std/Proc/exit(@{}, 7)!;
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -95,7 +95,7 @@ fn exit_halts_with_code() {
 // An exit code is a `Byte`, so a code no parent would read whole is refused where it is written rather than at run time: POSIX keeps a status's low eight bits, and `256` would reach the parent as the `0` of a success.
 #[test]
 fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
-    let refusal = typecheck("/std/Process/exit(256)").expect_err("256 is not a byte");
+    let refusal = typecheck("/std/Proc/exit(256)").expect_err("256 is not a byte");
     assert!(
         refusal.contains("Byte literal 256 is out of range"),
         "refused, but not as a byte:\n{refusal}"
@@ -104,11 +104,11 @@ fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
 
 #[test]
 fn exit_in_local_binding_halts() {
-    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write, so erasure must not collapse such a binding to the unit constant. `go` returns an `Io` for the force to have a region at all — an unforced `/std/Process/exit(3)` would be an inert description, which is the whole point of the carrier.
+    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write, so erasure must not collapse such a binding to the unit constant. `go` returns an `Io` for the force to have a region at all — an unforced `/std/Proc/exit(3)` would be an inert description, which is the whole point of the carrier.
     let entrypoint = r#"
         use /std/{Nat, Str, Io};
         let go(n : std/Nat) -> Io(std/Nat) =
-            let dead : {} = /std/Process/exit(3)!;
+            let dead : {} = /std/Proc/exit(3)!;
             Io/pure(n);
         let entry() -> /std/Io({}) =
             let v = go(1)!;
@@ -142,7 +142,7 @@ fn an_exit_ends_a_region_of_any_type() {
         use /std/{Nat, Str, Io};
         let f(n : Nat) -> Io(Str) =
             match n
-            | 0 => /std/Process/exit(7)
+            | 0 => /std/Proc/exit(7)
             | _ => Io/pure("ok")
             end;
         let entry() -> /std/Io({}) =
@@ -174,7 +174,7 @@ fn an_exit_ends_a_region_of_any_type() {
 fn an_exit_alone_in_the_tail_carries_its_code() {
     // A program needing no nominal rows emits no roster group, since Binaryen's reader refuses an empty recursion group.
     let entrypoint = r#"
-        /std/Process/exit(3)
+        /std/Proc/exit(3)
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -199,7 +199,7 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
 fn child_program(body: &str) -> String {
     fill!(
         r#"
-        use /std/{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Process};
+        use /std/{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Proc};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, Str) =
             Try/scope((scope) => ${body});
@@ -220,7 +220,7 @@ fn child_program(body: &str) -> String {
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
         r#"
-            let out = Process/run(Process/new("greet", ["world"]), x[])!;
+            let out = Proc/run(Proc/new("greet", ["world"]), x[])!;
             Try/pure(Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)]))
         "#,
     );
@@ -236,13 +236,13 @@ fn run_captures_both_outputs_and_the_exit() {
     );
 }
 
-// `status` wires every stream as the `Process` says and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found` at its own `run`, as an unknown path is to `open`.
+// `status` wires every stream as the `Proc` says and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found` at its own `run`, as an unknown path is to `open`.
 #[test]
 fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     let source = child_program(
         r#"
-            let crashed = Process/status(Process/new("crash", []))!;
-            let missing = Try/run(Process/status(Process { ..Process/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
+            let crashed = Proc/status(Proc/new("crash", []))!;
+            let missing = Try/run(Proc/status(Proc { ..Proc/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
             let shown = match missing | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
             Try/pure(Str/join(" ", [Show/show(crashed), shown]))
         "#,
@@ -267,7 +267,7 @@ fn a_cancelled_scope_kills_the_child_spawned_into_it() {
         r#"
             let body() -> Try(Io, Io/Error, {}) =
                 Try/scope((inner) =>
-                    let _ = Process/Child/spawn(inner, Process/new("sleepy", []))!;
+                    let _ = Proc/Child/spawn(inner, Proc/new("sleepy", []))!;
                     let _ = Io/sleep(/std/time/Duration/of_secs(60))!;
                     Try/pure(()));
             let ran = Io/timeout(/std/time/Duration/zero, Try/run(body()))!;
@@ -286,8 +286,8 @@ fn a_cancelled_scope_kills_the_child_spawned_into_it() {
 fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     let source = child_program(
         r#"
-            let child = Try/scope((inner) => Process/Child/spawn(inner, Process/new("done", [])))!;
-            let late = Try/run(Process/Child/wait(child))!;
+            let child = Try/scope((inner) => Proc/Child/spawn(inner, Proc/new("done", [])))!;
+            let late = Try/run(Proc/Child/wait(child))!;
             Try/pure(match late | success(e) => Show/show(e) | failure(e) => Show/show(e) end)
         "#,
     );
@@ -300,19 +300,19 @@ fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Process/Input` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Proc/Input` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
         r#"
-            let child = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdout = Process/Stdio/piped() })!;
+            let child = Proc/Child/spawn(scope, Proc { ..Proc/new("greet", []), stdout = Proc/Stdio/piped() })!;
             let read =
-                match Process/Child/stdout(child)
+                match Proc/Child/stdout(child)
                 | some(p) => /std/Io/read_all(p)
                 | none() => Try/pure(x[])
                 end;
             let bytes = read!;
-            let exit = Process/Child/wait(child)!;
+            let exit = Proc/Child/wait(child)!;
             Try/pure(Str/flatten([text(bytes), "|", Show/show(exit)]))
         "#,
     );
@@ -324,15 +324,15 @@ fn a_piped_output_is_read_through_the_stream_witness() {
     assert_eq!(io.output(), b"hello\n|exited(0)");
 }
 
-// A child holds a pipe for exactly the streams its `Process` piped, whichever of the three they are: an inherited stream and a null one have none.
+// A child holds a pipe for exactly the streams its `Proc` piped, whichever of the three they are: an inherited stream and a null one have none.
 #[test]
 fn a_child_holds_a_pipe_for_exactly_the_streams_it_piped() {
     let source = child_program(
         r#"
             let held(@A: Type, p: Option(A)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
-            let pipes(c: Process/Child) -> Str = Str/join(" ", [held(Process/Child/stdin(c)), held(Process/Child/stdout(c)), held(Process/Child/stderr(c))]);
-            let c = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
-            let d = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
+            let pipes(c: Proc/Child) -> Str = Str/join(" ", [held(Proc/Child/stdin(c)), held(Proc/Child/stdout(c)), held(Proc/Child/stderr(c))]);
+            let c = Proc/Child/spawn(scope, Proc { ..Proc/new("greet", []), stdin = Proc/Stdio/piped(), stdout = Proc/Stdio/null() })!;
+            let d = Proc/Child/spawn(scope, Proc { ..Proc/new("greet", []), stdin = Proc/Stdio/null(), stdout = Proc/Stdio/piped(), stderr = Proc/Stdio/piped() })!;
             Try/pure(Str/join(" | ", [pipes(c), pipes(d)]))
         "#,
     );

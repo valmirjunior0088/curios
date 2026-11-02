@@ -217,7 +217,7 @@ fn tested(root: &Path) {
     .unwrap();
     fs::write(
         root.join("lib.crs"),
-        "use /std/{Io, Test};\n\ntest holds =\n    Test/assert(true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    Test/perform(() => let _ = /std/Process/exit(@{}, 7)!; Io/pure(Test/assert(true)));\n",
+        "use /std/{Io, Test};\n\ntest holds =\n    Test/assert(true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));\n",
     )
     .unwrap();
     fs::write(
@@ -357,7 +357,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     assert_eq!(code, Some(1));
     assert_eq!(
         String::from_utf8_lossy(&stdout),
-        "/app/holds: passed\n/app/fails: failed\n  expected 2 but got 1\n    Test/equal(1, 2)\n/app/exits: exited 7\n    Test/perform(() => let _ = /std/Process/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n/own: passed\n2 passed, 1 failed, 1 exited\n"
+        "/app/holds: passed\n/app/fails: failed\n  expected 2 but got 1\n    Test/equal(1, 2)\n/app/exits: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n/own: passed\n2 passed, 1 failed, 1 exited\n"
     );
     let stderr = String::from_utf8_lossy(&stderr);
     in_order(

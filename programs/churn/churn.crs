@@ -7,7 +7,7 @@
 -- outside its own pair, so simultaneous and sequential update agree and no
 -- field is dead or loop-invariant. N is read from the command line; the seed derives from
 -- N so nothing is a closed term.
-use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
 struct Churn: Type {
     a: Nat,
@@ -37,7 +37,7 @@ let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
     end;
 
 let execute() -> Try(Io, Str, {}) =
-    let arguments = Process/args()!;
+    let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;

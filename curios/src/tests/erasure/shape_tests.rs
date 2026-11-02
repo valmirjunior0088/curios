@@ -105,7 +105,7 @@ fn a_function_held_in_a_structure_is_called_at_a_variable() {
 #[test]
 fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
     let source = r#"
-        use /std/{Nat, List, Process};
+        use /std/{Nat, List, Proc};
         struct S(A: Sort): Type {
             x: A,
             y: Nat,
@@ -123,7 +123,7 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
             | b() => 7
             end;
         let entry() -> /std/Io({}) =
-            let n = List/len(Process/args()!);
+            let n = List/len(Proc/args()!);
             /std/print(Nat/to_str(pick(U/a(S(P) { x = P/p(), y = n + 40 }))));
         entry()
         "#;

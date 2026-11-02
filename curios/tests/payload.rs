@@ -38,7 +38,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "app.crs",
-        "let main() -> /std/Io({}) = let _ = /std/print(/app/word)!;\n/std/Process/exit(7);\nmain()\n",
+        "let main() -> /std/Io({}) = let _ = /std/print(/app/word)!;\n/std/Proc/exit(7);\nmain()\n",
     );
 
     root

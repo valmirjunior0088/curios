@@ -123,10 +123,10 @@ fn a_file_kind_no_code_names_fails_the_stat() {
 fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
-        use /std/{Io, Try, Process};
+        use /std/{Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let r = Try/run(Io/write(Process/stdout, x[0x41]))!;
-            match r | success(_) => Process/exit(@{}, 0) | failure(_) => Process/exit(@{}, 7) end;
+            let r = Try/run(Io/write(Proc/stdout, x[0x41]))!;
+            match r | success(_) => Proc/exit(@{}, 0) | failure(_) => Proc/exit(@{}, 7) end;
         entry()
         "#,
         MockHost::builder().build().0,
@@ -141,7 +141,7 @@ fn a_write_that_accepts_nothing_is_a_failure() {
 #[test]
 fn a_host_that_returns_from_exit_traps() {
     let error = answering(
-        "/std/Process/exit(@{}, 3)",
+        "/std/Proc/exit(@{}, 3)",
         MockHost::builder().build().0,
         HostOp::ProcExit,
         vec![],
@@ -173,14 +173,14 @@ fn an_io_never_performed_asks_the_host_nothing() {
 fn a_program_cannot_name_a_row_the_library_declares() {
     let refusal = typecheck(
         r#"
-        use /std/Process/{proc_args};
+        use /std/Proc/{proc_args};
         /std/print("unread")
         "#,
     )
-    .expect_err("the row is private to `/std/Process`");
+    .expect_err("the row is private to `/std/Proc`");
 
     assert!(
-        refusal.contains("`proc_args` is private to `/std/Process`"),
+        refusal.contains("`proc_args` is private to `/std/Proc`"),
         "{refusal}"
     );
 }

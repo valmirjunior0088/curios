@@ -17,7 +17,7 @@ pub mod Parsed;
 pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, Chosen, Lookup, Has,
     get, HasIn, NamedIn, HasCommand, Named, command};
 
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Process,
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Proc,
     print, print_err};
 use /std/ops/{Eql};
 
@@ -394,7 +394,7 @@ let environment(names: List(Str)) -> Io(Map(Str, Str)) =
     | [] => Io/pure(Map/empty())
     | [n, ..more] =>
         let held = environment(more)!;
-        let value = Process/env(n)!;
+        let value = Proc/env(n)!;
         Io/pure(
             match Option/bind(value, (b) => Result/to_option(Str/of_bytes(b)))
             | some(text) => Map/insert(held, n, text)
@@ -404,11 +404,11 @@ let environment(names: List(Str)) -> Io(Map(Str, Str)) =
 
 let refuse(text: Str) -> Io({}) =
     let _ = print_err(text)!;
-    Process/exit(2);
+    Proc/exit(2);
 
 --- The process's command line read against `cli`, beside the environment variables it declares, and what it parsed into handed to `run`. Help and the version are written to standard output; a line refused is reported on standard error with the usage of the command that refused it, and ends the program with 2.
 pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
-    let raw = Process/args()!;
+    let raw = Proc/args()!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)
     | failure(at) =>
@@ -441,5 +441,5 @@ pub let try_main(
             let _ =
                 Fmt/print_err("error: invalid command line declaration: %\n")(
                     Str/join("; ", List/map([p, ..more], described)))!;
-            Process/exit(1)
+            Proc/exit(1)
     end((ok) => main(Cli { command = command, version = version, @ok = ok }, run));

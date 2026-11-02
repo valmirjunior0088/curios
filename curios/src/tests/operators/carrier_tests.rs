@@ -62,9 +62,9 @@ fn nat_bitwise_ops_execute() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Process};
+        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]
@@ -94,9 +94,9 @@ fn int_bitwise_ops_execute() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Int, Str, Option, Io, Try, Process};
+        use /std/{Byte, Bytes, Nat, Int, Str, Option, Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]

@@ -51,7 +51,7 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
 #[test]
 fn a_command_lands_whole_and_its_reply_line_is_read_across_arrivals() {
     let source = r#"
-        use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial, Process};
+        use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial, Proc};
         let exchange(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             let input = Io/Reader/new(s)!;
@@ -61,7 +61,7 @@ fn a_command_lands_whole_and_its_reply_line_is_read_across_arrivals() {
         let program() -> Io({}) =
             let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), exchange)))!;
             match r
-            | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Proc/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -106,7 +106,7 @@ fn a_scope_closes_its_port_without_a_drain() {
 #[test]
 fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
     let source = r#"
-        use /std/{Bytes, Option, Show, Try, Io, Path, Serial, Process};
+        use /std/{Bytes, Option, Show, Try, Io, Path, Serial, Proc};
         let reset(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Serial/set_dtr(s, false)!;
             let _ = Serial/set_rts(s, true)!;
@@ -118,7 +118,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
         let program() -> Io({}) =
             let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), reset)))!;
             match r
-            | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Proc/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()

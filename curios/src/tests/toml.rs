@@ -568,7 +568,7 @@ fn program() -> String {
         .join("\n        ");
     fill!(
         r##"
-        use /std/{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io, Try, Process};
+        use /std/{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io, Try, Proc};
         use /std/Toml/{flt};
         let entry() -> /std/Io({}) =
         let taint = Bytes/len(rand/bytes(0)!);
@@ -622,7 +622,7 @@ fn program() -> String {
                 | none() => "missing"
                 end
             end;
-        let line = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
+        let line = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
             | success(bytes(b, @_)) => b
             | success(ended()) => x[]
             | failure(_) => x[]

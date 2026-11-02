@@ -100,7 +100,7 @@ pub(crate) enum Mode {
         #[arg(
             trailing_var_arg = true,
             value_name = "SUBJECT_OR_ARGS",
-            help = format!("{}. Following words are program arguments (read via /std/Process/args); begin with -- to omit SUBJECT", RUN.subject_help())
+            help = format!("{}. Following words are program arguments (read via /std/Proc/args); begin with -- to omit SUBJECT", RUN.subject_help())
         )]
         args: Vec<OsString>,
     },

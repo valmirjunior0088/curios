@@ -80,7 +80,7 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
         r#"
             foreign frobnicate(Nat) -> Nat;
             let entry() -> /std/Io({}) =
-                let _ = /std/Try/run(/std/Io/write(/std/Process/stdout, x[0x00]))!;
+                let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, x[0x00]))!;
                 let n = frobnicate(5)!;
                 /std/print(/std/Nat/to_str(n));
             entry()
@@ -158,8 +158,8 @@ fn a_report_spells_a_row_as_its_declaration_is_reached() {
 fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
     let refusal = typecheck(
         r#"
-            use /std/{Eq, Io, Process};
-            pub let p: Eq()(Process/args(), Io/pure([])) = Eq/refl();
+            use /std/{Eq, Io, Proc};
+            pub let p: Eq()(Proc/args(), Io/pure([])) = Eq/refl();
             /std/print("")
         "#,
     )
@@ -167,7 +167,7 @@ fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
 
     assert!(
         refusal.contains(
-            "expected: Eq(@Io(/std/List(/std/Bytes)))(/std/Process/proc_args(), Io/pure(@/std/List(/std/Bytes), []))"
+            "expected: Eq(@Io(/std/List(/std/Bytes)))(/std/Proc/proc_args(), Io/pure(@/std/List(/std/Bytes), []))"
         ),
         "{refusal}"
     );

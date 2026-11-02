@@ -14,7 +14,7 @@ The loader fetches `index.wasm` against its integrity, `index.html` states the l
 - **A dependency is a namespace in the page as it is in the program.** Its name cannot collide with another package's, so nesting by it removes most collisions by construction, and the claim check names the rest.
 - **What a page holds is what it runs.** Carrying only the reached rows' files keeps a dependency's assets out of a page that never calls it, and the integrity of every module the page imports makes a file changed after the build fail to load rather than run.
 - **A build tool is a decision the author already made.** TypeScript, a bundler or a minifier each has its own configuration, and running one from the compiler would make the compiler the owner of a toolchain it cannot vouch for; a `static` entry is the one door, so whatever produced a file, the compiler serves it as it is.
-- **Arguments in the URL** are the one input a page has that a link can carry, and bytes percent-encoded are every argument `/std/Process/args` can hand a program.
+- **Arguments in the URL** are the one input a page has that a link can carry, and bytes percent-encoded are every argument `/std/Proc/args` can hand a program.
 
 **Rejected.**
 

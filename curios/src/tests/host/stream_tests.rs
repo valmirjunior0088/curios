@@ -38,8 +38,8 @@ fn io_read() {
     run_text(
         r#"
         let entry() -> /std/Io({}) =
-            match /std/Try/run(std/Io/read(std/Process/stdin, 1024))! : (_) => /std/Io({})
-            | success(bytes(b, @_)) => let w = /std/Try/run(std/Io/write(std/Process/stdout, b))!; /std/Io/pure(())
+            match /std/Try/run(std/Io/read(std/Proc/stdin, 1024))! : (_) => /std/Io({})
+            | success(bytes(b, @_)) => let w = /std/Try/run(std/Io/write(std/Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/Io/pure(())
             | failure(_) => /std/Io/pure(())
             end;
@@ -55,17 +55,17 @@ fn io_read() {
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io, Try, Result, Process};
+        use /std/{Io, Try, Result, Proc};
         let show(r : Result(Io/Error, Io/Chunk)) -> Io({}) =
             match r : (_) => Io({})
-            | success(bytes(b, @_)) => let _ = Try/run(Io/write(Process/stdout, b))!; /std/Io/pure(())
+            | success(bytes(b, @_)) => let _ = Try/run(Io/write(Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/print("1")
             | failure(_) => /std/print("e")
             end;
         let entry() -> /std/Io({}) =
-            let _ = show(Try/run(Io/read(Process/stdin, 2))!)!;
-            let _ = show(Try/run(Io/read(Process/stdin, 2))!)!;
-            show(Try/run(Io/read(Process/stdin, 2))!);
+            let _ = show(Try/run(Io/read(Proc/stdin, 2))!)!;
+            let _ = show(Try/run(Io/read(Proc/stdin, 2))!)!;
+            show(Try/run(Io/read(Proc/stdin, 2))!);
         entry()
         "#;
 
@@ -173,7 +173,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
 #[test]
 fn lines_read_across_the_chunks_a_stream_arrives_in() {
     let source = r#"
-        use /std/{Str, Bytes, Bool, Option, Result, Try, Io, print, Process};
+        use /std/{Str, Bytes, Bool, Option, Result, Try, Io, print, Proc};
         let line(r: Result(Io/Error, Option(Bytes))) -> Str =
             match r
             | success(some(b)) => Result/unwrap_or(Str/of_bytes(b), "?")
@@ -186,7 +186,7 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
             | failure(_) => "<error>"
             end;
         let program() -> Io({}) =
-            let input = Io/Reader/new(Process/stdin)!;
+            let input = Io/Reader/new(Proc/stdin)!;
             let a = Try/run(Io/Reader/line(input))!;
             let b = Try/run(Io/Reader/line(input))!;
             let c = Try/run(Io/Reader/until(input, ','))!;

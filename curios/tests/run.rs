@@ -20,7 +20,7 @@ let render(b: Bytes) -> Str = match Str/of_bytes(b)
     | failure(_) => Str/concat("bytes:", Nat/to_str(Bytes/to_nat(b)))
     end;
 let entry() -> /std/Io({}) =
-    let args = /std/Process/args()!;
+    let args = /std/Proc/args()!;
     let tail = match args | [] => [] | [_, ..rest] => rest end;
     /std/print(Str/join("|", List/map(tail, render)));
 entry()
@@ -151,11 +151,11 @@ fn single(root: &Path, program: &str) {
 }
 
 const FINISHED: &str = r#"
-use /std/{Str, Try, Io, Process};
+use /std/{Str, Try, Io, Proc};
 let entry() -> Io({}) =
-    let _ = Try/run(Io/write(Process/stdout, Str/to_bytes("before\n")))!;
-    let _ = Try/run(Io/finish(Process/stdout))!;
-    let _ = Try/run(Io/read_all(Process/stdin))!;
+    let _ = Try/run(Io/write(Proc/stdout, Str/to_bytes("before\n")))!;
+    let _ = Try/run(Io/finish(Proc/stdout))!;
+    let _ = Try/run(Io/read_all(Proc/stdin))!;
     Io/pure(());
 entry()
 "#;
@@ -188,9 +188,9 @@ fn finishing_standard_output_gives_its_reader_the_end_while_the_program_runs() {
 }
 
 const PRINTED_AFTER: &str = r#"
-use /std/{Try, Io, Process, print};
+use /std/{Try, Io, Proc, print};
 let entry() -> Io({}) =
-    let _ = Try/run(Io/finish(Process/stdout))!;
+    let _ = Try/run(Io/finish(Proc/stdout))!;
     print("after");
 entry()
 "#;

@@ -106,7 +106,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     end;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
+    let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>
@@ -135,7 +135,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     end;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
+    let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>

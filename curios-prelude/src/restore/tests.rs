@@ -204,7 +204,7 @@ const PURITY: &[(&str, Purity)] = &[
     ("Fmt", Purity::Performs),
     ("time", Purity::Performs),
     ("rand", Purity::Performs),
-    ("Process", Purity::Performs),
+    ("Proc", Purity::Performs),
     ("fs", Purity::Performs),
     ("File", Purity::Performs),
     ("Tty", Purity::Performs),

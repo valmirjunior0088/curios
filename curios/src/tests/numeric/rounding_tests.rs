@@ -106,7 +106,7 @@ fn every_direction_executes_as_the_model_rounds() {
     let naturals = NATURALS.join(",\n            ");
     let source = fill!(
         r#"
-        use /std/{Nat, Int, Flt, Bytes, List, Io, Try, Process};
+        use /std/{Nat, Int, Flt, Bytes, List, Io, Try, Proc};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
@@ -139,7 +139,7 @@ fn every_direction_executes_as_the_model_rounds() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Process/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
         "#,
@@ -213,7 +213,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
         .join(", ");
     let source = fill!(
         r#"
-        use /std/{Flt, Str, Bytes, List, Io, Option, Try, Process};
+        use /std/{Flt, Str, Bytes, List, Io, Option, Try, Proc};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
             let unread = Str/repeat("0", Bytes/len(/std/rand/bytes(0)!));
@@ -227,7 +227,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Process/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
         "#,
@@ -417,7 +417,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
     let scalings = SCALINGS.map(|n| format!("{n:+}")).join(", ");
     let source = fill!(
         r#"
-        use /std/{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Process};
+        use /std/{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Proc};
         use /std/Flt/{Rounding, Exceptions, signals};
         let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
@@ -453,7 +453,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Process/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)]))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)]))))!;
             Io/pure(());
         entry()
         "#,

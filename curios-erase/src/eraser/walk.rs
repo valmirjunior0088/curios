@@ -411,7 +411,7 @@ impl<'s> Eraser<'s> {
                 let label = binding.tail.hint_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
-                // A binding is a kept slot: a value is erased once and bound, and a proof or a type is bound to its stand-in without being computed (see `kept_operand`). `let _ = /std/Process/exit(3); …` is neither — an exit is an `Io`, a description, which is built here and performed only where it is bound into the program.
+                // A binding is a kept slot: a value is erased once and bound, and a proof or a type is bound to its stand-in without being computed (see `kept_operand`). `let _ = /std/Proc/exit(3); …` is neither — an exit is an `Io`, a description, which is built here and performed only where it is bound into the program.
                 let outcome = self.kept_operand(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.bind(&name, &type_, &value);

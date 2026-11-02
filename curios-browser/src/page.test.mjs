@@ -194,8 +194,8 @@ test("the program's arguments are its name, then each arg= of the query, percent
   const root = tree(t, {
     "app/curios.toml": 'compiler = "0.0.0"\nname = "app"\n',
     "app/exe.crs": `let main() -> /std/Io({}) =
-    let args = /std/Process/args()!;
-    let _ = /std/Try/run(/std/Io/write(/std/Process/stdout, /std/Bytes/join(x[124], args)))!;
+    let args = /std/Proc/args()!;
+    let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, /std/Bytes/join(x[124], args)))!;
     /std/Io/pure(());
 main()
 `,

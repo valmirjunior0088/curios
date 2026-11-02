@@ -217,7 +217,7 @@ fn a_scalar_crosses_to_a_plugin_and_back() {
         r#"
         foreign double(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -237,7 +237,7 @@ fn a_byte_crosses_to_a_plugin_and_back() {
         let entry() -> /std/Io({}) =
             let top = flip(0)!;
             let bottom = flip(255)!;
-            let _ = /std/Process/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+            let _ = /std/Proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#,
@@ -255,7 +255,7 @@ fn a_plugin_byte_past_255_is_refused() {
         r#"
         foreign bump(Byte) -> Byte;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, bump(255)!)!;
+            let _ = /std/Proc/exit(@{}, bump(255)!)!;
             /std/Io/pure(());
         entry()
         "#,
@@ -278,7 +278,7 @@ fn a_byte_string_crosses_through_the_plugins_memory() {
         let entry() -> /std/Io({}) =
             let answered = echo(/std/Str/to_bytes("curios"))!;
             let matched = /std/Bytes/eql(answered, /std/Str/to_bytes("curios"));
-            let _ = /std/Process/exit(@{}, match matched | true => 9 | false => 1 end)!;
+            let _ = /std/Proc/exit(@{}, match matched | true => 9 | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#,
@@ -297,7 +297,7 @@ fn a_declaration_nothing_answers_is_refused_where_a_program_reaches_it() {
         foreign double(Nat) -> Nat;
         foreign unclaimed(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte((double(21)! + unclaimed(1)!) % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte((double(21)! + unclaimed(1)!) % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -319,7 +319,7 @@ fn a_declaration_nothing_reaches_asks_for_no_implementation() {
         foreign double(Nat) -> Nat;
         foreign unclaimed(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -337,7 +337,7 @@ fn an_export_of_another_type_is_refused_before_the_program_runs() {
         r#"
         foreign flip(Byte) -> Byte;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, flip(0)!)!;
+            let _ = /std/Proc/exit(@{}, flip(0)!)!;
             /std/Io/pure(());
         entry()
         "#,
@@ -360,7 +360,7 @@ fn a_claim_on_a_missing_export_is_refused_listing_what_there_is() {
         r#"
         foreign double(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -383,7 +383,7 @@ fn a_nat_answered_with_every_bit_set_is_read_unsigned() {
         foreign ones() -> Nat;
         let entry() -> /std/Io({}) =
             let answered = ones()!;
-            let _ = /std/Process/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
+            let _ = /std/Proc/exit(@{}, match answered == 18446744073709551615 | true => 9 | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#,
@@ -402,7 +402,7 @@ fn a_declaration_two_modules_claim_is_refused() {
         r#"
         foreign double(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -423,7 +423,7 @@ fn a_modules_trap_names_the_module_the_export_and_the_cause() {
         r#"
         foreign boom() -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(boom()! % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(boom()! % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -444,7 +444,7 @@ fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
         r#"
         foreign far() -> Bytes;
         let entry() -> /std/Io({}) =
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -468,7 +468,7 @@ fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
         let entry() -> /std/Io({}) =
             let numbers = List/range(0, 2000000);
             let walked = List/traverse(numbers, (n: Nat) => match n == 1999999 | true => spin() | false => Io/pure(n) end)!;
-            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
             /std/Io/pure(());
         entry()
         "#,

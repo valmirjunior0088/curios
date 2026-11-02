@@ -1,6 +1,6 @@
 -- The control for `rng_state.crs`: the same LCG sum with the seed threaded as an ordinary parameter. Identical arithmetic, identical output, no monad.
 -- N is read from the command line; output is the sum mod 1000003.
-use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
 let run(k: Nat, s: Nat, acc: Nat) -> Nat =
     match k
@@ -14,7 +14,7 @@ let total(n: Nat) -> Nat =
     run(n, 1, 0);
 
 let execute() -> Try(Io, Str, {}) =
-    let arguments = Process/args()!;
+    let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;

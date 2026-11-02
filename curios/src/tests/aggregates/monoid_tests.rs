@@ -447,7 +447,7 @@ fn empty_bytes_literal_is_the_empty_sequence() {
     assert_eq!(
         run(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Process/stdout, x[../std/Str/to_bytes("ok")]))!;
+    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, x[../std/Str/to_bytes("ok")]))!;
     /std/Io/pure(());
 entry()
 "#),

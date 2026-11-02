@@ -20,7 +20,7 @@ pub induct Stdio: pub Type
 end
 
 --- A program to run, and how to run it: what a child is started from.
-pub struct Process: pub Type {
+pub struct Proc: pub Type {
     program: Str,
     args: List(Str),
     --- The working directory, or the parent's.
@@ -33,8 +33,8 @@ pub struct Process: pub Type {
 }
 
 --- `program` with `args`, inheriting the working directory, the environment and every stream.
-pub let new(program: Str, args: List(Str)) -> Process =
-    Process {
+pub let new(program: Str, args: List(Str)) -> Proc =
+    Proc {
         program = program,
         args = args,
         cwd = Option/none(),
@@ -77,14 +77,14 @@ let exchange(
 
 --- `p` run to its end with `input` written to its standard input, which then ends, and both outputs captured, and how it ended. The input is written while the outputs are read, so neither stalls the other.
 pub let run(
-    p: Process,
+    p: Proc,
     input: Bytes,
 ) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
     Try/scope((s) =>
         Try/bind(
             Child/spawn(
                 s,
-                Process {
+                Proc {
                     ..p,
                     stdin = Stdio/piped(),
                     stdout = Stdio/piped(),
@@ -92,7 +92,7 @@ pub let run(
             (c) => exchange(c, input)));
 
 --- `p` run with its streams as wired, and how it ended.
-pub let status(p: Process) -> Try(Io, Io/Error, Exit) =
+pub let status(p: Proc) -> Try(Io, Io/Error, Exit) =
     Try/scope((s) => Try/bind(Child/spawn(s, p), Child/wait));
 
 --- The process's arguments.

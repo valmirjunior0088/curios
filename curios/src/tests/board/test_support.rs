@@ -1880,31 +1880,31 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
 
 /// The description every fixture below takes apart, and the accepting control: `Io(False)` is built from an exit at a carrier with no constructors, so a program holding a description of a computation that yields `False` compiles and runs. What keeps it from being a proof is that nothing opens it.
 pub(super) const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
-    use /std/{Io, Process};
+    use /std/{Io, Proc};
     use /std/Bool/{False};
 
     induct Empty : pub Type end
 
     pub let forged() -> Io(False) =
-        Io/bind(Process/exit(@Empty, 1), (e : Empty) => Io/pure(match e end));
+        Io/bind(Proc/exit(@Empty, 1), (e : Empty) => Io/pure(match e end));
 
     /std/print("ok")
     "#;
 
 pub(super) const A_DESCRIPTION_IS_NO_EMPTY_TYPE: &str = r#"
-    use /std/{Process};
+    use /std/{Proc};
     use /std/Bool/{False};
 
     induct Empty : pub Type end
 
     let boom() -> False =
-        match Process/exit(@Empty, 1) end;
+        match Proc/exit(@Empty, 1) end;
 
     /std/print("FORGED")
     "#;
 
 pub(super) const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
-    use /std/{Process};
+    use /std/{Proc};
     use /std/Bool/{False};
 
     induct Empty : pub Type end
@@ -1913,13 +1913,13 @@ pub(super) const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
         match e end;
 
     let boom() -> False =
-        absurd(Process/exit(@Empty, 1).0);
+        absurd(Proc/exit(@Empty, 1).0);
 
     /std/print("FORGED")
     "#;
 
 pub(super) const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
-    use /std/{Io, Monad, Process};
+    use /std/{Io, Monad, Proc};
     use /std/Bool/{False};
 
     induct Empty : pub Type end
@@ -1939,7 +1939,7 @@ pub(super) const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
         Monad/lift(a);
 
     let boom() -> False =
-        match carried(Process/exit(@Empty, 1)).held end;
+        match carried(Proc/exit(@Empty, 1)).held end;
 
     /std/print("FORGED")
     "#;

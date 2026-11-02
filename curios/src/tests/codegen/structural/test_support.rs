@@ -13,26 +13,26 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`List/len(/std/Process/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
+// Every fixture takes a runtime taint (`List/len(/std/Proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 //
 // The runtime taint is read inside the entry function; its local annotations share that function's sequencing region.
 
 pub(super) const LCG: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     let loop(k : Nat, x : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(loop(n, 1)));
     entry()
     "#;
 
 pub(super) const TREES: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     induct Tree : Type
     | leaf(Nat)
     | node(Nat, Tree, Tree)
@@ -48,21 +48,21 @@ pub(super) const TREES: &str = r#"
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let d : Nat = taint;
         /std/print(Nat/to_str(sum(build(d, 1))));
     entry()
     "#;
 
 pub(super) const HIGHER_ORDER: &str = r#"
-    use /std/{Nat, Bool, List, Process};
+    use /std/{Nat, Bool, List, Proc};
     let pick(b : Bool) -> (Nat) -> Nat =
         match b : (_) => (Nat) -> Nat
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let f = pick(n <= 0);
         /std/print(Nat/to_str(f(n)));
@@ -70,7 +70,7 @@ pub(super) const HIGHER_ORDER: &str = r#"
     "#;
 
 pub(super) const DIRECT_ESCAPING: &str = r#"
-    use /std/{Nat, Bool, List, Process};
+    use /std/{Nat, Bool, List, Proc};
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
     let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
@@ -79,7 +79,7 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
         | false => (y) => y
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let escaped = select(n <= 0, inc);
         /std/print(Nat/to_str(inc(n) + apply(escaped, n)));
@@ -87,14 +87,14 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
     "#;
 
 pub(super) const FUNCTION_ONLY: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     let down(n : Nat, acc : Nat) -> Nat =
         match n : (_) => Nat
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(down(n, 0)));
     entry()
@@ -102,13 +102,13 @@ pub(super) const FUNCTION_ONLY: &str = r#"
 
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
 pub(super) const MUTUAL_RECURSION: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     let ping(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let start = n <= 0;
         /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end));
@@ -119,7 +119,7 @@ pub(super) const MUTUAL_RECURSION: &str = r#"
 ///
 /// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, which the fixture stops holding when that constant moves — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets [`a_returned_constructor_is_delivered_as_its_fields`] state that the callee is a different function from its callers instead of merely that some function exists.
 pub(super) const SPLIT_RETURN: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     induct Step : Type
     | more(Nat, Nat, Nat)
     | done(Nat, Nat)
@@ -144,7 +144,7 @@ pub(super) const SPLIT_RETURN: &str = r#"
         | done(r, s) => (r * 3 + s) % 40009
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(first(n) + second(n)));
     entry()
@@ -158,7 +158,7 @@ pub(super) const SPLIT_RETURN: &str = r#"
 ///
 /// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See [`a_returned_closure_every_caller_applies_is_absorbed`].
 pub(super) const UNCURRY: &str = r#"
-    use /std/{Nat, List, Process};
+    use /std/{Nat, List, Proc};
     let walk(n : Nat) -> (Nat) -> Nat =
         match n : (_) => (Nat) -> Nat
         | 0 => (s) => (s * 7 + 13) % 30011
@@ -169,7 +169,7 @@ pub(super) const UNCURRY: &str = r#"
             walk(m)(c)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(walk(n)(1)));
     entry()
@@ -177,7 +177,7 @@ pub(super) const UNCURRY: &str = r#"
 
 /// [`UNCURRY`]'s admissible shape with one difference: the caller applies the returned closure once *and* captures it in a lambda defined below the application, which escapes into a `List/map` so it is neither inlined nor dead. `mk` is recursive and `n` tainted so nothing folds the closure away, every return edge carries a closure, and the direct application is the resume's only *visible* use.
 pub(super) const UNCURRY_CAPTURED: &str = r#"
-    use /std/{Nat, List, Str, Process};
+    use /std/{Nat, List, Str, Proc};
     let mk(n : Nat) -> (Nat) -> Nat =
         match n : (_) => (Nat) -> Nat
         | 0 => (m) => m
@@ -187,7 +187,7 @@ pub(super) const UNCURRY_CAPTURED: &str = r#"
             (m) => f(m) + w
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let c = mk(n);
         let v = c(2);
@@ -215,7 +215,7 @@ pub(super) const UNCURRY_THROUGH_A_CALL: &str = r#"
 
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
 pub(super) const LOOPED_PICK: &str = r#"
-    use /std/{Nat, Bool, List, Process};
+    use /std/{Nat, Bool, List, Proc};
     let spin(k : Nat, acc : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => acc
@@ -227,7 +227,7 @@ pub(super) const LOOPED_PICK: &str = r#"
             spin(p, f(acc) % 40009)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(spin(n, 1)));
     entry()
@@ -241,7 +241,7 @@ pub(super) const LOOPED_PICK: &str = r#"
 ///
 /// **The demand is `spin`'s own `* +2.0`.** The program's tail follows a host call, so it is reached both where the answer arrives and through the suspension's continuation: `spin` is called from the two, stays a function and returns its result boxed, and a use past that return would leave the slot a reference.
 pub(super) const VARIANT_FILLER: &str = r#"
-    use /std/{Nat, Flt, Option, List, Process};
+    use /std/{Nat, Flt, Option, List, Proc};
     let spin(k : Nat, o : Option(Flt)) -> Flt =
         match k : (_) => Flt
         | 0 => Option/unwrap_or(o, +0.25) * +2.0
@@ -254,7 +254,7 @@ pub(super) const VARIANT_FILLER: &str = r#"
             spin(p, next)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint * 4 + 4;
         /std/print(Flt/to_str(spin(n, Option/none())));
     entry()
@@ -262,21 +262,21 @@ pub(super) const VARIANT_FILLER: &str = r#"
 
 /// A loop that reads two float literals in registers, seeded by a float its own entry computes so its parameter is held in a register. `j % 7919` puts a small `Nat` the loop alone holds into it, the needle that finds it: a float literal's own text also stands in its global's initializer, outside every loop.
 pub(super) const FLOAT_LITERAL_LOOP: &str = r#"
-    use /std/{Nat, Flt, List, Process};
+    use /std/{Nat, Flt, List, Proc};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
         | 0 => acc
         | j + 1 => go(acc * +1.25 + Nat/to_flt(j % 7919) * +0.375, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         /std/print(Flt/to_str(go(Nat/to_flt(taint), taint + 10)));
     entry()
     "#;
 
 /// A loop seeded by its function's own float parameter. `spin` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function, with `go` contified into it and seeded by `x`; `j % 7919` puts a small `Nat` the loop alone holds into it.
 pub(super) const KNOWN_PARAMETER_SEED: &str = r#"
-    use /std/{Flt, Nat, List, Str, Process};
+    use /std/{Flt, Nat, List, Str, Proc};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
         | 0 => acc
@@ -290,14 +290,14 @@ pub(super) const KNOWN_PARAMETER_SEED: &str = r#"
         let e = d * +0.5 + d * +0.25 + +1.0;
         e * +0.5 + e * +0.25 + +1.0;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         /std/print(Str/join(" | ", [Flt/to_str(spin(Nat/to_flt(taint) * +0.001, taint + 10)), Flt/to_str(spin(+0.002, taint + 20))]));
     entry()
     "#;
 
 /// A loop seeded by a call's result. `base` is called from two places with values the input decides, and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function and `seed` arrives as what it hands back.
 pub(super) const CALL_RESULT_SEED: &str = r#"
-    use /std/{Flt, Nat, List, Str, Process};
+    use /std/{Flt, Nat, List, Str, Proc};
     let base(x : Flt) -> Flt =
         let b = x * +0.5 + x * +0.25 + +1.0;
         let c = b * +0.5 + b * +0.25 + +1.0;
@@ -310,7 +310,7 @@ pub(super) const CALL_RESULT_SEED: &str = r#"
         | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let seed = base(Nat/to_flt(taint) * +0.001);
         let other = base(Nat/to_flt(taint) * +0.002);
         /std/print(Str/join(" | ", [Flt/to_str(go(seed, taint + 10)), Flt/to_str(other)]));
@@ -319,7 +319,7 @@ pub(super) const CALL_RESULT_SEED: &str = r#"
 
 /// A step function over a two-float structure, called once a round from a loop. `step` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function: the known-function worker takes its structures as their four fields, and the return protocol hands its answer back as two values. `j % 7919` puts a small `Nat` the loop alone holds into it.
 pub(super) const PAIR_STEP: &str = r#"
-    use /std/{Flt, Nat, List, Str, Process};
+    use /std/{Flt, Nat, List, Str, Proc};
     struct Vec2: Type { x: Flt, y: Flt }
     let step(p : Vec2, v : Vec2, dt : Flt) -> Vec2 =
         let a = p.x + v.x * dt;
@@ -335,7 +335,7 @@ pub(super) const PAIR_STEP: &str = r#"
         | j + 1 => run(step(p, v, Nat/to_flt(j % 7919) * +0.01), v, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let t = Nat/to_flt(taint);
         let r = run(Vec2 { x = t, y = t * +0.5 }, Vec2 { x = +1.0, y = t }, taint + 10);
         let s = step(Vec2 { x = t * +2.0, y = t }, Vec2 { x = t, y = t }, t);
@@ -345,7 +345,7 @@ pub(super) const PAIR_STEP: &str = r#"
 
 /// A float computed in the entry seeds a loop there and is captured by a closure that escapes into a list, whose loop it seeds too. `inner` and `outer` are each called once, so each is contified where it is called: `outer` into the entry, `inner` into the closure's body, which reads `seed` as a value free in it. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
 pub(super) const CAPTURED_FLOAT: &str = r#"
-    use /std/{Flt, Nat, List, Str, Process, Option};
+    use /std/{Flt, Nat, List, Str, Proc, Option};
     let inner(acc : Flt, k : Nat) -> Flt =
         match k
         | 0 => acc
@@ -357,7 +357,7 @@ pub(super) const CAPTURED_FLOAT: &str = r#"
         | j + 1 => outer(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let seed = Nat/to_flt(taint) * +0.001;
         let warp = (n : Nat) => inner(seed, n);
         let fs : List((Nat) -> Flt) = [warp, (m : Nat) => seed * Nat/to_flt(m)];
@@ -368,7 +368,7 @@ pub(super) const CAPTURED_FLOAT: &str = r#"
 
 /// Two loops only a stated carrier seeds. `warp` escapes into a list, so its parameter arrives through its closure wrapper's uniform signature and seeds `go`'s loop; and the closure called out of the list hands its result back as a reference, which seeds `spin`'s. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
 pub(super) const STATED_SEEDS: &str = r#"
-    use /std/{Flt, Nat, List, Str, Process, Option};
+    use /std/{Flt, Nat, List, Str, Proc, Option};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
         | 0 => acc
@@ -381,7 +381,7 @@ pub(super) const STATED_SEEDS: &str = r#"
         | j + 1 => spin(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let fs : List((Flt) -> Flt) = [warp, (y : Flt) => y * +2.0];
         let f = match List/try_get(fs, taint % 2) | some(g) => g | none() => warp end;
         let seeded = f(Nat/to_flt(taint));
@@ -393,7 +393,7 @@ pub(super) const STATED_SEEDS: &str = r#"
 ///
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.
 pub(super) const SHARED_PAYLOAD: &str = r#"
-    use /std/{Str, Flt, Nat, Result, List, Process};
+    use /std/{Str, Flt, Nat, Result, List, Proc};
     let judged(n : Nat, depth : Nat) -> Result(Str, Flt) =
         match depth
         | 0 =>
@@ -414,14 +414,14 @@ pub(super) const SHARED_PAYLOAD: &str = r#"
         | failure(why) => why
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]));
     entry()
     "#;
 
 /// The same slot met through a parser: `whole` binds a float and answers it after a later step, so the float is `success`'s payload beside the refusal `failure` carries, and here the refusal is built where the join can see it.
 pub(super) const PARSED_FLOAT: &str = r#"
-    use /std/{Str, Flt, Parse, Nat, Char, List, Process};
+    use /std/{Str, Flt, Parse, Nat, Char, List, Proc};
     let digits() -> Parse(Str, Flt) =
         let run = Parse/str/take_while(Char/is_ascii_digit)!;
         Parse/pure(Nat/to_flt(Str/len(run)));
@@ -430,7 +430,7 @@ pub(super) const PARSED_FLOAT: &str = r#"
         let _ = Parse/eof()!;
         Parse/pure(value);
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
         /std/print(match Parse/run(whole(), text) | success(f) => Flt/to_str(f) | failure(_) => "none" end);
     entry()
@@ -438,7 +438,7 @@ pub(super) const PARSED_FLOAT: &str = r#"
 
 /// A value whose type a match computes: `Held(b)` is a float where `b` holds and a string where it does not, so the one name `v` is joined from a float and from a string, and read as a float under one branch only. No variant is involved and no slot is shared: the parameter itself has two types.
 pub(super) const COMPUTED_TYPE: &str = r#"
-    use /std/{Str, Flt, Nat, Bool, List, Process};
+    use /std/{Str, Flt, Nat, Bool, List, Proc};
     let Held(b : Bool) -> Type =
         match b | true => Flt | false => Str end;
     let held(b : Bool, n : Nat) -> Held(b) =
@@ -453,7 +453,7 @@ pub(super) const COMPUTED_TYPE: &str = r#"
             | false => (x) => x
             end)(v);
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]));
     entry()
     "#;
@@ -462,9 +462,9 @@ pub(super) const COMPUTED_TYPE: &str = r#"
 ///
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
 pub(super) const STRING_WALK: &str = r#"
-    use /std/{Nat, Str, Char, List, Process};
+    use /std/{Nat, Str, Char, List, Proc};
     let entry() -> /std/Io({}) =
-        let taint = List/len(Process/args()!);
+        let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let text : Str = Nat/to_str(n);
         /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
@@ -727,7 +727,7 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     set
 }
 
-/// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `/std/Process/args()!`, which drives the taint.
+/// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `/std/Proc/args()!`, which drives the taint.
 pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
     let code = curios_cranelift::compile(&to_bytes(&module))

@@ -15,11 +15,11 @@ fn run_drains_a_real_child_through_the_scheduler() {
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = fill!(
         r#"
-        use /std/{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Process};
+        use /std/{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Proc};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, {}) =
-            let e = Process/run(Process/new("/bin/echo", ["hi"]), x[])!;
-            let c = Process/run(Process/new("/bin/cat", []), Str/to_bytes("fed"))!;
+            let e = Proc/run(Proc/new("/bin/echo", ["hi"]), x[])!;
+            let c = Proc/run(Proc/new("/bin/cat", []), Str/to_bytes("fed"))!;
             let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
             let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
             File/write_all(Path/of_str("${path}"), Str/to_bytes(Str/flatten([first, "|", second])));

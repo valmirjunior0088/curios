@@ -1,7 +1,7 @@
 -- The scan-argument reconstruction removed from the baseline mirror: the cont arm hands `mstep` the parameter it already holds instead of rebuilding it field by field.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Process, Fmt};
+use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Proc, Fmt};
 
 induct MClass: Type
 | ascii()
@@ -89,7 +89,7 @@ let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);
 
 let execute() -> Try(Io, Str, {}) =
-    let arguments = Process/args()!;
+    let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;

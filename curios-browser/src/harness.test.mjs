@@ -99,15 +99,15 @@ main()
 `;
 
 const KEEP = `
-use /std/{Io, Process};
+use /std/{Io, Proc};
 foreign keep(Bytes) -> Bytes;
 foreign poke() -> {};
 let main() -> /std/Try(Io, Io/Error, {}) =
     let b = x[0x61, 0x62, 0x63];
     let r = keep(b)!;
     let _ = poke()!;
-    let _ = Io/write(Process/stdout, b)!;
-    Io/write(Process/stdout, r);
+    let _ = Io/write(Proc/stdout, b)!;
+    Io/write(Proc/stdout, r);
 main()
 `;
 
@@ -461,7 +461,7 @@ test("a program that reads its arguments is refused by the row, which has none t
     `
 use /std/{List, Nat, print};
 let main() -> /std/Io({}) =
-    let args = /std/Process/args()!;
+    let args = /std/Proc/args()!;
     print(Nat/to_str(List/len(args)));
 main()
 `,
@@ -508,7 +508,7 @@ test("an exit ends the run with its code and no word, whatever the code", async 
     const outcome = await execute(`
 let main() -> /std/Io({}) =
     let _ = /std/print("bye")!;
-    /std/Process/exit(@{}, ${code});
+    /std/Proc/exit(@{}, ${code});
 main()
 `);
 
@@ -521,10 +521,10 @@ main()
 
 test("a program that finishes its standard output writes nothing more there, and a print after it ends the program saying why", async () => {
   const { stdout, stderr, exitCode } = await execute(`
-use /std/{Try, Io, Process, print};
+use /std/{Try, Io, Proc, print};
 let main() -> /std/Io({}) =
     let _ = print("before")!;
-    let _ = Try/run(Io/finish(Process/stdout))!;
+    let _ = Try/run(Io/finish(Proc/stdout))!;
     print("after");
 main()
 `);

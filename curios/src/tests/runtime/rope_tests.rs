@@ -68,7 +68,7 @@ fn a_flattening_writes_every_element_where_it_stands() {
             ];
 
         let entry() -> /std/Io({}) =
-            let arguments = /std/Process/args()!;
+            let arguments = /std/Proc/args()!;
             let n =
                 match List/try_get(arguments, 1)
                 | some(bytes) =>
@@ -115,7 +115,7 @@ fn a_run_built_from_a_window_and_read_once_holds_no_room() {
         r#"
         use /std/{Str, Nat, Bytes, List, Io};
         let entry() -> /std/Io({}) =
-            let arguments = /std/Process/args()!;
+            let arguments = /std/Proc/args()!;
             let mib =
                 match List/try_get(arguments, 1)
                 | some(bytes) =>

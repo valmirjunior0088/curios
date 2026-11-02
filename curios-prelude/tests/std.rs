@@ -295,7 +295,7 @@ fn every_conformance_case_segments_through_the_library_as_the_database_states() 
 
 /// What `/std/Char` answers of each scalar read on standard input, one line a scalar.
 const PROPERTIES_PROGRAM: &str = r#"
-use /std/{Nat, Str, Char, Option, Io, Try, Process, Spell, print};
+use /std/{Nat, Str, Char, Option, Io, Try, Proc, Spell, print};
 use /std/Io/{Reader};
 use /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};
 
@@ -307,7 +307,7 @@ let answer(c: Char) -> Str =
         Spell/spell(Char/is_extended_pictographic(c)),
         Spell/spell(Char/is_emoji_presentation(c))]);
 
-let each(r: Reader(Process/Input)) -> Try(Io, Io/Error, {}) =
+let each(r: Reader(Proc/Input)) -> Try(Io, Io/Error, {}) =
     let line = Reader/line_text(r)!;
     match line
     | none() => Try/pure(())
@@ -322,7 +322,7 @@ let each(r: Reader(Process/Input)) -> Try(Io, Io/Error, {}) =
     end;
 
 let main() -> Try(Io, Io/Error, {}) =
-    let r = Reader/new(Process/stdin)!;
+    let r = Reader/new(Proc/stdin)!;
     each(r);
 
 main()

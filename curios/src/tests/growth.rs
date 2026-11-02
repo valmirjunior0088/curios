@@ -457,7 +457,7 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
 /// A whole program: `definitions`, then an entry printing `result` over `a`, the argument count.
 fn program(definitions: &str, result: &str) -> String {
     fill!(
-        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =\n    let a = /std/List/len(/std/Process/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
+        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =\n    let a = /std/List/len(/std/Proc/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
         definitions,
         result,
     )

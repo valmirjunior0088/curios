@@ -116,7 +116,7 @@ const SYS_READERS: &[(&str, &[&str])] = &[
     ("errno", &["internal"]),
     ("open_mode", &["internal"]),
     ("file_kind", &["fs"]),
-    ("stdio_mode", &["Process"]),
+    ("stdio_mode", &["Proc"]),
     ("serial_parity", &["Serial"]),
     ("serial_flow", &["Serial"]),
     ("serial_op", &["Serial"]),

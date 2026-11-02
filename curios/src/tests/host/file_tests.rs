@@ -8,10 +8,10 @@ use {
 #[test]
 fn read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Path, Try, Io, Process};
+        use /std/{File, Path, Try, Io, Proc};
         let entry() -> /std/Io({}) =
             match Try/run(File/read_all(Path/of_str("data.txt")))!
-            | success(contents) => Io/bind(Try/run(Io/write(Process/stdout, contents)), (_) => Io/pure(()))
+            | success(contents) => Io/bind(Try/run(Io/write(Proc/stdout, contents)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -100,13 +100,13 @@ fn a_file_opened_to_write_persists_through_its_scopes_close() {
 #[test]
 fn read_pulls_bytes_inside_the_scope() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Io, Process};
+        use /std/{File, Path, Str, Bytes, Try, Io, Proc};
         let entry() -> /std/Io({}) =
             let bytes = Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let c = Io/read(f, 1024)!;
                 Try/pure(match c | bytes(b, @_) => b | ended() => x[] end))))!;
             match bytes
-            | success(b) => Io/bind(Try/run(Io/write(Process/stdout, b)), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Proc/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -123,7 +123,7 @@ fn read_pulls_bytes_inside_the_scope() {
 #[test]
 fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Io, Process};
+        use /std/{File, Path, Str, Bytes, Try, Io, Proc};
         let program: Try(Io, Io/Error, Bytes) =
             Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let _ = Io/yield()!;
@@ -132,7 +132,7 @@ fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
         let main() -> Io({}) =
             let r = Try/run(program)!;
             match r
-            | success(b) => Io/bind(Try/run(Io/write(Process/stdout, b)), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Proc/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         main()

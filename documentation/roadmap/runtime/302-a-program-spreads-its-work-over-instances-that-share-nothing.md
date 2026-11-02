@@ -30,7 +30,7 @@ Ruled out in the same discussion: a placement primitive a program calls, `place`
 
 ## Open questions
 
-- **The names.** `Task` is `/std/Io/Scope`'s child and `/std/Process` a child process of the operating system, so neither word is free; the concept's name with them.
+- **The names.** `Task` is `/std/Io/Scope`'s child and `/std/Proc` a child process of the operating system, so neither word is free; the concept's name with them.
 - **What an entry may hold.** A witness whose methods need premises: entries allowed only premise-free, or the dictionaries a start site resolved recorded and sent with the start.
 - **How a message wakes its receiver.** A cell is filled on one heap and the host reads none, so an inbox is a handle the host files, and the host table gains its rows: start, send, receive and an exit's report, each stated against [A host operation is a foreign declaration](../../design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md).
 - **What a handle that crosses is.** Moved, so that its sender holds it no more, or shared, and what closing it then means on each side.
