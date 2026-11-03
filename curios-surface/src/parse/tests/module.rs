@@ -51,6 +51,7 @@ fn parse_nested_module() {
             vis_pub: false,
             label: "Inner".into(),
             module: Some(Module::built(vec![TopItem::Let(vec![TopLet {
+                core: CoreHead::default(),
                 doc: None,
                 vis_pub: true,
                 label: "x".into(),

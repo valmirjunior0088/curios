@@ -1,4 +1,4 @@
-//! The decorator `#{…}`: what it attaches to, and that it reads back.
+//! What Core text writes beside a program's grammar: the decorator `#{…}`, what it attaches to, a declaration named by its absolute path, and that each reads back.
 
 use {crate::parse::test_support::*, crate::*};
 
@@ -87,4 +87,70 @@ fn a_decorator_round_trips() {
             "round-trip failed for {source:?}: printed {term}"
         );
     }
+}
+
+/// A declaration's Core head: the module its absolute name lies under, and the decorator before it — before the declaring word for a group's first member and before `and` for a later one.
+#[test]
+fn a_declaration_reads_its_path_and_the_decorator_before_it() {
+    let module = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: Type\n| box()\nend\n"
+        .parse::<Module>()
+        .unwrap();
+    let heads = module
+        .items
+        .iter()
+        .flat_map(TopItem::core_heads)
+        .map(|(core, label)| {
+            let path = core.path.as_ref().map(|path| path.segments().to_vec());
+            let fields = core
+                .fields
+                .iter()
+                .map(|field| field.label.to_string())
+                .collect::<Vec<_>>();
+
+            (path, label.to_string(), fields)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        heads,
+        [
+            (
+                Some(vec!["std".to_string(), "Nat".to_string()]),
+                "double".to_string(),
+                vec!["totality".to_string()]
+            ),
+            (
+                Some(Vec::new()),
+                "Read".to_string(),
+                vec!["proof".to_string()]
+            ),
+            (Some(Vec::new()), "Box".to_string(), Vec::new()),
+        ]
+    );
+}
+
+/// A decorator states the fields of a declaration, so one before an item that declares nothing a decorator could state — a module, an import, an anonymous witness — is refused, and so is a declaring path that is not absolute.
+#[test]
+fn a_decorator_before_no_declaration_is_refused() {
+    for source in [
+        "#{a = b}\nmod m;\n",
+        "#{a = b}\nuse /std/{Nat};\n",
+        "#{a = b}\nsatisfy C(Nat) { f = x }\n",
+        "let a/b : Nat = 1;\n",
+    ] {
+        assert!(source.parse::<Module>().is_err(), "{source:?} was read");
+    }
+}
+
+/// A module whose declarations carry Core heads prints back as the module it was read from.
+#[test]
+fn a_declarations_core_head_round_trips() {
+    let source = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: Type\n| box()\nend\n#{kind = test}\ntest /t = x;\n";
+    let module = source.parse::<Module>().unwrap();
+
+    assert_eq!(
+        module.to_string().parse::<Module>().unwrap(),
+        module,
+        "printed {module}"
+    );
 }

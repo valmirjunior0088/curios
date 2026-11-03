@@ -7,6 +7,7 @@ fn top_let_without_pub() {
     assert_eq!(
         "let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            core: CoreHead::default(),
             doc: None,
             vis_pub: false,
             label: "x".into(),
@@ -23,6 +24,7 @@ fn top_let_with_pub() {
     assert_eq!(
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            core: CoreHead::default(),
             doc: None,
             vis_pub: true,
             label: "x".into(),
@@ -82,6 +84,7 @@ fn top_let_group_mixed_pub() {
         .items,
         vec![TopItem::Let(vec![
             TopLet {
+                core: CoreHead::default(),
                 doc: None,
                 vis_pub: true,
                 label: "id".into(),
@@ -91,6 +94,7 @@ fn top_let_group_mixed_pub() {
                 },
             },
             TopLet {
+                core: CoreHead::default(),
                 doc: None,
                 vis_pub: false,
                 label: "helper".into(),

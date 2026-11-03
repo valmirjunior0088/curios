@@ -19,8 +19,8 @@ use {
     },
     curios_prelude::{std_module::*, with_prelude},
     curios_surface::{
-        Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod,
-        build_rename, display_names,
+        CoreHead, Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet,
+        TopMod, build_rename, display_names,
     },
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
     std::{
@@ -1532,6 +1532,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                         };
                         let declared = |label: String, type_, body| TopLet {
                             doc: None,
+                            core: CoreHead::default(),
                             vis_pub: false,
                             label: Label::from(label),
                             signature: LetSignature::Name {

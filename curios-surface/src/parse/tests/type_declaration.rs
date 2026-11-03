@@ -8,6 +8,7 @@ fn top_inductive_single_variant() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            core: CoreHead::default(),
             doc: None,
             vis_pub: false,
             rep_pub: false,
@@ -31,6 +32,7 @@ fn top_inductive_empty() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            core: CoreHead::default(),
             doc: None,
             vis_pub: false,
             rep_pub: false,

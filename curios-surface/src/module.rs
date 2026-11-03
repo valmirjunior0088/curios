@@ -1,12 +1,12 @@
 use {
     super::{
-        Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature, Name,
-        Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments, parse_file_head,
-        parse_optional_term, parse_program_end, parse_term, parse_top_item, print_module_items,
-        print_term, take_comments,
+        Argument, DecoratorField, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label,
+        LetSignature, Name, Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments,
+        parse_file_head, parse_optional_term, parse_program_end, parse_term, parse_top_item,
+        print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
-    curios_common::{Plicity, Report, Source, Span},
+    curios_common::{Plicity, Qualifier, Report, Source, Span},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
@@ -28,6 +28,22 @@ pub struct Doc {
 impl PartialEq for Doc {
     fn eq(&self, other: &Self) -> bool {
         self.lines == other.lines
+    }
+}
+
+/// What Core text writes in a declaration's head and a program never does: the decorator before it, and the module its absolute name lies under. Empty in a program, whose lowering refuses either.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CoreHead {
+    /// What the decorator before the declaration states of it: before `let` or another declaring word for a group's first member, before `and` for a later one.
+    pub fields: Vec<DecoratorField>,
+    /// The module the declaration's absolute name lies under: `/std/Nat` for `let /std/Nat/add`, the root for `/Read`, and `None` for the label a program declares.
+    pub path: Option<Qualifier>,
+}
+
+impl CoreHead {
+    /// Whether the head writes nothing a program does not.
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty() && self.path.is_none()
     }
 }
 
@@ -114,6 +130,7 @@ impl PartialEq for TopUse {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
     pub doc: Option<Doc>,
+    pub core: CoreHead,
     pub vis_pub: bool,
     pub label: Label,
     pub signature: LetSignature,
@@ -123,6 +140,7 @@ pub struct TopLet {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub doc: Option<Doc>,
+    pub core: CoreHead,
     pub vis_pub: bool,
     pub label: Label,
     pub signature: WireSignature,
@@ -151,6 +169,7 @@ pub struct TopCase {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct {
     pub doc: Option<Doc>,
+    pub core: CoreHead,
     pub vis_pub: bool,
     /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
@@ -177,6 +196,7 @@ pub struct StructField {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
     pub doc: Option<Doc>,
+    pub core: CoreHead,
     pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: Label,
@@ -220,6 +240,7 @@ impl ConceptField {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
     pub doc: Option<Doc>,
+    pub core: CoreHead,
     pub vis_pub: bool,
     /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
@@ -265,6 +286,7 @@ impl PartialEq for TopWitness {
 /// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
+    pub core: CoreHead,
     pub label: Label,
     pub body: Term,
 }
@@ -282,6 +304,23 @@ pub enum TopItem {
     Foreign(TopForeign),
     Test(TopTest),
     Broken(TopBroken),
+}
+
+impl TopItem {
+    /// Each member's Core head beside the label it declares: what Core text writes of a declaration and a program never does.
+    pub fn core_heads(&self) -> Vec<(&CoreHead, &Label)> {
+        match self {
+            TopItem::Let(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
+            TopItem::Induct(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
+            TopItem::Struct(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
+            TopItem::Concept(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
+            TopItem::Foreign(item) => vec![(&item.core, &item.label)],
+            TopItem::Test(item) => vec![(&item.core, &item.label)],
+            TopItem::Mod(_) | TopItem::Use(_) | TopItem::Witness(_) | TopItem::Broken(_) => {
+                Vec::new()
+            }
+        }
+    }
 }
 
 /// An item the parser could not read: what it reported, the text it skipped to resume past it, and the name its head declared where the head parsed that far. Kept in the list rather than beside it so the module is an honest record of the file — every consumer says what it does with one, lowering registers the name so a reference to it resolves and is withheld rather than reported unbound, and nothing that reaches erasure ever holds one. See `Module::parse` for what recovers, and what refuses instead.

@@ -451,16 +451,22 @@ fn parse_operand<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
 /// `#{field = value, …} operand`, committed once `#{` is read: no other form begins with `#`. The operand is an applied atom, so a decorator states the fields of one node and a second decorator on it is written in parentheses.
 fn parse_decorated<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     with_span(
-        take_exact("#{")
-            .and_drop(parse_whitespace)
-            .and_keep(commit(
-                sep_by0_trailing(parse_decorator_field, || parse_literal(","))
-                    .and_drop(parse_literal("}"))
-                    .and(parse_atomic_term),
-            ))
+        parse_decorator
+            .and(commit(parse_atomic_term))
             .map(|(fields, term)| Subterm::Decorated(Decorated { fields, term }).into()),
     )
     .parse(state)
+}
+
+/// `#{field = value, …}`, committed once `#{` is read: what a decorator states, before an operand or a declaration.
+pub(super) fn parse_decorator<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<DecoratorField>> {
+    take_exact("#{")
+        .and_drop(parse_whitespace)
+        .and_keep(commit(
+            sep_by0_trailing(parse_decorator_field, || parse_literal(","))
+                .and_drop(parse_literal("}")),
+        ))
+        .parse(state)
 }
 
 /// One field a decorator states, `label = value`, as a structure's literal states one: the `=` is guarded against `==` and `=>`, as a labelled field's is.

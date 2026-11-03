@@ -285,6 +285,34 @@ pub(super) fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (
     }
 }
 
+/// [`declared`] where a top-level declaration's name stands, which Core text may write as an absolute path: the module the name lies under, `None` for a label, and the label.
+pub(super) fn declared_at<'a, T: 'a>(
+    rest: impl Parser<'a, T>,
+) -> impl Parser<'a, ((Option<Qualifier>, Label), T)> {
+    move |state: ParserState<'a>| {
+        parse_declaring_path
+            .or(parse_declared_label.map(|label| (None, label)))
+            .flat_map(move |(path, label)| {
+                tagging(Some(label.to_string()), rest).map(move |rest| ((path, label), rest))
+            })
+            .parse(state)
+    }
+}
+
+/// `/a/b/c` where a declaration's name stands, Core text's: the module `/a/b` and the label `c`, committed once a `/` begins it, since no label does.
+fn parse_declaring_path<'a>(state: ParserState<'a>) -> Parsed<'a, (Option<Qualifier>, Label)> {
+    look_ahead(take_exact("/"))
+        .and_keep(commit(parse_name.flat_map(|name| match name.leaf_span() {
+            Some(span) if name.is_abs() => {
+                let label = Label::spanned(name.last(), span.clone());
+
+                pure((Some(name.qualifier().without_last()), label)).boxed()
+            }
+            _ => fail("a declaration's path is absolute: `let /std/Nat/add …`").boxed(),
+        })))
+        .parse(state)
+}
+
 fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
     move |state: ParserState<'a>| {
         mark()
