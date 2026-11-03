@@ -53,6 +53,71 @@ fn a_negative_self_occurrence_is_refused() {
     );
 }
 
+/// The same route to `False` with the negative occurrence spelled through an indirection: an identity lambda applied to the family, a `let` bound to it, and the first component of a tuple of it. Each is a shape the walk cannot read as a type former until it has reduced it, and each must leave `Bad` reaching itself at a non-accepting polarity — an occurrence a reduction loses stays at the `Unused` the fixpoint seeds a target at, which admits the declaration outright.
+///
+/// These are the nearest representable neighbours of `a_parameter_named_through_an_instance_is_an_occurrence_positivity_does_not_see`, the ticket `xboard/src/formation.rs` records as retired: an instance names a declaration, so no parameter can be named through one, and a telescope built by hand puts these in its place. The alias cases below exercise the same arm through delta; these exercise it through beta, zeta and iota.
+#[test]
+fn a_negative_occurrence_through_an_indirection_is_refused() {
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = || Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bound = Free::local(2, Some("X"));
+
+    for (label, devoured) in [
+        (
+            "an identity lambda applied to the family",
+            Term::apply(
+                Term::func([(bound, Term::type_ground())], Term::free_var(&bound)),
+                [bad_type()],
+            ),
+        ),
+        (
+            "a `let` bound to the family",
+            Term::let_(
+                &bound,
+                Term::type_ground(),
+                bad_type(),
+                Term::free_var(&bound),
+            ),
+        ),
+        (
+            "the first component of a tuple of the family",
+            Term::proj(Term::tuple([bad_type(), Term::type_ground()]), 0),
+        ),
+    ] {
+        let mut kernel = kernel();
+
+        let mut inducts = BTreeMap::new();
+        inducts.insert(
+            false_name,
+            InductDecl {
+                constructors: Vec::new().into(),
+                ..single_payload(Term::type_ground(), Term::prop())
+            },
+        );
+        inducts.insert(
+            bad_name,
+            single_payload(
+                Term::func_type([(Free::local(1, Some("x")), devoured)], false_type.clone()),
+                Term::type_ground(),
+            ),
+        );
+        for (name, entry) in &inducts {
+            kernel
+                .declare_induct(name, entry)
+                .expect("a name is declared once");
+        }
+
+        let refusal = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+            .expect_err("a negative self-occurrence must be refused however it is spelled");
+        assert!(
+            matches!(&refusal, PositivityRefusal::NotPositive(refusal) if refusal.name == bad_name),
+            "{label}: refused by the rule, at `Bad`: {refusal:?}",
+        );
+    }
+}
+
 /// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name recording nothing would admit the declaration outright. The refusal is the budget's: the alias was never read, so the analysis has no verdict of its own to give.
 #[test]
 fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
