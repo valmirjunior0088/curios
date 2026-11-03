@@ -722,3 +722,91 @@ fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_
         );
     }
 }
+
+/// **A host call's operands stand as the strategy leaves them.**
+///
+/// `whnf` leaves a `Foreign` node whole — it is one of the shapes its loop stops on without entering — and conversion reads it that way: "A host call is its declaration and its operands, and reduction leaves both as they were posed". The machine evaluates every operand before rebuilding the node, which the module documentation defends for *substituted* positions by confluence; a node reduction stands on is not one, and the two evaluators then spell one closed term two ways.
+#[test]
+fn a_host_calls_operands_are_left_as_the_strategy_leaves_them() {
+    let call = Term::foreign(
+        std::sync::Arc::new(curios_abi::ForeignFunction {
+            name: "/probe".to_string(),
+            signature: curios_abi::WireSignature {
+                params: vec![curios_abi::WireType::Nat],
+                returns: curios_abi::WireReturn::Answers(curios_abi::WireResults::single(
+                    curios_abi::WireType::Nat,
+                )),
+            },
+        }),
+        Global::Authored(Qualifier::from(["probe"])),
+        vec![
+            nat_type(),
+            Term::intrinsic(Intrinsic::nat_add(nat(1), nat(2))),
+        ],
+    );
+
+    let mut machined = kernel();
+    let mut strategy = strategy_kernel();
+
+    assert_eq!(
+        machined.reduce(call.clone()),
+        strategy.reduce(call.clone()),
+        "the machine and the strategy disagreed at a plain demand on {call}",
+    );
+}
+
+/// **An operand a fold reads plainly is read plainly under the machine as under the strategy.**
+///
+/// A fold over the empty list is its initial value, which `reduce_intrinsic` reads at the *plain* demand (`reducer.reduce(init)`): a folded recursive call is its own normal form there, so the strategy's answer is the folded call. The machine evaluates every computed operand at [`Demand::Forced`] before the fold runs and serves those values through its `Tap`, which answers `reduce` and `reduce_forced` out of one table — so the fold reads the operand's forced value where it asked for its plain one.
+///
+/// The term is a closed one, so which evaluator takes it is not the caller's choice: the machine's gate decides it, and the machine's own documentation is what this holds — a closed term has one value at a demand, "evaluated by the machine inside an arm and by the recursive strategy outside it, it would reach the same value spelled two ways, and a remembered reduct, or a solution spelled from one, would follow which of the two was asked first".
+#[test]
+fn an_operand_a_fold_reads_plainly_is_not_served_its_forced_value() {
+    let (member, n) = (binder(0, "member"), binder(1, "n"));
+    let (pred, hypothesis) = (binder(2, "pred"), binder(3, "ih"));
+    let (motive_binder, item, acc) = (binder(4, "m"), binder(5, "item"), binder(6, "acc"));
+
+    // `member(n) = 0` for every `n`, by a fold that descends to its zero case.
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive_binder),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::free_var(&hypothesis),
+        ),
+    );
+    let empty = Term::intrinsic(Intrinsic::List {
+        element: nat_type(),
+        items: Vec::new(),
+    });
+    let step = Term::func(
+        [(item, nat_type()), (acc, nat_type())],
+        Term::free_var(&acc),
+    );
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+        [(member, Term::func_type([(n, nat_type())], nat_type()), body)],
+        Term::intrinsic(Intrinsic::list_fold(
+            nat_type(),
+            nat_type(),
+            empty,
+            Term::apply(Term::free_var(&member), [nat(3)]),
+            step,
+        )),
+    )) else {
+        unreachable!("built as a rec")
+    };
+    let term = unfold_rec(rec);
+
+    let mut machined = kernel();
+    let mut strategy = strategy_kernel();
+
+    assert_eq!(
+        machined.reduce(term.clone()),
+        strategy.reduce(term.clone()),
+        "the machine and the strategy disagreed at a plain demand on {term}",
+    );
+}

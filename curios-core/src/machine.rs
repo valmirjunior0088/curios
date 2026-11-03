@@ -39,9 +39,8 @@ use {
         Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term,
         Universes, eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
-    curios_abi::ForeignFunction,
     curios_utilities::Plicity,
-    std::{collections::HashMap, mem, sync::Arc},
+    std::{collections::HashMap, mem},
 };
 
 /// What one machine frame costs when it deepens the stack past its previous peak: a [`Frame`] is a few slots of reducer-owned storage, priced on the buffer row. The native-frame analogue is [`Cost::FRAME`], three orders of magnitude larger, and the gap between the two is what this module exists to stop spending.
@@ -178,8 +177,12 @@ impl ClosedMemo {
         }
     }
 
-    /// Remember `value` as what `key` evaluates to at `demand`, in the life the two give the answer.
+    /// Remember `value` as what `key` evaluates to at `demand`, in the life the two give the answer. A value that is not [`its_own_forced_form`] is remembered nowhere, since [`ClosedMemo::remembered`] reads the plain table for a forced probe too and there is no demand such a value could be filed under safely.
     fn remember(&mut self, key: Term, value: Term, demand: Demand) {
+        if !its_own_forced_form(&value) {
+            return;
+        }
+
         let key = self.key(&key);
         let answers = match lasting(&key) && lasting(&value) {
             true => &mut self.lasting,
@@ -190,6 +193,13 @@ impl ClosedMemo {
             Demand::Forced => answers.forced.insert(key, value),
         };
     }
+}
+
+/// Whether `value`, produced at [`Demand::Whnf`], is its own forced form: true of every weak-head value but a folded recursive spelling, since forcing only unfolds recursive heads.
+///
+/// **One rule, read everywhere a plain answer could reach a forced reader.** The [`ClosedMemo`] files no value this declines, because `remembered` reads the plain table for a forced probe too; a caller reads it to size that write's charge, so nothing is charged for a write that will not happen; and the [`Tap`] reads it to decide whether an operand produced plainly may answer a fold that forces. Stated once because the three are the same fact: a forced reader may be handed a plain answer exactly where forcing would have changed nothing.
+fn its_own_forced_form(value: &Term) -> bool {
+    value.spine_rec_proj().is_none() && !matches!(&**value, Subterm::Rec(_))
 }
 
 /// Whether an answer about `term` can be the definition store's alone: it names no local, no metavariable and no universe metavariable. A host may rewrite a level or unwind a solution in place, and reads a local through its scope, so an answer naming none of them is one no change of scope reaches.
@@ -264,11 +274,6 @@ enum Finish {
     ///
     /// The memo is what keeps a *closed neutral* accumulator linear. A fold whose combining operation is genuinely stuck — byte arithmetic no rule folds, a runtime-only operation — accumulates a neutral chain one link deeper per element, exactly as it does under the hosts; without the memo the machine would re-walk that chain at every element, and a pathological program would price *worse* here than under the strategy this replaces. With it, a chain link evaluates once and every later encounter is one probe.
     Intrinsic { key: Term, intrinsic: Intrinsic },
-    /// Rebuild the inert host call over its evaluated operands.
-    Foreign {
-        function: Arc<ForeignFunction>,
-        declared: Global,
-    },
 }
 
 /// A left-to-right evaluation of a fixed list of terms, then a [`Finish`] over the values.
@@ -339,6 +344,8 @@ enum Frame {
 }
 
 /// The [`Reducer`] a [`Finish::Intrinsic`] hands to [`reduce_intrinsic`]: operand lookups are served from the operands the run just evaluated, so the fold sees them at constant native depth, and anything it conjures beyond them takes the host's ordinary path.
+///
+/// **Produced at the demand a fold reads them by, and served to a forced read only where forcing changes nothing.** The shared folds read most of their operands plainly, so the operands are evaluated at [`Demand::Whnf`]; a plain value is its own forced form for everything but a folded recursive spelling ([`its_own_forced_form`]), and that one shape goes to the host instead. Producing them forced and serving either demand from one table handed a fold the forced value of an operand it asked the plain value of, and a fold over the empty list — which is its initial value, read plainly — then answered that value's forced form where the recursive strategy answers the folded call. Falling through to the host for *every* forced read instead is what cost: a 32-link arithmetic chain exhausted a billion units.
 struct Tap<'a, H: Reducer> {
     host: &'a mut H,
     values: &'a HashMap<Term, Term>,
@@ -353,7 +360,11 @@ impl<H: Reducer> Reducer for Tap<'_, H> {
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        match self.values.get(&term) {
+        match self
+            .values
+            .get(&term)
+            .filter(|value| its_own_forced_form(value))
+        {
             Some(value) => Ok(value.clone()),
             None => self.host.reduce_forced(term),
         }
@@ -610,8 +621,8 @@ impl Machine {
                         written: Vec::new(),
                         done: Vec::with_capacity(count),
                         next: 0,
-                        // The hosts' intrinsic folds force their operands, so operand errors surface here exactly as they do there.
-                        item_demand: Demand::Forced,
+                        // The hosts' intrinsic folds force their operands, so operand errors surface here exactly as they do there. Producing them at the plain demand instead, so that a plain read is served what it asked for, costs what `documentation/roadmap/soundness/000-findings.md` records: a fold that forces then reaches the host, and a 32-link arithmetic chain exhausted a billion units where it spends thousands.
+                        item_demand: Demand::Whnf,
                         catch: false,
                         finish: Finish::Intrinsic {
                             key: Term::from(Subterm::Intrinsic(intrinsic.clone())),
@@ -621,23 +632,10 @@ impl Machine {
                 )
             }
 
-            Subterm::Foreign(function, declared, operands) => {
-                host.spend(Cost::collection(operands.len() as u64))?;
-
-                let count = operands.len();
-                self.args(
-                    host,
-                    Args {
-                        originals: operands,
-                        written: Vec::new(),
-                        done: Vec::with_capacity(count),
-                        next: 0,
-                        item_demand: Demand::Whnf,
-                        catch: false,
-                        finish: Finish::Foreign { function, declared },
-                    },
-                )
-            }
+            // A host call is its declaration and its operands, and reduction leaves both as they were posed — which is how conversion reads one and how the recursive strategy leaves it, its loop having no arm for this node. Running the operands here reduced terms the strategy stands on, so one closed term had two spellings; the confluence this module argues eager evaluation from is about a position a value is *substituted* into, and a node reduction stops on is not one, nothing being substituted and both terms being the final answer.
+            Subterm::Foreign(function, declared, operands) => Ok(Step::Value(Term::from(
+                Subterm::Foreign(function, declared, operands),
+            ))),
 
             Subterm::Instance(instance) => {
                 let universes = instance.universes;
@@ -834,11 +832,8 @@ impl Machine {
             }
 
             Frame::Memo { key, demand } => {
-                // A folded recursive spelling is a weak-head value a *forced* probe must not be served, and a forced probe reads the plain table too — so a rec-shaped value is simply not recorded. Every other weak-head value is its own forced form, since forcing only unfolds recursive heads.
-                let folded = value.spine_rec_proj().is_some() || matches!(&*value, Subterm::Rec(_));
-
-                if !folded {
-                    // One entry of two `Term` handles, on the buffer row, charged before the write.
+                // One entry of two `Term` handles, on the buffer row, charged before the write and only where there will be one — what is recorded at all is [`ClosedMemo::records`]'s, which [`ClosedMemo::remember`] holds to whatever a caller charged.
+                if its_own_forced_form(&value) {
                     host.spend(Cost::buffer(2))?;
                     host.closed_memo().remember(key, value.clone(), demand);
                 }
@@ -936,17 +931,16 @@ impl Machine {
                 };
 
                 let value = key.rebuilt(reduce_intrinsic(&mut tap, &intrinsic)?);
-                // Two entries of two `Term` handles each, on the buffer row, charged before they are made. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand.
-                host.spend(Cost::buffer(4))?;
-                let memo = host.closed_memo();
-                memo.remember(value.clone(), value.clone(), Demand::Whnf);
-                memo.remember(key, value.clone(), Demand::Whnf);
+                // Two entries of two `Term` handles each, on the buffer row, charged before they are made and only where there will be any. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand. A fold whose result is a folded recursive spelling records neither, which the operands being produced at the plain demand now makes reachable.
+                if its_own_forced_form(&value) {
+                    host.spend(Cost::buffer(4))?;
+                    let memo = host.closed_memo();
+                    memo.remember(value.clone(), value.clone(), Demand::Whnf);
+                    memo.remember(key, value.clone(), Demand::Whnf);
+                }
 
                 Ok(Step::Value(value))
             }
-            Finish::Foreign { function, declared } => Ok(Step::Value(Term::from(
-                Subterm::Foreign(function, declared, args.done),
-            ))),
         }
     }
 
