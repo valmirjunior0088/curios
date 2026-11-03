@@ -615,6 +615,15 @@ pub struct Let {
     pub tail: Scope<Many>,
 }
 
+impl Let {
+    /// Whether this block's tail binds one binder per binding, which is what opening it over their values requires.
+    ///
+    /// The count is a fact about a sibling field that nothing here relates it to, so it is asked rather than assumed: a reducer that opened the tail over the wrong number of values would reach `Scope::open`'s `assert!` and abort, where its rule is to stand stuck on every shape it cannot take (`curios-cert`'s README). A block answering `false` is refused where a module enters the kernel (`under_bindings`), so what a reducer meets answering `false` arrived another way.
+    pub fn opens(&self) -> bool {
+        self.tail.arity() == self.bindings.len()
+    }
+}
+
 /// One non-recursive local binding: its declared type and its value.
 ///
 /// A local binding is monomorphic. Universe polymorphism is a property of *declarations*, which are frozen into the prelude archive and re-instantiated by later programs; a local binding has no such use sites, and cumulativity admits the uses a local scheme would serve — for `let id : (@A : Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1` accepts both, and the level order is linear so a sup always exists.
@@ -755,6 +764,13 @@ pub struct Rec {
 }
 
 impl Rec {
+    /// Whether this block's tail binds one binder per member, which is what opening it over them requires — [`Let::opens`] of the other block form, and asked for the same reason.
+    ///
+    /// A tail that *selects* a member needs no opening at all, opening it being the identity ([`Rec::as_proj`]), so a projection is reduced by stepping to the member's body and the count never comes up; the member scopes it steps through are counted at the boundary that counts this one (`check_group`).
+    pub fn opens(&self) -> bool {
+        self.tail.arity() == self.group.length()
+    }
+
     /// The member index this block's tail selects, when it selects one rather than computing something of its own — see [`Term::rec_proj`].
     pub fn as_proj(&self) -> Option<usize> {
         let Subterm::Var(var) = &**self.tail.body() else {

@@ -199,6 +199,8 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             Subterm::Apply(apply) => step_apply(kernel, apply)?,
             Subterm::Proj(proj) => step_proj(kernel, proj)?,
             Subterm::Func(func) => step_func(kernel, func)?,
+            // A block whose tail binds other than one binder per binding does not fire, and is charged nothing: `step_let` opens the tail over one value per binding, which such a block has no reading of.
+            Subterm::Let(let_) if !let_.opens() => Step::Stop(Term::from(Subterm::Let(let_))),
             Subterm::Let(let_) => Step::Continue(step_let(kernel, let_)?),
             Subterm::Instance(instance) => step_instance(kernel, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
@@ -772,13 +774,16 @@ fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => term = whnf(kernel, unfold_rec(rec))?,
+            // A block whose tail binds other than one binder per member strips to nothing, so stripping stops at it as it stops at a projection.
+            Subterm::Rec(rec) if rec.opens() => term = whnf(kernel, unfold_rec(rec))?,
             other => return Ok(other.into()),
         }
     }
 }
 
 /// Open a `rec` group's tail over its members. A pure binder operation: it mints nothing and unfolds no fixed point.
+///
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
 pub(crate) fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();
@@ -815,7 +820,7 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => term = whnf(kernel, unfold_rec(rec))?,
+            Subterm::Rec(rec) if rec.opens() => term = whnf(kernel, unfold_rec(rec))?,
             // An application no unfolding opens is stuck as a `match` on a variable is: kept where the recursion is finished, its group gone from it, and the folded call otherwise.
             Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply.clone())? {
                 Some(unfolded) => term = whnf(kernel, unfolded)?,
@@ -880,7 +885,8 @@ pub(crate) fn unfold_spelling(
     }
 
     match &**term {
-        Subterm::Rec(rec) => Ok(Some(whnf(kernel, unfold_rec(rec.clone()))?)),
+        // A block whose tail binds other than one binder per member has no unfolding to withhold, so there is none to hand back either.
+        Subterm::Rec(rec) if rec.opens() => Ok(Some(whnf(kernel, unfold_rec(rec.clone()))?)),
         Subterm::Apply(apply) => match unfold_rec_apply(kernel, apply.clone())? {
             Some(unfolded) => Ok(Some(whnf(kernel, unfolded)?)),
             None => Ok(None),

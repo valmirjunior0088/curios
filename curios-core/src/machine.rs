@@ -563,6 +563,9 @@ impl Machine {
                 None => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
             },
 
+            // A block whose tail binds other than one binder per binding opens over nothing: it is its own value, and nothing is charged, since nothing was built.
+            Subterm::Let(let_) if !let_.opens() => Ok(Step::Value(Term::from(Subterm::Let(let_)))),
+
             Subterm::Let(Let { bindings, tail }) => {
                 // The kernel's zeta charge: one values vector, a ref vector per binding (triangular), and one substitution pass per binding.
                 let count = bindings.len() as u64;
@@ -585,8 +588,9 @@ impl Machine {
             }
 
             Subterm::Rec(rec) => match demand {
-                // A `rec` block is weak-head normal; only a demand for its value opens the tail.
+                // A `rec` block is weak-head normal; only a demand for its value opens the tail, and a tail that binds other than one binder per member opens over nothing, so the block is its own value at either demand.
                 Demand::Whnf => Ok(Step::Value(Term::from(Subterm::Rec(rec)))),
+                Demand::Forced if !rec.opens() => Ok(Step::Value(Term::from(Subterm::Rec(rec)))),
                 Demand::Forced => Ok(Step::Eval(unfold_rec(rec), Demand::Forced)),
             },
 
@@ -736,8 +740,8 @@ impl Machine {
                 }
 
                 match Term::unwrap_or_clone(value) {
-                    // `expose_rec_tail`: a `rec` block at an application head strips to its tail even under plain reduction.
-                    Subterm::Rec(rec) => {
+                    // `expose_rec_tail`: a `rec` block at an application head strips to its tail even under plain reduction. One whose tail binds other than one binder per member strips to nothing and falls to the stuck application below, as an unsaturated function does.
+                    Subterm::Rec(rec) if rec.opens() => {
                         // The memo frame is already on the stack from this frame's entry, so the re-pushed head carries no key of its own — one record per application, whatever chain of heads it strips through.
                         self.push(
                             host,
@@ -1136,6 +1140,8 @@ impl Machine {
 }
 
 /// Open a `rec` group's tail over its members — a pure binder operation, shared verbatim with both hosts' spelling of the same step.
+///
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
 fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();

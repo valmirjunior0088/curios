@@ -3270,8 +3270,8 @@ impl Convert {
                         _ => self.compare_rec(context, this, that)?,
                     }
                 }
-                (Subterm::Rec(rec), other) => {
-                    // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body.
+                // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body. A block that is no projection and whose tail binds other than one binder per member has neither step, and a comparison with no step left to take identifies nothing.
+                (Subterm::Rec(rec), other) if rec.as_proj().is_some() || rec.opens() => {
                     let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),
@@ -3281,7 +3281,7 @@ impl Convert {
                     self.enqueue(type_, stepped, other.into());
                     true
                 }
-                (other, Subterm::Rec(rec)) => {
+                (other, Subterm::Rec(rec)) if rec.as_proj().is_some() || rec.opens() => {
                     let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),

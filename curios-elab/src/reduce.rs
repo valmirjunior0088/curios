@@ -223,6 +223,8 @@ enum Reduce {
 }
 
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
+///
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
 pub fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
     let members = rec.group.members();
     // The member vector, the ref vector over it, and the opening — one substitution pass per member.
@@ -246,7 +248,8 @@ fn expose_rec_tail(context: &mut Context, mut term: Term) -> Result<Term, Reduce
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => {
+            // A block whose tail binds other than one binder per member strips to nothing, so stripping stops at it as it stops at a projection.
+            Subterm::Rec(rec) if rec.opens() => {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
@@ -353,7 +356,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => {
+            Subterm::Rec(rec) if rec.opens() => {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
@@ -779,6 +782,11 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
 ///
 /// Binding each value as a fresh context definition and opening the tail over those names would copy no value into its uses, but the minted names would stand in reducts where the kernel's copy of the same reduction has the values: two unfoldings of one definition would name its `let`s differently, so every comparison by spelling — a sum's cancellation, a position's peel through a concatenation, a guard's refinement key — would miss terms conversion identifies, and the metavariable solver would have to reify minted names back out of its candidates. Substituting is the kernel's rule, so a reduct is spelled as the kernel spells it. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
+    // A block whose tail binds other than one binder per binding has no reading that opens it, so it stands as it is and is charged nothing: the kernel's reduction and the closed machine's decline it the same way, and a reducer that opened it anyway would abort in `Scope::open` on a count no rule reads.
+    if !let_.opens() {
+        return Ok(Reduce::Break(Subterm::Let(let_).into()));
+    }
+
     // One values vector, and a fresh ref vector at every binding — triangular in the run's length, and charged as the kernel charges it.
     let bindings = let_.bindings.len() as u64;
     context.spend(

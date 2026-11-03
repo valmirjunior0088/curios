@@ -2,7 +2,10 @@
 
 use {
     super::{test_support::*, *},
-    curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term, UniverseParam},
+    curios_core::{
+        Apply, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Rec, RecGroup,
+        RecMemberScopes, Reducer, Scope, Subterm, Term, UniverseParam,
+    },
     curios_utilities::{Plicity, Qualifier},
 };
 
@@ -508,4 +511,54 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
         unfold_rec_apply(&mut kernel, apply),
         Ok(Some(Term::free_var(&value)))
     );
+}
+
+/// A one-member group whose tail binds `binders` of them, which is malformed for every count but one.
+fn group_tailed(binders: usize) -> Term {
+    let (f, g) = (binder(80, "f"), binder(81, "g"));
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(Many(1), &[&f], nat_type()),
+        body: Scope::close(Many(1), &[&f], nat(1)),
+    }]);
+    let closed_over = [&f, &g][..binders].to_vec();
+
+    Term::from(Subterm::Rec(Rec {
+        group,
+        tail: Scope::close(Many(binders), &closed_over, nat(7)),
+    }))
+}
+
+/// A one-binding block whose tail binds `binders` of them.
+fn block_tailed(binders: usize) -> Term {
+    let (x, y) = (binder(82, "x"), binder(83, "y"));
+    let closed_over = [&x, &y][..binders].to_vec();
+
+    Term::from(Subterm::Let(Let {
+        bindings: vec![LetBinding::new(nat_type(), nat(4))],
+        tail: Scope::close(Many(binders), &closed_over, nat(9)),
+    }))
+}
+
+/// A block whose tail binds a count its siblings do not state does not fire: it is its own value, as an application that does not saturate its lambda is.
+///
+/// A `rec` tail's arity is a fact about the members the group holds and a `let` tail's about the bindings its block holds, and nothing in the representation relates either pair — so a reducer handed a block they disagree in would open the tail over the wrong number of terms, which is `Scope::open`'s `assert!` and not a reduct. [`curios-cert`'s README](../../../../curios-cert/README.md) gives reduction the job of taking every shape a caller can hand it, stuck where it cannot fire, and that job is what these hold: the kernel's boundary refuses such a block where a module enters, so this answers for one that reached a reducer another way, and an abort reachable only because another pass refuses first rests on the order of two passes.
+///
+/// The `rec` tail is a constant rather than a member's index on purpose: a tail that selects a member is a projection, whose tail is never opened at all ([`Rec::as_proj`]), so it would exercise nothing.
+#[test]
+fn a_block_whose_tail_binds_other_than_its_siblings_does_not_fire() {
+    let mut kernel = kernel();
+
+    // `force` is where a `rec` tail would be opened, and an application's head is where `expose_rec_tail` would.
+    let block = group_tailed(2);
+    assert_eq!(kernel.reduce_forced(block.clone()), Ok(block.clone()));
+    let applied = Term::apply(block, [nat(2)]);
+    assert_eq!(whnf(&mut kernel, applied.clone()), Ok(applied));
+
+    // Zeta is the `let`'s one rule, so the plain demand reaches it.
+    let run = block_tailed(2);
+    assert_eq!(whnf(&mut kernel, run.clone()), Ok(run));
+
+    // The controls: at the count its siblings state, each block fires.
+    assert_eq!(kernel.reduce_forced(group_tailed(1)), Ok(nat(7)));
+    assert_eq!(whnf(&mut kernel, block_tailed(1)), Ok(nat(9)));
 }
