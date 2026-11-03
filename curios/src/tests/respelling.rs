@@ -172,6 +172,13 @@ const GUARDS: &[Guard] = &[
         dual: Some("10 + c <= b + a"),
         refused: &[],
     },
+    // A bare truncated difference as a whole side, read across by the adjunction: `a - b <= 3` is `a <= b + 3`, and its dual `3 < a - b` is `b + 3 < a`.
+    Guard {
+        guard: "a - b <= 3",
+        respelled: "a <= b + 3",
+        dual: Some("b + 3 < a"),
+        refused: &[],
+    },
     Guard {
         guard: "a == b",
         respelled: "b == a",

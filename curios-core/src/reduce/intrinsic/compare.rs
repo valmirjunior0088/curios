@@ -7,7 +7,7 @@
 use {
     super::{
         compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least, nat_modular,
-        nat_residual, sum_bound,
+        sum_bound,
     },
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side},
@@ -238,7 +238,7 @@ fn residuated(
         if !side.floor.is_zero() {
             continue;
         }
-        let Some((minuend, subtrahend)) = nat_residual(&side.inner) else {
+        let Some((minuend, subtrahend)) = Nat::residual(&side.inner) else {
             continue;
         };
         let sum = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(

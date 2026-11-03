@@ -153,7 +153,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             above: name(&["std", "Nat", "lt", "add_mul_lt"]),
             shift: name(&["std", "Nat", "le", "add_mono_l"]),
             difference: name(&["std", "Nat", "le", "add_sub_cancel"]),
-            truncated: name(&["std", "Nat", "le", "sub_zero"]),
             residual: name(&["std", "Nat", "le", "add_sub"]),
         },
         integer: IntegerSyntax {

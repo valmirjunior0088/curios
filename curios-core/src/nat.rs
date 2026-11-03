@@ -1,11 +1,11 @@
 use {
     super::{
-        Atoms, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term, product_bound, same_atom,
-        sum_bound,
+        Atoms, Declaration, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term,
+        product_bound, same_atom, sum_bound,
     },
     curios_algebra::{
-        Cancelled, Carrier, Combination, Deduction, Monomial, Progress, Recombination, Summand,
-        Wanted, distribute,
+        Cancelled, Carrier, Combination, Deduction, Monomial, Operation, Progress, Recombination,
+        Summand, Wanted, distribute,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -124,6 +124,28 @@ impl Nat {
             }
             _ => (Natural::zero(), term.clone()),
         }
+    }
+
+    /// A reduced term that is a difference, as its minuend and subtrahend — the operation `curios-algebra`'s `Operation::residual_of` declares the residual of the sum — or `None` for any other term. What is decided through it is the adjunction `a - b <= c` iff `a <= b + c`, which holds at every pair of naturals: the comparison asks the sum's verdict through it (`Comparison::through_residual`, held to values in `curios-algebra`), and the linear view moves a bare difference across its comparison by it ([`crate::LinearViews`]).
+    pub(crate) fn residual(term: &Term) -> Option<(Term, Term)> {
+        let Subterm::Intrinsic(intrinsic) = &**term else {
+            return None;
+        };
+        let Declaration::Operation {
+            carrier: Carrier::Natural,
+            operation,
+            operands,
+        } = intrinsic.algebra()
+        else {
+            return None;
+        };
+        if operation.residual_of() != Some(Operation::Sum) {
+            return None;
+        }
+        let [minuend, subtrahend] = operands.as_slice() else {
+            return None;
+        };
+        Some(((*minuend).clone(), (*subtrahend).clone()))
     }
 
     /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor back to the bare `inner` so the rebuilt term lands in the same normal form `decompose` expects.

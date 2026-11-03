@@ -359,6 +359,16 @@ const ROWS: &[Row] = &[
         "a1: Nat, b1: Nat, a2: Nat, b2: Nat, a3: Nat, b3: Nat, a4: Nat, b4: Nat, a5: Nat, b5: Nat, a6: Nat, b6: Nat, a7: Nat, b7: Nat, a8: Nat, b8: Nat, a9: Nat, b9: Nat, a10: Nat, b10: Nat",
         "Holds(a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 <= b1 + (a1 - b1) + b2 + (a2 - b2) + b3 + (a3 - b3) + b4 + (a4 - b4) + b5 + (a5 - b5) + b6 + (a6 - b6) + b7 + (a7 - b7) + b8 + (a8 - b8) + b9 + (a9 - b9) + b10 + (a10 - b10))",
     ),
+    // A bare difference as a whole side is read across by the adjunction, so a bound on one is the bound on its minuend and no case: the truncating case's fact as it stands, a shifted pair, and an upper bound from the sum.
+    claim("a: Nat, b: Nat, p: Holds(a <= b)", "Holds(a - b <= 0)"),
+    claim(
+        "lo: Nat, c: Nat, p: Holds(lo <= c)",
+        "Holds(lo - 0x80 <= c - 0x80)",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a <= b + c)",
+        "Holds(a - b <= c)",
+    ),
     // Division and remainder by a literal, through the quotient and remainder they denote.
     claim(
         "code: Nat, p: Holds(code < 0x800)",

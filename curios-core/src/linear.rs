@@ -21,7 +21,7 @@
 //! 3. **A side bounded by a literal, through an operand it never exceeds, or through the sum a difference is the residual of**: `x % 7 < 7`, `x - y <= x`, `x % 8 - y <= 7` — the bounds oracle, domination, and the adjunction `a - b <= c` iff `a <= b + c` for a difference standing as a whole side, strict or apart only past a positive `c`.
 //! 4. **An equality whose constant the gcd of its coefficients does not divide**, which is false: `2 · x + 1 == 2 · y`.
 //!
-//! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms, and an equality of a sum of naturals against zero read as the order comparison clause 2 makes it — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`, `x != 0` and `0 < x`, `x + y == 0` and `x + y <= 0`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).
+//! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms, and an equality of a sum of naturals against zero read as the order comparison clause 2 makes it — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`, `x != 0` and `0 < x`, `x + y == 0` and `x + y <= 0`; and so are a comparison with a bare truncated difference as one whole side and the comparison the adjunction gives it, where that is exact ([`LinearViews::moved`]): `x - y <= z` and `x <= y + z`, `z < x - y` and `y + z < x`, `x - y == 0` and `x <= y`, `x - y < z + 1` and `x < y + z + 1`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).
 //!
 //! **It decides nothing else about a comparison whose view keeps an atom** — `x + 1 <= y`, `0 < x`, `i + 1 > 0` stay open. Each clause is a held row of `curios`'s law grid, carrier "What conversion decides about a comparison", with its complement a control beside it.
 //!
@@ -57,6 +57,19 @@ impl LinearViews {
 
     /// [`LinearViews::view`], beside the carrier the comparison is at, which a view does not keep: it does not tell a natural from its image. A procedure that writes a proof over the comparison needs the carrier its lemmas are stated at.
     pub fn read(&mut self, comparison: &Intrinsic) -> Option<(Carrier, LinearView)> {
+        self.read_moving(comparison, true)
+    }
+
+    /// [`LinearViews::read`] with a bare difference kept as the atom it is rather than moved across ([`LinearViews::moved`]): how a search over facts reads every one of them, since a fact summed with others stands inside their sum, where the difference is an atom whatever the view made of the fact alone, and a fact *about* the atom — `a - b <= a`, stated for the sums it stands in — would moved state `0 <= b` and bound it by nothing. The moved reading is conversion's, which holds the two spellings one wherever a proof written at one meets the other.
+    pub fn read_atomic(&mut self, comparison: &Intrinsic) -> Option<(Carrier, LinearView)> {
+        self.read_moving(comparison, false)
+    }
+
+    fn read_moving(
+        &mut self,
+        comparison: &Intrinsic,
+        moving: bool,
+    ) -> Option<(Carrier, LinearView)> {
         let Declaration::Operation {
             carrier,
             operation,
@@ -75,15 +88,106 @@ impl LinearViews {
         }
 
         let mut nonnegative = Vec::new();
-        let left = side(&mut self.atoms, &mut nonnegative, carrier, left);
-        let right = side(&mut self.atoms, &mut nonnegative, carrier, right);
+        let moved = match moving {
+            true => self.moved(carrier, operation, left, right, &mut nonnegative),
+            false => None,
+        };
+        let (relation, left, right) = match moved {
+            Some(Across {
+                relation,
+                left,
+                right,
+            }) => (relation, left, right),
+            None => (
+                operation,
+                side(&mut self.atoms, &mut nonnegative, carrier, left),
+                side(&mut self.atoms, &mut nonnegative, carrier, right),
+            ),
+        };
         Some((
             carrier,
             LinearView {
-                relation: operation,
+                relation,
                 form: LinearForm::difference(left, right, nonnegative),
             },
         ))
+    }
+
+    /// A comparison with a bare truncated difference as one whole side, read with the difference moved across as the adjunction `a - b <= c` iff `a <= b + c` allows: the relation and the two sides as combinations over this reader's atoms, or `None` where neither side is such a difference or the move is not exact there. At `Nat` the side is the difference itself, under no floor; at `Int` it is exactly `Nat/to_int` of one, and the other side must be natural-valued — every coefficient positive over atoms read as naturals, the constant not below zero — for the comparison to be the naturals' own.
+    ///
+    /// **Where the move is exact.** With `D` the difference, `O` the other side and `k` its constant: `D <= O` always, and `O < D` always, the adjunction read at either polarity; `D < O` and `O <= D` only where `k` is at least one, since at `a < b` the difference is zero, which is below `O` or at least `O` only where `O` is positive; `D == O` and `D != O` likewise where `k` is at least one, where the difference is exact; and against the literal zero, `D == 0` is `a <= b` and `D != 0` is `b < a`, a difference being zero exactly where its subtrahend reaches its minuend. A floored difference, a difference inside a sum, and a second bare difference across from a moved one stay atoms: `x - y <= z - w` moves the left alone, the right then standing across a side with no constant. The difference's operands are read only once a move is decided, so a side that stays an atom hands out nothing for them.
+    fn moved(
+        &mut self,
+        carrier: Carrier,
+        relation: Operation,
+        left: &Term,
+        right: &Term,
+        nonnegative: &mut Vec<Atom>,
+    ) -> Option<Across> {
+        let zero = Integer::from(0);
+        for (difference, other, lesser) in [(left, right, true), (right, left, false)] {
+            let Some((minuend, subtrahend)) = bare_difference(carrier, difference) else {
+                continue;
+            };
+            let across = side(&mut self.atoms, nonnegative, carrier, other);
+            let natural_valued = across.constant >= zero
+                && across.summands.iter().all(|summand| {
+                    summand.coefficient > zero
+                        && summand
+                            .monomial
+                            .atoms()
+                            .iter()
+                            .all(|atom| nonnegative.contains(atom))
+                });
+            if !natural_valued {
+                continue;
+            }
+            let against_zero = across.summands.is_empty() && across.constant == zero;
+            let positive = across.constant >= Integer::from(1);
+            let moved = match (relation, lesser) {
+                (Operation::AtMost, true) | (Operation::Less, false) => Moved::Across,
+                (Operation::Less, true) | (Operation::AtMost, false) if positive => Moved::Across,
+                (Operation::Equal | Operation::Unequal, _) if positive => Moved::Across,
+                (Operation::Equal, _) if against_zero => Moved::OperandsAtMost,
+                (Operation::Unequal, _) if against_zero => Moved::OperandsBelow,
+                _ => continue,
+            };
+            let minuend = side(&mut self.atoms, nonnegative, Carrier::Natural, &minuend);
+            let subtrahend = side(&mut self.atoms, nonnegative, Carrier::Natural, &subtrahend);
+            return Some(match moved {
+                Moved::Across => {
+                    let constant = minuend.constant.clone() - subtrahend.constant.clone();
+                    let summands = minuend
+                        .summands
+                        .into_iter()
+                        .chain(subtrahend.negated().summands);
+                    let difference = Combination::collect(constant, summands).without_zeros();
+                    match lesser {
+                        true => Across {
+                            relation,
+                            left: difference,
+                            right: across,
+                        },
+                        false => Across {
+                            relation,
+                            left: across,
+                            right: difference,
+                        },
+                    }
+                }
+                Moved::OperandsAtMost => Across {
+                    relation: Operation::AtMost,
+                    left: minuend,
+                    right: subtrahend,
+                },
+                Moved::OperandsBelow => Across {
+                    relation: Operation::Less,
+                    left: subtrahend,
+                    right: minuend,
+                },
+            });
+        }
+        None
     }
 
     /// Two comparisons aligned through their views: one proposition where their views agree once aligned — `x + 1 <= y` and `x < y`, `Nat/to_int(m) < Nat/to_int(n)` and `m < n`, `i < j` and `+0 < j - i`, `x != 0` and `0 < x` — and otherwise both respelled in the one spelling their views give, so a congruence after meets aligned operands: `?n < y + 1` against `x <= y` becomes `?n <= y` against `x <= y`, which solves `?n` as `x`. `None` where either is no `Nat` or `Int` comparison.
@@ -237,6 +341,39 @@ impl LinearView {
     /// The comparison's value where its view is a constant — the case the contract says conversion decides by the view alone; `None` where an atom is left.
     pub fn decided(&self) -> Option<bool> {
         self.form.decided(self.relation)
+    }
+}
+
+/// A comparison with a bare difference read across it ([`LinearViews::moved`]): its relation, and its two sides as combinations over the reader's atoms.
+struct Across {
+    relation: Operation,
+    left: Combination<Integer, ()>,
+    right: Combination<Integer, ()>,
+}
+
+/// How a bare difference is read across its comparison ([`LinearViews::moved`]): the difference as a combination on its own side, or a comparison against zero as the order of the difference's operands.
+enum Moved {
+    Across,
+    /// `a - b == 0`, which is `a <= b`.
+    OperandsAtMost,
+    /// `a - b != 0`, which is `b < a`.
+    OperandsBelow,
+}
+
+/// `term` as the bare truncated difference it is at `carrier` — the difference itself under no floor at `Nat`, and exactly `Nat/to_int` of one at `Int` — as its minuend and subtrahend, or `None`.
+fn bare_difference(carrier: Carrier, term: &Term) -> Option<(Term, Term)> {
+    let natural = match carrier {
+        Carrier::Natural => term,
+        Carrier::Integer => match &**term {
+            Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => natural,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let (floor, inner) = Nat::decompose(natural);
+    match floor.is_zero() {
+        true => Nat::residual(&inner),
+        false => None,
     }
 }
 

@@ -162,3 +162,108 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
         .expect("an `Int` ordering");
     assert_eq!(carrier, curios_algebra::Carrier::Integer);
 }
+
+// A bare truncated difference as one whole side is read across by the adjunction where that is exact, so the comparison and the one the adjunction gives it are one view and agree at every sampled valuation: at most another side, below as the greater side, against the literal zero as the order of its operands, and at any relation across a side at least one. The controls keep the difference an atom — at least, below or equal to a side that may be zero, and a floored difference — so each pair there is two views; and a fact about the atom is read atomic, where the moved reading of `x - y <= x` would hold no atom at all.
+#[test]
+fn a_bare_difference_is_read_across_its_comparison_where_the_adjunction_is_exact() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
+    let difference = Term::intrinsic(Intrinsic::nat_sub(x.clone(), y.clone()));
+    let floored = |term: &Term| Nat::rebuild(1u32.into(), term.clone());
+    let moved = [
+        (
+            Intrinsic::NatLe(difference.clone(), z.clone()),
+            Intrinsic::NatLe(x.clone(), add(y.clone(), z.clone())),
+        ),
+        (
+            Intrinsic::nat_lt(z.clone(), difference.clone()),
+            Intrinsic::nat_lt(add(y.clone(), z.clone()), x.clone()),
+        ),
+        (
+            Intrinsic::nat_eql(difference.clone(), nat(0)),
+            Intrinsic::NatLe(x.clone(), y.clone()),
+        ),
+        (
+            Intrinsic::nat_neq(difference.clone(), nat(0)),
+            Intrinsic::nat_lt(y.clone(), x.clone()),
+        ),
+        (
+            Intrinsic::nat_lt(difference.clone(), floored(&z)),
+            Intrinsic::nat_lt(x.clone(), floored(&add(y.clone(), z.clone()))),
+        ),
+        (
+            Intrinsic::NatLe(floored(&z), difference.clone()),
+            Intrinsic::NatLe(floored(&add(y.clone(), z.clone())), x.clone()),
+        ),
+        (
+            Intrinsic::nat_eql(difference.clone(), floored(&z)),
+            Intrinsic::nat_eql(x.clone(), floored(&add(y.clone(), z.clone()))),
+        ),
+    ];
+    let kept = [
+        (
+            Intrinsic::NatLe(z.clone(), difference.clone()),
+            Intrinsic::NatLe(add(y.clone(), z.clone()), x.clone()),
+        ),
+        (
+            Intrinsic::nat_lt(difference.clone(), z.clone()),
+            Intrinsic::nat_lt(x.clone(), add(y.clone(), z.clone())),
+        ),
+        (
+            Intrinsic::nat_eql(difference.clone(), z.clone()),
+            Intrinsic::nat_eql(x.clone(), add(y.clone(), z.clone())),
+        ),
+        (
+            Intrinsic::NatLe(floored(&difference), z.clone()),
+            Intrinsic::NatLe(floored(&x), add(y.clone(), z.clone())),
+        ),
+    ];
+
+    let symbols = [(0, "x"), (1, "y"), (2, "z")];
+    for (written, across) in &moved {
+        let mut views = LinearViews::default();
+        assert_eq!(
+            views.view(written),
+            views.view(across),
+            "{written:?} is one view with {across:?}"
+        );
+        for a in 0..4 {
+            for b in 0..4 {
+                for c in 0..4 {
+                    let values = [nat(a), nat(b), nat(c)];
+                    assert_eq!(
+                        value_at(written, &symbols, &values),
+                        value_at(across, &symbols, &values),
+                        "{written:?} against {across:?} at x = {a}, y = {b}, z = {c}"
+                    );
+                }
+            }
+        }
+    }
+    for (written, across) in &kept {
+        let mut views = LinearViews::default();
+        assert_ne!(
+            views.view(written),
+            views.view(across),
+            "{written:?} keeps its difference an atom apart from {across:?}"
+        );
+    }
+
+    let within = Intrinsic::NatLe(difference.clone(), x.clone());
+    let mut views = LinearViews::default();
+    let (_, atomic) = views.read_atomic(&within).expect("a `Nat` ordering");
+    assert!(
+        atomic.form().terms.iter().any(|(_, monomial)| monomial
+            .atoms()
+            .iter()
+            .any(|atom| *views.term(atom) == difference)),
+        "read atomic, `x - y <= x` holds the difference as an atom"
+    );
+    let (_, moved) = views.read(&within).expect("a `Nat` ordering");
+    assert!(
+        moved.form().terms.iter().all(|(_, monomial)| monomial
+            .atoms()
+            .iter()
+            .all(|atom| *views.term(atom) != difference)),
+        "read across, it holds none"
+    );
+}

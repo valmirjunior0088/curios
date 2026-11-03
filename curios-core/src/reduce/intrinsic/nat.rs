@@ -218,28 +218,6 @@ pub(super) fn nat_dominators(term: &Term) -> Vec<(Term, bool)> {
     }
 }
 
-/// A reduced term that is a difference, as its minuend and subtrahend — the operation `curios-algebra`'s `Operation::residual_of` declares the residual of the sum — or `None` for any other term. What the comparison decides through it is the adjunction `a - b <= c` iff `a <= b + c`, which holds at every pair of naturals, so no instantiation is listed for it: `Comparison::through_residual` is held to values in `curios-algebra`.
-pub(super) fn nat_residual(term: &Term) -> Option<(Term, Term)> {
-    let Subterm::Intrinsic(intrinsic) = &**term else {
-        return None;
-    };
-    let Declaration::Operation {
-        carrier: Carrier::Natural,
-        operation,
-        operands,
-    } = intrinsic.algebra()
-    else {
-        return None;
-    };
-    if operation.residual_of() != Some(Operation::Sum) {
-        return None;
-    }
-    let [minuend, subtrahend] = operands.as_slice() else {
-        return None;
-    };
-    Some(((*minuend).clone(), (*subtrahend).clone()))
-}
-
 /// A reduced summand read as `coefficient · factor` with a *literal* coefficient, or `None` for a summand that is not such a product — the reading [`Nat::literal_factor`] takes, minus its unit default, for the callers that need to know whether a literal was there.
 fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
     matches!(&**summand, Subterm::Intrinsic(Intrinsic::NatMul(..)))

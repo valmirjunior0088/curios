@@ -465,6 +465,19 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x + y == 0, x + y <= 0)",
             "Eq()(x * y != 0, 0 < x * y)",
             "Eq()(Nat/to_int(m) != +0, +0 < Nat/to_int(m))",
+            // A bare truncated difference as one whole side is read across by the adjunction where that is exact: at most another side, below as the greater side, against the literal zero as the order of its operands, and at any relation across a side at least one — on either side, and through the embedding across a widened natural.
+            "Eq()(x - y <= m, x <= y + m)",
+            "Eq()(m < x - y, y + m < x)",
+            "Eq()(x - y == 0, x <= y)",
+            "Eq()(x - y != 0, y < x)",
+            "Eq()(0 == x - y, x <= y)",
+            "Eq()(x - y < m + 1, x < y + m + 1)",
+            "Eq()(m + 1 <= x - y, y + m + 1 <= x)",
+            "Eq()(x - y == m + 1, x == y + m + 1)",
+            "Eq()(x - y != m + 1, x != y + m + 1)",
+            "Eq()(x - y <= Nat/and(x, y) - m, x <= y + (Nat/and(x, y) - m))",
+            "Eq()(Nat/to_int(x - y) <= Nat/to_int(m), Nat/to_int(x) <= Nat/to_int(y) + Nat/to_int(m))",
+            "Eq()(Nat/to_int(x - y) <= +3, Nat/to_int(x) <= Nat/to_int(y) + +3)",
         ],
         refused: &[
             // Controls, and none is a law: an atom of each sign is left (`x = 0, y = 0`, `i = 0, j = 0`); a natural atom with nothing above it may be zero; an `Int` atom may be negative; an operand an `x - y` falls short of only where `y` is positive; constants the gcd divides.
@@ -480,6 +493,12 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x != 1, 1 < x)",
             "Eq()(x == y, x <= y)",
             "Eq()(x != y, x < y)",
+            // Controls for the move, and none is a law: a difference at least a side that may be zero, below one, or equal to one, is not the adjunction's (`m = 0, x = 0, y = 1`); a floored difference is no bare side (`x = 0, y = 1, m = 1`); and across an integer that may be negative the naturals' comparison is not the integers' (`i = -1, x = 0, y = 1`).
+            "Eq()(m <= x - y, y + m <= x)",
+            "Eq()(x - y < m, x < y + m)",
+            "Eq()(x - y == m, x == y + m)",
+            "Eq()((x - y) + 1 <= m, x + 1 <= y + m)",
+            "Eq()(Nat/to_int(x - y) <= i, Nat/to_int(x) <= Nat/to_int(y) + i)",
         ],
     },
     Carrier {

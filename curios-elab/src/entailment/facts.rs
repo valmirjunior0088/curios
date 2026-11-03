@@ -252,7 +252,7 @@ pub struct Split {
     asked: Option<Term>,
     /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
     holds: Vec<Fact>,
-    /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
+    /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0`, proved by `a <= b` since conversion holds the two one, for a `min` or a `max` the other operand.
     fails: Vec<Fact>,
 }
 
@@ -1314,7 +1314,6 @@ impl<'a> Reader<'a> {
         let order = order(context, Carrier::Natural);
         let names = [
             natural.difference,
-            natural.truncated,
             natural.residual,
             order.of_lt,
             order.of_not_le,
@@ -1378,19 +1377,17 @@ impl<'a> Reader<'a> {
         self.equation(context, Carrier::Natural, &summed, a, cancelled, origin)
     }
 
-    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0` by `le/sub_zero`.
+    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0`, stated of the atom and proved by `a <= b` through `lt/of_lt`, which conversion holds to be that very proposition, a bare difference moved across its comparison ([`LinearViews::moved`]).
     fn truncated(&mut self, context: &mut Context, a: &Term, b: &Term) -> Result<(), Error> {
-        let natural = context.syntax().entailment.natural;
         let of_not_le = order(context, Carrier::Natural).of_not_le;
         let below = Term::apply(global(of_not_le), [b.clone(), a.clone(), qed(context)]);
         let guard = Intrinsic::NatLt(a.clone(), b.clone());
         self.admit(context, guard, below.clone(), Origin::Definition)?;
         let of_lt = order(context, Carrier::Natural).of_lt;
         let loosened = Term::apply(global(of_lt), [a.clone(), b.clone(), below]);
-        let zero = Term::apply(global(natural.truncated), [a.clone(), b.clone(), loosened]);
         let subtracted = Term::intrinsic(Intrinsic::NatSub(a.clone(), b.clone()));
         let truncation = Intrinsic::NatLe(subtracted, literal(Carrier::Natural, 0u32));
-        self.admit(context, truncation, zero, Origin::Definition)
+        self.admit(context, truncation, loosened, Origin::Definition)
     }
 
     /// The split on `guard`, with the facts each of its cases adds: opened, or joined to the split already open on a comparison whose arm decides `guard`, its cases exchanged where that arm decides it false ([`answered_guard`]).
@@ -1604,7 +1601,8 @@ impl<'a> Reader<'a> {
             &self.side(context, carrier, left)?,
             &self.side(context, carrier, right)?,
         );
-        let Some((_, view)) = self.views.read(&read) else {
+        // A bare difference is the atom it is, and never moved across ([`LinearViews::read_atomic`]): a proof is summed over the facts as stated, and a difference a fact states bare stands inside the sum, where the view keeps it an atom whatever it did with the fact alone. What is known of the atom is what its cases and `Facts::common` state.
+        let Some((_, view)) = self.views.read_atomic(&read) else {
             return Ok(None);
         };
         let (aligned, form) = view.form().clone().aligned(view.relation());

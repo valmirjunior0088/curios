@@ -53,7 +53,11 @@ pub fn solved_linearly(
         return Ok(false);
     };
     let mut views = LinearViews::default();
-    let Some(view) = views.view(&equation) else {
+    // An equation of a bare truncated difference against zero is read by the view as the order of the difference's operands, `?m - 1 == 0` as `?m <= 1`, which pins no value: only a view still an equation solves.
+    let Some(view) = views
+        .view(&equation)
+        .filter(|view| view.relation() == Operation::Equal)
+    else {
         return Ok(false);
     };
     let form = view.form();
