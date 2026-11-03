@@ -16,9 +16,8 @@ use {
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_erase::{ErasedUnit, Erasures, erase_unit},
-    curios_module::{
-        PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
-    },
+    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude},
+    curios_surface::Translation,
     curios_unit::{Indexed, Record, Unit, framed, packed},
     std::{
         collections::BTreeSet,

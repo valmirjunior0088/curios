@@ -4,9 +4,10 @@
 
 use {
     crate::tests::TOML_DRIVER,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_profile::{Destination, fold, trace},
+    curios_surface::Entrypoint,
 };
 
 /// The stream, kept in memory so the fold reads it back without a file.

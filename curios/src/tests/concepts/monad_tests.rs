@@ -4,8 +4,9 @@ use {
     crate::tests::run,
     curios_common::fill,
     curios_core::Zonked,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_surface::Entrypoint,
 };
 
 // The List witness: bind is concat-map.

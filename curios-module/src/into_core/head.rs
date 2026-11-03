@@ -5,8 +5,8 @@
 //! **A file's heads are a function of its text.** A unit keeps each of its files' heads with the text they were read from ([`Scan`]), and a later lowering of the same sources that reads a file as that text takes them: the file is parsed only where one of its declarations is lowered again.
 
 use {
-    crate::{Label, Module, TopItem, TopUse},
     curios_common::{Report, Source, Span},
+    curios_surface::{Label, Module, TopItem, TopUse},
     std::{rc::Rc, sync::Arc},
 };
 

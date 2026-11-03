@@ -4,6 +4,7 @@ use {
     crate::into_core::test_support::*,
     crate::*,
     curios_common::{Qualifier, RootKind},
+    curios_surface::Entrypoint,
 };
 
 /// Items leave the lowering as they are written, whatever each names: `f` is written before the `T` its annotation names and the `g` another module declares, and no item is moved for another's sake. Which elaborates first is elaboration's to say, and the order they are stored in is the module's.

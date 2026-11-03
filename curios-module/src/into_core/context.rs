@@ -3,8 +3,9 @@ use {
         Consulted, Lookup, PublicInterface, Reach, Scoped, carriers, named, out_of_reach,
         unresolved, visible_binding, visible_child,
     },
-    crate::{Error, Label, Lint, Name, OrderedMap},
+    crate::{Error, Lint, OrderedMap},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
+    curios_surface::{Label, Name},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

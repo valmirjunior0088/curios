@@ -1,6 +1,6 @@
 # curios-parse
 
-The parser combinator DSL behind both the `.crs` surface grammar (`curios-module`) and the WAT parser (`curios-wasm`): single-use parsers that are functions of the input, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
+The parser combinator DSL behind both the `.crs` surface grammar (`curios-surface`) and the WAT parser (`curios-wasm`): single-use parsers that are functions of the input, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
 
 ## Design
 

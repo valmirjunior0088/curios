@@ -121,9 +121,11 @@ fn the_whole_or_nothing_reading_refuses_at_the_first_broken_item() {
 /// A broken last item swallows a program's tail, since a tail begins with no word an anchor could find; the report is the item's, not a term missing at the end of the input.
 #[test]
 fn a_broken_last_item_reports_itself_rather_than_the_missing_tail() {
-    let error = Entrypoint::supplied("<stdin>", "pub let a : Nat = ;\n/std/print(\"\")\n")
-        .err()
-        .expect("the tail was swallowed");
+    let error = Entrypoint::parse(&Source::labelled(
+        "<stdin>",
+        "pub let a : Nat = ;\n/std/print(\"\")\n",
+    ))
+    .expect_err("the tail was swallowed");
 
     assert!(
         error.format().contains("expected a term"),

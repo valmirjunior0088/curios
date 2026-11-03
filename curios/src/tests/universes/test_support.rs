@@ -2,8 +2,9 @@
 
 use {
     curios_core::{Item, Program, Variance},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
+    curios_surface::Entrypoint,
     std::collections::BTreeMap,
 };
 

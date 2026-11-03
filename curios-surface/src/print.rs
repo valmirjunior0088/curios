@@ -1556,7 +1556,7 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
 // What a page shows of a declaration: everything before its body, printed from the same tree and by the same printers the formatter uses, so a signature on a page is the signature in the file. Each takes a reference and clones what it prints, since the printers consume what they are handed and a record is built beside the tree rather than from it.
 
 /// The head of a `let` member: its visibility, name and signature, without the body.
-pub(crate) fn print_let_head(item: &TopLet) -> Printer {
+pub fn print_let_head(item: &TopLet) -> Printer {
     let signature = match &item.signature {
         LetSignature::Name {
             type_: Some(type_), ..
@@ -1587,7 +1587,7 @@ pub(crate) fn print_let_head(item: &TopLet) -> Printer {
 }
 
 /// The head of an `induct` member: its visibility, name, parameters and arity, without the cases.
-pub(crate) fn print_induct_head(item: &TopInduct) -> Printer {
+pub fn print_induct_head(item: &TopInduct) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("induct "),
@@ -1598,7 +1598,7 @@ pub(crate) fn print_induct_head(item: &TopInduct) -> Printer {
 }
 
 /// One constructor as a page lists it: its label, payload and target, without the bar that introduces it in a declaration.
-pub(crate) fn print_case_head(case: &TopCase) -> Printer {
+pub fn print_case_head(case: &TopCase) -> Printer {
     let payload = case
         .payload
         .iter()
@@ -1627,7 +1627,7 @@ pub(crate) fn print_case_head(case: &TopCase) -> Printer {
 /// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces, called once per parameter group — `success(A) -> Result(E, A)`, `cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)` for an indexed family, and `refl(@z: A) -> Eq()(z, z)` where every parameter is hidden.
 ///
 /// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away. Of the family's own parameters it writes the explicit ones, as a signature writes the family, a hidden one being optional in the call that owns it.
-pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
+pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
     let payload = case
         .payload
         .iter()
@@ -1668,7 +1668,7 @@ pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printe
 }
 
 /// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
-pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
+pub fn print_struct_head(item: &TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("struct "),
@@ -1681,7 +1681,7 @@ pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
 }
 
 /// One struct field as a page lists it.
-pub(crate) fn print_struct_field_head(field: &StructField) -> Printer {
+pub fn print_struct_field_head(field: &StructField) -> Printer {
     flat([
         print_plicity(field.plicity),
         print_field(field.param.clone()),
@@ -1689,7 +1689,7 @@ pub(crate) fn print_struct_field_head(field: &StructField) -> Printer {
 }
 
 /// The head of a `concept` member: its visibility, name, parameters and sort, without the fields.
-pub(crate) fn print_concept_head(item: &TopConcept) -> Printer {
+pub fn print_concept_head(item: &TopConcept) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("concept "),
@@ -1702,7 +1702,7 @@ pub(crate) fn print_concept_head(item: &TopConcept) -> Printer {
 }
 
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
-pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
+pub fn print_concept_field_head(field: &ConceptField) -> Printer {
     let Some(label) = &field.label else {
         return flat([pure("use "), print_term(field.type_.clone())]);
     };
@@ -1726,7 +1726,7 @@ pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
 }
 
 /// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.
-pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
+pub fn print_witness_head(item: &TopWitness) -> Printer {
     let params = item
         .params
         .iter()
@@ -1744,12 +1744,12 @@ pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
 }
 
 /// The head of a `test` declaration: the keyword and its name, without the body.
-pub(crate) fn print_test_head(item: &TopTest) -> Printer {
+pub fn print_test_head(item: &TopTest) -> Printer {
     flat([pure("test "), pure(item.label.clone())])
 }
 
 /// The head of a `foreign` declaration, which is the whole of it.
-pub(crate) fn print_foreign_head(item: &TopForeign) -> Printer {
+pub fn print_foreign_head(item: &TopForeign) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("foreign "),

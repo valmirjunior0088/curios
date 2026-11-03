@@ -20,7 +20,7 @@ fn an_entry_declares_what_its_mod_chain_reaches() {
         ],
     );
     let (entrypoint, loader, _) =
-        Entrypoint::opened(&root.join("serve.crs")).expect("the entry parses");
+        open_entrypoint(&root.join("serve.crs")).expect("the entry parses");
     let declares = |qualifier: Qualifier| {
         loader
             .entry_declares(&entrypoint.module.items, &qualifier)
@@ -63,7 +63,7 @@ fn the_declared_files_are_what_the_mod_chains_reach() {
     );
 
     let (entrypoint, loader, _) =
-        Entrypoint::opened(&root.join("serve.crs")).expect("the entry parses");
+        open_entrypoint(&root.join("serve.crs")).expect("the entry parses");
     assert_eq!(
         loader
             .entry_declared_files(&entrypoint.module.items)

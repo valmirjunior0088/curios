@@ -1,9 +1,9 @@
 use {
     super::{
-        Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature,
-        LoadError, Name, RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam,
-        clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
-        parse_top_item, parsed, print_module_items, print_term, take_comments,
+        Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature, Name,
+        Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments, parse_file_head,
+        parse_optional_term, parse_program_end, parse_term, parse_top_item, print_module_items,
+        print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_common::{Plicity, Report, Source, Span},
@@ -31,7 +31,7 @@ impl PartialEq for Doc {
     }
 }
 
-/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`]. The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`. The documentation comment above a `mod` documents the module it declares, which is the one place a module's prose lives.
+/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active `RootSource` (`curios-module`). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`. The documentation comment above a `mod` documents the module it declares, which is the one place a module's prose lives.
 #[derive(Debug, Clone)]
 pub struct TopMod {
     pub doc: Option<Doc>,
@@ -60,7 +60,7 @@ pub enum GroupItem {
 }
 
 impl GroupItem {
-    pub(crate) fn label(&self) -> &Label {
+    pub fn label(&self) -> &Label {
         match self {
             GroupItem::Mod(label) | GroupItem::Let(label) | GroupItem::Both(label) => label,
         }
@@ -69,7 +69,7 @@ impl GroupItem {
 
 impl TopUse {
     /// Place this declaration in `source` — see [`Name::rebase`].
-    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+    pub fn rebase(&mut self, source: &Arc<Source>) {
         if let Some(span) = &mut self.span {
             span.source = Arc::clone(source);
         }
@@ -204,7 +204,7 @@ impl ConceptField {
     }
 
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
-    pub(crate) fn desugared_type(&self) -> Term {
+    pub fn desugared_type(&self) -> Term {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
                 params: params.clone(),
@@ -385,7 +385,7 @@ fn into_module(recovered: Vec<Recovered<TopItem>>) -> Module {
     Module { items, spans }
 }
 
-/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and the flat items leave the lowering in it. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
+/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and the flat items leave the lowering in it. Parsed via `FromStr`, loaded from disk through `curios-module`'s `RootSource`, or built synthetically (the embedded `sys` prelude).
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<TopItem>,
@@ -453,7 +453,7 @@ fn parse_items_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 
 impl Module {
     /// The compilation's reading of a module: an item the parser could not read is kept as [`TopItem::Broken`] and parsing resumes at the next item, so one mistake costs one item's diagnosis rather than the file's. `str::parse` is the other reading — whole or nothing, refusing at the first broken item with that item's own error — for a fixture, a header a package reads to learn what it declares, and the formatter, none of which may act on a file it could not read whole.
-    pub(crate) fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
+    pub fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(module, _)| module)
     }
 
@@ -478,12 +478,7 @@ impl Module {
         Ok((module.trimmed(&comments), comments))
     }
 
-    /// Read and parse a standalone module from the disk, through the thread's parse memo as every file-backed module is read ([`RootSource`]): `curios-package` reads a library's header with it to learn what the library declares, and the compilation that reads the same text afterwards parses nothing.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
-        parsed(path.as_ref(), None).map(|(module, _)| module)
-    }
-
-    /// [`Module::from_path`] with `text` standing in for what `path` holds — an editor's unsaved buffer.
+    /// What `curios-module`'s `read_module` reads, with `text` standing in for what `path` holds — an editor's unsaved buffer.
     pub fn overlaid(path: &Path, text: &str) -> Result<Self, ParserError> {
         Self::parse(&Source::held(path, text))
     }
@@ -503,7 +498,7 @@ impl fmt::Display for Module {
     }
 }
 
-/// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]. It carries no type: the grammar has no position for one, and what an entry is judged at is whoever compiles it's to state.
+/// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or read from a file by `curios-module`'s `read_entrypoint`. It carries no type: the grammar has no position for one, and what an entry is judged at is whoever compiles it's to state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
     pub module: Module,
@@ -518,7 +513,7 @@ impl Entrypoint {
 
 impl Entrypoint {
     /// The compilation's reading of a program, recovering past a broken item as [`Module::parse`] does. A broken item that stands last swallows the tail, since a tail begins with no word an anchor could find; the tail's absence is then that item's fault and reported as it, rather than as a term missing at the end of the input.
-    fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
+    pub fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(entrypoint, _)| entrypoint)
     }
 
@@ -609,36 +604,6 @@ impl Form {
 }
 
 impl Entrypoint {
-    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`] so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`] the caller pairs it with.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
-        Self::sourced(path).map(|(entrypoint, _)| entrypoint)
-    }
-
-    /// [`from_path`](Self::from_path), handing back the text that was parsed as well as what it parsed to.
-    fn sourced(path: impl AsRef<Path>) -> Result<(Self, Arc<Source>), LoadError> {
-        let path = path.as_ref();
-        let source = Source::read(path).map_err(|error| LoadError::Read {
-            path: path.into(),
-            error,
-        })?;
-
-        Entrypoint::parse(&source)
-            .map(|entrypoint| (entrypoint, source))
-            .map_err(LoadError::Parse)
-    }
-
-    /// Reads `path` as an entrypoint, paired with the [`RootSource`] the directory it sits in anchors and the text that was parsed — the file is the root of its unit, so `mod util` in `main.crs` reads `util.crs` beside it.
-    ///
-    /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
-    ///
-    /// **The loader logs the entry's own header as read, from the text parsed here.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body — so it is logged where the two are paired (`RootSource::opened`), and a cache that verifies a compilation against what it read finds the entry among the rest. It must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale. The source comes back too, for a caller that files what the whole program compiled to.
-    pub fn opened(path: &Path) -> Result<(Self, RootSource, Arc<Source>), LoadError> {
-        let (entrypoint, source) = Self::sourced(path)?;
-        let loader = RootSource::opened(path, &source);
-
-        Ok((entrypoint, loader, source))
-    }
-
     /// The trivial program `Io/pure(())`, built rather than parsed.
     ///
     /// What a unit with no written entry is compiled through. A library has none, so one is supplied for it, and every policy that does so replaces it with a synthesized tail before anything checks it. It is a program rather than the shortest text an entrypoint parses: `()` has type `{}` and nothing lifts a pure value into `Io`, so such a placeholder would be refused the moment a policy stopped replacing it.
@@ -652,37 +617,6 @@ impl Entrypoint {
                 value: Term::from(Subterm::Tuple(Tuple { fields: Vec::new() })),
             })),
         }
-    }
-
-    /// Parses `text` as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`opened`](Self::opened) for a program that arrived as text rather than as a file. `label` names it in diagnostics, where a file's path would go.
-    ///
-    /// **Nothing resolves because there is nowhere to resolve from.** A root's file-backed modules live in the directory it sits in, and text sits in none, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
-    ///
-    /// The pairing lives here for the reason [`opened`](Self::opened)'s does: which `RootSource` goes with an entrypoint is one answer, not a caller's choice. The source comes back for the same reason too, though nothing verifies a supplied program against it — text that was never on disk cannot go stale, so what a caller has here is the third element of one shape rather than a second one to handle.
-    pub fn supplied(
-        label: &str,
-        text: &str,
-    ) -> Result<(Self, RootSource, Arc<Source>), ParserError> {
-        let source = Source::labelled(label, text);
-        let entrypoint = Self::parse(&source)?;
-
-        Ok((entrypoint, RootSource::none(), source))
-    }
-}
-
-impl Entrypoint {
-    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`] the file would get, so its file-backed `mod` declarations resolve where the saved file's would. The source names `path`, so a diagnostic about it reads as one about the file.
-    ///
-    /// The overlay for the *rest* of the unit is the loader's to carry (`RootSource::with_overlay`); this is the one file the loader never reads, supplied the one way it can be.
-    pub fn overlaid(
-        path: &Path,
-        text: &str,
-    ) -> Result<(Self, RootSource, Arc<Source>), ParserError> {
-        let source = Source::held(path, text);
-        let entrypoint = Self::parse(&source)?;
-        let loader = RootSource::opened(path, &source);
-
-        Ok((entrypoint, loader, source))
     }
 }
 

@@ -4,9 +4,10 @@ use {
     super::*,
     crate::{tests::anf_optm, *},
     curios_anf::{FieldShape, Module},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::Compiled,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
     std::collections::BTreeMap,
 };
 

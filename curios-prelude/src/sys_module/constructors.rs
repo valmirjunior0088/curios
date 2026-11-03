@@ -5,7 +5,7 @@
 use {
     super::{Projection, intrinsic, name, projection},
     curios_common::{Plicity, SyntaxRegistry},
-    curios_module::{
+    curios_surface::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
         TopItem, TopLet, TopMod, TopUse, UseGroup,
     },

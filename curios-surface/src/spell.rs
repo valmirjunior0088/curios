@@ -1,6 +1,6 @@
 //! Resolution in reverse: the name a reader writes to reach a declaration from where they stand.
 //!
-//! It stands beside the resolver because it is the resolver's inverse. Every spelling [`spell`] gives is one the lowering resolves to that declaration from the reader's position, and no shorter one is: a differential over the library puts each to the lowering's own doors (`curios-pipeline`'s `spelling_tests`), so a door resolution gains or loses is one this file is held to.
+//! It is `curios-module`'s resolver run backwards, and stands here, a crate below it, because the translation back to the tree spells every global through it. Every spelling [`spell`] gives is one the lowering resolves to that declaration from the reader's position, and no shorter one is: a differential over the library puts each to the lowering's own doors (`curios-pipeline`'s `spelling_tests`), so a door resolution gains or loses is one this file is held to.
 
 use curios_common::Qualifier;
 

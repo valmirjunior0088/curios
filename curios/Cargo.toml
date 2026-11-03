@@ -22,6 +22,7 @@ curios-wasm = { workspace = true }
 # For the `ffi` rows a compilation harvests and a link is typed by: this crate carries them from the pipeline to the runtime, and names no other part of the wire contract.
 curios-abi = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-common = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }

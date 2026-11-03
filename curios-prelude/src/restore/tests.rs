@@ -13,7 +13,8 @@ use {
     },
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
-    curios_module::{SYNTAX, TopItem},
+    curios_module::SYNTAX,
+    curios_surface::TopItem,
     curios_unit::{Record, Unit, segments},
     std::{
         cell::{Cell, RefCell},
@@ -234,7 +235,7 @@ fn declared_root_modules() -> Vec<String> {
     let header = fs::read_to_string(std_directory().join("lib.crs"))
         .expect("the standard library's header reads");
     let header = header
-        .parse::<curios_module::Module>()
+        .parse::<curios_surface::Module>()
         .unwrap_or_else(|error| panic!("the standard library's header parses: {error:?}"));
 
     header

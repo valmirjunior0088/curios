@@ -34,9 +34,6 @@ use lint::*;
 mod references;
 use references::*;
 
-mod spell;
-pub use spell::*;
-
 mod scoped;
 use scoped::*;
 
@@ -59,11 +56,7 @@ mod reachability;
 use reachability::*;
 
 use {
-    crate::{
-        Apply, Argument, Compiled, Entrypoint, Error, FuncTypeParam, GroupItem, Label,
-        LetSignature, Lint, LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry,
-        Subterm, Term, TopItem, TupleField, UseGroup, func_sugar_type_params, ordered, tree_of,
-    },
+    crate::{Compiled, Error, Lint, LintedBinder, RootSource, ordered, tree_of},
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
     curios_common::{
@@ -71,6 +64,11 @@ use {
         Source, Span, SyntaxRegistry, grown,
     },
     curios_document::Documentation,
+    curios_surface::{
+        Apply, Argument, Entrypoint, FuncTypeParam, GroupItem, Label, LetSignature, Module, Name,
+        StructLit, StructLitEntry, Subterm, Term, TopItem, TupleField, UseGroup,
+        func_sugar_type_params, spell,
+    },
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -556,7 +554,7 @@ impl<'a> Body<'a> {
             Body::File(loaded) => Ok(&loaded.tree()?.items),
             Body::Items(items) => Ok(items),
             Body::Inline(parent, index) => match &parent.items()?[*index] {
-                TopItem::Mod(crate::TopMod {
+                TopItem::Mod(curios_surface::TopMod {
                     module: Some(module),
                     ..
                 }) => Ok(&module.items),

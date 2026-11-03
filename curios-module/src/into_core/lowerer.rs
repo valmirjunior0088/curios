@@ -1,14 +1,15 @@
 use {
     super::{Context, MatchCompiler, SortSite},
-    crate::{
-        Apply, BytesSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
-        Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Literal,
-        Name, NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm,
-        Term, func_sugar_params, func_sugar_type_params,
-    },
+    crate::{Error, Lint, LintedBinder},
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Span, recurse},
     curios_num::Binary,
+    curios_surface::{
+        Apply, BytesSegment, Choose, ChooseTest, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
+        Let, LetBinding, LetGroup, LetSignature, ListEntry, Literal, Name, NumLit, Pattern,
+        PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm, Term, func_sugar_params,
+        func_sugar_type_params,
+    },
     std::{
         cell::{Cell, RefCell},
         collections::{HashMap, HashSet},

@@ -23,7 +23,7 @@ pub struct Name {
 
 impl Name {
     /// Place this name in `source`, the text it was written in: a name read back from a scan lies in the source the scan was stored with, and the file is read again as another that holds the same text.
-    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+    pub fn rebase(&mut self, source: &Arc<Source>) {
         for span in [&mut self.span, &mut self.leaf].into_iter().flatten() {
             span.source = Arc::clone(source);
         }
@@ -43,12 +43,12 @@ impl Name {
         self
     }
 
-    pub(crate) fn span(&self) -> Option<&Span> {
+    pub fn span(&self) -> Option<&Span> {
         self.span.as_ref()
     }
 
     /// Where the last segment alone was written, falling back to the whole path's span when the two were written together.
-    pub(crate) fn leaf_span(&self) -> Option<&Span> {
+    pub fn leaf_span(&self) -> Option<&Span> {
         self.leaf.as_ref().or(self.span.as_ref())
     }
 
@@ -56,11 +56,11 @@ impl Name {
         self.is_abs
     }
 
-    pub(crate) fn qualifier(&self) -> &Qualifier {
+    pub fn qualifier(&self) -> &Qualifier {
         &self.qualifier
     }
 
-    pub(crate) fn with(&self, segment: &str) -> Self {
+    pub fn with(&self, segment: &str) -> Self {
         Self {
             span: self.span.clone(),
             leaf: None,
@@ -70,14 +70,14 @@ impl Name {
     }
 
     /// This name extended by a segment the reader wrote *apart* from it — a `use m/{a}` group member. The path keeps its own span and the segment contributes [`Name::leaf_span`], so a refusal about `a` underlines `a` while one about `m` still underlines `m`.
-    pub(crate) fn with_label(&self, label: &Label) -> Self {
+    pub fn with_label(&self, label: &Label) -> Self {
         Self {
             leaf: label.span().cloned(),
             ..self.with(label)
         }
     }
 
-    pub(crate) fn join(&self) -> String {
+    pub fn join(&self) -> String {
         // A `Name` is a *surface* reference printed back as written: an absolute reference keeps `Qualifier::join`'s leading `/`; a relative one strips it. (Canonical core identities go through `Qualifier::join` directly and are always absolute — this `is_abs`-respecting form is only for surface text.)
         match self.is_abs {
             true => self.qualifier.join(),
@@ -93,7 +93,7 @@ impl Name {
         self.qualifier.head()
     }
 
-    pub(crate) fn last(&self) -> &str {
+    pub fn last(&self) -> &str {
         self.qualifier.last()
     }
 }
@@ -138,7 +138,7 @@ pub struct Label {
 
 impl Label {
     /// Place this label in `source` — see [`Name::rebase`].
-    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+    pub fn rebase(&mut self, source: &Arc<Source>) {
         if let Some(span) = &mut self.span {
             span.source = Arc::clone(source);
         }

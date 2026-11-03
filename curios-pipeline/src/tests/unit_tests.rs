@@ -4,8 +4,9 @@ use {
     super::test_support::*,
     curios_common::{Qualifier, fill},
     curios_core::{Definitions, Global},
-    curios_module::{PreparedText, RootSource, spell},
+    curios_module::{PreparedText, RootSource},
     curios_prelude::with_prelude,
+    curios_surface::spell,
     curios_unit::Unit,
     std::rc::Rc,
 };

@@ -24,8 +24,9 @@ use {
     crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Written},
     curios_common::{Report, Source, Span},
     curios_core::Declared,
-    curios_module::{Formatted, Overlay},
+    curios_module::Overlay,
     curios_package::{Selection, Spelling},
+    curios_surface::Formatted,
     curios_verdict::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{

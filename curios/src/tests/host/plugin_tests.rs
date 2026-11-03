@@ -4,9 +4,10 @@
 
 use {
     crate::tests::run_wasm,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::{DeclaredModule, MockHost, plugin_bindings},
     curios_pipeline::compile_with_prelude,
+    curios_surface::Entrypoint,
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, MemName,
         MemType, Module, NumType, ResultType, SubType, TypeName, ValType, to_bytes,

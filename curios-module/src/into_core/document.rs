@@ -11,17 +11,17 @@ mod tests;
 
 use {
     super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
-    crate::{
-        Doc, Module, TopItem, UseGroup, print_case_head, print_case_result_head,
-        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
-        print_let_head, print_struct_field_head, print_struct_head, print_test_head,
-        print_witness_head,
-    },
     curios_common::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, each_named, render_annotated},
+    curios_surface::{
+        Doc, Module, TopItem, UseGroup, print_case_head, print_case_result_head,
+        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
+        print_let_head, print_struct_field_head, print_struct_head, print_test_head,
+        print_witness_head,
+    },
     std::{
         collections::{HashMap, HashSet},
         path::PathBuf,

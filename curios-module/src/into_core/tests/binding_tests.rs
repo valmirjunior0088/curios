@@ -268,7 +268,7 @@ fn a_test_takes_its_name_among_its_modules_declarations() {
 fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
     // A build passes every test as if it were not written, nested ones included: none is registered and none lowers to an item. The same source tested holds each, in declaration order.
     let entrypoint = "test outer = Type;\nmod Inner\ntest inner = Type;\nend\n()"
-        .parse::<crate::Entrypoint>()
+        .parse::<curios_surface::Entrypoint>()
         .unwrap();
     let lowered = |loader: &crate::RootSource| {
         crate::into_core::into_core_unit(

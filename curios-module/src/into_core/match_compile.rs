@@ -1,10 +1,11 @@
 use {
     super::{Binder, Lowerer, RegionFrame},
-    crate::{
-        BytesPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
+    crate::Error,
+    curios_common::Span,
+    curios_surface::{
+        BytesPattern, Choose, ChooseArm, ChooseTest, ListPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
-    curios_common::Span,
     std::mem,
 };
 

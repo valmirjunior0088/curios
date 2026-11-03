@@ -1,7 +1,8 @@
 use {
     super::{Consulted, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
-    crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
+    crate::{Error, OrderedMap},
     curios_common::{Mount, Persistent, Qualifier, RootKind, nearest},
+    curios_surface::{GroupItem, Name, UseGroup},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,

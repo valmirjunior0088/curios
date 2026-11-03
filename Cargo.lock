@@ -586,6 +586,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
+ "curios-surface",
  "curios-verdict",
  "curios-wasm",
  "curios-wonder",
@@ -788,6 +789,7 @@ dependencies = [
  "curios-browser",
  "curios-module",
  "curios-pipeline",
+ "curios-surface",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",
@@ -807,6 +809,7 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-profile",
+ "curios-surface",
 ]
 
 [[package]]
@@ -842,6 +845,7 @@ version = "0.16.17"
 dependencies = [
  "curios-common",
  "curios-module",
+ "curios-surface",
  "semver",
  "serde",
  "toml",
@@ -875,6 +879,7 @@ dependencies = [
  "curios-module",
  "curios-prelude",
  "curios-profile",
+ "curios-surface",
  "curios-unit",
  "curios-wasm",
 ]
@@ -899,6 +904,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
+ "curios-surface",
  "curios-unicode",
  "curios-unit",
  "curios-verdict",
@@ -915,6 +921,20 @@ dependencies = [
  "curios-common",
  "libc",
  "tracing",
+]
+
+[[package]]
+name = "curios-surface"
+version = "0.16.17"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-common",
+ "curios-core",
+ "curios-num",
+ "curios-parse",
+ "curios-print",
+ "curios-profile",
 ]
 
 [[package]]
@@ -975,6 +995,7 @@ dependencies = [
  "curios-module",
  "curios-package",
  "curios-pipeline",
+ "curios-surface",
  "curios-unit",
  "curios-verdict",
  "curios-wasm",
@@ -2640,6 +2661,7 @@ dependencies = [
  "curios-elab",
  "curios-module",
  "curios-pipeline",
+ "curios-surface",
 ]
 
 [[package]]

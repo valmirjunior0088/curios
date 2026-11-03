@@ -7,8 +7,9 @@
 //! Every file a source reads passes through one of two doors, [`RootSource::read`] for its text and [`RootSource::load`] for its tree, which hold one source for each distinct text of a file per thread and parse it at most once: see [`parsed`].
 
 use {
-    super::{Error, Form, LoadError, Module, TopItem},
+    super::{Error, LoadError},
     curios_common::{Mount, Qualifier, RootKind, Source, is_identifier},
+    curios_surface::{Form, Module, TopItem},
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap},
@@ -59,7 +60,7 @@ enum Unreadable {
 
 /// Where one mount's modules are.
 enum Base {
-    /// Read from disk. `header` is the file the mount's own namespace is declared in — `None` for the entry program, whose header is its [`Entrypoint`](crate::Entrypoint) and so is never read twice — and everything below the prefix reads from `directory`: `<prefix>/a/b` is `<directory>/a/b.crs`.
+    /// Read from disk. `header` is the file the mount's own namespace is declared in — `None` for the entry program, whose header is its [`Entrypoint`](curios_surface::Entrypoint) and so is never read twice — and everything below the prefix reads from `directory`: `<prefix>/a/b` is `<directory>/a/b.crs`.
     Disk {
         header: Option<PathBuf>,
         directory: PathBuf,
@@ -76,7 +77,7 @@ impl RootSource {
 
     /// The entry program written in `header`, its own modules beside it: `mod util` in `<dir>/main.crs` reads `<dir>/util.crs`.
     ///
-    /// `header` is never read — the entry's own body is its [`Entrypoint`](crate::Entrypoint), which the caller already has — so the path is here for the directory it names, and an entrypoint parsed from a string can still be given one.
+    /// `header` is never read — the entry's own body is its [`Entrypoint`](curios_surface::Entrypoint), which the caller already has — so the path is here for the directory it names, and an entrypoint parsed from a string can still be given one.
     pub fn entry(header: &Path) -> Self {
         Self::over(vec![(
             entry_mount(),
@@ -663,7 +664,7 @@ pub(crate) fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Sou
     Ok((tree_of(&source)?, source))
 }
 
-/// Text standing in for files: `path → text`, consulted before the disk by every [`RootSource`] it is handed to, and by the entry opened through [`Entrypoint::overlaid`](crate::Entrypoint::overlaid).
+/// Text standing in for files: `path → text`, consulted before the disk by every [`RootSource`] it is handed to, and by the entry opened through [`overlay_entrypoint`](crate::overlay_entrypoint).
 ///
 /// **One door for every source.** An editor holds documents the disk does not have yet, and a program on standard input has no file at all; both reach the compiler as an overlay rather than as a second way to read, so the path a language server takes is the path the one-shot query is tested on. A read that misses the overlay falls through to the disk unchanged, and a read that hits is recorded exactly as a disk read is — under the path, with the text that was parsed — so what a compilation was verified against stays one list.
 ///

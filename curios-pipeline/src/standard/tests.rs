@@ -15,10 +15,10 @@ use {
     },
     curios_erase::{ErasedUnit, test_support::*},
     curios_module::{
-        Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
-        Translation, UnitSource, into_core_unit, into_core_unit_over,
+        Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
     curios_prelude::{std_module::*, with_prelude},
+    curios_surface::{Label, LetSignature, TopItem, TopLet, TopMod, Translation},
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
     std::{
         cell::RefCell,
@@ -1394,7 +1394,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         .filter(|(_, at)| **at == part)
         .map(|((path, module, text), _)| {
             let tree = text
-                .parse::<curios_module::Module>()
+                .parse::<curios_surface::Module>()
                 .unwrap_or_else(|error| panic!("{} parses: {error:?}", path.display()));
 
             (path, module, tree)
@@ -1436,12 +1436,13 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             .collect::<BTreeMap<_, _>>();
 
         let parsed = |text: &str, owner: Global| {
-            text.parse::<curios_module::Term>().unwrap_or_else(|error| {
-                panic!(
-                    "a term written for {} parses:\n{text}\n{error:?}",
-                    owner.faithful()
-                )
-            })
+            text.parse::<curios_surface::Term>()
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "a term written for {} parses:\n{text}\n{error:?}",
+                        owner.faithful()
+                    )
+                })
         };
         // A term as a report raised in `owner` prints it, settled where its reader stands and read back as the tree it parses to: `None` where the translation declines it.
         let established = Established::over(&[sys.core(), std.core()]);

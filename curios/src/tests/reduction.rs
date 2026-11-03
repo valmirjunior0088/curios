@@ -12,10 +12,11 @@ use {
     super::*,
     curios_common::fill,
     curios_core::{Consumption, Cost},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{
         DEFAULT_BUDGET, recheck_with_prelude, recheck_with_prelude_measured, typecheck_with_prelude,
     },
+    curios_surface::Entrypoint,
     std::time::{Duration, Instant},
 };
 

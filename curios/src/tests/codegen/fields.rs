@@ -3,9 +3,10 @@
 use {
     crate::*,
     curios_cps::{FieldGroup, Intrinsic, Node, ValueExpr},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
 };
 
 /// The loop toggles between two- and three-field tuples, reading their common first field under the matching `Bool` arm. Its host-read first field prevents literal-tag specialization from separating the widths before they merge. Scalar replacement removes the projections and the three-field construction; the result still follows the input on both widths and after several backedges.

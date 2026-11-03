@@ -17,7 +17,8 @@ use {
         Target, module_below, module_of, nearest_manifest, order, reachable,
     },
     curios_common::{Qualifier, RootKind},
-    curios_module::{Entrypoint, Form, Overlay, RootSource, identity},
+    curios_module::{Overlay, RootSource, identity, open_entrypoint, overlay_entrypoint},
+    curios_surface::Form,
     std::path::{Path, PathBuf},
 };
 
@@ -317,7 +318,7 @@ impl Program {
         let Entry::File(entry) = &self.entry else {
             return Ok(Vec::new());
         };
-        let (entrypoint, loader, _) = Entrypoint::opened(entry).map_err(|error| error.format())?;
+        let (entrypoint, loader, _) = open_entrypoint(entry).map_err(|error| error.format())?;
 
         let mut files = vec![entry.clone()];
         files.extend(
@@ -520,8 +521,8 @@ fn declaration(
 /// Whether a `mod` chain from `entry` reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.
 fn entry_declares(entry: &Path, module: &Qualifier, overlay: &Overlay) -> bool {
     let opened = match overlay.get(entry) {
-        Some(text) => Entrypoint::overlaid(entry, text).ok(),
-        None => Entrypoint::opened(entry).ok(),
+        Some(text) => overlay_entrypoint(entry, text).ok(),
+        None => open_entrypoint(entry).ok(),
     };
     let Some((entrypoint, loader, _)) = opened else {
         return true;

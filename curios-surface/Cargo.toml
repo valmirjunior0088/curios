@@ -1,0 +1,22 @@
+[package]
+name = "curios-surface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios surface syntax: the tree a file is read into, its parser, the printer that writes it back as written, the formatter, and the translation of a Core term back to the tree"
+
+[lints]
+workspace = true
+
+[features]
+profile = ["curios-profile/enabled", "curios-parse/profile"]
+
+[dependencies]
+curios-abi = { workspace = true }
+curios-archive = { workspace = true }
+curios-common = { workspace = true }
+curios-core = { workspace = true }
+curios-num = { workspace = true }
+curios-parse = { workspace = true }
+curios-print = { workspace = true }
+curios-profile = { workspace = true }

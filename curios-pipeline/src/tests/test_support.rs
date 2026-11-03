@@ -10,8 +10,9 @@ use {
     curios_core::{Definitions, Enter, Item, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
-    curios_module::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
+    curios_module::{LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
+    curios_surface::Entrypoint,
     curios_unit::{Pack, Predecessors, Unit, packed},
     std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
 };
@@ -164,7 +165,7 @@ pub(crate) fn compile_with_units(
                 prefix,
                 RootKind::Ordinary,
                 source
-                    .parse::<curios_module::Module>()
+                    .parse::<curios_surface::Module>()
                     .expect("a unit parses"),
             );
             modules
@@ -213,7 +214,7 @@ pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
         prefix,
         RootKind::Ordinary,
         source
-            .parse::<curios_module::Module>()
+            .parse::<curios_surface::Module>()
             .expect("a unit parses"),
     );
 

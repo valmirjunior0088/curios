@@ -211,7 +211,7 @@ impl Answer {
 ///
 /// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the kernel to judge. A refusal while the module is being built leaves the kernel nothing to judge.
 pub(crate) fn put_program(source: &str) -> Answer {
-    let entrypoint = match source.parse::<curios_module::Entrypoint>() {
+    let entrypoint = match source.parse::<curios_surface::Entrypoint>() {
         Ok(entrypoint) => entrypoint,
         Err(error) => return Answer::Unbuilt(Refusal::Text(format!("{error:?}"))),
     };

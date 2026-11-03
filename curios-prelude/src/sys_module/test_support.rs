@@ -3,7 +3,8 @@
 use {
     curios_common::{Qualifier, RootKind},
     curios_core::test_support::*,
-    curios_module::{Entrypoint, RootSource, SYNTAX},
+    curios_module::{RootSource, SYNTAX},
+    curios_surface::Entrypoint,
 };
 
 /// The `/std` of [`prelude_fixture`].

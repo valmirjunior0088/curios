@@ -18,6 +18,7 @@ curios-document = { workspace = true }
 # For what a name is declared as and where its declaration's name is written, which `at` and `declarations` answer in the lowering's own terms.
 curios-core = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }
 # For the fate survey `cost` reads: the CPS graph is `curios-cps`'s to walk, so the walk lives there and this crate is one of its consumers. It carries no back end — `curios-pipeline` already depends on it to name `curios_cps::Module` in `Stage`.

@@ -3,9 +3,13 @@
 use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
     curios_common::{Qualifier, Report, Source, Span, is_identifier},
-    curios_module::{Entrypoint, Form, Overlay, PreparedText, RootSource, UnitSource},
+    curios_module::{
+        Overlay, PreparedText, RootSource, UnitSource, open_entrypoint, overlay_entrypoint,
+        supply_entrypoint,
+    },
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
+    curios_surface::{Entrypoint, Form},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -332,11 +336,11 @@ pub(crate) fn open(
 ) -> Result<(Entrypoint, RootSource), Vec<Diagnosis>> {
     let opened = match origin {
         Origin::File(path) => match overlay.get(&path) {
-            Some(text) => Entrypoint::overlaid(&path, text).map_err(|error| error.report()),
-            None => Entrypoint::opened(&path).map_err(|error| error.report()),
+            Some(text) => overlay_entrypoint(&path, text).map_err(|error| error.report()),
+            None => open_entrypoint(&path).map_err(|error| error.report()),
         },
         Origin::Text { label, text } => {
-            Entrypoint::supplied(&label, &text).map_err(|error| error.report())
+            supply_entrypoint(&label, &text).map_err(|error| error.report())
         }
     };
 

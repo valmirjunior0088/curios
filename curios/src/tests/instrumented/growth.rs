@@ -6,9 +6,10 @@ use {
         *,
     },
     curios_core::take_looks,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count},
+    curios_surface::Entrypoint,
 };
 
 /// What one stage did: the instructions retired where the kernel counts them, the nodes its walks looked at, and its trips through the allocator with the bytes they took.

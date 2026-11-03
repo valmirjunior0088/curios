@@ -1,6 +1,6 @@
 //! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder stage`'s rungs are derived from.
 
-use {curios_module::Entrypoint, std::fmt};
+use {curios_surface::Entrypoint, std::fmt};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///

@@ -34,6 +34,7 @@ curios-erase = { workspace = true }
 curios-anf = { workspace = true }
 curios-profile = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }

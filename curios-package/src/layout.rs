@@ -14,7 +14,7 @@ mod tests;
 use {
     crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
     curios_common::{Qualifier, RootKind, is_identifier},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::{RootSource, open_entrypoint},
     std::{
         collections::BTreeMap,
         iter,
@@ -107,7 +107,7 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_module::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
+/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_module::read_module`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let umbrella = umbrella_over(directory)?;
     require_compiler(
@@ -190,7 +190,7 @@ fn one_unit_each(
         });
     let executable_files = package.executables.iter().flat_map(|executable| {
         let entry = directory.join(&executable.path);
-        let modules = Entrypoint::opened(&entry)
+        let modules = open_entrypoint(&entry)
             .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
             .unwrap_or_default();
 

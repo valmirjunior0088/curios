@@ -9,10 +9,11 @@ use {
     curios_abi::ForeignStore,
     curios_browser::page,
     curios_common::{Qualifier, Source},
-    curios_module::{Entrypoint, Form, Overlay, RootSource, UnitSource},
+    curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, HostOps, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, TestRecord},
+    curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
     std::{
@@ -449,7 +450,7 @@ impl TestRun {
 
 /// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused as written as a module where its text is one, rather than as missing the term a program ends in.
 pub fn opened(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    Entrypoint::opened(path).map_err(|error| match fs::read_to_string(path) {
+    open_entrypoint(path).map_err(|error| match fs::read_to_string(path) {
         // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
         Ok(text) if Form::of(path, &text) == Form::Module => {
             CompileError::failure(written_as_a_module(path.display()))
@@ -460,7 +461,7 @@ pub fn opened(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), Comp
 
 /// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file when it is written as a module.
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    Entrypoint::supplied(STDIN_LABEL, text).map_err(|error| {
+    supply_entrypoint(STDIN_LABEL, text).map_err(|error| {
         match Form::of(Path::new(STDIN_LABEL), text) {
             Form::Module => CompileError::failure(written_as_a_module(STDIN_LABEL)),
             Form::Program => CompileError::Failure(vec![error.report()]),

@@ -9,8 +9,9 @@ use {
         Enter, Global, IntrinsicForm, Item, Subterm, Term, Transient, intrinsic_form,
         intrinsic_global,
     },
-    curios_module::{RootSource, SYNTAX, into_core_with_prelude, spell},
+    curios_module::{RootSource, SYNTAX, into_core_with_prelude},
     curios_prelude::with_prelude,
+    curios_surface::spell,
     curios_unit::Predecessors,
     std::{
         collections::{BTreeMap, BTreeSet},

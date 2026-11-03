@@ -10,7 +10,7 @@ use {
     super::{applied, fn_over, intrinsic, name, sort, type_, unit},
     curios_common::{Plicity, Qualifier, SyntaxRegistry},
     curios_core::{Operand, Produced},
-    curios_module::{Intrinsic, Name, Subterm, Term},
+    curios_surface::{Intrinsic, Name, Subterm, Term},
 };
 
 /// What the table says of one node: each parameter's plicity and type, in the parameters' order, and the result.

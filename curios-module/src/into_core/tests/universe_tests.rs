@@ -1,6 +1,9 @@
 //! Universe levels and roles the lowering assigns, cumulativity, and the context a concept's wrappers share.
 
-use {crate::into_core::test_support::*, crate::*, curios_common::Qualifier};
+use {
+    crate::into_core::test_support::*, crate::*, curios_common::Qualifier,
+    curios_surface::Entrypoint,
+};
 
 #[test]
 fn no_items_simple_tail() {

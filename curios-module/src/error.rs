@@ -102,7 +102,7 @@ pub enum Error {
 impl Error {
     /// Whether the refusal is about the *last* segment of the path it was raised for, rather than about the path that reaches it.
     ///
-    /// A `use m/{a, b}` member is written apart from its group's path, so the two halves have separate spans ([`Name::leaf_span`](crate::Name::leaf_span)) and only the refusal knows which one it is talking about: `use /nope/{a}` cannot find `/nope` and `use /std/{nope}` cannot find `nope` in it.
+    /// A `use m/{a, b}` member is written apart from its group's path, so the two halves have separate spans ([`Name::leaf_span`](curios_surface::Name::leaf_span)) and only the refusal knows which one it is talking about: `use /nope/{a}` cannot find `/nope` and `use /std/{nope}` cannot find `nope` in it.
     pub(crate) fn names_the_leaf(&self) -> bool {
         match self {
             Self::Located { error, .. } => error.names_the_leaf(),
@@ -309,7 +309,7 @@ impl fmt::Display for Error {
     }
 }
 
-/// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`Entrypoint::from_path`](crate::Entrypoint::from_path); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
+/// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`read_entrypoint`](crate::read_entrypoint); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
 #[derive(Debug)]
 pub enum LoadError {
     Read { path: PathBuf, error: io::Error },

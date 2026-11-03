@@ -4,6 +4,7 @@ use {
     crate::into_core::test_support::*,
     crate::*,
     curios_abi::{WireResults, WireReturn, WireType},
+    curios_surface::Entrypoint,
 };
 
 #[test]

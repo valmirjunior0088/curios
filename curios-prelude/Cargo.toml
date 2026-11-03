@@ -40,6 +40,7 @@ curios-core = { workspace = true }
 curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-common = { workspace = true }
 # For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `std_module` too.
@@ -61,6 +62,7 @@ curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-package = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-common = { workspace = true }
 

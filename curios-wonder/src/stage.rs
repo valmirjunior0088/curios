@@ -4,8 +4,9 @@
 
 use {
     crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
-    curios_module::{Module, Overlay, RootSource},
+    curios_module::{Overlay, RootSource, read_module},
     curios_pipeline::{Cache, Fold, Stage},
+    curios_surface::Module,
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::path::Path,
@@ -122,7 +123,7 @@ pub fn unit_stage(
         "text" => {
             let parsed = match overlay.get(file) {
                 Some(text) => Module::overlaid(file, text).map_err(|error| error.report()),
-                None => Module::from_path(file).map_err(|error| error.report()),
+                None => read_module(file).map_err(|error| error.report()),
             };
 
             parsed.map(|module| module.to_string()).map_err(|report| {

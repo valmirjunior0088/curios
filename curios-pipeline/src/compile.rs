@@ -21,9 +21,10 @@ use {
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
     curios_module::{
-        BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
-        UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
+        BrokenItem, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
+        into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
+    curios_surface::{Entrypoint, Translation},
     curios_unit::{Predecessors, Unit},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };

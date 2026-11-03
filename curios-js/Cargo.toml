@@ -18,6 +18,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 curios-browser = { workspace = true }
 curios-module = { workspace = true }
+curios-surface = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }

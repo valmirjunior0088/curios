@@ -28,7 +28,7 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 **Decision.** `is_identifier` and `is_keyword` — the identifier characters and the reserved words — live beside `Qualifier`, not in the parser.
 
-**Rationale.** A segment's legality is a property of the identity: `curios-module` refuses a keyword in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One list below both keeps the two refusals one refusal.
+**Rationale.** A segment's legality is a property of the identity: `curios-surface` refuses a keyword in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One list below both keeps the two refusals one refusal.
 
 ### A mount is a prefix, not an identity beside it
 

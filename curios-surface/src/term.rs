@@ -21,7 +21,7 @@ pub struct Term {
 
 impl Term {
     /// Attaches a span to this term. If the term already carries a span (the innermost one), it is preserved — innermost wins, matching how `Error::at` keeps the first span it sees as errors propagate up.
-    pub(crate) fn with_span(mut self, span: Span) -> Self {
+    pub fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
             self.span = Some(span);
         }
@@ -29,7 +29,7 @@ impl Term {
         self
     }
 
-    pub(crate) fn span(&self) -> Option<&Span> {
+    pub fn span(&self) -> Option<&Span> {
         self.span.as_ref()
     }
 
@@ -38,7 +38,7 @@ impl Term {
         Rc::unwrap_or_clone(self.inner)
     }
 
-    pub(crate) fn as_subterm(&self) -> &Subterm {
+    pub fn as_subterm(&self) -> &Subterm {
         &self.inner
     }
 
@@ -108,7 +108,7 @@ pub struct TupleTypeParam {
 
 impl TupleTypeParam {
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
-    pub(crate) fn desugared_type(&self) -> Term {
+    pub fn desugared_type(&self) -> Term {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
                 params: params.clone(),
@@ -174,7 +174,7 @@ pub struct TupleField {
 
 impl TupleField {
     /// The field's value with the definition sugar undone: the written value when the field is plain, the lambda `(params) => value` when it was written `label(params) = value`.
-    pub(crate) fn desugared_value(&self) -> Term {
+    pub fn desugared_value(&self) -> Term {
         match &self.func_params {
             // This sugar's binders stay plain-name-only (it is not one of the pattern-accepting sites) but each retains its plicity mark, so a `@`/`use` written in the sugar is carried onto the generated lambda's slot rather than dropped.
             Some(params) => Subterm::Func(Func {
@@ -331,7 +331,7 @@ pub enum MatchPattern {
 
 impl MatchPattern {
     /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bytes` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
-    pub(crate) fn is_dispatchable(&self) -> bool {
+    pub fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
             MatchPattern::Binder(_) | MatchPattern::Tuple(_) | MatchPattern::Struct { .. }
@@ -441,7 +441,7 @@ pub enum LetSignature {
 }
 
 /// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder and a premise has none at all, so each lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
-pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeParam> {
+pub fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeParam> {
     params
         .iter()
         .map(|param| FuncTypeParam {
@@ -463,7 +463,7 @@ pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeP
 }
 
 /// The function-definition sugar's body as the lambda binding every parameter. Each binder copies its plicity: the generated function value carries the same marks its signature does, so a written `@`/`use` in the sugar is checked against the slot it claims rather than silently dropped.
-pub(crate) fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term {
+pub fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term {
     Subterm::Func(Func {
         params: func_sugar_params(params),
         body: body.clone(),
@@ -472,7 +472,7 @@ pub(crate) fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term 
 }
 
 /// The function-definition sugar's telescope as the parameters of the lambda its body is, each annotated with its written type. A premise takes the wildcard, which holds its slot and binds nothing.
-pub(crate) fn func_sugar_params(params: &[FuncSugarParam]) -> Vec<FuncParam> {
+pub fn func_sugar_params(params: &[FuncSugarParam]) -> Vec<FuncParam> {
     params
         .iter()
         .map(|param| FuncParam {
@@ -487,7 +487,7 @@ pub(crate) fn func_sugar_params(params: &[FuncSugarParam]) -> Vec<FuncParam> {
 }
 
 impl LetSignature {
-    pub(crate) fn type_(&self) -> Term {
+    pub fn type_(&self) -> Term {
         match self {
             LetSignature::Name {
                 type_: Some(type_), ..
@@ -502,7 +502,7 @@ impl LetSignature {
         }
     }
 
-    pub(crate) fn body(&self) -> Term {
+    pub fn body(&self) -> Term {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             LetSignature::Func { params, body, .. } => func_sugar_lambda(params, body),

@@ -8,7 +8,8 @@ use {
     },
     curios_abi::HostOp,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},
-    curios_module::{GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude},
+    curios_module::{SYNTAX, prepare_prelude},
+    curios_surface::{GroupItem, Module, TopItem, UseGroup},
     std::{
         collections::BTreeSet,
         fs,

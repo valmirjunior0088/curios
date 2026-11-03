@@ -11,8 +11,9 @@ use {
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
         ValueExpr, ValueId,
     },
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
     std::collections::{BTreeMap, BTreeSet},
 };
 

@@ -7,7 +7,7 @@
 use {
     super::*,
     curios_common::{RootKind, fill, test_support::*},
-    curios_module::{Entrypoint, Module},
+    curios_module::{open_entrypoint, read_module},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold},
     curios_wasm::to_bytes,
     std::path::PathBuf,
@@ -65,7 +65,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
 
     // Told which executable its entry is, as the command line tells it: the unit of the entry's own declarations is filed too, and is none of the units the payload counts.
     let verdicts = Verdicts::at(root).executing(&package, &name);
-    let (entrypoint, loader, source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, source) = open_entrypoint(&entry).expect("the entry parses");
     let program = Program {
         package: &package,
         executable: &name,
@@ -491,7 +491,7 @@ fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
     supplied.insert_root(
         "supplied",
         RootKind::Ordinary,
-        Module::from_path(root.join("supplied.crs")).expect("the supplied module parses"),
+        read_module(root.join("supplied.crs")).expect("the supplied module parses"),
     );
 
     let gapped = invoke_over(&root, None, vec![supplied]);

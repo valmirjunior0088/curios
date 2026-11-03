@@ -4,15 +4,16 @@ use {
     super::*,
     crate::*,
     curios_common::{Qualifier, RootKind},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::{RootSource, supply_entrypoint},
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, TestProgram},
+    curios_surface::Entrypoint,
 };
 
 /// Run `source` as standard input is run — the reading that recovers past a broken item — expecting a refusal, and return its report.
 fn supplied_error(source: &str) -> String {
     let (entrypoint, loader, _) =
-        Entrypoint::supplied("<stdin>", source).expect("the program parses, holes and all");
+        supply_entrypoint("<stdin>", source).expect("the program parses, holes and all");
     let (system, _io) = MockHost::builder().build();
     run_entrypoint(&entrypoint, &loader, system).expect_err("the fixture is refused")
 }

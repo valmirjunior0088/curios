@@ -2,7 +2,8 @@
 
 use {
     crate::sys_module::{sys_module, test_support::*},
-    curios_module::{Intrinsic, LetSignature, SYNTAX, Subterm, Term, TopItem},
+    curios_module::SYNTAX,
+    curios_surface::{Intrinsic, LetSignature, Subterm, Term, TopItem},
 };
 
 // `sys` is the trusted intrinsic substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.

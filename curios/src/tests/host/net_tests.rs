@@ -3,9 +3,10 @@
 use {
     crate::tests::{run, run_text},
     curios_common::{fill, test_support::*},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_pipeline::compile_with_prelude,
+    curios_surface::Entrypoint,
 };
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.

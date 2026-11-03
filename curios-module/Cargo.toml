@@ -3,13 +3,13 @@ name = "curios-module"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios surface syntax: parser, formatter, printer, lints, module resolution, the registry of compiler-known names, and lowering to core"
+description = "The Curios module system: loading, module resolution, lints, the registry of compiler-known names, and lowering the surface tree to Core"
 
 [lints]
 workspace = true
 
 [features]
-profile = ["curios-profile/enabled", "curios-parse/profile"]
+profile = ["curios-profile/enabled", "curios-parse/profile", "curios-surface/profile"]
 
 [dependencies]
 curios-archive = { workspace = true }
@@ -22,6 +22,7 @@ curios-parse = { workspace = true }
 curios-print = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
+curios-surface = { workspace = true }
 
 [dev-dependencies]
 # `curios_core::test_support::into_nested_term`, which the lowering suite folds a finished module with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.

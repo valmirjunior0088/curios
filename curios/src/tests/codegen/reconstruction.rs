@@ -4,9 +4,10 @@ use {
     super::structural::test_support::*,
     curios_abi::ForeignStore,
     curios_common::fill,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
     curios_wasm::to_bytes,
     std::collections::BTreeSet,
 };

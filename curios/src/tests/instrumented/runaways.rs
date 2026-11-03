@@ -2,9 +2,10 @@
 
 use {
     crate::tests::{Runaway, runaway},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_profile::{Destination, Report, fold_at, trace},
+    curios_surface::Entrypoint,
     std::{
         fs::create_dir_all,
         path::Path,

@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_common::{Qualifier, digest, test_support::*},
-    curios_module::{Entrypoint, Overlay, RootSource},
+    curios_module::{Overlay, RootSource, open_entrypoint},
     curios_native::{ForeignBindings, MockHost},
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
@@ -58,7 +58,7 @@ fn run(directory: &Path, subject: Option<&str>) -> Vec<u8> {
 fn cached(directory: &Path, subject: Option<&str>, cache: Option<&dyn Cache>) -> Vec<u8> {
     let (entry, units) = resolved(directory, subject);
 
-    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = open_entrypoint(&entry).expect("the entry parses");
     let (module, foreigns) = Fold::new(DEFAULT_BUDGET, &units, cache)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
@@ -73,7 +73,7 @@ fn cached(directory: &Path, subject: Option<&str>, cache: Option<&dyn Cache>) ->
 fn folded(directory: &Path, subject: Option<&str>, cache: &dyn Cache) -> Vec<String> {
     let (entry, units) = resolved(directory, subject);
 
-    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = open_entrypoint(&entry).expect("the entry parses");
     let mut events = Vec::new();
     Fold::new(DEFAULT_BUDGET, &units, Some(cache))
         .compile(
@@ -223,7 +223,7 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
     let (entry, units) = resolved(&root, Some(orphan.to_str().unwrap()));
     assert!(units.is_empty(), "a file argument mounts nothing");
 
-    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = open_entrypoint(&entry).expect("the entry parses");
     assert!(
         Fold::new(DEFAULT_BUDGET, &units, None)
             .compile(&entrypoint, &loader, |_| {}, |_| {})
@@ -252,7 +252,7 @@ fn a_loose_program_names_std_and_is_refused_sys() {
     );
 
     let (entry, units) = resolved(&root, Some(root.join("sys.crs").to_str().unwrap()));
-    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = open_entrypoint(&entry).expect("the entry parses");
     let refusal = Fold::new(DEFAULT_BUDGET, &units, None)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .map(|_| ())
@@ -294,7 +294,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
         "/std/print(\"unreached\")\n",
     );
     let (entry, units) = resolved(&orphan.join("app"), None);
-    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = open_entrypoint(&entry).expect("the entry parses");
     let refusal = Fold::new(DEFAULT_BUDGET, &units, None)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .map(|_| ())

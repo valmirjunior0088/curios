@@ -7,8 +7,9 @@ use {
     curios_common::Qualifier,
     curios_core::{Global, Item, ReaderPosition, build_rename, display_names},
     curios_elab::{Established, Reading, test_support::*},
-    curios_module::{SYNTAX, Translation},
+    curios_module::SYNTAX,
     curios_prelude::with_prelude,
+    curios_surface::Translation,
     curios_unit::Predecessors,
     std::rc::Rc,
 };

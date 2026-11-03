@@ -6,7 +6,7 @@ use {
     super::*,
     curios_common::{Qualifier, fill, test_support::*},
     curios_core::{Certification, Global},
-    curios_module::Entrypoint,
+    curios_module::open_entrypoint,
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
     std::{cell::RefCell, collections::BTreeMap, path::Path},
@@ -73,7 +73,7 @@ fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache, compiled: Compil
         })
         .collect::<Vec<_>>();
     let (entrypoint, loader, _source) =
-        Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
+        open_entrypoint(&root.join("exe.crs")).expect("an openable entrypoint");
 
     let mut events = Vec::new();
     Fold::new(1_000_000, &library, Some(cache))
@@ -579,7 +579,7 @@ fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static str {
     let governing = Governing::of(&root.join("shape")).expect("a governed package");
     let library = order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
-        Entrypoint::opened(&root.join(entry)).expect("an openable entrypoint");
+        open_entrypoint(&root.join(entry)).expect("an openable entrypoint");
 
     Fold::new(1_000_000, &library, Some(&watching))
         .compile(&entrypoint, &loader, |_| {}, |_| {})
@@ -778,7 +778,7 @@ fn folded_chain(root: &Path) -> Result<Vec<String>, String> {
     let governing = Governing::of(&root.join("top")).expect("a governed package");
     let library = order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
-        Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
+        open_entrypoint(&root.join("exe.crs")).expect("an openable entrypoint");
 
     let mut events = Vec::new();
     let compiled = Fold::new(1_000_000, &library, Some(&verdicts)).compile(

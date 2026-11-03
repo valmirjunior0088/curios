@@ -12,6 +12,7 @@ use {
         SyntaxRegistry, TestSyntax, test_support::*,
     },
     curios_core::test_support::*,
+    curios_surface::Entrypoint,
     std::{collections::BTreeSet, fs, path::Path},
 };
 

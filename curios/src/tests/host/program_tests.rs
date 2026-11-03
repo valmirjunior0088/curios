@@ -3,9 +3,10 @@
 use {
     crate::{tests::typecheck, *},
     curios_common::fill,
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, MockHostBuilder},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
+    curios_surface::Entrypoint,
 };
 
 /// What a program came to under `host`: the status it ended with, everything it wrote, and the standard error half of that.

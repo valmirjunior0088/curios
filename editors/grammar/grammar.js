@@ -1,6 +1,6 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// The surface grammar of `documentation/syntax.md`, mirrored from `curios-module/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
+// The surface grammar of `documentation/syntax.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
 
 // An identifier is a nonempty run of Unicode alphanumerics and `_` (`curios_common::is_identifier`).
 const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/u;

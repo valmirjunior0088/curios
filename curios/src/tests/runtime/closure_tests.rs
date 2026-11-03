@@ -2,9 +2,10 @@
 
 use {
     crate::tests::{emits, run, run_text},
-    curios_module::{Entrypoint, RootSource},
+    curios_module::RootSource,
     curios_native::MockHost,
     curios_pipeline::{Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
 };
 
 #[test]
