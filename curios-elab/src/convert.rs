@@ -931,7 +931,7 @@ impl Convert {
         Ok(())
     }
 
-    /// What two recursive groups are, compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, under the binders and inside the pairs of the problem that asks, so a pair it does not hold leaves nothing behind and goes on to what its caller does next, and only where neither group binds a universe of its own, as the kernel asks it. A run that ends blocked has decided nothing, and says so: its caller neither holds the pair nor refuses it on that.
+    /// What two recursive groups are, compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, under the binders and inside the pairs of the problem that asks, so a pair it does not hold leaves nothing behind and goes on to what its caller does next; a group binds no universe, so both sides' members spell the levels of the declaration this comparison is judged in and no width is consulted, as the kernel asks it. A run that ends blocked has decided nothing, and says so: its caller neither holds the pair nor refuses it on that.
     fn two_groups(
         context: &mut Context,
         binders: &Binders,

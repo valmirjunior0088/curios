@@ -454,7 +454,7 @@ impl<E: Env> Walk<'_, E> {
                     self.level(level);
                 }
             }
-            // A group carries a universe context of its own, so it is read as written rather than walked into.
+            // A group forcing left standing — a member this path is already inside, or one a refused reduction stopped at — is read as written rather than walked into: every level it mentions is the enclosing declaration's, and marking all of them is the refusing direction.
             Subterm::Rec(_) => self.everything(&term),
             // A metavariable's solution may mention any level.
             Subterm::Metavar(_) => self.marked.every = true,

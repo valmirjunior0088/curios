@@ -50,7 +50,7 @@ pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
 ///
 /// Closure first: a context naming what it does not declare cannot be instantiated, so asking whether it has a solution would be asking about nothing.
 ///
-/// Every context a walk assumes is decided here, wherever it is assumed from: a registry entry's and a definition's before `recheck_module_verdicts` judges anything, and a `rec` group's own where `check_group` opens it. An unsatisfiable set assumed anywhere is the same hypothesis set from which everything follows, so the clause is one function rather than one per place that assumes one.
+/// Every context a walk assumes is decided here, wherever it is assumed from: a registry entry's and a definition's, each before `recheck_module_verdicts` judges anything. A group carries no context of its own, so a `rec` is no position of its own either — its members' levels are the enclosing declaration's, whose context was decided with every other. An unsatisfiable set assumed anywhere is the same hypothesis set from which everything follows, so the clause is one function rather than one per place that assumes one.
 pub(crate) fn universe_verdict(context: &UniverseContext) -> Option<Error> {
     curios_profile::profile!("universe_verdict");
     if !context.is_closed() {
