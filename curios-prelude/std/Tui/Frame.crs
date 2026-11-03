@@ -96,12 +96,12 @@ let overlay(
 ) -> Frame(w, h) =
     let patches = List/map(Vec/to_list(top), Vec/to_list);
     let splice(index: Nat, under: List(Tile)) -> List(Tile) =
-        match List/try_get(patches, index - y)
-        | none() => under
-        | some(patch) =>
-            match y <= index
-            | false => under
-            | true =>
+        match y <= index
+        | false => under
+        | true =>
+            match List/try_get(patches, index - y)
+            | none() => under
+            | some(patch) =>
                 List/flatten([List/take(under, x), patch, drop_upto(under, x + List/len(patch))])
             end
         end;
