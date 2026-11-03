@@ -783,7 +783,7 @@ fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 
 /// Open a `rec` group's tail over its members. A pure binder operation: it mints nothing and unfolds no fixed point.
 ///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 pub(crate) fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();

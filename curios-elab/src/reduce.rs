@@ -224,7 +224,7 @@ enum Reduce {
 
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
 ///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 pub fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
     let members = rec.group.members();
     // The member vector, the ref vector over it, and the opening — one substitution pass per member.

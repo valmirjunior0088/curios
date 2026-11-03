@@ -1141,7 +1141,7 @@ impl Machine {
 
 /// Open a `rec` group's tail over its members — a pure binder operation, shared verbatim with both hosts' spelling of the same step.
 ///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks first: the opening is `Scope::open`, whose assert is the only reader of a count no typing rule reads.
+/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();

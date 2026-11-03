@@ -766,7 +766,7 @@ pub struct Rec {
 impl Rec {
     /// Whether this block's tail binds one binder per member, which is what opening it over them requires — [`Let::opens`] of the other block form, and asked for the same reason.
     ///
-    /// A tail that *selects* a member needs no opening at all, opening it being the identity ([`Rec::as_proj`]), so a projection is reduced by stepping to the member's body and the count never comes up; the member scopes it steps through are counted at the boundary that counts this one (`check_group`).
+    /// A tail that *selects* a member needs no opening at all, opening it being the identity ([`Rec::as_proj`]), so a projection is reduced by stepping to the member's body and this count never comes up. The member scopes it steps through carry a count of their own, which `check_group` reads at the boundary and this question does not cover: a reducer handed a projection out of a group whose member scopes disagree with its members opens one of them through `member_body` before any typing rule has read either count, which `documentation/roadmap/soundness/000-findings.md` holds as an entry.
     pub fn opens(&self) -> bool {
         self.tail.arity() == self.group.length()
     }
