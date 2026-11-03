@@ -431,10 +431,13 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
 
 /// A free variable is the normal form it is: the kernel holds no local by name, a `let` being read by value before reduction meets its binder ([`Kernel::bind`]).
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
-    assert!(
-        !kernel.binds(var.unwrap()),
-        "a `let`-bound local reached reduction by name"
-    );
+    // A bound index stops here as a local with no binding does, and the assert is a free local's alone: an index with no binder is no name a scope could have bound, so there is nothing to have read by value, and reduction asserts on no shape a caller hands it. One reaching here is refused where the module entered (`curios_core::open_positions_of`).
+    if let Some(free) = var.as_free() {
+        assert!(
+            !kernel.binds(free),
+            "a `let`-bound local reached reduction by name"
+        );
+    }
 
     Ok(Step::Stop(Term::var(var)))
 }

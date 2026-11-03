@@ -1,12 +1,12 @@
-//! Identities a walk is handed: a free local is refused before the kernel mints a binder that could alias it.
+//! Identities a walk is handed: a free local is refused before the kernel mints a binder that could alias it, and a bound variable no scope binds before a rule reads it as one.
 
 use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Entrypoint, Free, Global, Intrinsic, Level, Module, Nat, Program, Term, UniverseContext,
-        UniverseParam,
+        Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Module, Nat, Program,
+        Scope, Subterm, Term, UniverseContext, UniverseParam, Var,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -29,6 +29,26 @@ fn constant_over(stray: &Free) -> Term {
 
 fn held() -> Global {
     Global::Authored(Qualifier::from(["held"]))
+}
+
+/// `0`, the value a binding is given where the binding is not what is under test.
+fn zero() -> Term {
+    Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))
+}
+
+/// A module holding one definition that states `stated` as the sort its value inhabits: `held : Type = Nat`, whose value sort is the position under test.
+fn sorted(stated: Term) -> Module {
+    let item = match authored(&held(), Term::type_ground(), nat()) {
+        curios_core::Item::Let(definition) => {
+            curios_core::Item::Let(Box::new(curios_core::Definition {
+                value_sort: Some(stated),
+                ..*definition
+            }))
+        }
+        item => item,
+    };
+
+    holding(vec![item])
 }
 
 /// A module holding `items` and nothing else.
@@ -72,16 +92,7 @@ fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
             ),
             [Term::free_var(&stray)],
         );
-        let item = match authored(&held(), Term::type_ground(), nat()) {
-            curios_core::Item::Let(definition) => {
-                curios_core::Item::Let(Box::new(curios_core::Definition {
-                    value_sort: Some(stated),
-                    ..*definition
-                }))
-            }
-            item => item,
-        };
-        let module = holding(vec![item]);
+        let module = sorted(stated);
 
         let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
@@ -102,16 +113,7 @@ fn a_stated_value_sort_holding_a_metavariable_is_refused() {
         ),
         [Term::hole(7_usize)],
     );
-    let item = match authored(&held(), Term::type_ground(), nat()) {
-        curios_core::Item::Let(definition) => {
-            curios_core::Item::Let(Box::new(curios_core::Definition {
-                value_sort: Some(stated),
-                ..*definition
-            }))
-        }
-        item => item,
-    };
-    let module = holding(vec![item]);
+    let module = sorted(stated);
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
@@ -134,16 +136,7 @@ fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
             Term::prop(),
             Term::type_ground(),
         );
-        let item = match authored(&held(), Term::type_ground(), nat()) {
-            curios_core::Item::Let(definition) => {
-                curios_core::Item::Let(Box::new(curios_core::Definition {
-                    value_sort: Some(stated),
-                    ..*definition
-                }))
-            }
-            item => item,
-        };
-        let module = holding(vec![item]);
+        let module = sorted(stated);
 
         let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
@@ -216,4 +209,55 @@ fn an_entry_mentioning_a_free_local_is_refused() {
             "an entry mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }
+}
+
+/// Every position of a definition is held closed: a bound variable no scope in it binds is refused rather than aborted on.
+///
+/// `Var::bound` is public, so a module built by hand carries an occurrence no binder of its own opens. No boundary saw one, because every one asks `Mentions`, which is built from `var.as_free()` and answers nothing for a bound occurrence — and `infer`'s `Var` rule reads such a variable first, through `Var::unwrap`'s `expect("a free occurrence")`, which kills the process where [the board](../../../documentation/design/soundness/the-soundness-board.md) requires a refusal. The last case is the one no arity check sees either: the index is loose *past* a binder, so the scope it sits under is a legitimate one and only its depth is wrong. Mutation-checked, and in two places. With the boundary dropped, a body aborts in `Var::unwrap` from `infer`'s own `Var` rule. With the boundary and that rule's refusal both standing but `accelerable` not reading closedness, the stated value sort aborts in the closed machine instead: it is the one position here that conversion reduces without typing it — `hold_value_sort` compares the statement to the sort the value reaches — so no rule-level refusal stands in front of it, which is what the machine's gate is for.
+#[test]
+fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
+    let loose = || Term::var(Var::bound(0));
+    // `let x : Nat = 0; <index 1>`: the block binds one binder and its tail reaches past it, which is why the tail's own arity is no answer to this.
+    let past_a_binder = Term::from(Subterm::Let(Let {
+        bindings: vec![LetBinding::new(nat(), zero())],
+        tail: Scope::constant(Many(1), Term::var(Var::bound(1))),
+    }));
+
+    for (position, module) in [
+        ("a body", holding(vec![authored(&held(), nat(), loose())])),
+        ("a type", holding(vec![authored(&held(), loose(), nat())])),
+        ("a stated value sort", sorted(loose())),
+        (
+            "a body past a binder",
+            holding(vec![authored(&held(), nat(), past_a_binder)]),
+        ),
+    ] {
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        assert!(
+            verdicts.iter().any(|verdict| verdict.name == Some(held())
+                && matches!(&verdict.error, Error::NotClosed { .. })),
+            "{position} holding a loose bound variable was not refused for it: {verdicts:?}",
+        );
+    }
+}
+
+/// The entry is held closed as the module's items are, since it is judged in the same walk by the same rule.
+#[test]
+fn an_entry_holding_a_loose_bound_variable_is_refused() {
+    let program = Program {
+        module: holding(Vec::new()),
+        entry: Entrypoint {
+            body: Term::var(Var::bound(0)),
+            type_: Some(nat()),
+        },
+    };
+
+    let verdicts = fixture_verdicts(&program, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name.is_none()
+                && matches!(&verdict.error, Error::NotClosed { .. })),
+        "an entry holding a loose bound variable was not refused for it: {verdicts:?}",
+    );
 }

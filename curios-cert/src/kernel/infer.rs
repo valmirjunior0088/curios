@@ -127,15 +127,23 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         // A variable has the type it was bound at. There is no fallback: an unbound name in a finished term is a broken term.
         //
         // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
+        //
+        // A *bound* index reaching here is the other broken term, and it is refused rather than looked up: a term closed under the scopes above it has none, which the boundary holds every position to (`curios_core::open_positions_of`), and asking the scope for one would be asking `Var::unwrap` for a free occurrence it has not got. The depth is all the refusal can name, the index having no identity, and it is the rule's own as much as the boundary's — a rule that aborted where a boundary already refused would die before the verdict was read.
         Subterm::Var(var) => {
-            if !spine_head && let Some(free) = var.as_free() {
+            let Some(free) = var.as_free() else {
+                return Err(Error::NotClosed {
+                    reach: term.reach(),
+                });
+            };
+
+            if !spine_head {
                 kernel.record_call(free, &[])?;
             }
 
             kernel
-                .local_type(var.unwrap())
+                .local_type(free)
                 .cloned()
-                .ok_or_else(|| Error::Unbound(*var.unwrap()))
+                .ok_or(Error::Unbound(*free))
         }
 
         // A type former is a type, at the universe its parts join to — computed by the judgment role, which types those parts, rather than by the lookup, which only classifies them.

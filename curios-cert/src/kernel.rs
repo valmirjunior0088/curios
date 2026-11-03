@@ -131,6 +131,8 @@ pub enum Error {
     Reduce(ReduceError),
     /// A variable with no binder. In a well-formed module this cannot happen, which is why it is an error rather than a stuck neutral: the kernel is checking a *finished* term.
     Unbound(Free),
+    /// A position holding a bound variable no scope in it binds, `reach` binders out. A finished term has none, as it has no free local, and the two are told apart because nothing names this one: `Error::Unbound` carries the `Free` it refused, and an index with no binder has no identity to carry — only the depth it reaches, which is what a reader at another depth would have read it as.
+    NotClosed { reach: usize },
     /// A reference to a declaration the environment does not hold: a definition with no entry, or a nominal type with no registry entry, so its fields, constructors, and result sort are all unknown.
     Undeclared(Global),
     /// A declaration under a name already declared: one the environment holds, whatever is declared under it, or one an earlier item of its module declares. A name is one declaration, so the second is refused whatever it is.
@@ -306,6 +308,10 @@ impl fmt::Display for Displayed<'_> {
             ),
             Error::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
             Error::Unbound(name) => write!(formatter, "unbound name `{}`", name.faithful()),
+            Error::NotClosed { reach } => write!(
+                formatter,
+                "a bound variable no scope binds, reaching {reach} binders out"
+            ),
             Error::Undeclared(name) => {
                 write!(
                     formatter,

@@ -55,9 +55,9 @@ use {
     super::{
         Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited, bytes_of,
         check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
-        check_struct_decl, define_as_stated, free_locals_of, held_digest, open_quality,
-        positivity_vectors, read_digest, rewrite_universe_levels, universe_metas, universe_verdict,
-        variance_vectors,
+        check_struct_decl, define_as_stated, free_locals_of, held_digest, open_positions_of,
+        open_quality, positivity_vectors, read_digest, rewrite_universe_levels, universe_metas,
+        universe_verdict, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
@@ -513,11 +513,25 @@ fn verdicts_within<'s>(
             error: Error::Unbound(local),
         });
     }
+    // A bound variable no scope binds is refused over the same positions, and no judgment could take the refusal instead: `Mentions` answers nothing for one, so every rule reads it as the variable it is not — `infer`'s through `Var::unwrap`, which aborts rather than returning a verdict — and the index denotes whatever the depth it is read at gives it, so what a rule would judge is not what the module carries.
+    for (owner, reach) in open_positions_of(judged_items()) {
+        verdicts.push(Verdict {
+            name: owner,
+            error: Error::NotClosed { reach },
+        });
+    }
     if let Some(entry) = entry {
         for local in entry.free_locals() {
             verdicts.push(Verdict {
                 name: None,
                 error: Error::Unbound(local),
+            });
+        }
+        let reach = entry.reach();
+        if reach != 0 {
+            verdicts.push(Verdict {
+                name: None,
+                error: Error::NotClosed { reach },
             });
         }
     }

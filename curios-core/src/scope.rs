@@ -113,7 +113,7 @@ enum VarType {
     Bound(usize),
 }
 
-/// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
+/// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption) or bound (a de Bruijn index into enclosing [`Scope`]s). Outside code builds free variables and lets the scope machinery convert them; the bound form is constructible all the same, so that a term may be built at the depth it will stand at and an adversarial one put to a checker, and what holds a term closed is the boundary that reads a position's reach (`curios_core::open_positions_of`) rather than who may spell an index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Var {
@@ -149,7 +149,7 @@ impl Var {
         }
     }
 
-    /// This occurrence's identity, asserting it is free. Callers hold a term the scope machinery has not closed over, where a bound index is an invariant violation rather than a case to handle.
+    /// This occurrence's identity, asserting it is free. Callers hold a term something upstream has established is closed — the machine's gate ([`accelerable`](crate::accelerable)), or the boundary a module passed — where a bound index is that invariant broken rather than a case to handle; a reader that can be handed one answers through [`Var::as_free`] instead.
     pub fn unwrap(&self) -> &Free {
         self.as_free().expect("a free occurrence")
     }

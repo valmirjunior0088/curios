@@ -171,6 +171,34 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
     );
 }
 
+/// A bound variable no scope in the unit binds is refused at the same seam, for a reason of its own.
+///
+/// A loose index is not an identity a counter handed out — it is an index with no binder, which `Mentions` answers nothing for, so the free-local clause above sees none of it. Stored, it is read at whatever depth the term it is spliced under happens to give it, which is a different term with no error anywhere; and handed to a walk, it is what the kernel refuses by `Error::NotClosed`.
+#[test]
+fn a_stored_unit_may_not_carry_a_loose_bound_variable() {
+    let module = stored(Term::var(Var::bound(2)));
+
+    assert_eq!(
+        validate_stored_identities(&module),
+        Err(Positional::LooseIndex {
+            owner: Some(Global::Authored(Qualifier::from(["held"]))),
+            reach: 3,
+        })
+    );
+}
+
+/// The control. A scope's body legitimately carries the indices its own binders bind, and every term in every stored unit holds some, so the clause reads a position's reach against the binders above it — which is none, a position being where a term starts.
+#[test]
+fn a_stored_unit_may_carry_a_scope_whose_body_names_its_binders() {
+    let binder = Free::local(11, Some("x"));
+    let module = stored(Term::func(
+        [(binder, Term::intrinsic(crate::Intrinsic::NatType))],
+        Term::free_var(&binder),
+    ));
+
+    assert_eq!(validate_stored_identities(&module), Ok(()));
+}
+
 /// A witness declared here, scoped to a mount this module does not own.
 ///
 /// A witness's name holds the module that declares it, so a module declaring a witness under somebody else's mount is claiming a name in a space it does not own, which two units could both declare.
@@ -274,6 +302,22 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
 
     let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");
     assert!(refusal.to_string().contains("holed"), "{refusal}");
+}
+
+/// A module is evidence of being finished only where it is closed too: a loose bound variable refuses the projection, since what the wrapper stands for at a stage boundary is a Core term a walk can be handed.
+#[test]
+fn a_loose_bound_variable_refuses_the_zonked_projection() {
+    let mut adrift = definition("adrift", UniverseContext::empty());
+    adrift.body = Term::var(Var::bound(0));
+    let module = Module {
+        items: vec![Item::Let(Box::new(adrift))].into(),
+        mounts: Vec::new(),
+        witnesses: Default::default(),
+        tests: Default::default(),
+    };
+
+    let refusal = Zonked::project(&module).expect_err("the loose index must refuse the projection");
+    assert!(refusal.to_string().contains("adrift"), "{refusal}");
 }
 
 #[test]

@@ -197,9 +197,11 @@ pub fn lasting(term: &Term) -> bool {
     !term.has_local_free() && !term.has_metavar() && !term.has_universe_meta()
 }
 
-/// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). It is the whole gate, an arm's equations included: see the module documentation.
+/// Whether `term` is in the machine's domain: closed, and holding no local free and no metavariable, read off the per-node cached bits in O(1). It is the whole gate, an arm's equations included: see the module documentation.
+///
+/// Closedness is part of the gate and not an assumption about the caller. The machine evaluates by looking a variable up — a definition for a free one, nothing for a local — and an index with no binder is neither: it denotes whatever the depth a reader meets it at gives it, so the machine would have to answer about a term that is not the one it was handed. A term carrying one is refused where a module enters ([`open_positions_of`](crate::open_positions_of)), and this is what keeps that the only place it has to be: declining it here hands it to the host's own reduction, which stops on it as on any variable it cannot resolve, rather than to a walk that would assert.
 pub fn accelerable(term: &Term) -> bool {
-    !term.has_local_free() && !term.has_metavar()
+    term.closed() && !term.has_local_free() && !term.has_metavar()
 }
 
 /// Whether `term` is its own weak-head value in the machine's domain ([`accelerable`]): a former reduction leaves as it is — a sort, a function, tuple, structure or inductive type, a tuple, a structure or a variant — however it is demanded.

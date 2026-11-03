@@ -1598,6 +1598,13 @@ impl Entrypoint {
             .collect()
     }
 
+    /// How far the entry's body or stated type reaches past the binders above them — none, as a position has none — so zero for a finished entry and the reach of its open position otherwise. The sibling of [`Entrypoint::free_locals`], as [`open_positions_of`] is of [`free_locals_of`].
+    pub fn reach(&self) -> usize {
+        let stated = self.type_.as_ref().map_or(0, Bound::reach);
+
+        Bound::reach(&self.body).max(stated)
+    }
+
     /// The top-level names the entry reaches, through its body and the type it states.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = term_reaches(&self.body);
@@ -1776,6 +1783,7 @@ impl<B: Bound + Terms> Terms for Telescope<B> {
 trait Carried {
     fn mentions(&self) -> Mentions;
     fn has_metavar(&self) -> bool;
+    fn reach(&self) -> usize;
     fn terms(&self, visit: &mut dyn FnMut(&Term));
 }
 
@@ -1786,6 +1794,10 @@ impl<B: Bound + Terms> Carried for B {
 
     fn has_metavar(&self) -> bool {
         Bound::has_metavar(self)
+    }
+
+    fn reach(&self) -> usize {
+        Bound::reach(self)
     }
 
     fn terms(&self, visit: &mut dyn FnMut(&Term)) {
@@ -1842,13 +1854,15 @@ fn made_positions(module: &Module, mut visit: impl FnMut(Option<&Global>, &dyn C
     }
 }
 
-/// An identity a stored unit may not carry: one meaningful only in the compilation that assigned it.
+/// What a stored unit may not carry at a position: an identity meaningful only in the compilation that assigned it, and, carrying none, a bound variable no scope in the unit binds, which is no identity at all and is read at whatever depth a later splice gives it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Positional {
     /// A free local binder. Its index came from one compilation's binder counter, and every walk mints from a counter of its own that starts at zero — so a local surviving into stored output is an index two compilations can both hand out.
     FreeLocal { owner: Option<Global>, index: u64 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
+    /// A bound variable no scope in the position binds, `reach` binders out. Not an identity a counter assigned but an index with no binder, which [`Mentions`] answers nothing for and the free local above therefore misses: stored, it is read at whatever depth the term it is spliced under gives it, which is a different term with an error nowhere.
+    LooseIndex { owner: Option<Global>, reach: usize },
     /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.
     UnscopedWitness { witness: Global },
     /// A witness this module declares under its place among its module's witnesses ([`WitnessId::Unspelled`]): its signature spelled no key, which registration refuses, so one reaching a store is a name the same text written in another order gives to another declaration.
@@ -1860,6 +1874,10 @@ impl fmt::Display for Positional {
         let (owner, carried) = match self {
             Positional::FreeLocal { owner, index } => (owner, format!("free local binder {index}")),
             Positional::Metavar { owner } => (owner, "an unsolved metavariable".to_string()),
+            Positional::LooseIndex { owner, reach } => (
+                owner,
+                format!("a bound variable no scope binds, reaching {reach} binders out"),
+            ),
             Positional::UnscopedWitness { witness } => {
                 return write!(
                     formatter,
@@ -1885,15 +1903,15 @@ impl fmt::Display for Positional {
 
 /// Refuse `module` if it carries an identity meaningful only in the compilation that produced it.
 ///
-/// **A unit may be stored only if it carries no positional identity.** Storing one is how rustc came to need `cnum_map` — an index another compilation reads and then has to remap — and it is the property deciding whether a stored unit is portable at all.
+/// **A unit may be stored only if it carries no positional identity, and only if every position it carries is closed.** Storing an identity is how rustc came to need `cnum_map` — an index another compilation reads and then has to remap — and it is the property deciding whether a stored unit is portable at all. A bound variable no scope binds is the other half of the same question asked of a position, and it has no remapping even in principle: it denotes the binder at its depth wherever it is read, so a unit carrying one stores a term that is not the term it was written from.
 ///
-/// Four of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
+/// Five of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
 ///
 /// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Module::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
 /// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
-/// It refuses the free locals [`free_locals_of`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+/// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     let mut found: Option<Positional> = None;
 
@@ -1913,6 +1931,15 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
             found = Some(Positional::FreeLocal {
                 owner: owner.cloned(),
                 index,
+            });
+            return;
+        }
+
+        let reach = carried.reach();
+        if reach != 0 {
+            found = Some(Positional::LooseIndex {
+                owner: owner.cloned(),
+                reach,
             });
         }
     });
@@ -1961,7 +1988,29 @@ pub fn free_locals_of<'a>(
     found
 }
 
-/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, no level in one holds a universe metavariable, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
+/// Every position of `items` whose term is not closed, each with how far it reaches past the binders above it — which are none, a position being where a term starts — and the top-level name owning it.
+///
+/// **A bound variable no scope binds is refused where the free locals are, and for a reason of its own.** It is not an identity a counter assigned: [`Mentions`] is built from `var.as_free()` and answers nothing for a bound occurrence, so [`free_locals_of`]'s question misses it entirely. What meets one instead is the first rule to read it as a variable, through [`Var::unwrap`](crate::Var::unwrap), which expects a free occurrence and aborts — and a walk that aborts has returned no verdict at all. Nor could a judgment answer where the boundary does not: an index with no binder denotes whatever the depth it is read at gives it, so the term a rule sees is not the term the module carries. The refusal is therefore taken here, over the same positions, where it costs each position's memoized [`Bound::reach`].
+///
+/// A scope body legitimately carries the indices its own binders bind, and every term of every module holds some, so what is read is a *position* — a definition's type, body or stated sort, a registry entry's telescopes, a group's members opened over their own names — where no binder stands above the term and `reach` is therefore zero for everything well formed.
+pub fn open_positions_of<'a>(
+    items: impl IntoIterator<Item = &'a Item>,
+) -> BTreeSet<(Option<Global>, usize)> {
+    let mut found = BTreeSet::new();
+    let mut visit = |owner: Option<&Global>, carried: &dyn Carried| {
+        let reach = carried.reach();
+        if reach != 0 {
+            found.insert((owner.copied(), reach));
+        }
+    };
+    for item in items {
+        item_positions(item, &|_| false, &mut visit);
+    }
+
+    found
+}
+
+/// Evidence that a module is a finished Core term: the kernel's whole `NotCore` class — no `Metavar` and no `Transient` node survives in any term-bearing position, and no level in one holds a universe metavariable — every position closed, no bound variable reaching past the scopes that bind it, and, for a program, an entry stating the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -1982,17 +2031,11 @@ impl Zonkable for Module {
 impl Zonkable for Program {
     /// The module's first unfinished place, then the entry's: a program is finished when its module is and its entry states the type it was judged at, meta-free.
     fn unfinished(&self) -> Option<String> {
-        zonked_refusal(&self.module).or_else(|| {
-            let unfinished = |term: &Term| {
-                term.has_metavar() || term.has_transient() || term.has_universe_meta()
-            };
-            match &self.entry.type_ {
-                None => Some("the entrypoint states no type it was judged at".to_owned()),
-                Some(type_) if unfinished(&self.entry.body) || unfinished(type_) => {
-                    Some("elaboration-only syntax survives in the entrypoint".to_owned())
-                }
-                Some(_) => None,
-            }
+        zonked_refusal(&self.module).or_else(|| match &self.entry.type_ {
+            None => Some("the entrypoint states no type it was judged at".to_owned()),
+            Some(type_) => unfinished(&self.entry.body)
+                .or_else(|| unfinished(type_))
+                .map(|found| format!("{found} survives in the entrypoint")),
         })
     }
 }
@@ -2080,18 +2123,18 @@ impl fmt::Display for ZonkedRefusal {
 /// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`, `has_transient` and `has_universe_meta` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
     for item in &module.items {
-        if unfinished_item(item) {
-            return Some(item_refusal(item));
+        if let Some(found) = unfinished_item(item) {
+            return Some(item_refusal(item, found));
         }
     }
     for (name, decl) in module.induct_decls() {
-        if unfinished_inductive(decl) {
-            return Some(entry_refusal(&name));
+        if let Some(found) = unfinished_inductive(decl) {
+            return Some(entry_refusal(&name, found));
         }
     }
     for (name, decl) in module.struct_decls() {
-        if unfinished_record(decl) {
-            return Some(entry_refusal(&name));
+        if let Some(found) = unfinished_record(decl) {
+            return Some(entry_refusal(&name, found));
         }
     }
     None
@@ -2099,62 +2142,93 @@ fn zonked_refusal(module: &Module) -> Option<String> {
 
 /// [`zonked_refusal`] asked of `items` alone: their terms, then the entries they carry.
 fn items_refusal(items: &[&Item]) -> Option<String> {
-    if let Some(item) = items.iter().find(|item| unfinished_item(item)) {
-        return Some(item_refusal(item));
+    if let Some((item, found)) = items
+        .iter()
+        .find_map(|item| unfinished_item(item).map(|found| (item, found)))
+    {
+        return Some(item_refusal(item, found));
     }
     items
         .iter()
         .flat_map(|item| item.nominals())
-        .find(|(_, nominal)| {
-            nominal.inductive().is_some_and(unfinished_inductive)
-                || nominal.record().is_some_and(unfinished_record)
+        .find_map(|(name, nominal)| {
+            let found = nominal
+                .inductive()
+                .and_then(unfinished_inductive)
+                .or_else(|| nominal.record().and_then(unfinished_record))?;
+
+            Some(entry_refusal(name, found))
         })
-        .map(|(name, _)| entry_refusal(name))
 }
 
-fn unfinished(term: &Term) -> bool {
-    term.has_metavar() || term.has_transient() || term.has_universe_meta()
-}
+/// What a finished module may not carry in a term-bearing position, each named so a refusal says which it met: the two are answerable for by different passes, elaboration's own syntax by zonking and a variable reaching past its scopes by whatever built the term.
+const ELABORATION_RESIDUE: &str = "elaboration-only syntax";
+const LOOSE_VARIABLE: &str = "a bound variable no scope binds";
 
-fn unfinished_bound<B: Bound>(value: &B) -> bool {
+/// Whether elaboration's own syntax survives in `value` — the question the three cached per-node bits answer.
+fn residue<B: Bound>(value: &B) -> bool {
     value.has_metavar() || value.has_transient() || value.has_universe_meta()
 }
 
-/// Whether elaboration-only syntax survives in a definition's type, body or stated value sort of `item`.
-fn unfinished_item(item: &Item) -> bool {
-    match item {
-        Item::Let(definition) => {
-            unfinished(&definition.type_)
-                || unfinished(&definition.body)
-                || definition.value_sort.as_ref().is_some_and(unfinished)
-        }
-        Item::Rec(rec) => rec
-            .group
-            .iter()
-            .any(|member| unfinished(member.type_.body()) || unfinished(member.body.body())),
+fn unfinished(term: &Term) -> Option<&'static str> {
+    unfinished_bound(term)
+}
+
+/// [`unfinished`] of a value a position holds whole — a telescope, an arity — read as a position is, with no binder standing above it.
+fn unfinished_bound<B: Bound>(value: &B) -> Option<&'static str> {
+    if residue(value) {
+        Some(ELABORATION_RESIDUE)
+    } else if !value.closed() {
+        Some(LOOSE_VARIABLE)
+    } else {
+        None
     }
 }
 
-fn unfinished_inductive(decl: &InductDecl) -> bool {
+/// [`unfinished`] of a scope's body, read against the binders the scope itself opens: a member's terms are stored closed over the whole group, so their indices are bound where a position's are not.
+fn unfinished_scope(scope: &Scope<Many>) -> Option<&'static str> {
+    if residue(scope.body()) {
+        Some(ELABORATION_RESIDUE)
+    } else if scope.reach() != 0 {
+        Some(LOOSE_VARIABLE)
+    } else {
+        None
+    }
+}
+
+/// What `item` is not finished with, in a definition's type, body or stated value sort, or in a member's scopes.
+fn unfinished_item(item: &Item) -> Option<&'static str> {
+    match item {
+        Item::Let(definition) => unfinished(&definition.type_)
+            .or_else(|| unfinished(&definition.body))
+            .or_else(|| definition.value_sort.as_ref().and_then(unfinished)),
+        Item::Rec(rec) => rec.group.iter().find_map(|member| {
+            unfinished_scope(&member.type_).or_else(|| unfinished_scope(&member.body))
+        }),
+    }
+}
+
+fn unfinished_inductive(decl: &InductDecl) -> Option<&'static str> {
     unfinished_bound(&decl.arity)
-        || unfinished(&decl.result_sort)
-        || decl
-            .constructors
-            .iter()
-            .any(|(_, param)| unfinished_bound(&param.telescope))
+        .or_else(|| unfinished(&decl.result_sort))
+        .or_else(|| {
+            decl.constructors
+                .iter()
+                .find_map(|(_, param)| unfinished_bound(&param.telescope))
+        })
 }
 
-fn unfinished_record(decl: &StructDecl) -> bool {
-    unfinished_bound(&decl.arity) || unfinished(&decl.result_sort)
+fn unfinished_record(decl: &StructDecl) -> Option<&'static str> {
+    unfinished_bound(&decl.arity).or_else(|| unfinished(&decl.result_sort))
 }
 
-fn item_refusal(item: &Item) -> String {
-    format!("elaboration-only syntax survives in {}", item.describe())
+fn item_refusal(item: &Item, found: &str) -> String {
+    format!("{found} survives in {}", item.describe())
 }
 
-fn entry_refusal(name: &Global) -> String {
+fn entry_refusal(name: &Global, found: &str) -> String {
     format!(
-        "elaboration-only syntax survives in the registry entry for {}",
+        "{found} survives in the registry entry for {}",
         name.faithful()
     )
 }
