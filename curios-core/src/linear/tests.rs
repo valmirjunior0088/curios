@@ -204,13 +204,13 @@ fn two_truth_values_conversion_holds_one_agree_at_every_valuation() {
             int_sum(&image(&sub(x.clone(), y.clone())), &int(1)),
         ),
     ];
-    let nat_relations: [(&str, fn(Term, Term) -> Intrinsic); 4] = [
+    let nat_relations: [(&str, Relation); 4] = [
         ("<=", |left, right| Intrinsic::NatLe(left, right)),
         ("<", |left, right| Intrinsic::nat_lt(left, right)),
         ("==", |left, right| Intrinsic::nat_eql(left, right)),
         ("!=", |left, right| Intrinsic::nat_neq(left, right)),
     ];
-    let int_relations: [(&str, fn(Term, Term) -> Intrinsic); 4] = [
+    let int_relations: [(&str, Relation); 4] = [
         ("<=", |left, right| Intrinsic::IntLe(left, right)),
         ("<", |left, right| Intrinsic::IntLt(left, right)),
         ("==", |left, right| Intrinsic::IntEql(left, right)),
@@ -221,8 +221,7 @@ fn two_truth_values_conversion_holds_one_agree_at_every_valuation() {
         .flat_map(|a| (0..5u32).flat_map(move |b| (-2..3i32).map(move |c| (a, b, c))))
         .collect::<Vec<_>>();
     let mut grid = Vec::new();
-    let mut spelled = |sides: &[(&str, Term)],
-                       relations: &[(&str, fn(Term, Term) -> Intrinsic)]| {
+    let mut spelled = |sides: &[(&str, Term)], relations: &[(&str, Relation)]| {
         for (left_name, left) in sides {
             for (right_name, right) in sides {
                 for (symbol, spell) in relations {

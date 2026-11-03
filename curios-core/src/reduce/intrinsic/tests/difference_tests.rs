@@ -1,6 +1,9 @@
 //! What the fold decides of a comparison a truncated difference stands in, held to the carrier's own values.
 
-use {crate::reduce::intrinsic::test_support::*, crate::*};
+use {
+    crate::reduce::intrinsic::test_support::*,
+    crate::{test_support::*, *},
+};
 
 /// The sides a difference can stand on, each with the spelling to name it by: bare, floored, nested, inside a sum, scaled, and against a side the bounds oracle or the lattice reads.
 fn sides() -> Vec<(&'static str, Term)> {
@@ -61,7 +64,7 @@ fn sides() -> Vec<(&'static str, Term)> {
 }
 
 /// The four comparisons the roster builds, each by the spelling to name it by.
-fn comparisons() -> Vec<(&'static str, fn(Term, Term) -> Intrinsic)> {
+fn comparisons() -> Vec<(&'static str, Relation)> {
     vec![
         ("<=", |left, right| Intrinsic::nat_lte(left, right)),
         ("<", |left, right| Intrinsic::nat_lt(left, right)),

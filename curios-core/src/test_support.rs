@@ -140,6 +140,9 @@ pub fn fresh(hint: Option<&str>) -> Free {
     )
 }
 
+/// How a suite spells one of the comparison intrinsics, paired at its use site with the symbol to name it by: the grids that hold a verdict to the carrier's values range over the four relations, and a bare function type among them reads as the shape of the roster rather than as one relation.
+pub type Relation = fn(Term, Term) -> Intrinsic;
+
 /// A reducer that folds intrinsics all the way down, for the gates that must *evaluate* a rebuilt term rather than inspect its shape. `reduce_intrinsic` already reduces its own operands through this seam, so one pass suffices for the terms the suites build.
 pub struct Folding;
 
