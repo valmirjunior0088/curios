@@ -7,27 +7,22 @@
 #[cfg(test)]
 mod tests;
 
-use std::{env, fs, thread};
+use {
+    serde::{Deserialize, Serialize},
+    std::{env, fs, thread},
+};
 
 /// What stands where the host exposes nothing. A missing value is spelled rather than dropped, so two readings taken where different things are knowable still compare as the different arrangements they are.
 const UNKNOWN: &str = "unknown";
 
-/// Where a reading was taken, as the reading records it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a reading was taken, as the host answers it and the reading records it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Platform {
     /// The machine itself. Differs between two readings, and they are of different machines.
-    pub(crate) machine: &'static str,
-    /// How it was arranged when the reading was taken. Differs, and the same machine was running under different rules.
-    pub(crate) state: &'static str,
-    /// What was running on it. Recorded, never gated.
-    pub(crate) software: &'static str,
-}
-
-/// The same three lines as the host answers them, which is what `collect` captures and writes into the module it prints.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Captured {
     pub(crate) machine: String,
+    /// How it was arranged when the reading was taken. Differs, and the same machine was running under different rules.
     pub(crate) state: String,
+    /// What was running on it. Recorded, never gated.
     pub(crate) software: String,
 }
 
@@ -79,13 +74,13 @@ fn told(path: &str) -> String {
 }
 
 /// What the host answers about itself, as a reading records it.
-pub(crate) fn capture() -> Captured {
+pub(crate) fn capture() -> Platform {
     let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
     let meminfo = fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let cpus = thread::available_parallelism()
         .map_or_else(|_| UNKNOWN.to_string(), |cpus| cpus.to_string());
 
-    Captured {
+    Platform {
         machine: format!(
             "{}, {}, {cpus} cpus, {}",
             field(&cpuinfo, "model name"),

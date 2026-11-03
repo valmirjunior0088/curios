@@ -8,13 +8,14 @@
 mod tests;
 
 use {
-    crate::{Captured, capture, held, table},
+    crate::{Pin, Reading, Size, Timed, capture, held, table},
     std::{
         env, fs, io,
         path::{Path, PathBuf},
         process::{Command, Stdio},
         time::Instant,
     },
+    toml::value::Datetime,
 };
 
 /// One workload of the measurement corpus, `programs/<name>/`, which carries the same program in Curios and in Rust. What each computes is `programs/README.md`'s.
@@ -187,10 +188,10 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
     }
 }
 
-/// Run one contestant once: what it printed, and how long the whole process took, in milliseconds.
+/// Run one contestant once: what it printed, and how long the whole process took, in whole microseconds.
 ///
 /// `PATH` is the one variable that survives the clearing, because the engine is found on it; everything else is dropped so that the environment a contestant starts under is the same small thing in every execution of every reading.
-fn once(invocation: &Invocation) -> Result<(String, f64), String> {
+fn once(invocation: &Invocation) -> Result<(String, u64), String> {
     let path = env::var("PATH").unwrap_or_default();
     let named = invocation.program.display().to_string();
 
@@ -208,7 +209,7 @@ fn once(invocation: &Invocation) -> Result<(String, f64), String> {
     let produced = child
         .wait_with_output()
         .map_err(|error| format!("{named} could not be waited for: {error}"))?;
-    let took = started.elapsed().as_secs_f64() * 1000.0;
+    let took = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
 
     match produced.status.success() {
         true => Ok((
@@ -319,7 +320,7 @@ fn agree(workload: &Workload, size: u64, root: &Path) -> Result<(), String> {
 }
 
 /// Time every contestant on `workload`, a group at a time and the contestants interleaved inside each, and hand back each one's samples by group.
-fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<f64>>>, String> {
+fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>>, String> {
     eprintln!(">> timing {} ({}={size})", workload.name, workload.letter);
 
     let invocations = CONTESTANTS
@@ -352,67 +353,10 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<f64>>
     Ok(samples)
 }
 
-/// Everything one sitting captured, which is the subject `recorded` writes out. It travels as one value because it is one thing: what a reading will say.
-#[derive(Debug)]
-struct Sitting {
-    taken: String,
-    subject: String,
-    platform: Captured,
-    pinned: Vec<(&'static str, String)>,
-    sizes: Vec<(&'static str, u64)>,
-    timed: Vec<(&'static str, &'static str, Vec<Vec<f64>>)>,
-}
-
-/// A reading as the module that records it, ready to be filed as `src/reading_NN.rs` and listed in `main.rs`.
-fn recorded(number: usize, sitting: &Sitting) -> String {
-    let Sitting {
-        taken,
-        subject,
-        platform,
-        ..
-    } = sitting;
-    // `date -I` zero-pads, and `03` is a zero-prefixed decimal literal, which does not compile.
-    let unpadded = |field: &str| field.trim_start_matches('0').to_string();
-    let (year, month, day) = (
-        &taken[0..4],
-        unpadded(&taken[5..7]),
-        unpadded(&taken[8..10]),
-    );
-    let mut module = format!(
-        "use crate::{{Date, Platform, Reading, took}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
-        platform.machine, platform.state, platform.software
-    );
-
-    for (tool, version) in &sitting.pinned {
-        module.push_str(&format!("        ({tool:?}, {version:?}),\n"));
-    }
-    module.push_str("    ],\n    sizes: &[\n");
-    for (workload, size) in &sitting.sizes {
-        module.push_str(&format!("        ({workload:?}, {size}),\n"));
-    }
-    module.push_str("    ],\n    timed: &[\n");
-
-    for (workload, contestant, groups) in &sitting.timed {
-        module.push_str(&format!("        took({workload:?}, {contestant:?}, &[\n"));
-        for group in groups {
-            let group = group
-                .iter()
-                .map(|took| format!("{took:.3}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            module.push_str(&format!("            &[{group}],\n"));
-        }
-        module.push_str("        ]),\n");
-    }
-
-    module.push_str("    ],\n};\n");
-    module
-}
-
-/// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the reading as the module that records it.
+/// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the reading as the TOML file that records it.
 ///
-/// The reading is numbered after `taken`, the readings already filed, which the binary keeps. Standard output carries the module alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error.
-pub(crate) fn collect(taken: usize) -> Result<(), String> {
+/// The reading is numbered after `filed`, the readings already filed, which the binary keeps. Standard output carries the reading alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error, the name to file it under among it.
+pub(crate) fn collect(filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
@@ -438,42 +382,64 @@ pub(crate) fn collect(taken: usize) -> Result<(), String> {
 
     let mut timed = Vec::new();
     for workload in WORKLOADS {
-        let samples = time(workload, workload.size, &root)?;
-
-        let borrowed = samples
+        let measured = CONTESTANTS
             .iter()
-            .map(|groups| groups.iter().map(Vec::as_slice).collect::<Vec<_>>())
+            .zip(time(workload, workload.size, &root)?)
+            .map(|(contestant, microseconds)| Timed {
+                workload: workload.name.to_string(),
+                contestant: contestant.name.to_string(),
+                microseconds,
+            })
             .collect::<Vec<_>>();
+
         let rows = CONTESTANTS
             .iter()
-            .zip(&borrowed)
-            .map(|(contestant, groups)| (contestant.title, groups.as_slice()))
+            .zip(&measured)
+            .map(|(contestant, timed)| (contestant.title, timed.milliseconds()))
             .collect::<Vec<_>>();
         eprint!(
             "\n{}",
             table(workload.title, workload.letter, workload.size, &rows)
         );
 
-        for (contestant, groups) in CONTESTANTS.iter().zip(samples) {
-            timed.push((workload.name, contestant.name, groups));
-        }
+        timed.extend(measured);
     }
 
-    let sizes = WORKLOADS
-        .iter()
-        .map(|workload| (workload.name, workload.size))
-        .collect::<Vec<_>>();
-
-    let sitting = Sitting {
-        taken: asked("date", &["-I"], &root)?,
+    let reading = Reading {
+        taken: today(&asked("date", &["-I"], &root)?)?,
         subject,
         platform,
-        pinned,
-        sizes,
+        pinned: pinned
+            .into_iter()
+            .map(|(tool, version)| Pin {
+                tool: tool.to_string(),
+                version,
+            })
+            .collect(),
+        sizes: WORKLOADS
+            .iter()
+            .map(|workload| Size {
+                workload: workload.name.to_string(),
+                size: workload.size,
+            })
+            .collect(),
         timed,
     };
 
-    print!("{}", recorded(taken, &sitting));
+    print!("{}", reading.filed()?);
+    eprintln!(">> file it as xbench/readings/{filed:02}.toml");
 
     Ok(())
+}
+
+/// The day `date -I` answers, as a reading records it.
+fn today(said: &str) -> Result<toml::value::Date, String> {
+    match said.parse::<Datetime>() {
+        Ok(Datetime {
+            date: Some(date),
+            time: None,
+            offset: None,
+        }) => Ok(date),
+        _ => Err(format!("`date -I` answered {said:?}, which is no day")),
+    }
 }

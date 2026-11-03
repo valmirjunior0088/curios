@@ -1,43 +1,51 @@
-//! The benchmark bench, as a cargo subcommand, and the readings it has taken, one a module beside this one.
+//! The benchmark bench, as a cargo subcommand, and the readings it has taken, each a TOML file under `xbench/readings/` that the build embeds.
 //!
-//! `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and prints the reading as the module that records it — standard output carries the module alone, so `cargo xbench collect > xbench/src/reading_NN.rs` files a capture and nothing else. `cargo xbench report` computes what the readings say; it runs anywhere.
+//! `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and prints the reading as the TOML file that records it — standard output carries the reading alone, so `cargo xbench collect > xbench/readings/NN.toml` files a capture and nothing else. `cargo xbench report` computes what the readings say; it runs anywhere.
+//!
+//! It reads in the order a sitting uses it:
+//!
+//! - [`held`] holds every tool to the pin the file that owns it states, before anything is built.
+//! - [`capture`] asks the host where the reading is being taken.
+//! - [`collect`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and prints a [`Reading`] as the file that records it.
+//! - [`report()`] computes every median, span, ratio and refusal from the readings, since none of them is stored.
 
 #[cfg(test)]
 mod tests;
 
-mod support;
-use support::*;
+mod platform;
+use platform::*;
 
-mod reading_00;
-use reading_00::*;
+mod reading;
+use reading::*;
 
-mod reading_01;
-use reading_01::*;
+mod pins;
+use pins::*;
 
-mod reading_02;
-use reading_02::*;
+mod contest;
+use contest::*;
 
-mod reading_03;
-use reading_03::*;
-
-mod reading_04;
-use reading_04::*;
+mod report;
+use report::*;
 
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
 };
 
-/// Every reading taken, oldest first: a reading's number is its index here.
+include!(concat!(env!("OUT_DIR"), "/filed.rs"));
+
+/// Every reading filed, oldest first: a reading's number is its index here and its file's name.
 ///
 /// The bench begins with none, as the board began with no ticket. A reading is filed from what a sitting printed, never written by hand, and the ones a vanished harness took are not carried in: none was taken under a protocol this bench records, so none could be compared with a reading taken now.
-const READINGS: &[&Reading] = &[
-    &READING_00,
-    &READING_01,
-    &READING_02,
-    &READING_03,
-    &READING_04,
-];
+fn readings() -> Result<Vec<Reading>, String> {
+    FILED
+        .iter()
+        .enumerate()
+        .map(|(number, text)| {
+            Reading::read(text).map_err(|why| format!("reading {number:02} is malformed: {why}"))
+        })
+        .collect()
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -72,23 +80,24 @@ enum Bench {
 }
 
 fn main() -> ExitCode {
-    let outcome = match Cli::parse().command {
+    let command = Cli::parse().command;
+    let outcome = readings().and_then(|readings| match command {
         // The next reading is numbered after the ones already filed, which is something only the binary knows.
-        Bench::Collect => collect(READINGS.len()),
+        Bench::Collect => collect(readings.len()),
         Bench::Report { reading: None } => {
-            print!("{}", report(READINGS));
+            print!("{}", report(&readings));
             Ok(())
         }
         Bench::Report {
             reading: Some(number),
-        } => match READINGS.get(number) {
+        } => match readings.get(number) {
             Some(reading) => {
                 print!("{}", one(number, reading));
                 Ok(())
             }
             None => Err(format!("there is no reading {number:02}")),
         },
-    };
+    });
 
     match outcome {
         Ok(()) => ExitCode::SUCCESS,

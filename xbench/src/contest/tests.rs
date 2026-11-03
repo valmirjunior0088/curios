@@ -91,33 +91,13 @@ fn a_workload_is_checked_at_a_smaller_size_than_it_is_timed_at() {
     }
 }
 
+/// `date -I` answers a zero-padded day, and a reading records it as TOML's local date, which refuses a day its month does not have.
 #[test]
-fn a_recorded_reading_is_the_module_that_files_it() {
-    let platform = Captured {
-        machine: "A Processor, x86_64, 16 cpus, 31.3 GiB".to_string(),
-        state: "governor performance, boost on, smt on".to_string(),
-        software: "kernel 7.2.7, microcode 0xa201213".to_string(),
-    };
-    let module = recorded(
-        7,
-        &Sitting {
-            taken: "2026-10-07".to_string(),
-            subject: "curios 0.15.6 (51232992ce88)".to_string(),
-            platform,
-            pinned: vec![("rustc", "1.95.0".to_string())],
-            sizes: vec![("lcg", 100_000_000)],
-            timed: vec![("lcg", "curios", vec![vec![1.5, 2.5], vec![3.0]])],
-        },
+fn the_day_date_answers_is_the_day_a_reading_records() {
+    assert_eq!(
+        today("2026-10-07").map(|day| day.to_string()),
+        Ok("2026-10-07".to_string())
     );
-
-    assert!(module.contains("READING_07: Reading"));
-    // `date -I` zero-pads the day, and `07` is a zero-prefixed decimal literal that does not compile.
-    assert!(module.contains("Date::new(2026, 10, 7)"));
-    assert!(module.contains("subject: \"curios 0.15.6 (51232992ce88)\""));
-    assert!(module.contains("machine: \"A Processor, x86_64, 16 cpus, 31.3 GiB\""));
-    assert!(module.contains("(\"rustc\", \"1.95.0\")"));
-    assert!(module.contains("(\"lcg\", 100000000)"));
-    assert!(module.contains("took(\"lcg\", \"curios\", &["));
-    assert!(module.contains("&[1.500, 2.500]"));
-    assert!(module.contains("&[3.000]"));
+    assert!(today("2026-02-30").is_err());
+    assert!(today("yesterday").is_err());
 }

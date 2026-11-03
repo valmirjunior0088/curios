@@ -7,10 +7,27 @@ use super::*;
 /// Two is the fewest that yields a span rather than a single difference, and the report's whole test is whether two spans are disjoint.
 const LEAST_GROUPS: usize = 2;
 
+/// Every reading filed, each read as the bench reads it.
+fn filed() -> Vec<Reading> {
+    readings().unwrap_or_else(|why| panic!("{why}"))
+}
+
+/// A reading is filed from what a sitting printed, never written by hand: each file is what `collect` prints of the reading it holds.
+#[test]
+fn every_reading_is_filed_as_collect_prints_it() {
+    for (number, (text, reading)) in FILED.iter().zip(filed()).enumerate() {
+        assert_eq!(
+            reading.filed().as_deref(),
+            Ok(*text),
+            "reading {number:02} is not as `collect` prints it"
+        );
+    }
+}
+
 #[test]
 fn every_reading_measures_what_the_contest_names() {
-    for (number, reading) in READINGS.iter().enumerate() {
-        for timed in reading.timed {
+    for (number, reading) in filed().iter().enumerate() {
+        for timed in &reading.timed {
             assert!(
                 WORKLOADS
                     .iter()
@@ -32,10 +49,10 @@ fn every_reading_measures_what_the_contest_names() {
 /// A figure whose size the reading does not state cannot be compared with anything, since the gate has nothing to hold the two readings to.
 #[test]
 fn every_figure_names_a_workload_its_reading_sized() {
-    for (number, reading) in READINGS.iter().enumerate() {
-        for timed in reading.timed {
+    for (number, reading) in filed().iter().enumerate() {
+        for timed in &reading.timed {
             assert!(
-                reading.size(timed.workload).is_some(),
+                reading.size(&timed.workload).is_some(),
                 "reading {number:02} times {} without saying what size it ran at",
                 timed.workload
             );
@@ -45,17 +62,17 @@ fn every_figure_names_a_workload_its_reading_sized() {
 
 #[test]
 fn every_figure_holds_enough_batches_to_have_a_span() {
-    for (number, reading) in READINGS.iter().enumerate() {
-        for timed in reading.timed {
+    for (number, reading) in filed().iter().enumerate() {
+        for timed in &reading.timed {
             assert!(
-                timed.groups.len() >= LEAST_GROUPS,
+                timed.microseconds.len() >= LEAST_GROUPS,
                 "reading {number:02} times {} on {} in {} batches",
                 timed.contestant,
                 timed.workload,
-                timed.groups.len()
+                timed.microseconds.len()
             );
             assert!(
-                timed.groups.iter().all(|group| !group.is_empty()),
+                timed.microseconds.iter().all(|group| !group.is_empty()),
                 "reading {number:02} times {} on {} with an empty batch",
                 timed.contestant,
                 timed.workload
@@ -66,7 +83,7 @@ fn every_figure_holds_enough_batches_to_have_a_span() {
 
 #[test]
 fn every_reading_says_what_it_is_of_and_where_it_was_taken() {
-    for (number, reading) in READINGS.iter().enumerate() {
+    for (number, reading) in filed().iter().enumerate() {
         assert!(
             !reading.subject.is_empty(),
             "reading {number:02} names no subject"

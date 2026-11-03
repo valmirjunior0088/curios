@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Reading, WORKLOADS},
+    crate::{CONTESTANTS, Pin, Reading, WORKLOADS},
     std::fmt::Write,
 };
 
@@ -58,7 +58,7 @@ fn spanned(values: &[f64]) -> Option<Figure> {
 }
 
 /// What `groups` amount to: the median of each group's median, and the least and greatest of them.
-pub(crate) fn figure(groups: &[&[f64]]) -> Option<Figure> {
+pub(crate) fn figure(groups: &[Vec<f64>]) -> Option<Figure> {
     spanned(
         &groups
             .iter()
@@ -68,7 +68,7 @@ pub(crate) fn figure(groups: &[&[f64]]) -> Option<Figure> {
 }
 
 /// `subject` over `against`, group by group: each group's median of the one over the other's in the same group, where the two ran interleaved, so what disturbed the machine during it reaches both and cancels.
-fn relative(subject: &[&[f64]], against: &[&[f64]]) -> Option<Figure> {
+fn relative(subject: &[Vec<f64>], against: &[Vec<f64>]) -> Option<Figure> {
     spanned(
         &subject
             .iter()
@@ -156,10 +156,15 @@ fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
 }
 
 /// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times Rust it is.
-pub(crate) fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -> String {
+pub(crate) fn table(
+    title: &str,
+    letter: &str,
+    size: u64,
+    rows: &[(&str, Vec<Vec<f64>>)],
+) -> String {
     let mut figures = rows
         .iter()
-        .filter_map(|&(contestant, groups)| Some((contestant, figure(groups)?)))
+        .filter_map(|(contestant, groups)| Some((*contestant, figure(groups)?)))
         .collect::<Vec<_>>();
     let control = figures
         .iter()
@@ -204,7 +209,7 @@ fn header(number: usize, reading: &Reading) -> String {
     let pinned = reading
         .pinned
         .iter()
-        .map(|&(tool, version)| format!("{tool} {version}"))
+        .map(|pin| format!("{} {}", pin.tool, pin.version))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -230,7 +235,7 @@ pub(crate) fn one(number: usize, reading: &Reading) -> String {
             .iter()
             .filter_map(|contestant| {
                 let timed = reading.took(workload.name, contestant.name)?;
-                Some((contestant.title, timed.groups))
+                Some((contestant.title, timed.milliseconds()))
             })
             .collect::<Vec<_>>();
         if rows.is_empty() {
@@ -255,13 +260,22 @@ fn incomparable(before: &Reading, after: &Reading) -> Option<String> {
         (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
     };
 
-    differs("machine", before.platform.machine, after.platform.machine)
-        .or_else(|| differs("state", before.platform.state, after.platform.state))
+    // A pin is spelled as the tool and the version it holds, the pair a reader compares.
+    let pairs = |pinned: &[Pin]| {
+        pinned
+            .iter()
+            .map(|pin| (pin.tool.clone(), pin.version.clone()))
+            .collect::<Vec<_>>()
+    };
+
+    differs("machine", &before.platform.machine, &after.platform.machine)
+        .or_else(|| differs("state", &before.platform.state, &after.platform.state))
         .or_else(|| {
             (before.pinned != after.pinned).then(|| {
                 format!(
                     "  pinned   {:?}\n       -> {:?}",
-                    before.pinned, after.pinned
+                    pairs(&before.pinned),
+                    pairs(&after.pinned)
                 )
             })
         })
@@ -279,8 +293,8 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
     let mut rows = Vec::new();
     for workload in WORKLOADS {
         let read = |reading: &Reading| {
-            let groups = |contestant| Some(reading.took(workload.name, contestant)?.groups);
-            relative(groups(SUBJECT)?, groups(CONTROL)?)
+            let groups = |contestant| Some(reading.took(workload.name, contestant)?.milliseconds());
+            relative(&groups(SUBJECT)?, &groups(CONTROL)?)
         };
         let (Some(was), Some(is)) = (read(before), read(after)) else {
             continue;
@@ -326,7 +340,7 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
 }
 
 /// Every reading so far: each in full, with what changed between consecutive ones.
-pub(crate) fn report(readings: &[&Reading]) -> String {
+pub(crate) fn report(readings: &[Reading]) -> String {
     let Some((first, rest)) = readings.split_first() else {
         return "No reading recorded. `cargo xbench collect` takes the first.\n".to_string();
     };
@@ -337,7 +351,7 @@ pub(crate) fn report(readings: &[&Reading]) -> String {
             out,
             "\n{}\n{}",
             one(number + 1, reading),
-            compare(number + 1, readings[number], reading)
+            compare(number + 1, &readings[number], reading)
         );
     }
 

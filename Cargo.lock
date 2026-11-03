@@ -2625,6 +2625,8 @@ name = "xbench"
 version = "0.16.17"
 dependencies = [
  "clap",
+ "serde",
+ "toml",
 ]
 
 [[package]]

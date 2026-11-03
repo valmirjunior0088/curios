@@ -1,6 +1,6 @@
 # xbench — where Curios's cost is, and whether it moved
 
-The benchmark bench: `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them, and prints the sitting as the module that records it; `cargo xbench report` computes what the readings say. It is a run-once-every-never bench for orientation — "Curios is ~Nx off Rust on integer loops" — and **not** a rigorous benchmark suite. What makes it worth keeping is not its precision but its bookkeeping: a reading records everything it was taken under, nothing derived from a reading is stored, and a comparison the record cannot justify is refused rather than drawn.
+The benchmark bench: `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them, and prints the sitting as the TOML file that records it; `cargo xbench report` computes what the readings say. It is a run-once-every-never bench for orientation — "Curios is ~Nx off Rust on integer loops" — and **not** a rigorous benchmark suite. What makes it worth keeping is not its precision but its bookkeeping: a reading records everything it was taken under, nothing derived from a reading is stored, and a comparison the record cannot justify is refused rather than drawn.
 
 A reading is a historical fact and cannot be re-run. That is what separates this crate from [`xboard`](../xboard/README.md), whose witnesses go to the checkers on every run and fail where they disagree with their ticket. Nothing here regresses; the bench fails only where a filed record is malformed.
 
@@ -8,21 +8,21 @@ A reading is a historical fact and cannot be re-run. That is what separates this
 
 ```
 xbench/
-  src/main.rs        the command line, and every reading taken
-  src/reading_NN.rs  one reading each, as data
-  src/support/       what a reading is, what it is taken under, the contest, the report
+  src/main.rs        the command line, and the readings the build embeds
+  src/               what a reading is, what it is taken under, the contest, the report
+  readings/NN.toml   one reading each, the file `collect` printed
 
 ../programs/
   lcg/ trees/ chain/ churn/ walk/ spines/   the timed programs, one directory per workload
 ```
 
 ```sh
-cargo xbench collect > xbench/src/reading_00.rs   # then list the module in main.rs
-cargo xbench report                               # every reading, and what changed between them
-cargo xbench report 00                            # one reading in full
+cargo xbench collect > xbench/readings/00.toml   # filed under the next number, which collect names
+cargo xbench report                              # every reading, and what changed between them
+cargo xbench report 00                           # one reading in full
 ```
 
-Standard output carries the reading module alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.
+Standard output carries the reading alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.
 
 Taking a reading needs a checkout, `cargo`, and the `wasmtime` CLI at the version `Cargo.lock` resolves — `rust-wasm` runs on the CLI while `curios` runs on the engine the compiler embeds, so unless the two agree the WebAssembly comparison is between two engines rather than two compilers. A reading records both, and `collect` refuses before it builds anything where they differ. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install beyond the engine.
 
@@ -78,6 +78,14 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Rejected.** The machine as a sentence written after the fact: nothing holds it to the sitting and nothing can compare two of them. A mean and a standard deviation over one batch: five samples summarised that way cannot tell a one percent move from nothing, and stating a ratio from them claims a precision the measurement does not have. Sizes read from the contest at print time rather than from the reading: changing a workload's size would silently relabel what every earlier reading measured.
 
+### A reading is a file the build embeds
+
+**Decision.** A reading is `readings/<NN>.toml`, the file `collect` printed: the day as a TOML local date, every sample in whole microseconds, and the pins, the sizes and the timings as arrays in the order they were taken. The build embeds every file there in the order of its number and refuses a name that is not the next number, and a test holds each file to what `collect` prints of the reading it holds.
+
+**Rationale.** A reading is data, and a record kept as code is read by Rust alone: a field added rewrote every reading, and each was listed by hand. A microsecond is an integer, so the record is exact where a decimal millisecond is a float a reader parses again, and TOML refuses a day its month does not have, which a date type of the bench's own held before. Embedding keeps a binary built at one commit reporting that commit's readings.
+
+**Rejected.** A reading as a Rust module, for the reasons above. Reading the directory where the bench runs, under which a binary built at one commit reports another's readings. The TOML printer's pretty form, which lays a nested array out unevenly where the plain form puts a group's samples on one line.
+
 ### A difference is proven only where two spans are disjoint
 
 **Decision.** The span between group medians is the bar, and a movement under it is `no difference proven` rather than a number.
@@ -112,7 +120,7 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 ### The bench begins with no reading
 
-**Decision.** `READINGS` starts empty. The runs a vanished harness took are not carried in.
+**Decision.** `readings/` began empty. The runs a vanished harness took are not carried in.
 
 **Rationale.** It is the board's rule — it began with no ticket, because a flaw never seen admitted by a run of the board says nothing. No earlier run was taken under a protocol this bench records: none states its sizes, its sample count or its warmup, none kept its samples, and each was taken on a machine described in prose. Not one could be compared with a reading taken now, so carrying them in would furnish the record with rows the report must always refuse.
 

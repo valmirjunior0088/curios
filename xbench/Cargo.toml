@@ -12,3 +12,6 @@ workspace = true
 [dependencies]
 # The command line, in `xtask`'s own convention.
 clap = { workspace = true }
+# A reading is a TOML file beside the code, read where the bench runs and printed where a sitting files one.
+serde = { workspace = true }
+toml = { workspace = true, features = ["display"] }
