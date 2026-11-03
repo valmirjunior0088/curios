@@ -1118,3 +1118,208 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
         "the field type at the occurrence's instance was refused",
     );
 }
+
+/// A top-level `rec` group's member names only the universe parameters its item declares.
+///
+/// A group binds no universe, so a level `param k` inside a member's scopes is the enclosing item's `k`th wherever it stands, and an instance of the item substitutes it with every other level the item binds. That is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` was admitted through the absence of; the fixtures beside it hold the four sites a *reader* reaches, and this one holds the boundary, which is what makes those four the only readings there are.
+///
+/// While a group bound parameters of its own, `param 1` inside a member of a one-parameter item was that item's own level, shifted past the group's binder — so the module below is the pre-collapse spelling of a legitimate group, and nothing about it is ill-formed on its face. The instance `held@{5}` states one level for a one-parameter scheme, so `Kernel::check_instance` passes on width and has no constraint to discharge; `instantiate_universes` then substitutes `param 0` and leaves `param 1` as it stands, and `param 1` at the reader is the *reader's* second parameter. Under the reader's own `param 1 ≤ 0` the member's body reads as `Type 1`, which the reader's `Type 0` inhabits. `universe_escape` is the whole of what refuses it, reaching a member through the opened view [`RecItem::definitions`](curios_core::RecItem::definitions) hands back, at the item's own count.
+///
+/// Reachable from no surface program — `validate_universes` holds every level of a module to its declaration's count before the module leaves the elaborator — so only this fixture puts the certifier's copy of the rule at this position.
+///
+/// Mutation-checked, which is what makes the claim above a demonstration: with `universe_escape` answering `None`, the walk returns **zero** verdicts over the first module, so the reader's `Type 0` stands at a level the member never meant.
+///
+/// The control is the same group with the item declaring the parameter its member names, read at an instance that states both.
+#[test]
+fn a_group_members_level_names_only_its_items_universe_parameters() {
+    let second = Level::param(UniverseParam(1));
+    let plus_one = second.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let held = Global::Authored(Qualifier::from(["held"]));
+    let reads = Global::Authored(Qualifier::from(["reads"]));
+    let member = |parameters: usize| Definition {
+        name: held,
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: parameters,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_: Term::type_at(plus_two.clone()),
+        body: Term::type_at(plus_one.clone()),
+    };
+    // The reader pins its own second parameter at zero: the level a captured `param 1` would be read at, and the one the member's own instance must answer instead.
+    let readers_context = |parameters: usize| UniverseContext {
+        parameter_count: parameters,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: second.clone(),
+            upper: Level::zero(),
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+        }],
+    };
+    let module = |parameters: usize, instance: Vec<Level>, claimed: Level| Module {
+        mounts: Vec::new(),
+        items: vec![
+            Item::Rec(RecItem::new(vec![(fresh(None), member(parameters))])),
+            Item::Let(Box::new(Definition {
+                name: reads,
+                kind: DefinitionKind::Authored,
+                universe_context: readers_context(2),
+                island: Qualifier::default(),
+                totality: Totality::Total,
+                proof: false,
+                variances: Vec::new(),
+                field_variances: Vec::new(),
+                parameter_field: None,
+                value_sort: None,
+                type_: Term::instance(held, instance),
+                body: Term::type_at(claimed),
+            })),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    let verdicts = fixture_verdicts(
+        &module(1, vec![Level::constant(5)], Level::zero()),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(held)
+            && matches!(verdict.error, Error::UnclosedUniverses)),
+        "the kernel certified a group member naming a level its item does not bind: {verdicts:?}",
+    );
+
+    let stated = vec![Level::constant(5), Level::constant(6)];
+    assert_eq!(
+        fixture_verdicts(
+            &module(2, stated, Level::constant(6)),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "the same member, at an item declaring the parameter it names, was refused",
+    );
+}
+
+/// A universe context whose offsets sit at the top of the range is decided rather than saturated.
+///
+/// The soundness board states that level arithmetic is checked throughout and refuses with `OffsetOverflow`, "so the hierarchy cannot be collapsed by saturating it". `Level::checked_add` is one half of that, and [`an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow`] holds it. The other half is the arithmetic the two level *decisions* run: `LevelModel::raise` adds a clause's shift to an offset and `ceiling` multiplies a gain by a head count, both saturating, and `satisfiable` and `entails` read the result. Saturated into agreement, a loop would answer *satisfiable* — a pass raising nothing is the least model — and the walk would assume a hypothesis set from which `entails` proves every level relation and `check_instance` discharges nothing (`curios-cert/src/satisfy.rs`).
+///
+/// Two readings are put here, the two the decisions are. `param 0 + u32::MAX ≤ param 0` is a loop whose every pass climbs by the largest offset a level holds, so the floor passes the ceiling rather than settling: refused as unsatisfiable. And under the satisfiable `param 0 + (u32::MAX - 1) ≤ param 1`, the bound `Type (param 0 + u32::MAX - 1) : Type (param 1)` asks `param 0 + u32::MAX ≤ param 1`, one rung above what the hypothesis states: the derivation must stop one short of it instead of saturating onto it.
+///
+/// The controls are the two sets with the same offsets the other way round, where the hypothesis does state the bound: both must stand, since a decision that refused every large offset would shut this with a brick.
+#[test]
+fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_saturated() {
+    let first = Level::param(UniverseParam(0));
+    let second = Level::param(UniverseParam(1));
+    let raised = |level: &Level, offset: u32| {
+        level
+            .checked_add(offset)
+            .expect("an offset below the top of the range")
+    };
+    let bounded = |lower: Level, upper: Level| UniverseConstraint {
+        lower,
+        upper,
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+    let held = Global::Authored(Qualifier::from(["held"]));
+    let module = |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Module {
+        mounts: Vec::new(),
+        items: vec![Item::Let(Box::new(Definition {
+            name: held,
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext {
+                parameter_count: parameters,
+                quality_count: 0,
+                constraints,
+            },
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_,
+            body,
+        }))]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+
+    let looping = module(
+        1,
+        vec![bounded(raised(&first, u32::MAX), first.clone())],
+        nat(),
+        zero(),
+    );
+    let verdicts = fixture_verdicts(&looping, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::UnsatisfiableUniverses)),
+        "a loop through the largest offset a level holds was called satisfiable: {verdicts:?}",
+    );
+
+    let short = module(
+        2,
+        vec![bounded(raised(&first, u32::MAX - 1), second.clone())],
+        Term::type_at(second.clone()),
+        Term::type_at(raised(&first, u32::MAX - 1)),
+    );
+    let verdicts = fixture_verdicts(&short, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        "a bound one rung above the hypothesis was derived at the top of the offset range: {verdicts:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(
+                1,
+                vec![bounded(first.clone(), raised(&first, u32::MAX))],
+                nat(),
+                zero(),
+            ),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "a set with a model at every assignment was refused for its offsets",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &module(
+                2,
+                vec![bounded(raised(&first, u32::MAX), second.clone())],
+                Term::type_at(second),
+                Term::type_at(raised(&first, u32::MAX - 1)),
+            ),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "a bound the hypothesis states at the top of the offset range was not derived",
+    );
+}

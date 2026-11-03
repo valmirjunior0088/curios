@@ -5,8 +5,10 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Module, Nat, Quality,
-        Scope, Subterm, Telescope, Term, UniverseContext, test_support::*,
+        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Intrinsic, Item,
+        Level, Many, Module, Nat, Quality, Scope, Subterm, Telescope, Term, Totality,
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseParam, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -682,5 +684,162 @@ fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "a `Type 3` was refined into a variable of type `Type 0`: {collapsing:?}",
+    );
+}
+
+/// [`refined_variable_module`] with the outer variable's own type written as a reference to a declaration, so the bound the refinement is kept by is read at the levels the reference states.
+///
+/// `Universe@{p} : Type (p + 2) = Type (p + 1)` is a definition whose value is a sort, and `V : Universe@{0}` is a binder whose type forces to `Type 1`. `fits_its_variable` forces the variable's type and asks `Judge::sort_below` of the target, so the level the bound is decided at arrives through an instance rather than written where the binder is.
+///
+/// The reader pins a level of its own at eight, `8 ≤ q` and `q ≤ 8`, so that a captured reading is above the honest one and still below the family's index. Read at the instance, `Universe@{0}` is `Type 1`, the target `Type 3` is typed at `Type 4`, and `4 ≤ 1` holds under no hypothesis: the refinement is dropped and the arm reads `V` as it stands, where its body `Type 2` is a term nothing types at a variable. Read at the *reader's* parameter instead — the shape `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` was admitted through — the bound would be `4 ≤ q + 1`, which the hypotheses entail, and the refinement would be kept.
+///
+/// `variable` is what the binder's type is written as, so that the term a captured reading would have left — `Type (q + 1)`, spelled in the reader's own parameter — is a fixture of its own beside the instance. The family's index stands at `Type 10` so that both readings inhabit it: a binder is checked at its index's type by subsumption before any refinement is asked about, and an index below the captured reading would refuse the module there instead.
+fn refined_at(variable: impl Fn(&Level) -> Term) -> Module {
+    let p = Level::param(UniverseParam(0));
+    let plus_one = p.clone().succ().expect("a parameter has a successor");
+    let plus_two = plus_one.clone().succ().expect("a level has a successor");
+    let universe = Global::Authored(Qualifier::from(["Universe"]));
+    let read = Global::Authored(Qualifier::from(["read"]));
+
+    let family = Global::Authored(Qualifier::from(["Fixed"]));
+    let index = fresh(Some("i"));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(index, Term::type_at(Level::constant(10)))],
+            (),
+        )),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::done(vec![Term::type_at(Level::constant(3))]),
+                Vec::new(),
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(Level::constant(11)),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let outer = fresh(Some("V"));
+    let subject = fresh(Some("h"));
+    let at = |argument: Term| {
+        Term::induct_type_at(family, Vec::<Level>::new(), Vec::<Term>::new(), [argument])
+    };
+    let arm = Term::induct_match_scoped_marked(
+        Term::free_var(&subject),
+        Scope::close(
+            Many(2),
+            &[&fresh(Some("i")), &fresh(Some("s"))],
+            Term::free_var(&outer),
+        ),
+        vec![("mk", Vec::new(), Term::type_at(Level::constant(2)))],
+        None,
+    );
+    let binders = || [(outer, variable(&p)), (subject, at(Term::free_var(&outer)))];
+    // The reader's own level, pinned at eight from both sides: what a captured bound would be read at, and the hypotheses that would then grant the fit.
+    let bounded = |lower: Level, upper: Level| UniverseConstraint {
+        lower,
+        upper,
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+    let readers_context = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: vec![
+            bounded(Level::constant(8), p.clone()),
+            bounded(p.clone(), Level::constant(8)),
+        ],
+    };
+    let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
+        Item::Let(Box::new(Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            proof: false,
+            variances: Vec::new(),
+            field_variances: Vec::new(),
+            parameter_field: None,
+            value_sort: None,
+            type_,
+            body,
+        }))
+    };
+
+    declaring(
+        Module {
+            items: vec![
+                definition(
+                    universe,
+                    UniverseContext {
+                        parameter_count: 1,
+                        quality_count: 0,
+                        constraints: Vec::new(),
+                    },
+                    Term::type_at(plus_two),
+                    Term::type_at(plus_one),
+                ),
+                definition(
+                    read,
+                    readers_context,
+                    Term::func_type(binders(), Term::free_var(&outer)),
+                    Term::func(binders(), arm),
+                ),
+            ]
+            .into(),
+            ..Module::default()
+        },
+        [(family, declaration)],
+        [],
+        [],
+    )
+}
+
+/// A refinement's fit is decided at the levels the variable's own instance states, not at the reader's.
+///
+/// `a_published_value_sort_is_the_sort_its_instance_reaches` names `Judge::sort_below` through `curios-analysis`'s `fits_its_variable` as the other consumer of the level the ticket's cause carried, and builds no fixture for it. This is that fixture, reached the way a hand-written indexed family, match and inversion reach it.
+///
+/// The third module is what makes the first a demonstration rather than an assertion: it is the same reader with the binder's type spelled as the capture would have left it, `Type (q + 1)`, and it is accepted. So the level being read at the instance is the whole of what refuses the first, and nothing else in the module stands in its way.
+#[test]
+fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
+    let universe = Global::Authored(Qualifier::from(["Universe"]));
+    let collapsing = fixture_verdicts(
+        &refined_at(|_| Term::instance(universe, vec![Level::zero()])),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        collapsing
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        "a `Type 3` was refined into a variable the instance types at `Type 1`: {collapsing:?}",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &refined_at(|_| Term::instance(universe, vec![Level::constant(6)])),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "a refinement whose target inhabits the type the instance states was dropped",
+    );
+
+    assert_eq!(
+        fixture_verdicts(
+            &refined_at(|p| Term::type_at(p.clone().succ().expect("a parameter has a successor"))),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "the reading a capture would have left was refused for some other reason",
     );
 }
