@@ -18,7 +18,7 @@
 //!
 //! 1. **Every atom cancelled**: the constant's sign is the answer. `x + y + 2 <= y + x + 3`.
 //! 2. **Every monomial of one sign over non-negative atoms**, and a constant that does not oppose them: a sum of naturals is at least its constant, so `0 < x + y + 1` is true and `x < 0` false, while `0 < x` stays open. At `Int` this holds where every atom is a widened natural.
-//! 3. **A side bounded by a literal, or through an operand it never exceeds**: `x % 7 < 7`, `x - y <= x` — the bounds oracle and domination.
+//! 3. **A side bounded by a literal, through an operand it never exceeds, or through the sum a difference is the residual of**: `x % 7 < 7`, `x - y <= x`, `x % 8 - y <= 7` — the bounds oracle, domination, and the adjunction `a - b <= c` iff `a <= b + c` for a difference standing as a whole side, strict or apart only past a positive `c`.
 //! 4. **An equality whose constant the gcd of its coefficients does not divide**, which is false: `2 · x + 1 == 2 · y`.
 //!
 //! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms, and an equality of a sum of naturals against zero read as the order comparison clause 2 makes it — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`, `x != 0` and `0 < x`, `x + y == 0` and `x + y <= 0`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).

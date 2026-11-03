@@ -99,6 +99,17 @@ impl Comparison {
             _ => None,
         }
     }
+
+    /// The verdict a difference `a - b` forces against `c` through the sum it is the residual of, given this verdict of `a` against `b + c`: `a - b <= c` exactly where `a <= b + c`, so a non-strict bound carries as it is; a strict one carries strictly only where `c` is `positive`, since at `a < b` the difference is zero, below `c` only where `c` is; `=`, `>=` and `>` carry as they are, each putting `a` at least `b`, where the difference is exact; and the operands are apart only where `c` is positive, for the reason the strict bound is. `None` where the sum's verdict forces nothing.
+    pub fn through_residual(self, positive: bool) -> Option<Self> {
+        match (self, positive) {
+            (Comparison::Le, _) | (Comparison::Lt, false) => Some(Comparison::Le),
+            (Comparison::Lt, true) => Some(Comparison::Lt),
+            (Comparison::Eq | Comparison::Ge | Comparison::Gt, _) => Some(self),
+            (Comparison::Ne, true) => Some(Comparison::Ne),
+            (Comparison::Ne, false) | (Comparison::Stuck, _) => None,
+        }
+    }
 }
 
 /// Whether two sums are equal at no value because their floors differ modulo the gcd of their coefficients: every symbolic summand is a coefficient times an integer, so each side is its floor modulo that gcd whatever the atoms take, and two floors apart there never meet — `2 · x + 1` against `2 · y`, the first step of the omega test. A summand with no literal coefficient has coefficient `1`, which takes the gcd to `1` and the test quiet exactly where it has nothing to say; two literals — no coefficient at all — are left to the ordering, which already decided them.

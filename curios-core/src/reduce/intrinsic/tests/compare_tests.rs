@@ -185,6 +185,49 @@ fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
     );
 }
 
+// A difference standing as a whole side is read through the sum it is the residual of: `a - b <= c` exactly where `a <= b + c`, so the bound a divisor puts on a remainder reaches the difference, `x % 16 - 10 < 6` as `x % 16 < 16`, and a floor across reaches it as a dominator's does, `x % 8 - y <= 7` as `x % 8 <= y + 7`, on either side. The control: a strict bound carries strictly only past a positive other side, so `x % 8 - y` against `7` stops at the non-strict verdict, `x % 8` being `7` at `x = 7, y = 0`.
+#[test]
+fn nat_decides_a_difference_through_the_sum_it_is_the_residual_of() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let remainder = |divisor: u32| {
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend: x.clone(),
+            divisor: lit(divisor),
+            non_zero: qed(),
+        })
+    };
+    let difference =
+        |minuend: Term, subtrahend: Term| Term::intrinsic(Intrinsic::nat_sub(minuend, subtrahend));
+
+    let (below, _, _) =
+        compare_nat(&mut Inert, difference(remainder(16), lit(10)), lit(6)).expect("reduces");
+    assert_eq!(
+        below,
+        Comparison::Lt,
+        "`x % 16 - 10 < 6`, since `x % 16 < 16`"
+    );
+
+    let (at_most, _, _) =
+        compare_nat(&mut Inert, difference(remainder(8), y.clone()), lit(7)).expect("reduces");
+    assert_eq!(
+        at_most,
+        Comparison::Le,
+        "`x % 8 - y <= 7`, since `x % 8 <= y + 7`, and no more than that"
+    );
+
+    let (at_least, _, _) =
+        compare_nat(&mut Inert, lit(7), difference(remainder(8), y.clone())).expect("reduces");
+    assert_eq!(at_least, Comparison::Ge, "and mirrored, `7 >= x % 8 - y`");
+
+    let (open, _, _) =
+        compare_nat(&mut Inert, difference(x.clone(), y.clone()), y.clone()).expect("reduces");
+    assert_eq!(
+        open,
+        Comparison::Stuck,
+        "`x - y` against `y` would need `x` against `y + y`, which nothing decides"
+    );
+}
+
 // A side is compared through each operand it never exceeds, and so is the other, so two sides nested this deep lead to one pair of their subterms along every interleaving of the two descents: more paths than a run walks. The comparison keeps each pair's verdict, and what it costs is the product of the two sides' sizes.
 #[test]
 fn two_chains_of_operands_a_value_never_exceeds_compare_each_pair_once() {
@@ -312,6 +355,14 @@ fn the_order_nat_decides_is_transitive() {
         (
             "x - y",
             Term::intrinsic(Intrinsic::nat_sub(x.clone(), y.clone())),
+        ),
+        (
+            "x % 8 - y",
+            Term::intrinsic(Intrinsic::nat_sub(remainder(lit(8)), y.clone())),
+        ),
+        (
+            "x % 16 - 10",
+            Term::intrinsic(Intrinsic::nat_sub(remainder(lit(16)), lit(10))),
         ),
         ("x % 8", remainder(lit(8))),
         ("x % 8 + 1", above(1, &remainder(lit(8)))),

@@ -1,13 +1,13 @@
 //! Deciding a `Nat` comparison, including under symbols.
 //!
-//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
+//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, the sum a difference is the residual of, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 //!
 //! **A pair decides how much of itself to build.** Two symbolic sides are distributed before they cancel, since what they share may be spelled two ways; a side against a literal is read as it stands, since nothing of it cancels but its floor, and its floor, what it is at least, its bounds and the divisor of its coefficients are read through a product the fold left stuck — so a web of products meets a literal with nothing distributed, as it meets one in the conversion chain.
 
 use {
     super::{
         compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least, nat_modular,
-        sum_bound,
+        nat_residual, sum_bound,
     },
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side},
@@ -139,6 +139,12 @@ pub(super) fn compare_nat_among(
         decided => decided,
     };
 
+    // A difference standing as a whole side is read through the sum it is the residual of: `a - b <= c` exactly where `a <= b + c`, so the verdict of the minuend against the subtrahend's sum with the other side is the difference's, strict or apart only where the other side is positive. Asked one difference head down, with the sum reduced through the fold so cancellation meets its summands, so the recursion ends. See `Comparison::through_residual` for why each verdict carries.
+    let outcome = match outcome {
+        Comparison::Stuck => residuated(reducer, asked, &left, &right)?,
+        decided => decided,
+    };
+
     // A `min` or a `max` on either side is read through the lattice: at most each of a `min`'s leaves and at least what is at most all of them, and a `max` the mirror. Each verdict it asks is of a leaf, one strict subterm down.
     let outcome = match outcome {
         Comparison::Stuck => {
@@ -216,6 +222,36 @@ fn dominated(
             if let Some(verdict) = verdict.mirrored().through_strict_dominator() {
                 return Ok(verdict.mirrored());
             }
+        }
+    }
+    Ok(Comparison::Stuck)
+}
+
+/// The verdict a difference standing as one whole side forces through the sum it is the residual of, tried on the left and then on the right mirrored, or `Stuck` where neither side is a bare difference or the sum's verdict forces nothing. A side with a floor is no bare difference: `(a - b) + 1 <= c` is `a - b <= c - 1` only where `c` is positive, and the floors read that first.
+fn residuated(
+    reducer: &mut impl Reducer,
+    asked: &mut Asked,
+    left: &Operand,
+    right: &Operand,
+) -> Result<Comparison, ReduceError> {
+    for (side, other, mirrored) in [(left, right, false), (right, left, true)] {
+        if !side.floor.is_zero() {
+            continue;
+        }
+        let Some((minuend, subtrahend)) = nat_residual(&side.inner) else {
+            continue;
+        };
+        let sum = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(
+            subtrahend,
+            other.whole.clone(),
+        )))?;
+        let verdict = asked.verdict(reducer, Carrier::Natural, minuend, sum)?;
+        let positive = other.least >= Natural::one();
+        if let Some(verdict) = verdict.through_residual(positive) {
+            return Ok(match mirrored {
+                true => verdict.mirrored(),
+                false => verdict,
+            });
         }
     }
     Ok(Comparison::Stuck)

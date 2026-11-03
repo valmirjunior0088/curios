@@ -400,6 +400,12 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shr(x, y) <= x, true)",
             "Eq()(x < x - y, false)",
             "Eq()(x - y <= x + 3, true)",
+            // A difference standing as a whole side, through the sum it is the residual of: `a - b <= c` exactly where `a <= b + c`, so a bound on the minuend reaches the difference, on either side, strictly only past a positive other side.
+            "Eq()(x % 16 - 10 < 6, true)",
+            "Eq()(x % 8 - y <= 7, true)",
+            "Eq()(x % 8 - y < 8, true)",
+            "Eq()(7 >= x % 8 - y, true)",
+            "Eq()(Nat/and(x, 7) - y <= 7, true)",
             // A remainder is strictly below its divisor, so at most whatever the divisor is at most one past: the two spellings of that across the `<`/`<=` seam decide alike, under whatever stands above a floor.
             "Eq()(x % (y + 1) <= y, true)",
             "Eq()(x % 8 <= y + 7, true)",
@@ -422,6 +428,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x % 8 <= y + 6, true)",
             // The control for a remainder against what its divisor is at most one past, and not a law: `x % 2` is `1` at `x = 1, y = 0`.
             "Eq()(x % (y + 2) <= y, true)",
+            // Controls for the residual, and neither is a law: `x % 8 - y` is `7` at `x = 7, y = 0`, and `x - y` is `0` at `x = y`.
+            "Eq()(x % 8 - y < 7, true)",
+            "Eq()(0 < x - y, true)",
             // The control for divisibility across a product, and not a law: an odd factor beside one whose coefficients share nothing with it leaves the divisor `1`, and the product is `12` at `x = 1, y = 0`.
             "Eq()((2 * x + 2 * y + 1) * (3 * x + 3 * y + 1) == 12, false)",
         ],
@@ -443,6 +452,8 @@ const CARRIERS: &[Carrier] = &[
             // A side bounded by a literal, and a side through an operand it never exceeds.
             "Eq()(x % 7 < 7, true)",
             "Eq()(x - y <= x, true)",
+            // A difference standing as a whole side, through the sum it is the residual of.
+            "Eq()(x % 8 - y <= 7, true)",
             // An equality whose constant the coefficients' gcd does not divide.
             "Eq()(2 * x + 1 == 2 * y, false)",
             // A sum of naturals against zero is its order comparison: at least zero by its shape, so zero exactly where it is at most zero, and not zero exactly where it is at least one — at `Nat`, on either side, over a sum and a product, and through the embedding.
@@ -462,6 +473,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(0 < x, true)",
             "Eq()(i + 1 > +0, true)",
             "Eq()(x - y < x, true)",
+            "Eq()(x % 8 - y < 7, true)",
             "Eq()(2 * x == 2 * y + 2, false)",
             // Controls for the reading against zero, and none is a law: an `Int` atom is not zero below zero as above it (`i = -1`); a literal that is not zero leaves a value under it (`x = 0`); and two open sides are apart on either side (`x = 0, y = 1`).
             "Eq()(i != +0, +0 < i)",

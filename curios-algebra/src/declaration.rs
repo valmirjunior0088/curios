@@ -246,6 +246,14 @@ impl Operation {
             _ => &[],
         }
     }
+
+    /// The operation this one is the residual of: `a - b <= c` exactly where `a <= b + c`, over ℕ with its truncated difference as over ℤ with the group's, so a difference standing as a whole side of a comparison is decided through the sum's verdict ([`crate::Comparison::through_residual`]). An adjunction equates no two terms, so it is a comparison's to read and no fold's.
+    pub fn residual_of(self) -> Option<Operation> {
+        match self {
+            Operation::Difference => Some(Operation::Sum),
+            _ => None,
+        }
+    }
 }
 
 /// Whether converting a value of `source` into `target` and back gives the value again, as far as the rule reading it takes it.

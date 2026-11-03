@@ -1,9 +1,61 @@
-//! The divisibility reading through a product: what a layer's floor and divisor are, read without distributing, and what two readings hold apart.
+//! The divisibility reading through a product: what a layer's floor and divisor are, read without distributing, and what two readings hold apart. And the verdict a difference carries through its residual, held to the carrier's values.
 
 use {
     super::*,
     curios_num::{Integer, Natural},
+    std::cmp::Ordering,
 };
+
+// Soundness gate for the residual: at every verdict of `a` against `b + c`, and every triple of naturals the verdict allows, the verdict carried to `a - b` against `c` allows the triple's own order, with `c` held positive where the carrying asks it. The carrier's monus is the oracle, so the table is held to values rather than restated; a verdict that carries nothing is held to nothing.
+#[test]
+fn the_residual_carries_a_verdict_its_values_allow() {
+    let verdicts = [
+        Comparison::Eq,
+        Comparison::Lt,
+        Comparison::Gt,
+        Comparison::Le,
+        Comparison::Ge,
+        Comparison::Ne,
+        Comparison::Stuck,
+    ];
+    let allows = |verdict: Comparison, ordering: Ordering| match verdict {
+        Comparison::Eq => ordering == Ordering::Equal,
+        Comparison::Lt => ordering == Ordering::Less,
+        Comparison::Gt => ordering == Ordering::Greater,
+        Comparison::Le => ordering != Ordering::Greater,
+        Comparison::Ge => ordering != Ordering::Less,
+        Comparison::Ne => ordering != Ordering::Equal,
+        Comparison::Stuck => true,
+    };
+    let natural = |value: usize| Natural::from(value);
+    let mut carried = 0;
+    for verdict in verdicts {
+        for positive in [false, true] {
+            let Some(through) = verdict.through_residual(positive) else {
+                continue;
+            };
+            for a in 0..8 {
+                for b in 0..8 {
+                    for c in usize::from(positive)..8 {
+                        if !allows(verdict, a.cmp(&(b + c))) {
+                            continue;
+                        }
+                        carried += 1;
+                        let difference = natural(a).monus(&natural(b));
+                        assert!(
+                            allows(through, difference.cmp(&natural(c))),
+                            "{verdict:?} carried as {through:?} fails at a = {a}, b = {b}, c = {c}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        carried > 0,
+        "a grid that carried nothing would hold vacuously"
+    );
+}
 
 fn literal(value: i32) -> Modular {
     Modular::literal(Integer::from(value))
