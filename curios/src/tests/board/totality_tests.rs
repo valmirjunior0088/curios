@@ -114,3 +114,9 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
         "is not provably impossible at the scrutinee's indices",
     );
 }
+
+/// A proof standing on a partial term its elimination reads nothing of is refused too.
+#[test]
+fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
+    rejected_by(PARTIAL_UNDER_AN_EMPTY_ELIMINATION, "not known to terminate");
+}

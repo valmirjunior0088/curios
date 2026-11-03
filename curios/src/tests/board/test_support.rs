@@ -2024,6 +2024,22 @@ pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
     /std/print("FORGED")
     "#;
 
+/// A partial inhabitant of an index no constructor targets, eliminated by the arms it leaves out.
+///
+/// The four rows above reach the partial definition through a value a proof reads. This one reads nothing of it: `Pin(n + 1)` is a case every constructor's target clashes with, so the elimination enumerates no arm, and the proof is the ex falso that covers nothing. Reduction never takes the scrutinee apart and never needs to — which is exactly the shape where "a term left stuck admits nothing" has to be carried by obligation (V) rather than by reduction, since `spin(n + 1)` is a closed term of an uninhabited type that no rule ever reduces. A general recursion at a `Type`-sorted result is the language's design, so `spin` itself stands; what must not is a proof standing on it.
+pub(super) const PARTIAL_UNDER_AN_EMPTY_ELIMINATION: &str = r#"
+    use /std/{Nat};
+    use /std/Bool/{False};
+    induct Pin : (n : Nat) -> pub Type
+    | only() : (0)
+    end
+    let spin(n : Nat) -> Pin(n) = spin(n);
+    let bad(n : Nat) -> False =
+        match spin(n + 1) : (i, p) => False
+        end;
+    /std/print("FORGED")
+    "#;
+
 /// Obligation **(T)** rather than (V): a *type* that reaches a definition which is not known to terminate.
 ///
 /// `spin` is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this syntactically from written type positions; the kernel seeds it from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T).
