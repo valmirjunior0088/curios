@@ -1377,7 +1377,7 @@ impl<'a> Reader<'a> {
         self.equation(context, Carrier::Natural, &summed, a, cancelled, origin)
     }
 
-    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0`, stated of the atom and proved by `a <= b` through `lt/of_lt`, which conversion holds to be that very proposition, a bare difference moved across its comparison ([`LinearViews::moved`]).
+    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0`, stated of the atom and proved by `a <= b` through `lt/of_lt`, which conversion holds to be that very proposition, a bare difference moved across its comparison (`curios_core::LinearViews`'s `moved`).
     fn truncated(&mut self, context: &mut Context, a: &Term, b: &Term) -> Result<(), Error> {
         let of_not_le = order(context, Carrier::Natural).of_not_le;
         let below = Term::apply(global(of_not_le), [b.clone(), a.clone(), qed(context)]);
