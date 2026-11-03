@@ -18,7 +18,7 @@ Nothing waits for the end: each row is on disk before the step after it runs, so
 awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
 ```
 
-The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a module it shares with a program standing beside it, which runs the work again under the recorder and files the stream beside its crate, at `curios-prelude/.artifacts/profile.tsv`. `cargo xtask profile-prelude` runs it, and prints the fold of what it filed:
+The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a module it shares with a program standing beside it, which runs the work again under the recorder and files the stream beside its crate, at `curios-prelude/.artifacts/profile.tsv`, and its fold beside the stream, at `profile.folded.tsv`. `cargo xtask profile-prelude` runs it, and prints the fold:
 
 ```sh
 cargo xtask profile-prelude
