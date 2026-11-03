@@ -37,7 +37,7 @@ fn every_stage_is_observed_once_in_names_order() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_anf::Module` representation lowers it end-to-end to wasm without overflow.
+    // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Definitions`/`curios_anf::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         let subject : /std/Nat = id(/std/Nat, 5);

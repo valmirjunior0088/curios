@@ -4,7 +4,7 @@ use {
     crate::rerun,
     curios_archive::{Bytes, parted},
     curios_common::{Digest, Facet, Member, Object, Recorded},
-    curios_core::{Anchors, Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
+    curios_core::{Anchors, Definitions, Global, HeldReads, Imports, ItemRun, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, HeldAsked},
     curios_text::PreparedText,
@@ -53,7 +53,7 @@ pub(crate) enum Kind {
     Stored(Vec<Object>),
     /// The elaborated items of `core`, at each place with its digest.
     Items {
-        core: Rc<Module>,
+        core: Rc<Definitions>,
         named: Vec<(usize, Digest)>,
     },
     /// Declarations' traces, each with its digest and the name it is filed under.

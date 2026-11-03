@@ -44,4 +44,4 @@ Working specification for labelling a source of the package `std` by the package
 
 ## Completion and retirement
 
-What a source's label is and who may ask for its file goes to `curios-common`' and `curios-text`'s rustdoc, the rationale to a decision under `documentation/design/compilation/`, and the two-directory comparison stays as a stated protocol there. Once those contracts are recorded and no reference to this specification remains, this file is deleted.
+What a source's label is and who may ask for its file goes to `curios-common`'s and `curios-text`'s rustdoc, the rationale to a decision under `documentation/design/compilation/`, and the two-directory comparison stays as a stated protocol there. Once those contracts are recorded and no reference to this specification remains, this file is deleted.

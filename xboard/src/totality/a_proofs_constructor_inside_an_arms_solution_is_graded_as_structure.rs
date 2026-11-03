@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, false_type, refused},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, Free, Global, InductDecl, InductParam, Item, Many, Module, Nominal,
+        Atom, Definition, Definitions, Free, Global, InductDecl, InductParam, Item, Many, Nominal,
         RecItem, Scope, Telescope, Term, UniverseContext,
     },
 };
@@ -23,7 +23,7 @@ pub(super) const TICKET: Ticket = Ticket {
 /// The arm's inversion refines `t`, which binds data, to the case's target `Box/box(Wit/w(n))`, and the size order reads that solution as a constructor tree: `n` sits under `Wit/w`, so the call's `n` grades below `t` while `q` is handed back unchanged, and the recursion repeats for ever.
 ///
 /// The solution is the outer direction's (`invert_indices_outer`), which solves a context variable against the whole target rather than decomposing it, so the guard that yields no equation at a `Prop`-sorted variant never fires. The equation holds, by the irrelevance that makes `Wit/base()` and `Wit/w(Box/box(Wit/base()))` one proof; what it does not state is a fact about the value `t` has, which no reduction took apart.
-fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
+fn a_recursion_through_a_proofs_constructor() -> (Definitions, Term) {
     let wit = Global::Authored(Qualifier::from(["Wit"]));
     let boxed = Global::Authored(Qualifier::from(["Box"]));
     let family = Global::Authored(Qualifier::from(["Q"]));
@@ -105,7 +105,7 @@ fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
         Term::prop(),
     );
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![
             carriers,
             Item::Rec(RecItem::new(vec![(
@@ -114,7 +114,7 @@ fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
             )])),
         ]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     let member = Free::local(994, Some("f"));
@@ -172,5 +172,5 @@ fn a_recursion_through_a_proofs_constructor() -> (Module, Term) {
         ),
     );
 
-    (module, proof_term)
+    (definitions, proof_term)
 }

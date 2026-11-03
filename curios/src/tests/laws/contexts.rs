@@ -524,7 +524,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
     for (index, context) in contexts.iter().enumerate() {
         let name = named(format!("probe{index}"));
         let body = program
-            .module
+            .definitions
             .items
             .iter()
             .find_map(|item| match item {

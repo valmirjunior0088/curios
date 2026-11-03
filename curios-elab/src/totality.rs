@@ -14,7 +14,7 @@ use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position},
     curios_analysis::{Erased, group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
+        Definition, Definitions, Enter, Entrypoint, Extent, Global, Item, Rec, RecGroup, RecItem,
         Sharing, Subterm, Term, Totality,
     },
     std::{
@@ -266,13 +266,13 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 /// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`stamp_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
 pub fn check_type_totality(
     context: &mut Context,
-    module: &Module,
+    definitions: &Definitions,
     entry: Option<&Entrypoint>,
     mark: usize,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_type_totality");
-    let mut positions = type_positions(module, entry);
+    let mut positions = type_positions(definitions, entry);
     positions.extend(checked_type_positions(context, mark, cache)?);
     report(context, &positions, Erased::Type)
 }

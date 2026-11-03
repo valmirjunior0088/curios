@@ -5,15 +5,15 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
-    curios_core::{Global, Intrinsic, Level, Module, Term, UniverseParam, Variance},
+    curios_core::{Definitions, Global, Intrinsic, Level, Term, UniverseParam, Variance},
 };
 
 fn level_one() -> Level {
     Level::zero().succ().expect("level zero has a successor")
 }
 
-fn refusals(module: &Module) -> Vec<Verdict> {
-    fixture_verdicts(module, 1_000_000, &Globals::default(), SYNTAX)
+fn refusals(definitions: &Definitions) -> Vec<Verdict> {
+    fixture_verdicts(definitions, 1_000_000, &Globals::default(), SYNTAX)
 }
 
 /// Whether the identity put at two instances was itself refused: the walk's own verdict on the pair, apart from anything the reconciliation says of the declaration.
@@ -37,7 +37,7 @@ fn denied(verdicts: &[Verdict], family: Global, level: usize) -> bool {
 #[test]
 fn two_instances_apart_in_an_irrelevant_level_convert() {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
-    let module = coercion_module(
+    let definitions = coercion_definitions(
         wrap,
         wrap_declaration(vec![Variance::Irrelevant]),
         vec![Term::intrinsic(Intrinsic::NatType)],
@@ -45,7 +45,7 @@ fn two_instances_apart_in_an_irrelevant_level_convert() {
         level_one(),
     );
 
-    assert_eq!(refusals(&module), Vec::new());
+    assert_eq!(refusals(&definitions), Vec::new());
 }
 
 // `Box` holds a `Type u`, carried honestly and carried with no vector at all.
@@ -54,7 +54,7 @@ fn an_invariant_level_is_compared() {
     let boxed = Global::Authored(Qualifier::from(["Box"]));
 
     for variances in [vec![Variance::Invariant], Vec::new()] {
-        let module = coercion_module(
+        let definitions = coercion_definitions(
             boxed,
             box_declaration(variances),
             Vec::new(),
@@ -62,7 +62,7 @@ fn an_invariant_level_is_compared() {
             Level::zero(),
         );
 
-        assert!(coercion_refused(&refusals(&module)));
+        assert!(coercion_refused(&refusals(&definitions)));
     }
 }
 
@@ -71,7 +71,7 @@ fn an_invariant_level_is_compared() {
 fn a_carried_irrelevance_the_walk_denies_is_refused_and_read_by_no_comparison() {
     let boxed = Global::Authored(Qualifier::from(["Box"]));
 
-    let believed = refusals(&coercion_module(
+    let believed = refusals(&coercion_definitions(
         boxed,
         box_declaration(vec![Variance::Irrelevant]),
         Vec::new(),
@@ -81,7 +81,7 @@ fn a_carried_irrelevance_the_walk_denies_is_refused_and_read_by_no_comparison() 
     assert!(coercion_refused(&believed));
     assert!(denied(&believed, boxed, 0));
 
-    let overlong = refusals(&coercion_module(
+    let overlong = refusals(&coercion_definitions(
         boxed,
         box_declaration(vec![Variance::Invariant, Variance::Irrelevant]),
         Vec::new(),
@@ -96,7 +96,7 @@ fn a_carried_irrelevance_the_walk_denies_is_refused_and_read_by_no_comparison() 
 fn a_carried_invariance_the_walk_would_grant_is_read_by_no_comparison() {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
     let carried = |to: Level| {
-        refusals(&coercion_module(
+        refusals(&coercion_definitions(
             wrap,
             wrap_declaration(vec![Variance::Invariant]),
             vec![Term::intrinsic(Intrinsic::NatType)],
@@ -111,7 +111,7 @@ fn a_carried_invariance_the_walk_would_grant_is_read_by_no_comparison() {
 }
 
 /// `held.{u} : Type.{u + 1} = Type.{u}` carrying `variances`, and `coerce : (x : held.{1}) -> held.{0} = (x) => x`, which reads the higher instance back at the lower: what a definition's vector claims, against what the kernel compares two of its instances by.
-fn definition_coercion(variances: Vec<Variance>) -> Module {
+fn definition_coercion(variances: Vec<Variance>) -> Definitions {
     use curios_core::{Definition, DefinitionKind, Free, Item, Totality, UniverseContext};
 
     let held = Global::Authored(Qualifier::from(["held"]));
@@ -142,7 +142,7 @@ fn definition_coercion(variances: Vec<Variance>) -> Module {
     let at = |level: Level| Term::instance(held, vec![level]);
     let x = Free::local(80, Some("x"));
 
-    Module {
+    Definitions {
         items: vec![
             Item::Let(Box::new(scheme)),
             authored(
@@ -152,7 +152,7 @@ fn definition_coercion(variances: Vec<Variance>) -> Module {
             ),
         ]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     }
 }
 
@@ -185,7 +185,7 @@ fn a_level_only_a_carriers_element_holds_is_invariant() {
     ];
 
     for former in formers {
-        let honest = refusals(&coercion_module(
+        let honest = refusals(&coercion_definitions(
             boxed,
             carried_box_declaration(former, vec![Variance::Invariant]),
             Vec::new(),
@@ -194,7 +194,7 @@ fn a_level_only_a_carriers_element_holds_is_invariant() {
         ));
         assert!(only_the_coercion_refused(&honest), "{honest:?}");
 
-        let lying = refusals(&coercion_module(
+        let lying = refusals(&coercion_definitions(
             boxed,
             carried_box_declaration(former, vec![Variance::Irrelevant]),
             Vec::new(),
@@ -208,10 +208,10 @@ fn a_level_only_a_carriers_element_holds_is_invariant() {
 // `Fam`'s first level reaches no payload and no index type, and its constructor's target puts it at `Box`'s invariant position: two instances apart in it have different inhabitants at one index. Carried honestly the coercion is refused; carried as irrelevant the declaration is.
 #[test]
 fn a_level_only_an_index_target_mentions_is_invariant() {
-    let (_, honest) = index_target_module(vec![Variance::Invariant, Variance::Invariant]);
+    let (_, honest) = index_target_definitions(vec![Variance::Invariant, Variance::Invariant]);
     assert!(coercion_refused(&refusals(&honest)));
 
-    let (family, lying) = index_target_module(vec![Variance::Irrelevant, Variance::Invariant]);
+    let (family, lying) = index_target_definitions(vec![Variance::Irrelevant, Variance::Invariant]);
     assert!(denied(&refusals(&lying), family, 0));
 }
 
@@ -237,7 +237,7 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
     let boxed = Global::Authored(Qualifier::from(["Box"]));
     let over_wrap = || {
-        held_module(
+        held_definitions(
             Term::induct_type_at(
                 wrap,
                 [level.clone()],
@@ -249,7 +249,7 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
         )
     };
     let over_box = || {
-        held_module(
+        held_definitions(
             Term::induct_type_at(
                 boxed,
                 [level.clone()],
@@ -260,23 +260,23 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
             vec![Variance::Irrelevant],
         )
     };
-    let judged = |module: &Module, scope: AlreadyJudged| {
-        fixture_verdicts(module, 1_000_000, &scope.globals(), SYNTAX)
+    let judged = |definitions: &Definitions, scope: AlreadyJudged| {
+        fixture_verdicts(definitions, 1_000_000, &scope.globals(), SYNTAX)
     };
 
-    let (_, module) = over_wrap();
+    let (_, definitions) = over_wrap();
     assert_eq!(
         judged(
-            &module,
+            &definitions,
             scope_of(wrap, wrap_declaration(vec![Variance::Irrelevant]))
         ),
         Vec::new()
     );
 
-    let (held, module) = over_box();
+    let (held, definitions) = over_box();
     assert!(denied(
         &judged(
-            &module,
+            &definitions,
             scope_of(boxed, box_declaration(vec![Variance::Invariant]))
         ),
         held,
@@ -284,7 +284,7 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
     ));
     assert!(denied(
         &judged(
-            &module,
+            &definitions,
             scope_of(boxed, box_declaration(vec![Variance::Irrelevant]))
         ),
         held,
@@ -295,9 +295,9 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
 // `Uses` mentions its level only on `Alias.{u}(A)`, which unfolds to `A`: the recomputation reads the reduct and grants the irrelevance the entry carries.
 #[test]
 fn a_level_a_reduction_removes_is_carried_as_irrelevant() {
-    let (_, module) = alias_module(vec![Variance::Irrelevant]);
+    let (_, definitions) = alias_definitions(vec![Variance::Irrelevant]);
 
-    assert_eq!(refusals(&module), Vec::new());
+    assert_eq!(refusals(&definitions), Vec::new());
 }
 
 /// Whether every refusal is the coercion's: the declarations the fixture forges were accepted, so a refused coercion is the walk's verdict on the instances and not the echo of a family it refused.
@@ -311,10 +311,10 @@ fn only_the_coercion_refused(verdicts: &[Verdict]) -> bool {
 // `Arm`'s first level is stated by one arm of a match stuck on its parameter and by no other part the walk reads: a stuck form is read through its children, so the arm's `Type u` holds the level, and two instances apart in it are two types. Granted irrelevant, `c(Type 0): Arm.{1, 2}(true)` read at `Arm.{0, 2}(true)` would hold `Type 0` at `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.
 #[test]
 fn a_level_one_arm_of_a_stuck_match_states_is_invariant() {
-    let (_, honest) = stuck_arm_module(vec![Variance::Invariant, Variance::Invariant]);
+    let (_, honest) = stuck_arm_definitions(vec![Variance::Invariant, Variance::Invariant]);
     assert!(only_the_coercion_refused(&refusals(&honest)));
 
-    let (family, lying) = stuck_arm_module(vec![Variance::Irrelevant, Variance::Invariant]);
+    let (family, lying) = stuck_arm_definitions(vec![Variance::Irrelevant, Variance::Invariant]);
     assert!(denied(&refusals(&lying), family, 0));
 }
 
@@ -346,23 +346,24 @@ fn the_level_a_carrier_stands_at_is_irrelevant_where_its_payloads_level_is_not()
     let honest = || vec![Variance::Invariant, Variance::Irrelevant];
 
     assert_eq!(
-        refusals(&russell_coercion_module(honest(), 1, 2)),
+        refusals(&russell_coercion_definitions(honest(), 1, 2)),
         Vec::new()
     );
     assert_eq!(
-        refusals(&russell_coercion_module(honest(), 2, 1)),
+        refusals(&russell_coercion_definitions(honest(), 2, 1)),
         Vec::new()
     );
 
-    let lying = russell_coercion_module(vec![Variance::Irrelevant; 2], 1, 2);
+    let lying = russell_coercion_definitions(vec![Variance::Irrelevant; 2], 1, 2);
     assert!(denied(&refusals(&lying), russell_name(), 0));
 }
 
 // Russell's self-application over that carrier: `Fam.{0, 1}/mk(Fam.{0, 1}, (x) => x)` hands the family's own type, a `Type 1`, to the payload the declaration stands at `Type 0`. The irrelevance makes `Fam.{0, 1}` one type with `Fam.{0, o}` for every `o`, so the paradox needs no instance spelled at the payload's sort; what refuses it is the sort the declaration states at the instance written, which conversion comparing nothing at the level does not move, and the declaration itself stands.
 #[test]
 fn russells_self_application_is_refused_at_the_sort_its_instance_states() {
-    let (russell, module) = russell_module(vec![Variance::Invariant, Variance::Irrelevant]);
-    let verdicts = refusals(&module);
+    let (russell, definitions) =
+        russell_definitions(vec![Variance::Invariant, Variance::Irrelevant]);
+    let verdicts = refusals(&definitions);
 
     assert!(mismatched(&verdicts, russell), "{verdicts:?}");
     assert!(!denied(&verdicts, russell_name(), 1), "{verdicts:?}");
@@ -371,8 +372,9 @@ fn russells_self_application_is_refused_at_the_sort_its_instance_states() {
 // The two instances convert, and their sorts do not: `Fam.{0, 2}` is no inhabitant of `Type 1`, though `Fam.{0, 1}` is and the two are one type. A level conversion reads at nothing is still read where the declaration states the sort, so the irrelevance transports terms between the two types and never the types between the two sorts.
 #[test]
 fn an_irrelevant_levels_higher_instance_is_no_type_at_the_lower_instances_sort() {
-    let (lowered, module) = lowered_sort_module(vec![Variance::Invariant, Variance::Irrelevant]);
-    let verdicts = refusals(&module);
+    let (lowered, definitions) =
+        lowered_sort_definitions(vec![Variance::Invariant, Variance::Irrelevant]);
+    let verdicts = refusals(&definitions);
 
     assert!(mismatched(&verdicts, lowered), "{verdicts:?}");
 }

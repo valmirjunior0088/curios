@@ -1,6 +1,6 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, false_type, refused},
-    curios_core::{Free, Global, Intrinsic, Module, Nat, Term, Universes},
+    curios_core::{Definitions, Free, Global, Intrinsic, Nat, Term, Universes},
     curios_text::SYNTAX,
 };
 
@@ -89,7 +89,7 @@ const AN_IDENTITY_ARM_READS_A_LIST_AT_THE_EMPTY_ONE: &str = r#"
 /// `((n, h : Holds(n == 2)) => match n : (_) => False | 0 => h | pred + 1; ih => ih end)(2, qed)`.
 ///
 /// The kernel types the identity arm with `n` substituted by `0` through the arm and the locals it re-types, so `h` stands at `Holds(0 == 2)` and inhabits the motive; the cons arm hands its hypothesis back. Nothing the arm learned holds where reduction takes it: at the tail the fold is over `0` and the arm's `n` is `2`.
-fn an_identity_arm_typed_at_zero() -> (Module, Term) {
+fn an_identity_arm_typed_at_zero() -> (Definitions, Term) {
     let n = Free::local(910, Some("n"));
     let h = Free::local(911, Some("h"));
     let pred = Free::local(912, Some("pred"));
@@ -124,5 +124,5 @@ fn an_identity_arm_typed_at_zero() -> (Module, Term) {
     );
     let forged = Term::func([(n, Term::intrinsic(Intrinsic::NatType)), (h, holds)], fold);
 
-    (Module::default(), Term::apply(forged, [two(), qed]))
+    (Definitions::default(), Term::apply(forged, [two(), qed]))
 }

@@ -2,7 +2,7 @@
 //!
 //! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
 //!
-//! Items are stored in dependency order, each at its depth and among items of one depth by name, so every item after the items it reaches ([`Order`](crate::Order), [`Module::ordered`]), and every walk reads them as stored. The entry an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) is carried by the type former that declares it ([`Nominal`]), and beside its items a [`Module`] carries its mounts, the witness set and its tests. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
+//! Items are stored in dependency order, each at its depth and among items of one depth by name, so every item after the items it reaches ([`Order`](crate::Order), [`Definitions::ordered`]), and every walk reads them as stored. The entry an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) is carried by the type former that declares it ([`Nominal`]), and beside its items a unit's [`Definitions`] carry its mounts, the witness set and its tests. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
 //!
 //! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable is decided by each checker for itself, the elaborator's solver and the certifier's loop check; whether a definition terminates runs the size-change engine in `curios-analysis`, which both checkers drive. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
@@ -49,7 +49,7 @@ impl Totality {
 ///
 /// **A version of its baseline's where its walk was over one.** Its tables are persistent and read back in the order of their names, so a walk over the unit as a baseline starts from the record it adopts verdicts from and changes it at the declarations it judges or drops alone ([`Certification::revised`]).
 ///
-/// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
+/// Only the certifier's walk makes one — `curios_cert::certify_definitions` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
@@ -487,13 +487,13 @@ impl Certification {
     }
 
     /// Whether this record classifies every definition `module` holds.
-    pub fn covers(&self, module: &Module) -> bool {
+    pub fn covers(&self, definitions: &Definitions) -> bool {
         let classified = |name: &Global| self.totalities.contains_key(name);
 
-        module
+        definitions
             .items
             .places()
-            .all(|place| module.items.names(place).into_iter().all(classified))
+            .all(|place| definitions.items.names(place).into_iter().all(classified))
     }
 
     /// Every classification this record holds.
@@ -582,7 +582,7 @@ impl Revision {
     }
 }
 
-/// Where a module holds each name it declares, as [`Module::lexicon`] finds one: the item's place, and the member's within it.
+/// Where a module holds each name it declares, as [`Definitions::lexicon`] finds one: the item's place, and the member's within it.
 type Located = HashMap<Global, (usize, usize)>;
 
 /// How a lowered definition was introduced.
@@ -718,7 +718,7 @@ impl Nominal {
         }
     }
 
-    /// The entry with every term hash-consed against `sharing` — see [`Module::shared`].
+    /// The entry with every term hash-consed against `sharing` — see [`Definitions::shared`].
     pub fn shared(&self, sharing: &Sharing) -> Self {
         match self {
             Nominal::Inductive(declaration) => Nominal::Inductive(declaration.shared(sharing)),
@@ -740,7 +740,7 @@ pub struct Definition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub universe_context: UniverseContext,
-    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_module_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `InductDecl::module` and `StructDecl::module` carry for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
+    /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_definitions_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `InductDecl::module` and `StructDecl::module` carry for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
     /// Whether this definition terminates on every input, together with everything it reaches. Written by `curios-elab` as the definition's item is published, once — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
@@ -1021,7 +1021,7 @@ impl Definition {
 
     /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than in a reference, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
     ///
-    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Module::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the reference edges alone serve.
+    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Definitions::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the reference edges alone serve.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = self.mentions();
         names.extend(construction_heads(&self.type_));
@@ -1049,7 +1049,7 @@ pub enum Item {
 }
 
 impl Item {
-    /// This item with every term hash-consed against `sharing` — see [`Module::shared`].
+    /// This item with every term hash-consed against `sharing` — see [`Definitions::shared`].
     pub fn shared(&self, sharing: &Sharing) -> Item {
         let kind = |kind: &DefinitionKind| match kind {
             DefinitionKind::Nominal(nominal) => {
@@ -1204,11 +1204,11 @@ pub struct Entrypoint {
 
 /// A program: the unit it is compiled from, and the term it closes with.
 ///
-/// The one compilation that has an entrypoint is the one that holds a `Program`; every other unit — a library, a prelude root, a recompile's reused items — is a [`Module`] alone. An optional entry on every module would be `None` for all of them but one, and each stage reading a module would carry a case for the entry it almost never has. Carried beside the module instead, the entry exists exactly where a program is compiled, and a stored unit cannot hold one.
+/// The one compilation that has an entrypoint is the one that holds a `Program`; every other unit — a library, a prelude root, a recompile's reused items — is its [`Definitions`] alone. An optional entry on every module would be `None` for all of them but one, and each stage reading a module would carry a case for the entry it almost never has. Carried beside the module instead, the entry exists exactly where a program is compiled, and a stored unit cannot hold one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub module: Module,
-    pub entry: Entrypoint,
+    pub definitions: Definitions,
+    pub entrypoint: Entrypoint,
 }
 
 /// The whole of one unit as a *flat* list of top-level `items`. A nominal declaration's registry entry is held by the definition that is its former ([`Nominal`]), so the registries a stage checks against are read off the items and a module holds none beside them.
@@ -1218,7 +1218,7 @@ pub struct Program {
 /// The default is the empty unit: no item and no mount. Every field is a collection, so it states nothing, and a module built by hand names only what it holds.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
-pub struct Module {
+pub struct Definitions {
     /// The module's items, in the order it stores them: every one in hand where the module was made in this process, and each restored the first time it is read where the module was stored ([`Items`]).
     #[archived_with(crate::AsVector)]
     pub items: Items,
@@ -1232,7 +1232,7 @@ pub struct Module {
     pub tests: Vec<Global>,
 }
 
-impl Module {
+impl Definitions {
     /// The entry the definition `name` carries, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
     pub fn nominal(&self, places: &Places, name: &Global) -> Option<&Nominal> {
         let place = places.place(name)?;
@@ -1303,21 +1303,21 @@ impl Module {
             })
     }
 
-    /// Every inductive family the module declares, by name — see [`Module::nominals`].
+    /// Every inductive family the module declares, by name — see [`Definitions::nominals`].
     pub fn induct_decls(&self) -> BTreeMap<Global, &InductDecl> {
         self.nominals()
             .filter_map(|(name, nominal)| Some((*name, nominal.inductive()?)))
             .collect()
     }
 
-    /// Every record the module declares, a structure's or a concept's, by name — see [`Module::nominals`].
+    /// Every record the module declares, a structure's or a concept's, by name — see [`Definitions::nominals`].
     pub fn struct_decls(&self) -> BTreeMap<Global, &StructDecl> {
         self.nominals()
             .filter_map(|(name, nominal)| Some((*name, nominal.record()?)))
             .collect()
     }
 
-    /// Every concept the module declares, by name — see [`Module::nominals`].
+    /// Every concept the module declares, by name — see [`Definitions::nominals`].
     pub fn concepts(&self) -> BTreeMap<Global, &ConceptDecl> {
         self.nominals()
             .filter_map(|(name, nominal)| Some((*name, nominal.concept()?)))
@@ -1329,8 +1329,8 @@ impl Module {
     /// Built for an elaborated module about to be archived. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures several times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
     ///
     /// Not for a lowered module, which a lint and a report are located in: a consed term says nothing of where it was written.
-    pub fn shared(&self, sharing: &Sharing) -> Module {
-        Module {
+    pub fn shared(&self, sharing: &Sharing) -> Definitions {
+        Definitions {
             items: self.items.iter().map(|item| item.shared(sharing)).collect(),
             mounts: self.mounts.clone(),
             witnesses: self.witnesses.clone(),
@@ -1406,7 +1406,7 @@ impl Module {
         let located = self.located();
 
         Lexicon {
-            symbols: Rc::new(Symbols::of(self.module_symbols())),
+            symbols: Rc::new(Symbols::of(self.symbols())),
             plicities: Rc::new(self.nominal_plicities(&located)),
             members: Rc::new(self.members(&located)),
         }
@@ -1503,7 +1503,7 @@ impl Module {
     }
 
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
-    pub fn module_symbols(&self) -> Vec<Global> {
+    pub fn symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
         // Asked of what each place declares, which a stored module knows without its item.
         for place in self.items.places() {
@@ -1513,14 +1513,12 @@ impl Module {
     }
 }
 
-impl Module {
+impl Definitions {
     /// The spelling this module prints its terms in.
     ///
-    /// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Module]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
+    /// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Definitions]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
     fn spelling(&self) -> Rc<Spelling> {
-        Rc::new(
-            Spelling::default().with_short_names(Rc::new(build_shorten(&self.module_symbols()))),
-        )
+        Rc::new(Spelling::default().with_short_names(Rc::new(build_shorten(&self.symbols()))))
     }
 
     /// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
@@ -1554,7 +1552,7 @@ impl Module {
     }
 }
 
-impl fmt::Display for Module {
+impl fmt::Display for Definitions {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.print_items(formatter, &self.spelling())
     }
@@ -1563,10 +1561,10 @@ impl fmt::Display for Module {
 impl fmt::Display for Program {
     /// The module's items, then the entry in the module's spelling, with the type it states beneath it.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let spelling = self.module.spelling();
-        self.module.print_items(formatter, &spelling)?;
-        write!(formatter, "{}", self.entry.body.spelled(&spelling))?;
-        if let Some(type_) = &self.entry.type_ {
+        let spelling = self.definitions.spelling();
+        self.definitions.print_items(formatter, &spelling)?;
+        write!(formatter, "{}", self.entrypoint.body.spelled(&spelling))?;
+        if let Some(type_) = &self.entrypoint.type_ {
             write!(formatter, "\n: {}", type_.spelled(&spelling))?;
         }
 
@@ -1843,8 +1841,8 @@ fn item_positions(
 }
 
 /// Every position that can hold a bound value in the items of `module` it holds as other than an object a store holds, item by item — see [`item_positions`]: an item read out of the object it was stored as was walked where it was filed, by the compiler that files this one, since a store's address names its compiler.
-fn made_positions(module: &Module, mut visit: impl FnMut(Option<&Global>, &dyn Carried)) {
-    let items = &module.items;
+fn made_positions(definitions: &Definitions, mut visit: impl FnMut(Option<&Global>, &dyn Carried)) {
+    let items = &definitions.items;
     for place in items.places().filter(|place| items.part(*place).is_none()) {
         item_positions(&items[place], &|_| false, &mut visit);
     }
@@ -1912,14 +1910,14 @@ impl fmt::Display for Positional {
 ///
 /// Five of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
 ///
-/// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Module::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
+/// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Definitions::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
 /// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
 /// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
-pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
+pub fn validate_stored_identities(definitions: &Definitions) -> Result<(), Positional> {
     // First, because the position walk below cannot run over a group whose counts disagree: it reads an item through `RecItem::definitions`, whose `opened` opens every member scope over one term per definition, so such a group aborts the walk that would have reported it. Every constructor makes the counts agree and a restored archive's fields do not, which is why the one door that can carry one reads it, as `check_group` reads it where a walk meets one.
-    if let Some((owner, stated)) = module.items.iter().find_map(|item| match item {
+    if let Some((owner, stated)) = definitions.items.iter().find_map(|item| match item {
         Item::Rec(rec) if !rec.group.counted() || rec.definitions.len() != rec.group.length() => {
             Some((
                 rec.definitions.first().map(|definition| definition.name),
@@ -1933,7 +1931,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
 
     let mut found: Option<Positional> = None;
 
-    made_positions(module, |owner, carried| {
+    made_positions(definitions, |owner, carried| {
         if found.is_some() {
             return;
         }
@@ -1962,14 +1960,14 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
         }
     });
 
-    if let Some(witness) = module.witnesses.iter().find(|witness| match witness {
+    if let Some(witness) = definitions.witnesses.iter().find(|witness| match witness {
         // Containment rather than equality: the identity names the *module* that declares it, which lies within one of this unit's mounts rather than being one.
-        Global::Witness(id) => Mount::owning(&module.mounts, id.module()).is_none(),
+        Global::Witness(id) => Mount::owning(&definitions.mounts, id.module()).is_none(),
         Global::Authored(_) => false,
     }) {
         return Err(Positional::UnscopedWitness { witness: *witness });
     }
-    if let Some(witness) = module
+    if let Some(witness) = definitions
         .witnesses
         .iter()
         .find(|witness| matches!(witness, Global::Witness(WitnessId::Unspelled { .. })))
@@ -2028,7 +2026,7 @@ pub fn open_positions_of<'a>(
     found
 }
 
-/// Evidence that a module is a finished Core term: the kernel's whole `NotCore` class — no `Metavar` and no `Transient` node survives in any term-bearing position, and no level in one holds a universe metavariable — every position closed, no bound variable reaching past the scopes that bind it, and, for a program, an entry stating the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
+/// Evidence that a module is a finished Core term: the kernel's whole `NotCore` class — no `Metavar` and no `Transient` node survives in any term-bearing position, and no level in one holds a universe metavariable — every position closed, no bound variable reaching past the scopes that bind it, and, for a program, an entry stating the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a unit's `Definitions` re-establishes them at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -2040,7 +2038,7 @@ pub trait Zonkable: Clone {
     fn unfinished(&self) -> Option<String>;
 }
 
-impl Zonkable for Module {
+impl Zonkable for Definitions {
     fn unfinished(&self) -> Option<String> {
         zonked_refusal(self)
     }
@@ -2049,9 +2047,9 @@ impl Zonkable for Module {
 impl Zonkable for Program {
     /// The module's first unfinished place, then the entry's: a program is finished when its module is and its entry states the type it was judged at, meta-free.
     fn unfinished(&self) -> Option<String> {
-        zonked_refusal(&self.module).or_else(|| match &self.entry.type_ {
+        zonked_refusal(&self.definitions).or_else(|| match &self.entrypoint.type_ {
             None => Some("the entrypoint states no type it was judged at".to_owned()),
-            Some(type_) => unfinished(&self.entry.body)
+            Some(type_) => unfinished(&self.entrypoint.body)
                 .or_else(|| unfinished(type_))
                 .map(|found| format!("{found} survives in the entrypoint")),
         })
@@ -2068,18 +2066,18 @@ impl<T: Zonkable> Zonked<T> {
     }
 }
 
-impl Zonked<Module> {
-    pub fn as_module(&self) -> &Module {
+impl Zonked<Definitions> {
+    pub fn as_definitions(&self) -> &Definitions {
         &self.0
     }
 
-    pub fn into_module(self) -> Module {
+    pub fn into_definitions(self) -> Definitions {
         self.0
     }
 
     /// `value` taken as evidence by asking `made` alone, every other item of it being an item of a module already finished: a recompile's, whose kept items are its baseline's own. The claim is the caller's; debug builds re-validate the whole.
     pub fn revised<'a>(
-        value: &Module,
+        value: &Definitions,
         made: impl IntoIterator<Item = &'a Item>,
     ) -> Result<Self, ZonkedRefusal> {
         let made = made.into_iter().collect::<Vec<_>>();
@@ -2095,7 +2093,7 @@ impl Zonked<Module> {
     }
 
     /// The carried module rewritten by a transform that preserves meta-freedom. The preservation claim is the caller's; debug builds re-validate it.
-    pub fn map(self, rewrite: impl FnOnce(Module) -> Module) -> Self {
+    pub fn map(self, rewrite: impl FnOnce(Definitions) -> Definitions) -> Self {
         let rewritten = rewrite(self.0);
         debug_assert!(
             zonked_refusal(&rewritten).is_none(),
@@ -2110,14 +2108,14 @@ impl Zonked<Program> {
         &self.0
     }
 
-    /// The program's module, with the evidence its projection established. The clone is cheap — items share their terms by `Rc`.
-    pub fn module(&self) -> Zonked<Module> {
-        Zonked(self.0.module.clone())
+    /// The program's definitions, with the evidence its projection established. The clone is cheap — items share their terms by `Rc`.
+    pub fn definitions(&self) -> Zonked<Definitions> {
+        Zonked(self.0.definitions.clone())
     }
 
     /// The entrypoint's body and the type it was judged at.
     pub fn entry(&self) -> (&Term, &Term) {
-        let entry = &self.0.entry;
+        let entry = &self.0.entrypoint;
         let type_ = entry
             .type_
             .as_ref()
@@ -2139,18 +2137,18 @@ impl fmt::Display for ZonkedRefusal {
 }
 
 /// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`, `has_transient` and `has_universe_meta` bits, first offender wins.
-fn zonked_refusal(module: &Module) -> Option<String> {
-    for item in &module.items {
+fn zonked_refusal(definitions: &Definitions) -> Option<String> {
+    for item in &definitions.items {
         if let Some(found) = unfinished_item(item) {
             return Some(item_refusal(item, found));
         }
     }
-    for (name, decl) in module.induct_decls() {
+    for (name, decl) in definitions.induct_decls() {
         if let Some(found) = unfinished_inductive(decl) {
             return Some(entry_refusal(&name, found));
         }
     }
-    for (name, decl) in module.struct_decls() {
+    for (name, decl) in definitions.struct_decls() {
         if let Some(found) = unfinished_record(decl) {
             return Some(entry_refusal(&name, found));
         }

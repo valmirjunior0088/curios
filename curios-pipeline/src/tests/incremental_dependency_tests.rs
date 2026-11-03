@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_core::{Module, Zonked},
+    curios_core::{Definitions, Zonked},
     curios_elab::DEFAULT_BUDGET,
     curios_prelude::with_prelude,
     curios_text::SYNTAX,
@@ -59,7 +59,7 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
         [directory.join("a.crs")],
         "the import nothing reads is reported in the file it is written in"
     );
-    assert_modules_agree(whole.core(), incremental.core());
+    assert_definitions_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
 }
 
@@ -141,7 +141,7 @@ fn a_dependency_respelled_under_its_signature_redoes_what_unfolded_it_and_no_oth
     );
     assert!(reuses_body(&baseline, &incremental, "bound"));
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(whole.core(), incremental.core());
+    assert_definitions_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
 }
 
@@ -160,7 +160,7 @@ fn a_dependency_whose_signature_moved_redoes_what_read_it() {
     assert!(!reuses_body(&baseline, &incremental, "two"));
     assert!(reuses_body(&baseline, &incremental, "bound"));
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(whole.core(), incremental.core());
+    assert_definitions_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
 }
 
@@ -176,7 +176,7 @@ fn a_dependency_that_gained_a_declaration_redoes_nothing_of_its_dependent() {
             "{name} was elaborated again"
         );
     }
-    assert_modules_agree(whole.core(), incremental.core());
+    assert_definitions_agree(whole.core(), incremental.core());
     assert_stored_alike(&whole, &incremental);
 }
 
@@ -241,15 +241,15 @@ end
 ";
 
 /// `module`, elaborated already, put to the kernel alone with the prelude and then `units` in scope.
-fn certified_after(module: &Module, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
-    let module = Zonked::project(module).expect("an elaborated module is zonked");
+fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
+    let definitions = Zonked::project(definitions).expect("an elaborated module is zonked");
 
     with_prelude(|prelude| {
         let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
 
         let globals = crate::globals(Predecessors::over(&scope));
 
-        curios_cert::certify_module(&module, DEFAULT_BUDGET, &globals, SYNTAX)
+        curios_cert::certify_definitions(&definitions, DEFAULT_BUDGET, &globals, SYNTAX)
             .0
             .verdicts
     })

@@ -209,7 +209,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
         .map(|index| {
             let name = named(format!("stated{index}"));
             let stated = program
-                .module
+                .definitions
                 .items
                 .iter()
                 .find_map(|item| match item {
@@ -241,7 +241,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
         })
         .collect::<Vec<_>>();
     let names = claims.iter().map(|claim| claim.name).collect::<Vec<_>>();
-    program.module.items.extend(
+    program.definitions.items.extend(
         claims
             .into_iter()
             .map(|definition| Item::Let(Box::new(definition))),

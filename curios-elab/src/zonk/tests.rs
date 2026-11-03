@@ -3,8 +3,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Anchor, Anchored, Cost, Definition, DefinitionKind, Extent, Free, Global, Intrinsic, Item,
-        MetavarId, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext, test_support::*,
+        Anchor, Anchored, Cost, Definition, DefinitionKind, Definitions, Extent, Free, Global,
+        Intrinsic, Item, MetavarId, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
+        test_support::*,
     },
 };
 
@@ -21,9 +22,9 @@ fn nat_lit(n: usize) -> Term {
 }
 
 /// A lowered module holding `body` as its one definition's value.
-fn lowered_module(body: Term) -> Module {
+fn lowered_definitions(body: Term) -> Definitions {
     declaring(
-        Module {
+        Definitions {
             mounts: Vec::new(),
             items: vec![Item::Let(Box::new(Definition {
                 name: Global::Authored(Qualifier::from(["held"])),
@@ -216,7 +217,7 @@ fn goals_are_gathered_once_per_node() {
     for _ in 0..60 {
         body = Term::intrinsic(Intrinsic::nat_add(body.clone(), body));
     }
-    let sites = goal_sites(&context, &lowered_module(body), None);
+    let sites = goal_sites(&context, &lowered_definitions(body), None);
 
     assert_eq!(sites.len(), 1);
 }
@@ -289,7 +290,7 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
     assert!(
         refused
             .format(&Reading {
-                module: &lowered_module(nat()),
+                definitions: &lowered_definitions(nat()),
                 kept: None,
                 scope: &[],
                 syntax: &SYNTAX,

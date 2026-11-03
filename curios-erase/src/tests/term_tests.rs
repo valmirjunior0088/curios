@@ -5,7 +5,7 @@ use {
     crate::test_support::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::*,
-    curios_cert::{Globals, certify_module},
+    curios_cert::{Globals, certify_definitions},
     curios_common::{Plicity, Qualifier},
     curios_elab::DEFAULT_BUDGET,
     std::sync::Arc,
@@ -160,7 +160,7 @@ fn items_erase_in_the_order_the_module_stores_them() {
         ),
     ];
     let mut program = module(items, reference("a"));
-    program.module = program.module.ordered();
+    program.definitions = program.definitions.ordered();
     let erased = erase(
         &program,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
@@ -300,18 +300,18 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
             )],
             nat_lit(0),
         )
-        .module;
+        .definitions;
 
         let unit = zonked(&unit);
         let globals = Globals::default();
-        let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-        let places = curios_core::Places::of(unit.as_module());
+        let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let places = curios_core::Places::of(unit.as_definitions());
         kernel.read(|reader| {
             for _ in 0..opened {
                 reader.fresh(None);
             }
 
-            erase_through(reader, unit.as_module(), &places).expect("the unit erases")
+            erase_through(reader, unit.as_definitions(), &places).expect("the unit erases")
         })
     };
     let first = erased(0);
@@ -624,8 +624,8 @@ fn an_applied_lambda_with_a_witness_slot_erases() {
         ],
     );
     let mut fixture = module(Vec::new(), call);
-    fixture.module = curios_core::test_support::declaring(
-        std::mem::take(&mut fixture.module),
+    fixture.definitions = curios_core::test_support::declaring(
+        std::mem::take(&mut fixture.definitions),
         [],
         [(nominal("Dict"), newtype_struct("held", nat.clone()))],
         [],

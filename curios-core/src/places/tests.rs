@@ -23,17 +23,17 @@ fn definition(name: &str) -> Definition {
     }
 }
 
-fn module(items: Vec<Item>) -> Module {
-    Module {
+fn definitions(items: Vec<Item>) -> Definitions {
+    Definitions {
         items: items.into(),
-        ..Module::default()
+        ..Definitions::default()
     }
 }
 
 /// A name is held where its item sits, a group's member by its member.
 #[test]
 fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         Item::Let(Box::new(definition("first"))),
         Item::Rec(RecItem::new(vec![
             (fresh(None), definition("even")),
@@ -41,7 +41,7 @@ fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
         ])),
         Item::Rec(RecItem::new(vec![(fresh(None), definition("loop"))])),
     ]);
-    let places = Places::of(&module);
+    let places = Places::of(&definitions);
     let place = |name: &str| places.place(&Global::Authored(Qualifier::from([name])));
 
     assert_eq!(place("first"), Some(Place::Let(0)));
@@ -56,7 +56,7 @@ fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
 #[test]
 #[should_panic(expected = "a module declares one name twice")]
 fn a_module_declaring_a_name_twice_has_no_places() {
-    Places::of(&module(vec![
+    Places::of(&definitions(vec![
         Item::Let(Box::new(definition("twice"))),
         Item::Rec(RecItem::new(vec![
             (fresh(None), definition("other")),
@@ -69,14 +69,14 @@ fn a_module_declaring_a_name_twice_has_no_places() {
 #[test]
 fn a_version_keeps_the_places_of_what_it_did_not_change() {
     let name = |name: &str| Global::Authored(Qualifier::from([name]));
-    let module = module(vec![
+    let definitions = definitions(vec![
         Item::Let(Box::new(definition("first"))),
         Item::Let(Box::new(definition("second"))),
         Item::Let(Box::new(definition("third"))),
     ]);
-    let mut version = Module {
-        items: module.items.version(),
-        ..module.clone()
+    let mut version = Definitions {
+        items: definitions.items.version(),
+        ..definitions.clone()
     };
     let first = version.items.places().next().expect("an item");
     let between = version
@@ -84,8 +84,8 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
         .insert_after(Some(first), Item::Let(Box::new(definition("between"))))
         .expect("a place between two");
     let held = Places::of(&version);
-    let names = |module: &Module| {
-        module
+    let names = |definitions: &Definitions| {
+        definitions
             .items
             .iter()
             .flat_map(Item::declared_names)
@@ -102,7 +102,7 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
         Some(Place::Let(between as u64))
     );
 
-    let mut later = Module {
+    let mut later = Definitions {
         items: version.items.version(),
         ..version.clone()
     };
@@ -127,11 +127,11 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
 /// A version made of a module that placed its items at their indices has room before its first item, where an item named before every other goes.
 #[test]
 fn a_version_takes_an_item_before_its_first() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         Item::Let(Box::new(definition("b"))),
         Item::Let(Box::new(definition("c"))),
     ]);
-    let mut items = module.items.version();
+    let mut items = definitions.items.version();
 
     let first = items.insert_after(None, Item::Let(Box::new(definition("a"))));
 
@@ -142,12 +142,12 @@ fn a_version_takes_an_item_before_its_first() {
 /// What a version changed of the items it was made from is what it replaced, put between two others and took out, and nothing it shares with them; items that are no version say nothing of what they share.
 #[test]
 fn a_version_says_what_it_changed_of_its_items() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         Item::Let(Box::new(definition("first"))),
         Item::Let(Box::new(definition("second"))),
         Item::Let(Box::new(definition("third"))),
     ]);
-    let earlier = module.items.version();
+    let earlier = definitions.items.version();
     let places = earlier.places().collect::<Vec<_>>();
     let mut later = earlier.clone();
     later.replace(places[1], Item::Let(Box::new(definition("second"))));
@@ -161,5 +161,5 @@ fn a_version_says_what_it_changed_of_its_items() {
     assert_eq!(changes.replaced, [places[1]]);
     assert_eq!(changes.inserted, [between]);
     assert_eq!(changes.removed, [places[2]]);
-    assert_eq!(module.items.changed_since(&earlier), None);
+    assert_eq!(definitions.items.changed_since(&earlier), None);
 }

@@ -13,7 +13,7 @@
 //! **A version holds items by place.** A unit compiled over a baseline holds the baseline's items and replaces the ones it made: a version shares every item it did not change with the module it was made from, each at the place it had, and holds an item new to it at a place between two others ([`Items::version`]). A module made whole or restored places its items at their indices; a version made of one spaces them apart first, once, and every version made of a version keeps its places. So a reader goes by the places a module gives ([`Items::places`]), never by counting.
 
 use {
-    crate::{ArchivedItemRun, Declared, Global, Item, ItemRun, Module},
+    crate::{ArchivedItemRun, Declared, Definitions, Global, Item, ItemRun},
     curios_archive::{Bytes, Pooled, Proxy, Via},
     curios_common::{Mount, Object, Ordered},
     std::{
@@ -822,7 +822,7 @@ impl fmt::Debug for Items {
     }
 }
 
-/// A module archived without its items: what each item declares, its mounts, its witnesses and its tests, which is what every unit after it reads of it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Module::with_items`]).
+/// A module archived without its items: what each item declares, its mounts, its witnesses and its tests, which is what every unit after it reads of it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Definitions::with_items`]).
 pub struct Itemless;
 
 /// A module as [`Itemless`] archives it.
@@ -835,17 +835,17 @@ pub struct ItemlessModule {
 }
 
 impl ItemlessModule {
-    fn of(module: &Module) -> Self {
+    fn of(definitions: &Definitions) -> Self {
         Self {
-            outlines: Outlines::of(&module.items),
-            mounts: module.mounts.clone(),
-            witnesses: module.witnesses.clone(),
-            tests: module.tests.clone(),
+            outlines: Outlines::of(&definitions.items),
+            mounts: definitions.mounts.clone(),
+            witnesses: definitions.witnesses.clone(),
+            tests: definitions.tests.clone(),
         }
     }
 
-    fn module(self) -> Result<Module, String> {
-        Ok(Module {
+    fn definitions(self) -> Result<Definitions, String> {
+        Ok(Definitions {
             items: Items::parted(self.outlines, Vec::new())?,
             mounts: self.mounts,
             witnesses: self.witnesses,
@@ -854,27 +854,27 @@ impl ItemlessModule {
     }
 }
 
-impl Proxy<Module> for Itemless {
+impl Proxy<Definitions> for Itemless {
     type Archivable = ItemlessModule;
 
-    fn to_archivable(module: &Module) -> impl Borrow<ItemlessModule> {
-        ItemlessModule::of(module)
+    fn to_archivable(definitions: &Definitions) -> impl Borrow<ItemlessModule> {
+        ItemlessModule::of(definitions)
     }
 
-    fn from_archivable(module: ItemlessModule) -> Result<Module, String> {
-        module.module()
+    fn from_archivable(module: ItemlessModule) -> Result<Definitions, String> {
+        module.definitions()
     }
 }
 
-impl Proxy<Rc<Module>> for Itemless {
+impl Proxy<Rc<Definitions>> for Itemless {
     type Archivable = ItemlessModule;
 
-    fn to_archivable(module: &Rc<Module>) -> impl Borrow<ItemlessModule> {
-        ItemlessModule::of(module)
+    fn to_archivable(definitions: &Rc<Definitions>) -> impl Borrow<ItemlessModule> {
+        ItemlessModule::of(definitions)
     }
 
-    fn from_archivable(module: ItemlessModule) -> Result<Rc<Module>, String> {
-        module.module().map(Rc::new)
+    fn from_archivable(module: ItemlessModule) -> Result<Rc<Definitions>, String> {
+        module.definitions().map(Rc::new)
     }
 }
 

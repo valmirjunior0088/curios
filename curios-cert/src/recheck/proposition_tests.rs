@@ -6,7 +6,7 @@ use {
     curios_analysis::{Erased, test_support::*},
     curios_common::Qualifier,
     curios_core::{
-        Atom, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term, Universes,
+        Atom, Definitions, Global, InductParam, Intrinsic, Nat, Telescope, Term, Universes,
         test_support::*,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -140,8 +140,8 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     )]);
 
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: vec![wrapped_at_true(&wrap_name, qed)].into(),
             witnesses: BTreeSet::new(),
@@ -156,7 +156,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     );
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
     );
 }
@@ -174,7 +174,7 @@ fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
     );
     let lemma = Global::Authored(Qualifier::from(["lemma"]));
 
-    let honest = collision_module(
+    let honest = collision_definitions(
         vec![
             proof_group(&lemma, vouched.clone(), qed),
             authored(
@@ -190,7 +190,7 @@ fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
         Vec::new(),
     );
 
-    let lying = collision_module(
+    let lying = collision_definitions(
         vec![proof_group(
             &lemma,
             Term::intrinsic(Intrinsic::NatType),

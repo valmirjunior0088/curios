@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_name, false_type, refused},
     curios_common::Qualifier,
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Item, Module,
+        Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam, Item,
         Nominal, Telescope, Term, Totality, UniverseContext, Universes,
     },
 };
@@ -68,18 +68,18 @@ fn family(result_sort: Term, constructors: &[&str]) -> InductDecl {
 /// One declaration, the prelude's `False` holding a constructor `mk`, closed with `False/mk()`.
 ///
 /// Declared over the environment a walk is seeded with, the entry stands where the prelude's did and is the one every rule reads. Checking it would not refuse it: an inhabited proposition is a well-formed declaration, and what is wrong with this one is its name.
-fn a_registry_entry_under_the_preludes_false() -> (Module, Term) {
-    let module = Module {
+fn a_registry_entry_under_the_preludes_false() -> (Definitions, Term) {
+    let definitions = Definitions {
         items: vec![declared(
             false_name(),
             Nominal::Inductive(family(Term::prop(), &["mk"])),
         )]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     (
-        module,
+        definitions,
         Term::variant(false_name(), Vec::<Term>::new(), "mk", Vec::<Term>::new()),
     )
 }
@@ -87,14 +87,14 @@ fn a_registry_entry_under_the_preludes_false() -> (Module, Term) {
 /// `p : Prop = Holds`, then `thm : p = Holds/qed()`, then `p : Prop = ((x : Holds) => False)(thm)`, closed with `thm`.
 ///
 /// A walk takes items as they are stored, and a name declared twice is written twice: `thm` is typed while `p` is `Holds`, and the second `p`, which names `thm`, is defined where the first stood. The closing term is then read at a `p` that reduces to `False`.
-fn a_statement_declared_twice() -> (Module, Term) {
+fn a_statement_declared_twice() -> (Definitions, Term) {
     let holds = Global::Authored(Qualifier::from(["Holds"]));
     let statement = Global::Authored(Qualifier::from(["p"]));
     let theorem = Global::Authored(Qualifier::from(["thm"]));
     let holds_type = Term::induct_type(holds, Vec::<Term>::new(), Vec::<Term>::new());
     let named = |name: &Global| Term::instance(*name, Universes::default());
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![
             declared(holds, Nominal::Inductive(family(Term::prop(), &["qed"]))),
             authored(&statement, Term::prop(), holds_type.clone()),
@@ -113,8 +113,8 @@ fn a_statement_declared_twice() -> (Module, Term) {
             ),
         ]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
-    (module, named(&theorem))
+    (definitions, named(&theorem))
 }

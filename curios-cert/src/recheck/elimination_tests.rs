@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Intrinsic, Item,
-        Level, Many, Module, Nat, Quality, Scope, Subterm, Telescope, Term, Totality,
+        Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam,
+        Intrinsic, Item, Level, Many, Nat, Quality, Scope, Subterm, Telescope, Term, Totality,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam, test_support::*,
     },
@@ -282,8 +282,8 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         ),
     );
 
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: vec![vacuous].into(),
             witnesses: BTreeSet::new(),
@@ -294,7 +294,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         [],
     );
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         verdicts
@@ -317,8 +317,8 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
 /// A declaration's own domains are the seventh position and are not repeated here; [`a_proposition_may_not_carry_a_computed_relevant_field`] holds that one, and holds it with the derivation rather than with the position alone.
 #[test]
 fn no_type_position_admits_a_lying_motive() {
-    for (position, module) in lying_type_positions() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    for (position, definitions) in lying_type_positions() {
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -418,7 +418,7 @@ fn an_irrelevant_level_changes_no_elimination() {
 // The scrutinee's index is `wrap` at another instance than `Ixd`'s target states, which conversion calls the same value: inversion reads the tag and the payloads and no level, so the arm is solved and stays mandatory.
 #[test]
 fn an_arm_is_not_excused_by_an_irrelevant_level() {
-    let (family, vacuous) = excused_arm_module(false);
+    let (family, vacuous) = excused_arm_definitions(false);
     assert!(
         fixture_verdicts(&vacuous, 1_000_000, &Globals::default(), SYNTAX)
             .iter()
@@ -429,7 +429,7 @@ fn an_arm_is_not_excused_by_an_irrelevant_level() {
                 })
     );
 
-    let (_, covered) = excused_arm_module(true);
+    let (_, covered) = excused_arm_definitions(true);
     assert_eq!(
         fixture_verdicts(&covered, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
@@ -441,7 +441,7 @@ fn an_arm_is_not_excused_by_an_irrelevant_level() {
 /// The stated instance is one no value of the family stands at: `mk` targets `(x, x)`, so the payload its indices pin is `x := 0` and the instance it builds at that payload is `Pinned(0, 0)`. That is what the open branch of the sole-arm rule compares — `unread_payload`'s `grounded`, which answers no here, leaving the match standing — and what the closed branch does not compare at all, `stated_payload` handing the payload over on the ground that a closed proof of a one-constructor family is that constructor.
 ///
 /// With `over` naming a binder the definition is a function of a proof of the stated instance and the scrutinee is that binder, which is the open branch; with none the scrutinee is a metavariable, which the gate reads as closed.
-fn pinned_sole_arm_module(over: Option<Free>, binders: Vec<(Plicity, Free)>) -> Module {
+fn pinned_sole_arm_definitions(over: Option<Free>, binders: Vec<(Plicity, Free)>) -> Definitions {
     let pinned = Global::Authored(Qualifier::from(["Pinned"]));
     let falsehood = Global::Authored(Qualifier::from(["False"]));
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -498,14 +498,14 @@ fn pinned_sole_arm_module(over: Option<Free>, binders: Vec<(Plicity, Free)>) -> 
     };
 
     declaring(
-        Module {
+        Definitions {
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["bad"])),
                 type_,
                 body,
             )]
             .into(),
-            ..Module::default()
+            ..Definitions::default()
         },
         BTreeMap::from([(pinned, declaration), (falsehood, proposition(Vec::new()))]),
         [],
@@ -519,7 +519,7 @@ fn pinned_sole_arm_module(over: Option<Free>, binders: Vec<(Plicity, Free)>) -> 
 #[test]
 fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
     let verdicts = fixture_verdicts(
-        &pinned_sole_arm_module(None, vec![(Plicity::Explicit, Free::local(770, Some("x")))]),
+        &pinned_sole_arm_definitions(None, vec![(Plicity::Explicit, Free::local(770, Some("x")))]),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -540,7 +540,7 @@ fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
 fn an_arm_whose_arity_its_constructor_denies_is_refused() {
     let proof = Free::local(773, Some("p"));
     let verdicts = fixture_verdicts(
-        &pinned_sole_arm_module(
+        &pinned_sole_arm_definitions(
             Some(proof),
             vec![
                 (Plicity::Explicit, Free::local(770, Some("x"))),
@@ -571,7 +571,7 @@ fn an_arm_whose_arity_its_constructor_denies_is_refused() {
 fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
     let proof = Free::local(773, Some("p"));
     let verdicts = fixture_verdicts(
-        &pinned_sole_arm_module(
+        &pinned_sole_arm_definitions(
             Some(proof),
             vec![(Plicity::Explicit, Free::local(770, Some("x")))],
         ),
@@ -597,7 +597,7 @@ fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
 /// The one caller of `Judge::sort_below` is `curios_analysis`'s `fits_its_variable`, which keeps an index refinement of an *outer* variable only where the judge holds the target below the variable's own type. An outer variable is checked at its index's type by subsumption, so `V` may stand at a sort below `Type 7` while the target `Type 3` is typed at `Type 7`, and the arm's body inhabits `V` exactly where the refinement `V := Type 3` is kept. With `own` the index's own sort the refinement fits and the arm stands; with `own` a sort the target does not inhabit, a kept refinement would read `Type 3 : Type 0` — type in type, off a binder, with nothing to reduce.
 ///
 /// Mutation-checked: with `fits_its_variable` returning `Ok(true)` unconditionally, the `Type 0` module is admitted with no verdict at all, so the bound is the whole of what refuses it.
-fn refined_variable_module(own: Level) -> Module {
+fn refined_variable_definitions(own: Level) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Fixed"]));
     let index = Free::local(960, Some("i"));
     let declaration = InductDecl {
@@ -644,14 +644,14 @@ fn refined_variable_module(own: Level) -> Module {
     };
 
     declaring(
-        Module {
+        Definitions {
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["read"])),
                 Term::func_type(binders(own.clone()), Term::free_var(&outer)),
                 Term::func(binders(own), read),
             )]
             .into(),
-            ..Module::default()
+            ..Definitions::default()
         },
         [(family, declaration)],
         [],
@@ -663,7 +663,7 @@ fn refined_variable_module(own: Level) -> Module {
 #[test]
 fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
     let fitting = fixture_verdicts(
-        &refined_variable_module(Level::constant(7)),
+        &refined_variable_definitions(Level::constant(7)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -674,7 +674,7 @@ fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
     );
 
     let collapsing = fixture_verdicts(
-        &refined_variable_module(Level::zero()),
+        &refined_variable_definitions(Level::zero()),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -687,14 +687,14 @@ fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
     );
 }
 
-/// [`refined_variable_module`] with the outer variable's own type written as a reference to a declaration, so the bound the refinement is kept by is read at the levels the reference states.
+/// [`refined_variable_definitions`] with the outer variable's own type written as a reference to a declaration, so the bound the refinement is kept by is read at the levels the reference states.
 ///
 /// `Universe@{p} : Type (p + 2) = Type (p + 1)` is a definition whose value is a sort, and `V : Universe@{0}` is a binder whose type forces to `Type 1`. `fits_its_variable` forces the variable's type and asks `Judge::sort_below` of the target, so the level the bound is decided at arrives through an instance rather than written where the binder is.
 ///
 /// The reader pins a level of its own at eight, `8 ≤ q` and `q ≤ 8`, so that a captured reading is above the honest one and still below the family's index. Read at the instance, `Universe@{0}` is `Type 1`, the target `Type 3` is typed at `Type 4`, and `4 ≤ 1` holds under no hypothesis: the refinement is dropped and the arm reads `V` as it stands, where its body `Type 2` is a term nothing types at a variable. Read at the *reader's* parameter instead — the shape `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` was admitted through — the bound would be `4 ≤ q + 1`, which the hypotheses entail, and the refinement would be kept.
 ///
 /// `variable` is what the binder's type is written as, so that the term a captured reading would have left — `Type (q + 1)`, spelled in the reader's own parameter — is a fixture of its own beside the instance. The family's index stands at `Type 10` so that both readings inhabit it: a binder is checked at its index's type by subsumption before any refinement is asked about, and an index below the captured reading would refuse the module there instead.
-fn refined_at(variable: impl Fn(&Level) -> Term) -> Module {
+fn refined_at(variable: impl Fn(&Level) -> Term) -> Definitions {
     let p = Level::param(UniverseParam(0));
     let plus_one = p.clone().succ().expect("a parameter has a successor");
     let plus_two = plus_one.clone().succ().expect("a level has a successor");
@@ -772,7 +772,7 @@ fn refined_at(variable: impl Fn(&Level) -> Term) -> Module {
     };
 
     declaring(
-        Module {
+        Definitions {
             items: vec![
                 definition(
                     universe,
@@ -792,7 +792,7 @@ fn refined_at(variable: impl Fn(&Level) -> Term) -> Module {
                 ),
             ]
             .into(),
-            ..Module::default()
+            ..Definitions::default()
         },
         [(family, declaration)],
         [],

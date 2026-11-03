@@ -118,13 +118,13 @@ impl ErasedProgram {
 pub fn erase_unit(
     kernel: &mut curios_cert::Kernel<'_>,
     scope: Erasures<'_>,
-    module: &curios_core::Zonked<curios_core::Module>,
+    definitions: &curios_core::Zonked<curios_core::Definitions>,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let module = module.as_module();
-        let places = curios_core::Places::of(module);
-        kernel.read(|reader| erase_items(reader, scope, (module, &places), None))
+        let definitions = definitions.as_definitions();
+        let places = curios_core::Places::of(definitions);
+        kernel.read(|reader| erase_items(reader, scope, (definitions, &places), None))
     })
 }
 
@@ -132,14 +132,14 @@ pub fn erase_unit(
 pub fn erase_unit_over(
     kernel: &mut curios_cert::Kernel<'_>,
     scope: Erasures<'_>,
-    module: &curios_core::Zonked<curios_core::Module>,
+    definitions: &curios_core::Zonked<curios_core::Definitions>,
     baseline: ErasedBaseline<'_>,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let module = module.as_module();
-        let over = ErasedOver::new(baseline, module, scope);
-        kernel.read(|reader| erase_items(reader, scope, (module, baseline.now), Some(over)))
+        let definitions = definitions.as_definitions();
+        let over = ErasedOver::new(baseline, definitions, scope);
+        kernel.read(|reader| erase_items(reader, scope, (definitions, baseline.now), Some(over)))
     })
 }
 
@@ -151,17 +151,17 @@ pub fn erase_program(
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let module = &program.as_program().module;
-        let places = curios_core::Places::of(module);
+        let definitions = &program.as_program().definitions;
+        let places = curios_core::Places::of(definitions);
         let (body, type_) = program.entry();
         kernel.read(|reader| {
-            let own = erase_items(reader, scope, (module, &places), None)?;
+            let own = erase_items(reader, scope, (definitions, &places), None)?;
             let entry = {
                 let externals = |name: &curios_core::Global, sorts: Sorts| {
                     own.find(name, sorts).or_else(|| scope.find(name, sorts))
                 };
                 let declared = |name: &curios_core::Global| {
-                    declared(module, &places, name).or_else(|| scope.definition(name))
+                    declared(definitions, &places, name).or_else(|| scope.definition(name))
                 };
                 reader.restore_budget();
                 seal_entry(
@@ -183,7 +183,7 @@ pub fn erase_program(
 pub fn erase_items(
     reader: &mut Reader,
     scope: Erasures<'_>,
-    (module, places): (&curios_core::Module, &curios_core::Places),
+    (definitions, places): (&curios_core::Definitions, &curios_core::Places),
     mut over: Option<ErasedOver<'_>>,
 ) -> Result<ErasedUnit, Error> {
     let shared = over.as_ref().and_then(|over| {
@@ -211,12 +211,12 @@ pub fn erase_items(
     }
     let walk = match (&over, &shared) {
         (Some(over), Some(_)) => over.visited().collect::<Vec<_>>(),
-        _ => module.items.places().collect(),
+        _ => definitions.items.places().collect(),
     };
     // The first name of each item erased here, whose trace is its own, and every other name such an item declares.
     let (mut made, mut others) = (Vec::new(), Vec::new());
     for place in walk {
-        let item = &module.items[place];
+        let item = &definitions.items[place];
         let names = item.declared_names();
         let kept = over.as_mut().and_then(|over| over.keep(place, item, &unit));
         let taken = match kept {
@@ -240,7 +240,8 @@ pub fn erase_items(
                 record
             }
             (None, None) => {
-                let (erased, read) = erase_forms(reader, scope, &unit, (module, places), item)?;
+                let (erased, read) =
+                    erase_forms(reader, scope, &unit, (definitions, places), item)?;
                 // One sample for each item erased, with how much its erasure read.
                 curios_profile::sample!("erase::asked", read.len());
                 unit.push(place, item, erased);
@@ -369,7 +370,7 @@ fn erase_forms(
     reader: &mut Reader,
     scope: Erasures<'_>,
     unit: &ErasedUnit,
-    (module, places): (&curios_core::Module, &curios_core::Places),
+    (definitions, places): (&curios_core::Definitions, &curios_core::Places),
     item: &curios_core::Item,
 ) -> Result<(ErasedForms, Asked), Error> {
     let names = item.declared_names();
@@ -383,7 +384,7 @@ fn erase_forms(
         };
         let declared = |name: &curios_core::Global| {
             declared_read.borrow_mut().push(*name);
-            declared(module, places, name).or_else(|| scope.definition(name))
+            declared(definitions, places, name).or_else(|| scope.definition(name))
         };
         reader.restore_budget();
         reader.take_reads();

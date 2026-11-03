@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Module, Nominal, Telescope, Term,
+        Atom, Definitions, Free, Global, InductDecl, InductParam, Nominal, Telescope, Term,
         UniverseContext,
     },
 };
@@ -53,7 +53,7 @@ const A_PAYLOAD_RETURNS_ITS_CONSTRUCTOR_BUILT_AGAIN: &str = r#"
 /// `induct Bad : Prop | c(f : (A : Prop) -> (x : A) -> A) end` and `rec bad : (b : Bad) -> False = (b) => match b | c(f) => bad(f(Bad)(b)) end`, closed with `bad(Bad/c((A) => (x) => x))`.
 ///
 /// A `Prop`-sorted family carried no size condition, so `Bad` held a payload that quantified over the sort `Bad` was in, and the payload's declared type names `Bad` nowhere, so strict positivity had nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one did, and at the identity it handed back the scrutinee. The declaration is refused where it is sized: its payload does not fit under `Prop` at level zero.
-fn a_payload_applied_at_its_own_family() -> (Module, Term) {
+fn a_payload_applied_at_its_own_family() -> (Definitions, Term) {
     let family = Global::Authored(Qualifier::from(["Bad"]));
     let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
 
@@ -85,9 +85,9 @@ fn a_payload_applied_at_its_own_family() -> (Module, Term) {
         variances: Vec::new(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     let member = Free::local(923, Some("bad"));
@@ -135,5 +135,5 @@ fn a_payload_applied_at_its_own_family() -> (Module, Term) {
         ),
     );
 
-    (module, proof)
+    (definitions, proof)
 }

@@ -33,7 +33,7 @@ impl ErasedUnit {
     /// Complete the record of the erasure of each item `module` holds, where `places` holds each name and `certification` is the record its walk filed, that no filing has: the item's identity, from `items`, what its erasure read, and its erased forms, from `forms`, each by the item's place. Nothing completes one that read a part that will not digest, or one of another unit that the unit records nothing of.
     pub fn complete(
         &self,
-        module: &curios_core::Module,
+        definitions: &curios_core::Definitions,
         places: &curios_core::Places,
         certification: &curios_core::Certification,
         items: &HashMap<usize, Digest>,
@@ -42,8 +42,8 @@ impl ErasedUnit {
         curios_profile::profile!("erasures::complete");
         // What each part read digests to, made once however many items read it.
         let mut digests = HashMap::<(curios_core::Global, Part), Option<Read>>::new();
-        for place in module.items.places() {
-            let names = module.items.names(place);
+        for place in definitions.items.places() {
+            let names = definitions.items.names(place);
             let Some(held) = names.first().and_then(|first| self.asked(first)) else {
                 continue;
             };
@@ -59,9 +59,9 @@ impl ErasedUnit {
                 .reads()
                 .map(|read| match names.contains(&&read.0) {
                     true => Some(None),
-                    false => *digests
-                        .entry(read)
-                        .or_insert_with(|| self.read_then((module, places, certification), read)),
+                    false => *digests.entry(read).or_insert_with(|| {
+                        self.read_then((definitions, places, certification), read)
+                    }),
                 })
                 .collect::<Option<Vec<_>>>();
             held.complete(reads.map(|reads| Made {
@@ -75,8 +75,8 @@ impl ErasedUnit {
     /// What an item read of `part` of `name`, as a completed record holds it ([`Read`]), off this unit, its module held where `places` says under `certification`, and what its erasure recorded of other units: `None` where it will not digest.
     fn read_then(
         &self,
-        (module, places, certification): (
-            &curios_core::Module,
+        (definitions, places, certification): (
+            &curios_core::Definitions,
             &curios_core::Places,
             &curios_core::Certification,
         ),
@@ -87,7 +87,7 @@ impl ErasedUnit {
                 erased_digest(self, place, (name, part))
             }
             (Part::Signature | Part::Body | Part::Kind, _, Some(_)) => {
-                declared_digest(module, places, certification, (name, part))
+                declared_digest(definitions, places, certification, (name, part))
             }
             _ => return self.recorded_read(&name, part),
         };

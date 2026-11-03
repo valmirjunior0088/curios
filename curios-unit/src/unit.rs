@@ -8,7 +8,7 @@ use {
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
     curios_common::{Digest, Mount, Object, Recorded},
-    curios_core::{Certification, ItemRun, Lexicon, Module, Places},
+    curios_core::{Certification, Definitions, ItemRun, Lexicon, Places},
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_text::PreparedText,
@@ -26,9 +26,9 @@ struct Produced {
     text: Rc<PreparedText>,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration reads where it stands.
     ///
-    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Module::with_items`]).
+    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
     #[archived_with(curios_core::WithoutItems)]
-    core: Rc<Module>,
+    core: Rc<Definitions>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
     places: Rc<OnceCell<Places>>,
@@ -53,7 +53,7 @@ struct Produced {
 }
 
 impl Produced {
-    fn new(text: PreparedText, core: Module, erased: ErasedUnit, traces: Traces) -> Self {
+    fn new(text: PreparedText, core: Definitions, erased: ErasedUnit, traces: Traces) -> Self {
         Self {
             text: Rc::new(text),
             core: Rc::new(core),
@@ -77,7 +77,7 @@ impl Produced {
     }
 
     /// See [`Unit::core`].
-    pub fn core(&self) -> &Module {
+    pub fn core(&self) -> &Definitions {
         &self.core
     }
 
@@ -294,7 +294,7 @@ impl Unit {
     /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — the only way a unit is made, so none is without one.
     pub fn new(
         text: PreparedText,
-        core: Module,
+        core: Definitions,
         erased: ErasedUnit,
         traces: Traces,
         certification: Certification,
@@ -335,7 +335,7 @@ impl Unit {
     }
 
     /// This unit's elaborated module — what the kernel judges, and what a successor's elaboration reads rather than re-checks.
-    pub fn core(&self) -> &Module {
+    pub fn core(&self) -> &Definitions {
         self.unit.core()
     }
 

@@ -25,7 +25,7 @@ use {
 /// The baseline a unit is erased over: an earlier text of the unit as it was certified and as it erased, with every name of a declaration the new text's elaboration made again — every other the unit declares it kept as the baseline holds it — and every name the new text no longer declares.
 #[derive(Clone, Copy)]
 pub struct ErasedBaseline<'a> {
-    pub core: &'a curios_core::Module,
+    pub core: &'a curios_core::Definitions,
     pub places: &'a curios_core::Places,
     /// The record the baseline's certification filed: what a part read of it is digested under.
     pub certification: &'a curios_core::Certification,
@@ -46,7 +46,7 @@ pub type Kept = (Held, HeldAsked);
 /// What an erasure over a baseline has decided, as it walks the unit's items in the order they are stored in.
 pub struct ErasedOver<'a> {
     baseline: ErasedBaseline<'a>,
-    module: &'a curios_core::Module,
+    module: &'a curios_core::Definitions,
     /// What the module changed of the baseline's items, where it is a version of the baseline's module, so the two hold an unchanged item at one place.
     changes: Option<curios_core::Changes>,
     /// Whether each item the walk has visited, by place, holds the baseline's own erased form.
@@ -66,13 +66,13 @@ pub struct ErasedOver<'a> {
 impl<'a> ErasedOver<'a> {
     pub fn new(
         baseline: ErasedBaseline<'a>,
-        module: &'a curios_core::Module,
+        definitions: &'a curios_core::Definitions,
         scope: Erasures<'a>,
     ) -> Self {
         let mut over = Self {
             baseline,
-            module,
-            changes: module.items.changed_since(&baseline.core.items),
+            module: definitions,
+            changes: definitions.items.changed_since(&baseline.core.items),
             kept: HashMap::new(),
             same: HashMap::new(),
             scope,
@@ -87,7 +87,7 @@ impl<'a> ErasedOver<'a> {
 
     /// Mark every item an edit could have reached: each the elaborator made again, each that read a part of another unit that moved, and every item that read an item marked or a name the unit no longer declares. Where the module is no version of the baseline's, nothing says which items they share, and each the walk cannot keep by its record is marked too.
     fn reach(&mut self) {
-        let (module, baseline) = (self.module, self.baseline);
+        let (definitions, baseline) = (self.module, self.baseline);
         let readers = baseline.erased.readers();
         let mut frontier = Vec::new();
 
@@ -102,8 +102,8 @@ impl<'a> ErasedOver<'a> {
                 .extend(changes.inserted.iter().chain(&changes.replaced).copied());
         }
         if self.changes.is_none() {
-            for place in module.items.places() {
-                let names = module.items.names(place);
+            for place in definitions.items.places() {
+                let names = definitions.items.names(place);
                 let keepable = names.first().is_some_and(|first| {
                     baseline.erased.held(first).is_some() && baseline.erased.asked(first).is_some()
                 });
@@ -369,10 +369,10 @@ impl<'a> ErasedOver<'a> {
         if !self.baseline.made.contains(name) {
             return true;
         }
-        let (module, baseline) = (self.module, self.baseline);
+        let (definitions, baseline) = (self.module, self.baseline);
 
         *self.same.entry((*name, part)).or_insert_with(|| {
-            let now = declared_digest(module, baseline.now, baseline.recorded, (*name, part));
+            let now = declared_digest(definitions, baseline.now, baseline.recorded, (*name, part));
             let then = declared_digest(
                 baseline.core,
                 baseline.places,

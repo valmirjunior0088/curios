@@ -408,15 +408,15 @@ impl Tables {
         for (first, record) in self.records.iter() {
             records.insert(position(moved[&place_of(first)]), Rc::clone(record));
         }
-        let module = curios_core::Module {
+        let definitions = curios_core::Definitions {
             items,
-            ..curios_core::Module::default()
+            ..curios_core::Definitions::default()
         };
 
         Self {
-            places: curios_core::Places::of(&module),
-            declarations: curios_core::Declarations::of(&module),
-            items: module.items,
+            places: curios_core::Places::of(&definitions),
+            declarations: curios_core::Declarations::of(&definitions),
+            items: definitions.items,
             bodies: Bodies::of(&records),
             texts: texts_of(&records),
             records,
@@ -430,15 +430,15 @@ impl Tables {
         for (first, record) in records.iter() {
             placed.insert(position(from[&place_of(first)]), Rc::clone(record));
         }
-        let module = curios_core::Module {
+        let definitions = curios_core::Definitions {
             items,
-            ..curios_core::Module::default()
+            ..curios_core::Definitions::default()
         };
 
         Self {
-            places: curios_core::Places::of(&module),
-            declarations: curios_core::Declarations::of(&module),
-            items: module.items,
+            places: curios_core::Places::of(&definitions),
+            declarations: curios_core::Declarations::of(&definitions),
+            items: definitions.items,
             bodies: Bodies::of(&placed),
             texts: texts_of(&placed),
             records: placed,

@@ -6,7 +6,7 @@ use {
     curios_anf::FieldShape,
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
-        Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
+        Certification, Definition, DefinitionKind, Definitions, Global, Item, Nominal, Places,
         ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
@@ -523,13 +523,13 @@ fn std_image_division() {
                 [readings[0], readings[2], readings[4]]
             }};
         }
-        // What `$module`'s items are of it: archived as it holds them, and each alone, which stores a structure two of them share once for each.
+        // What `$definitions`' items are of it: archived as it holds them, and each alone, which stores a structure two of them share once for each.
         macro_rules! items {
-            ($name:expr, $module:expr) => {{
-                let module: &Module = $module;
-                let whole = curios_archive::to_bytes(&module.items.to_vec())
+            ($name:expr, $definitions:expr) => {{
+                let definitions: &Definitions = $definitions;
+                let whole = curios_archive::to_bytes(&definitions.items.to_vec())
                     .expect("a module's items serialize");
-                let alone = module
+                let alone = definitions
                     .items
                     .iter()
                     .map(|item| {
@@ -633,7 +633,7 @@ fn std_image_division() {
         );
         part!("  the lowering's state", PreparedText, std.text());
         let consed = std.core().shared(&Sharing::new());
-        part!("  the elaborated module, consed", Module, &consed);
+        part!("  the elaborated module, consed", Definitions, &consed);
         items!("    its items", &consed);
         part!("  its erased forms' index", ErasedUnit, std.erased());
         part!(
@@ -675,11 +675,11 @@ fn std_image_division() {
             .iter()
             .map(|item| {
                 let sharing = Sharing::new();
-                let module = Module {
+                let definitions = Definitions {
                     items: vec![item.clone()].into(),
-                    ..Module::default()
+                    ..Definitions::default()
                 };
-                module.shared(&sharing);
+                definitions.shared(&sharing);
 
                 sharing.structures()
             })
@@ -813,10 +813,10 @@ fn introduced(item: &Item) -> &DefinitionKind {
 }
 
 /// The names of each declaration of `module`, in item order: an item's, with those of every item generated from it — a type former's constructors, a concept's method wrappers — which no elaboration takes apart from it.
-fn declarations(module: &Module) -> Vec<BTreeSet<Global>> {
+fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
     let mut generated: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     let mut declarations = Vec::new();
-    for item in &module.items {
+    for item in &definitions.items {
         let names = item.declared_names().into_iter().copied();
         match introduced(item) {
             DefinitionKind::InductiveConstructor { owner, .. }
@@ -841,7 +841,11 @@ fn declarations(module: &Module) -> Vec<BTreeSet<Global>> {
 }
 
 /// What differs between the items of `whole` declaring `names` and `replayed`'s, each as the definition and the part that differs.
-fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> Vec<String> {
+fn differences(
+    whole: &Definitions,
+    replayed: &Definitions,
+    names: &BTreeSet<Global>,
+) -> Vec<String> {
     let first = |item: &Item| item.declared_names().first().map(|name| **name);
     let mut differences = Vec::new();
     for item in &whole.items {
@@ -980,7 +984,7 @@ fn std_replay_census() {
                         );
                     }
                     Ok(replayed) => {
-                        let differences = differences(whole, &replayed.module, names);
+                        let differences = differences(whole, &replayed.definitions, names);
                         differing += usize::from(!differences.is_empty());
                         for difference in differences {
                             println!("  beside {padding}: {difference}");
@@ -1413,7 +1417,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         let lexicons = predecessors.lexicons();
         let spellings = Rc::new(std.text().spellings(&predecessors.text()));
         let reading = Reading {
-            module: std.core(),
+            definitions: std.core(),
             kept: None,
             scope: &lexicons,
             syntax: &SYNTAX,
@@ -1614,12 +1618,12 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         }
 
         // The kernel's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
-        let finished = Zonked::project(&recompiled.module)
+        let finished = Zonked::project(&recompiled.definitions)
             .unwrap_or_else(|refusal| panic!("what elaboration finished is finished: {refusal}"));
         let places = recompiled
             .places
             .clone()
-            .unwrap_or_else(|| Places::of(finished.as_module()));
+            .unwrap_or_else(|| Places::of(finished.as_definitions()));
         let globals = crate::globals_after(predecessors, &[false]);
         let (judged, _) = recheck_over(
             &finished,

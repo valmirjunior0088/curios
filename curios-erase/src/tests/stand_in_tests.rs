@@ -4,7 +4,7 @@ use {
     crate::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_cert::{Globals, certify_module},
+    curios_cert::{Globals, certify_definitions},
     curios_common::Qualifier,
     curios_elab::DEFAULT_BUDGET,
     std::collections::BTreeMap,
@@ -49,11 +49,11 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
             ],
             nat_lit(0),
         )
-        .module,
+        .definitions,
     );
 
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
     kernel.read(|reader| {
         assert_eq!(reader.head(&reference("lemma")), Ok(reference("lemma")));
@@ -122,13 +122,13 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Top"), top_induct());
     let unit = zonked(&curios_core::test_support::declaring(
-        module(items, nat_lit(0)).module,
+        module(items, nat_lit(0)).definitions,
         induct_decls,
         [],
         [],
     ));
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
     erase_unit(&mut kernel, Erasures::nothing(), &unit).expect("the unit erases");
@@ -182,8 +182,8 @@ fn stand_in(
         items,
         curios_core::Term::apply(reference("need"), [witness]),
     );
-    program.module = curios_core::test_support::declaring(
-        program.module,
+    program.definitions = curios_core::test_support::declaring(
+        program.definitions,
         [(nominal("Top"), top_induct())],
         [],
         [],

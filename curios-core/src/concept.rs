@@ -1,4 +1,4 @@
-//! The registry entry for a concept — a record-shaped interface — carried on the [`Module`](super::Module) beside `induct_decls` and `struct_decls`.
+//! The registry entry for a concept — a record-shaped interface — carried on the [`Definitions`](super::Module) beside `induct_decls` and `struct_decls`.
 //!
 //! A concept lowers to a representation-public nominal structure, whose [`StructDecl`](super::StructDecl) entry drives literals and projections; this entry adds what resolution needs on top: the field labels, what each superclass edge reaches, and the parameter telescope. Resolution itself — witness keys, head keys, and the instance search — is elaboration machinery and lives in `curios-elab`.
 
@@ -33,7 +33,7 @@ impl ConceptDecl {
             .collect()
     }
 
-    /// This concept with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
+    /// This concept with every term hash-consed against `sharing`. See [`Definitions::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
             universe_context: self.universe_context.unplaced(),

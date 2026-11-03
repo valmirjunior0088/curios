@@ -26,14 +26,14 @@ fn a_program_whose_tail_proves_something_else_is_refused_at_false() {
 fn a_module_is_admitted_at_a_type_its_term_has() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
-    assert!(put_module(Module::default(), zero(), nat_type).admitted());
+    assert!(put_module(Definitions::default(), zero(), nat_type).admitted());
 }
 
 #[test]
 fn a_module_whose_term_proves_nothing_is_refused_at_false() {
     let witness = Witness {
         what: "a number",
-        proof: Proof::Module(|| (Module::default(), zero())),
+        proof: Proof::Module(|| (Definitions::default(), zero())),
         expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
     };
 

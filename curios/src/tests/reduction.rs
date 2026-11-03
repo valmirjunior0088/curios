@@ -980,7 +980,7 @@ fn a_published_binder_states_whether_it_binds_a_proof() {
         .expect("the program elaborates within the default budget")
         .program;
     let through = program
-        .module
+        .definitions
         .items
         .iter()
         .find_map(|item| match item {

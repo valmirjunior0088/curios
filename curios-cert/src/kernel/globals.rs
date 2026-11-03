@@ -10,7 +10,7 @@
 //!
 //! # What a walk starts from is read where it stands
 //!
-//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, the entries its type formers carry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name a unit here declares, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
+//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, the entries its type formers carry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_definitions_verdicts`](crate::recheck_definitions_verdicts) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name a unit here declares, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
 //!
 //! # What a walk reads is three layers
 //!
@@ -22,8 +22,8 @@ use {
     super::Error,
     crate::Baseline,
     curios_core::{
-        Certification, Global, InductDecl, Item, Module, Place, Places, Polarity, StructDecl, Term,
-        Totality, UniverseContext, Universes, Variance,
+        Certification, Definitions, Global, InductDecl, Item, Place, Places, Polarity, StructDecl,
+        Term, Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -44,10 +44,14 @@ pub(crate) struct Held<'a> {
 /// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, and either with nothing to unfold to where it is marked a proof.
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
-pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) -> Option<Held<'a>> {
+pub(crate) fn held<'a>(
+    definitions: &'a Definitions,
+    places: &'a Places,
+    name: &Global,
+) -> Option<Held<'a>> {
     let place = places.place(name)?;
     match place {
-        Place::Let(_) => match &module.items[place.item()] {
+        Place::Let(_) => match &definitions.items[place.item()] {
             // What a finished module publishes is `Definition::published`'s to say, the body and the sort that body inhabits going together because the mark withholds both, as `define_as_stated` writes a proof.
             Item::Let(definition) => {
                 let (value, value_sort) = definition.published();
@@ -61,7 +65,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
             }
             Item::Rec(_) => unreachable!("a definition's place is a definition's"),
         },
-        Place::Member { member, .. } => match &module.items[place.item()] {
+        Place::Member { member, .. } => match &definitions.items[place.item()] {
             Item::Rec(rec) => {
                 let (type_, body) = places.member(name, rec, member);
 
@@ -118,7 +122,7 @@ pub(crate) fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
 /// One unit in scope, read where it stands: its module, the places its unit keeps for the module's names, and the record the certifier's walk over it filed.
 #[derive(Clone, Copy)]
 struct Mounted<'s> {
-    module: &'s Module,
+    definitions: &'s Definitions,
     places: &'s Places,
     certification: &'s Certification,
     /// Whether `certification` covers `module`. Where it does, its classifications are the environment's; where it does not — one naming fewer definitions than the unit holds, an empty one included — a walk classifies the unit's items for itself, from their terms.
@@ -131,7 +135,7 @@ struct Mounted<'s> {
 
 impl<'s> Mounted<'s> {
     fn held(&self, name: &Global) -> Option<Held<'s>> {
-        held(self.module, self.places, name)
+        held(self.definitions, self.places, name)
     }
 
     /// Whether this unit declares `name`. An entry is held by its type former, so the names a unit declares are its items'.
@@ -141,7 +145,7 @@ impl<'s> Mounted<'s> {
 
     /// How many items this unit holds: what says which of two units is the smaller to ask the other of.
     fn size(&self) -> usize {
-        self.module.items.len()
+        self.definitions.items.len()
     }
 
     /// Whether this unit and `other` hold a name in common, asked of the smaller of the two.
@@ -150,7 +154,7 @@ impl<'s> Mounted<'s> {
             true => (self, other),
             false => (other, self),
         };
-        let items = &smaller.module.items;
+        let items = &smaller.definitions.items;
         items.places().any(|place| {
             items
                 .names(place)
@@ -163,14 +167,14 @@ impl<'s> Mounted<'s> {
     fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
         self.certification
             .polarities(name)
-            .filter(|_| self.module.nominal(self.places, name).is_some())
+            .filter(|_| self.definitions.nominal(self.places, name).is_some())
     }
 
     /// The variance vector this unit's record files for the registry entry it holds under `name`.
     fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
         self.certification
             .variances(name)
-            .filter(|_| self.module.nominal(self.places, name).is_some())
+            .filter(|_| self.definitions.nominal(self.places, name).is_some())
     }
 }
 
@@ -190,15 +194,15 @@ impl<'s> Globals<'s> {
     /// Names are disjoint by mount, so no two units hold one — asserted rather than reported, where a walk's own write of a held name is reported to it: a collision here is a driver that mounted one name twice, which is a construction bug and not a program's fault.
     pub fn mount(
         &mut self,
-        module: &'s Module,
+        definitions: &'s Definitions,
         places: &'s Places,
         certification: &'s Certification,
     ) {
         let mounted = Mounted {
-            module,
+            definitions,
             places,
             certification,
-            covered: certification.covers(module),
+            covered: certification.covers(definitions),
             fixed: false,
             moved: false,
         };
@@ -265,7 +269,7 @@ impl<'s> Globals<'s> {
         self.mounted
             .iter()
             .filter(|mounted| !mounted.covered)
-            .flat_map(|mounted| &mounted.module.items)
+            .flat_map(|mounted| &mounted.definitions.items)
     }
 
     /// The registry entries in scope here that no record files a polarity vector for, as the two maps strict positivity is handed: a walk computes these for itself before it judges anything.
@@ -288,12 +292,12 @@ impl<'s> Globals<'s> {
         for mounted in &self.mounted {
             // Which names declare a nominal is what each place of the unit says, so the record is asked of each with no entry read, and an entry is read where the record files no vector for it.
             let unfiled = mounted
-                .module
+                .definitions
                 .formers()
                 .into_iter()
                 .filter(|(name, _)| !filed(mounted.certification, name));
             for (name, _) in unfiled {
-                let Some(nominal) = mounted.module.nominal(mounted.places, &name) else {
+                let Some(nominal) = mounted.definitions.nominal(mounted.places, &name) else {
                     continue;
                 };
                 if let Some(declaration) = nominal.inductive() {
@@ -323,13 +327,13 @@ impl<'s> Globals<'s> {
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&'s InductDecl> {
         self.mounted
             .iter()
-            .find_map(|mounted| mounted.module.induct_decl(mounted.places, name))
+            .find_map(|mounted| mounted.definitions.induct_decl(mounted.places, name))
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&'s StructDecl> {
         self.mounted
             .iter()
-            .find_map(|mounted| mounted.module.struct_decl(mounted.places, name))
+            .find_map(|mounted| mounted.definitions.struct_decl(mounted.places, name))
     }
 
     /// The polarity vector the record of the unit holding the registry entry `name` files for it.
@@ -467,7 +471,7 @@ impl<'s> Environment<'s> {
         let adopted = self
             .baseline
             .filter(|_| self.adopted.contains(name) || self.passed(name))
-            .and_then(|baseline| held(baseline.module, baseline.places, name));
+            .and_then(|baseline| held(baseline.definitions, baseline.places, name));
 
         adopted.or_else(|| self.scope.and_then(|scope| scope.held(name)))
     }
@@ -504,7 +508,7 @@ impl<'s> Environment<'s> {
     pub(super) fn adopt(&mut self, name: &Global) -> Result<(), Error> {
         let held = self
             .baseline
-            .and_then(|baseline| held(baseline.module, baseline.places, name));
+            .and_then(|baseline| held(baseline.definitions, baseline.places, name));
         if held.is_none() || self.held(name).is_some() {
             return Err(Error::Redeclared(*name));
         }
@@ -613,7 +617,7 @@ impl<'s> Environment<'s> {
             .get(name)
             .or_else(|| {
                 self.unvisited_holding(name)
-                    .and_then(|baseline| baseline.module.induct_decl(baseline.places, name))
+                    .and_then(|baseline| baseline.definitions.induct_decl(baseline.places, name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.induct_decl(name)))
     }
@@ -624,7 +628,7 @@ impl<'s> Environment<'s> {
             .get(name)
             .or_else(|| {
                 self.unvisited_holding(name)
-                    .and_then(|baseline| baseline.module.struct_decl(baseline.places, name))
+                    .and_then(|baseline| baseline.definitions.struct_decl(baseline.places, name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.struct_decl(name)))
     }

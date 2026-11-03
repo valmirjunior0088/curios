@@ -3,7 +3,9 @@
 use {
     super::*,
     crate::std_module::std_directory,
-    curios_cert::{Error, Globals, certify_module, infer, recheck_module_verdicts_uncached},
+    curios_cert::{
+        Error, Globals, certify_definitions, infer, recheck_definitions_verdicts_uncached,
+    },
     curios_common::{Qualifier, digest},
     curios_core::{
         Bound, Cases, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Match, Nat,
@@ -285,13 +287,13 @@ fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
     let mut reached_by = HashMap::<Global, Vec<Global>>::new();
     let mut performing = HashMap::<Global, Option<Global>>::new();
     let mut queue = Vec::new();
-    for module in modules {
-        for item in &module.items {
+    for definitions in modules {
+        for item in &definitions.items {
             let host = item
                 .definitions()
                 .iter()
                 .any(|definition| holds_a_host_call(&definition.body));
-            let reached = module.reaches(item);
+            let reached = definitions.reaches(item);
             for name in item.declared_names() {
                 for target in &reached {
                     reached_by.entry(*target).or_default().push(*name);
@@ -485,7 +487,7 @@ fn class(error: &Error) -> String {
 
 /// Every item the kernel refuses across the whole fixed prelude, tallied by class.
 ///
-/// Not an assertion — a measurement, run on demand. `recheck_module` stops at the first refusal and so says nothing about what lies past it; this walks to the end with each verdict independent of the others (see `recheck_module_verdicts`), which is what makes the classes countable rather than discovered one build at a time.
+/// Not an assertion — a measurement, run on demand. `recheck_definitions` stops at the first refusal and so says nothing about what lies past it; this walks to the end with each verdict independent of the others (see `recheck_definitions_verdicts`), which is what makes the classes countable rather than discovered one build at a time.
 ///
 /// The restored image is the subject, named directly: a compiled module carries only its own items, so no fixture reaches the standard library by compiling. What asserts the prelude is acceptable is `curios-prelude`'s own build script, which runs this same walk and panics on the first refusal; this is the inventory beside it.
 ///
@@ -500,7 +502,7 @@ fn kernel_disagreements() {
         for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
-            let (rechecked, _) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let (rechecked, _) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             verdicts.extend(rechecked.verdicts);
         }
 
@@ -539,10 +541,10 @@ fn kernel_memo_parity() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
             assert_eq!(
-                certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX)
+                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX)
                     .0
                     .verdicts,
-                recheck_module_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
+                recheck_definitions_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
             );
         }
     });
@@ -629,7 +631,8 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
         for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
-            let (rechecked, mut kernel) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let (rechecked, mut kernel) =
+                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
             for definition in root.core().items.iter().flat_map(Item::definitions) {
@@ -739,7 +742,8 @@ fn stored_prelude_measurements() {
             // Certified, then erased through the kernel that certified it, as the build makes the root.
             let globals = certified(&prelude[..index]);
             let start = Instant::now();
-            let (rechecked, mut kernel) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let (rechecked, mut kernel) =
+                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
             let heaviest = kernel.heaviest_declaration();
 

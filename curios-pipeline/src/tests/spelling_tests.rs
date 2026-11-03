@@ -145,7 +145,7 @@ fn held(reader: &Reader, under: Option<&Qualifier>) -> Counted {
         let lowered = lower(&declarations);
         let bodies = lowered
             .program
-            .module
+            .definitions
             .items
             .iter()
             .flat_map(Item::definitions)

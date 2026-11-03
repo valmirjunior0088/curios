@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Entrypoint, Free, Global, InductDecl, InductParam, Module, Program, Telescope, Term,
-        UniverseContext, Universes, test_support::*,
+        Atom, Definitions, Entrypoint, Free, Global, InductDecl, InductParam, Program, Telescope,
+        Term, UniverseContext, Universes, test_support::*,
     },
     std::collections::BTreeMap,
 };
@@ -24,22 +24,22 @@ fn a_declaration_admitted_on_a_refused_declarations_definition_leaves_the_module
     let lie = Global::Authored(Qualifier::from(["lie"]));
     let truth = Global::Authored(Qualifier::from(["truth"]));
 
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             items: vec![
                 authored(&lie, absurd(), Term::tuple(Vec::<Term>::new())),
                 authored(&truth, absurd(), Term::instance(lie, Universes::default())),
             ]
             .into(),
-            ..Module::default()
+            ..Definitions::default()
         },
         BTreeMap::from([(family, proposition(Vec::new()))]),
         [],
         [],
     );
     let program = Program {
-        module,
-        entry: Entrypoint {
+        definitions,
+        entrypoint: Entrypoint {
             body: Term::instance(truth, Universes::default()),
             type_: Some(absurd()),
         },
@@ -129,14 +129,14 @@ fn a_family_admitted_through_a_refused_declarations_vector_leaves_the_module_ref
         variances: Vec::new(),
     };
 
-    let module = declaring(
-        Module::default(),
+    let definitions = declaring(
+        Definitions::default(),
         BTreeMap::from([(shape, shape_declaration), (knot, knot_declaration)]),
         [],
         [],
     );
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert_eq!(
         verdicts
             .iter()

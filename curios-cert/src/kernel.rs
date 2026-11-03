@@ -63,10 +63,10 @@ use {
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
-        Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
-        LevelHead, Lexicon, Module, Names, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
-        Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes,
-        Variance,
+        Advance, Atom, ClosedMemo, Consumption, Cost, Definitions, Exhaustion, Free, Global,
+        InductDecl, Level, LevelHead, Lexicon, Names, Polarity, Probe, Quality, Reads, ReduceError,
+        Reducer, Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
+        Universes, Variance,
     },
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
@@ -255,23 +255,23 @@ impl Error {
     /// Universe instances are deliberately *not* suppressed here, unlike an elaboration diagnostic. A kernel refusal is often *about* the universes: `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type`. The same call `wonder stage`'s dumps make, for the same reason — a reader looking at the checker wants the levels the checker is arguing about.
     pub fn format_with(
         &self,
-        module: &Module,
+        definitions: &Definitions,
         scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
     ) -> String {
-        self.format_stating(None, module, scope, syntax)
+        self.format_stating(None, definitions, scope, syntax)
     }
 
     /// [`Error::format_with`] for a refusal of the declaration that states the type `stated`: one reached at an assignment of the sorts the declaration leaves to its caller restates that type read at the assignment. The refusal spells the declaration's terms at the assignment, where the declaration's text says `Sort`, so the type is where a reader sees which written `Sort` stood at which sort.
     pub(crate) fn format_stating(
         &self,
         stated: Option<&Term>,
-        module: &Module,
+        definitions: &Definitions,
         scope: &[&Lexicon],
         syntax: &SyntaxRegistry,
     ) -> String {
         // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
-        let own = module.lexicon();
+        let own = definitions.lexicon();
         let spelling = Rc::new(
             Spelling::default()
                 .with_lexicons(&own, scope)

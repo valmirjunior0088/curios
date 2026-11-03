@@ -33,7 +33,7 @@ pub struct DeclaredWitnesses {
 }
 
 impl DeclaredWitnesses {
-    /// Mark a definition name as a witness declaration; when its signature elaborates, `elaborate_module_suffix` registers it into the witness table.
+    /// Mark a definition name as a witness declaration; when its signature elaborates, `elaborate_definitions_suffix` registers it into the witness table.
     pub fn mark(&mut self, name: &Global) {
         self.marked.insert(*name);
     }

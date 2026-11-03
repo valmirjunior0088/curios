@@ -4,20 +4,20 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Entrypoint, Intrinsic, Module, Nat, Program, Term},
+    curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Program, Term},
     std::collections::BTreeSet,
 };
 
 /// A program of nothing but `entry`.
 fn entry_module(entry: Entrypoint) -> Program {
     Program {
-        module: Module {
+        definitions: Definitions {
             mounts: Vec::new(),
             items: Vec::new().into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
-        entry,
+        entrypoint: entry,
     }
 }
 

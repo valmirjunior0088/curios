@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Item, Level, Module, Nominal, RecGroup,
+        Definition, DefinitionKind, Definitions, Free, Global, Item, Level, Nominal, RecGroup,
         StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
         Universes,
@@ -28,7 +28,7 @@ pub(super) const TICKET: Ticket = Ticket {
 /// This was admitted while a group bound universe parameters of its own. The four were then read two ways — as the item's by `check_group`, and as the group's by every scope walk, which shadowed them — so an instance of the carrier left the record's field types spelled in the *reader's* parameters, under the reader's constraints, `u ≤ 0` and `w ≤ 0`, where the four products quantify over `Type 0` and stand at `Type 0`. Those are the impredicative products the paradox needs, and nothing re-certified the group on the reading side: `synth_neutral` instantiated the carrier's scheme, which *is* the bare projection, and `infer`'s projection rule reduced that to the record and read the field type off it, a reduction and not a judgment.
 ///
 /// A group binds no universe now, so the four are the carrier's under every reader and an instance substitutes them with every other level the carrier binds. The reader's `Type 0` claim meets a product that inhabits `Type 1`, and the comparison refuses it.
-fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
+fn a_bare_group_read_under_the_readers_constraints() -> (Definitions, Term) {
     let (u, v, w, x) = (
         Level::param(UniverseParam(0)),
         Level::param(UniverseParam(1)),
@@ -193,18 +193,18 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
     let paradox = Global::Authored(Qualifier::from(["paradox"]));
     let paradox_item = definition(paradox, reading, false_type(), body);
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![
             declared(boxed, Nominal::Struct(boxed_decl)),
             carrier_item,
             paradox_item,
         ]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     (
-        module,
+        definitions,
         Term::instance(
             paradox,
             vec![Level::zero(), one, Level::zero(), Level::zero()],

@@ -7,7 +7,7 @@ use {
     super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
-    curios_cert::{Globals, Kernel, Verdict, certify_module, certify_program},
+    curios_cert::{Globals, Kernel, Verdict, certify_definitions, certify_program},
     curios_common::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     curios_core::{
         Anchors, Consumption, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec,
@@ -213,13 +213,21 @@ fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec
 /// What elaboration or erasure refused `module` with, as a compilation reports it: every member read against one set of tables, so a name is spelled and a declaration placed alike whichever stage refused. `text` is the lowering the refused terms came from and `predecessors` the units it was lowered against, whose tables say how a name is written and where a declaration lies; `lexicons` are those of every unit `module` was read over, which is the lowering's own unit too where `module` is a term elaborated over it.
 pub(crate) fn elaborator_refusal(
     error: &curios_elab::Error,
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     lexicons: &[&curios_core::Lexicon],
     text: &PreparedText,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    refusal_read(error, module, None, lexicons, text, predecessors, syntax)
+    refusal_read(
+        error,
+        definitions,
+        None,
+        lexicons,
+        text,
+        predecessors,
+        syntax,
+    )
 }
 
 /// [`elaborator_refusal`] of the module the lowering `text` made, read where its unit keeps what a report spells the unit's own names by and places its reader in ([`PreparedText::lexicon`], [`PreparedText::places`]): over a baseline, those of the baseline revised, so a refusal reads the declarations the edit reached.
@@ -245,7 +253,7 @@ pub(crate) fn lowering_refusal(
 /// What elaboration refused `module` with, read against `kept`, the lexicon and places its unit keeps for it, where there are any.
 fn refusal_read(
     error: &curios_elab::Error,
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
     lexicons: &[&curios_core::Lexicon],
     text: &PreparedText,
@@ -253,7 +261,7 @@ fn refusal_read(
     syntax: &SyntaxRegistry,
 ) -> CompileError {
     read_for_report(
-        module,
+        definitions,
         kept,
         lexicons,
         text,
@@ -266,14 +274,14 @@ fn refusal_read(
 /// What erasure refused `module` with, as the one report each of its refusals is: in erasure's words, the program having been certified.
 pub(crate) fn erasure_refusal(
     error: &curios_erase::Error,
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     lexicons: &[&curios_core::Lexicon],
     text: &PreparedText,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> CompileError {
     read_for_report(
-        module,
+        definitions,
         None,
         lexicons,
         text,
@@ -285,7 +293,7 @@ pub(crate) fn erasure_refusal(
 
 /// `report` over the reading a refusal of `module` is spelled and placed by: its unit's names spelled as resolution reaches them from the reader's place, and its positions placed in the files they were written in.
 fn read_for_report(
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
     lexicons: &[&curios_core::Lexicon],
     text: &PreparedText,
@@ -295,7 +303,7 @@ fn read_for_report(
 ) -> CompileError {
     let spellings = Rc::new(text.spellings(&predecessors.text()));
     let reading = Reading {
-        module,
+        definitions,
         kept,
         scope: lexicons,
         syntax,
@@ -326,11 +334,11 @@ pub(crate) fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) 
 /// The compile error a kernel verdict is reported as: the refusal, named for the item it is about where there is one.
 pub(crate) fn kernel_refusal(
     verdict: &Verdict,
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     scope: &[&curios_core::Lexicon],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.format_with(module, scope, syntax);
+    let refusal = verdict.format_with(definitions, scope, syntax);
 
     CompileError::failure(match &verdict.name {
         Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
@@ -512,8 +520,8 @@ impl EntryTail {
     /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     fn scheduled(
         &self,
-        own: &curios_core::Module,
-        scope: &[&curios_core::Module],
+        own: &curios_core::Definitions,
+        scope: &[&curios_core::Definitions],
     ) -> Vec<curios_elab::ScheduledTest> {
         let EntryTail::Test { under } = self else {
             return Vec::new();
@@ -524,14 +532,14 @@ impl EntryTail {
             .iter()
             .copied()
             .chain([own])
-            .flat_map(|module| {
-                let tests = module
+            .flat_map(|definitions| {
+                let tests = definitions
                     .tests
                     .iter()
                     .filter(selected)
                     .copied()
                     .collect::<Vec<_>>();
-                scheduled_tests(&tests, &module.items)
+                scheduled_tests(&tests, &definitions.items)
             })
             .collect()
     }
@@ -539,8 +547,8 @@ impl EntryTail {
     /// Every test in scope, selected or not, by its path, in the order [`EntryTail::scheduled`] keeps: what a selection meeting none of them is answered with. None for a program or an entry at `False`.
     fn declared(
         &self,
-        own: &curios_core::Module,
-        scope: &[&curios_core::Module],
+        own: &curios_core::Definitions,
+        scope: &[&curios_core::Definitions],
     ) -> Vec<Qualifier> {
         match self {
             EntryTail::Program | EntryTail::False => Vec::new(),
@@ -548,7 +556,13 @@ impl EntryTail {
                 .iter()
                 .copied()
                 .chain([own])
-                .flat_map(|module| module.tests.iter().filter_map(Global::qualifier).copied())
+                .flat_map(|definitions| {
+                    definitions
+                        .tests
+                        .iter()
+                        .filter_map(Global::qualifier)
+                        .copied()
+                })
                 .collect(),
         }
     }
@@ -573,9 +587,13 @@ pub struct TestRecord {
     pub body: String,
 }
 
-/// The declaration-ordered paths of a module's registered tests — how `curios test` and `wonder tests` name them, read off [`Module::tests`](curios_core::Module) so the two cannot disagree with the schedule.
-pub fn declared_test_paths(module: &curios_core::Module) -> Vec<String> {
-    module.tests.iter().map(curios_core::Global::path).collect()
+/// The declaration-ordered paths of a module's registered tests — how `curios test` and `wonder tests` name them, read off [`Module::tests`](curios_core::Definitions) so the two cannot disagree with the schedule.
+pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String> {
+    definitions
+        .tests
+        .iter()
+        .map(curios_core::Global::path)
+        .collect()
 }
 
 /// The definition a registered test names, among the unit's items.
@@ -682,7 +700,7 @@ fn elaborate_entry<'s, O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let cores = established.modules();
+    let cores = established.definitions();
     let scope = predecessors.text();
     // The registry the context was made with, which is the one its elaboration synthesizes names from.
     let syntax = &context.syntax();
@@ -707,7 +725,7 @@ where
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
     let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
 
-    let scheduled = tail.scheduled(&lowered.module, cores);
+    let scheduled = tail.scheduled(&lowered.definitions, cores);
     let records = match scheduled.is_empty() {
         true => Vec::new(),
         false => test_records(&scheduled, &anchors),
@@ -718,28 +736,28 @@ where
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
     // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` executes, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
-    state(&mut lowered.entry, &tail, syntax);
-    let elab_tail = tail.closing(&lowered.entry, &scheduled);
+    state(&mut lowered.entrypoint, &tail, syntax);
+    let elab_tail = tail.closing(&lowered.entrypoint, &scheduled);
 
     context.set_imports(names.imports().clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let elaborated = elaborate_and_zonk_program_reporting(
         context,
         established,
-        &lowered.module,
+        &lowered.definitions,
         &minted,
         elab_tail,
     )
     .map(
         |FinalizedProgram {
-             module,
+             definitions,
              entry,
              obligations,
-         }| (module, entry, obligations),
+         }| (definitions, entry, obligations),
     );
     // What a report of this program is read against, each table made by the first report that reads one.
     let reading = || Reading {
-        module: &lowered.module,
+        definitions: &lowered.definitions,
         kept: None,
         scope: &lexicons,
         syntax,
@@ -756,7 +774,7 @@ where
             (Some(Box::new(error)), Err(reported))
         }
     };
-    let (module, entry, obligations) =
+    let (definitions, entry, obligations) =
         with_broken(&broken, elaborated).map_err(|reported| Refused { error, reported })?;
 
     let obligations = obligations
@@ -767,8 +785,8 @@ where
         })
         .collect();
     let program = Program {
-        module,
-        entry: entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
+        definitions,
+        entrypoint: entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
     };
 
     observe(Stage::CoreElab(&program));
@@ -825,8 +843,8 @@ pub(crate) fn check_entrypoint_reading(
 }
 
 /// A module of nothing, mounted nowhere: what a program's final term is elaborated, judged and erased beside where its declarations are a unit in scope.
-fn nothing() -> curios_core::Module {
-    curios_core::Module {
+fn nothing() -> curios_core::Definitions {
+    curios_core::Definitions {
         mounts: Vec::new(),
         items: Vec::new().into(),
         witnesses: BTreeSet::new(),
@@ -838,7 +856,7 @@ fn nothing() -> curios_core::Module {
 pub(crate) struct Closing<'a> {
     pub(crate) tail: Tail<'a>,
     /// Told the unit's module and the entry as they elaborated, before anything judges them.
-    pub(crate) elaborated: &'a mut dyn FnMut(&curios_core::Module, &curios_core::Entrypoint),
+    pub(crate) elaborated: &'a mut dyn FnMut(&curios_core::Definitions, &curios_core::Entrypoint),
     /// Told the unit's lowering, credited by its elaboration, where the unit is refused: what a question reads the program's findings off whatever the verdict.
     pub(crate) refused: &'a mut dyn FnMut(&PreparedText),
 }
@@ -866,8 +884,8 @@ impl Entered {
     /// The program as one module and its entry: the unit's declarations, and the term that closes it.
     fn program(&self) -> Program {
         Program {
-            module: self.unit.core().clone(),
-            entry: self.program.as_program().entry.clone(),
+            definitions: self.unit.core().clone(),
+            entrypoint: self.program.as_program().entrypoint.clone(),
         }
     }
 }
@@ -922,8 +940,8 @@ where
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);
     observe(Stage::Core(&Program {
-        module: lowered.core().clone(),
-        entry: written.clone(),
+        definitions: lowered.core().clone(),
+        entrypoint: written.clone(),
     }));
     let closing = tail.closing(&written, &scheduled);
 
@@ -945,12 +963,13 @@ where
             closed.map(|entry| (unit, Some(lowered), entry))
         }
         (None, earlier) => {
-            let mut elaborated = |module: &curios_core::Module, entry: &curios_core::Entrypoint| {
-                observe(Stage::CoreElab(&Program {
-                    module: module.clone(),
-                    entry: entry.clone(),
-                }));
-            };
+            let mut elaborated =
+                |definitions: &curios_core::Definitions, entry: &curios_core::Entrypoint| {
+                    observe(Stage::CoreElab(&Program {
+                        definitions: definitions.clone(),
+                        entrypoint: entry.clone(),
+                    }));
+                };
             let mut refused = |lowered: &PreparedText| findings = Some(Findings::of_text(lowered));
             let closing = Some(Closing {
                 tail: closing,
@@ -999,8 +1018,8 @@ where
             let findings = findings.unwrap_or_else(|| Findings::of_text(unit.text()));
             if lowered.is_some() {
                 observe(Stage::CoreElab(&Program {
-                    module: unit.core().clone(),
-                    entry: entry.clone(),
+                    definitions: unit.core().clone(),
+                    entrypoint: entry.clone(),
                 }));
             }
             // A test program that schedules no test is compiled to nothing, so it is not erased.
@@ -1097,8 +1116,8 @@ fn judged(
 ) -> Result<(Zonked<Program>, Option<Erasure>), CompileError> {
     // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&Program {
-        module: nothing(),
-        entry,
+        definitions: nothing(),
+        entrypoint: entry,
     })
     .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
@@ -1109,7 +1128,8 @@ fn judged(
         certify_program(&program, budget, &globals, *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = verdict.format_with(&program.as_program().module, &scope.lexicons(), syntax);
+        let refusal =
+            verdict.format_with(&program.as_program().definitions, &scope.lexicons(), syntax);
         return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
             None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -1132,7 +1152,7 @@ fn judged(
         .map_err(|error| {
             erasure_refusal(
                 &error,
-                &program.as_program().module,
+                &program.as_program().definitions,
                 &scope.lexicons(),
                 text,
                 predecessors,
@@ -1329,9 +1349,14 @@ pub(crate) fn compile_lowered(
 
     // The unit is erased through the kernel that certified it.
     let globals = globals(predecessors);
-    let (rechecked, mut kernel) = certify_module(&core, budget, &globals, *syntax);
+    let (rechecked, mut kernel) = certify_definitions(&core, budget, &globals, *syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
+        let refusal = kernel_refusal(
+            verdict,
+            core.as_definitions(),
+            &predecessors.lexicons(),
+            syntax,
+        );
         return Err(refuse(&lowered, refusal));
     }
 
@@ -1342,7 +1367,7 @@ pub(crate) fn compile_lowered(
     let anf = erase_unit(&mut kernel, scope, &core).map_err(|error| {
         let refusal = erasure_refusal(
             &error,
-            core.as_module(),
+            core.as_definitions(),
             &predecessors.lexicons(),
             &lowered,
             predecessors,
@@ -1352,7 +1377,7 @@ pub(crate) fn compile_lowered(
         refuse(&lowered, refusal)
     })?;
 
-    let core = core.into_module();
+    let core = core.into_definitions();
 
     Ok((
         Unit::new(lowered, core, anf, traces, rechecked.certification),

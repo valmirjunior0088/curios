@@ -4,27 +4,27 @@ use {
     crate::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_cert::{Globals, certify_module, certify_program},
+    curios_cert::{Globals, certify_definitions, certify_program},
     curios_elab::DEFAULT_BUDGET,
     std::collections::BTreeSet,
 };
 
 /// What certifying `unit` with nothing in scope records: what a part of the unit is digested under, by an erasure over it and by one of it.
-fn certified(unit: &curios_core::Zonked<curios_core::Module>) -> curios_core::Certification {
+fn certified(unit: &curios_core::Zonked<curios_core::Definitions>) -> curios_core::Certification {
     let globals = Globals::default();
 
-    certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX)
+    certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX)
         .0
         .certification
 }
 
 /// [`erase_alone`] over `baseline`.
 fn erase_over(
-    unit: &curios_core::Zonked<curios_core::Module>,
+    unit: &curios_core::Zonked<curios_core::Definitions>,
     baseline: ErasedBaseline<'_>,
 ) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut kernel) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
         rechecked.verdicts.is_empty(),
         "the fixture is certified: {:?}",
@@ -217,7 +217,7 @@ fn a_bound_value_is_computed_where_it_is_written() {
 }
 
 /// A unit of `step`, a function adding `by` to its argument, and `stepped`, which is `step(4)`, with the unit erased whole.
-fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit) {
+fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Definitions>, ErasedUnit) {
     let n = fresh(Some("n"));
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let unit = zonked(
@@ -242,7 +242,7 @@ fn stepping(by: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit)
             ],
             nat_lit(0),
         )
-        .module,
+        .definitions,
     );
     let erased = erase_alone(&unit).expect("the unit erases whole");
 
@@ -280,13 +280,13 @@ fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
     let over = erase_over(
         &edited,
         ErasedBaseline {
-            core: before.as_module(),
-            places: &curios_core::Places::of(before.as_module()),
+            core: before.as_definitions(),
+            places: &curios_core::Places::of(before.as_definitions()),
             certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
             dropped: &BTreeSet::new(),
-            now: &curios_core::Places::of(edited.as_module()),
+            now: &curios_core::Places::of(edited.as_definitions()),
             recorded: &certified(&edited),
             candidates: None,
         },
@@ -306,13 +306,13 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
     let over = erase_over(
         &edited,
         ErasedBaseline {
-            core: before.as_module(),
-            places: &curios_core::Places::of(before.as_module()),
+            core: before.as_definitions(),
+            places: &curios_core::Places::of(before.as_definitions()),
             certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("step")]),
             dropped: &BTreeSet::new(),
-            now: &curios_core::Places::of(edited.as_module()),
+            now: &curios_core::Places::of(edited.as_definitions()),
             recorded: &certified(&edited),
             candidates: None,
         },
@@ -329,7 +329,7 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
 }
 
 /// A unit of two definitions, `callee` and `caller`, which is `callee` by name, and the same unit erased whole.
-fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUnit) {
+fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Definitions>, ErasedUnit) {
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
     let unit = zonked(
         &module(
@@ -339,7 +339,7 @@ fn calling(callee: usize) -> (curios_core::Zonked<curios_core::Module>, ErasedUn
             ],
             nat_lit(0),
         )
-        .module,
+        .definitions,
     );
     let erased = erase_alone(&unit).expect("the unit erases whole");
 
@@ -368,7 +368,7 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
                 ],
                 nat_lit(0),
             )
-            .module,
+            .definitions,
         )
     };
 
@@ -379,13 +379,13 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
     let over = erase_over(
         &edited,
         ErasedBaseline {
-            core: before.as_module(),
-            places: &curios_core::Places::of(before.as_module()),
+            core: before.as_definitions(),
+            places: &curios_core::Places::of(before.as_definitions()),
             certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("redone")]),
             dropped: &BTreeSet::new(),
-            now: &curios_core::Places::of(edited.as_module()),
+            now: &curios_core::Places::of(edited.as_definitions()),
             recorded: &certified(&edited),
             candidates: None,
         },
@@ -408,13 +408,13 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
     let over = erase_over(
         &edited,
         ErasedBaseline {
-            core: before.as_module(),
-            places: &curios_core::Places::of(before.as_module()),
+            core: before.as_definitions(),
+            places: &curios_core::Places::of(before.as_definitions()),
             certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
             dropped: &BTreeSet::new(),
-            now: &curios_core::Places::of(edited.as_module()),
+            now: &curios_core::Places::of(edited.as_definitions()),
             recorded: &certified(&edited),
             candidates: None,
         },
@@ -434,13 +434,13 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
     let over = erase_over(
         &edited,
         ErasedBaseline {
-            core: before.as_module(),
-            places: &curios_core::Places::of(before.as_module()),
+            core: before.as_definitions(),
+            places: &curios_core::Places::of(before.as_definitions()),
             certification: &certified(&before),
             erased: &baseline,
             made: &BTreeSet::from([nominal("callee")]),
             dropped: &BTreeSet::new(),
-            now: &curios_core::Places::of(edited.as_module()),
+            now: &curios_core::Places::of(edited.as_definitions()),
             recorded: &certified(&edited),
             candidates: None,
         },

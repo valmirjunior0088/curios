@@ -16,7 +16,7 @@ use {
 #[test]
 fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
     let verdicts = fixture_verdicts(
-        &stamp_trial_module(Totality::Total, false),
+        &stamp_trial_definitions(Totality::Total, false),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -42,7 +42,7 @@ fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
 fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
     assert_eq!(
         fixture_verdicts(
-            &stamp_trial_module(Totality::Partial, false),
+            &stamp_trial_definitions(Totality::Partial, false),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -74,9 +74,13 @@ fn refuses_the_proof_reaching_the_lie(verdicts: &[Verdict]) -> bool {
 /// The walk over the proof alone, the lying library mounted beneath it as the compile path mounts a unit — with `certification` as the record filed beside it.
 fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
     fixture_verdicts(
-        &carried_proof_module(),
+        &carried_proof_definitions(),
         1_000_000,
-        &AlreadyJudged::with(&stamp_trial_module(Totality::Total, false), certification).globals(),
+        &AlreadyJudged::with(
+            &stamp_trial_definitions(Totality::Total, false),
+            certification,
+        )
+        .globals(),
         SYNTAX,
     )
 }
@@ -87,7 +91,7 @@ fn carried_beneath_the_lie(certification: &Certification) -> Vec<Verdict> {
 #[test]
 fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() {
     let honest = fixture_certified(
-        &stamp_trial_module(Totality::Partial, false),
+        &stamp_trial_definitions(Totality::Partial, false),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -109,7 +113,7 @@ fn a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies() 
     );
 
     let judged = fixture_verdicts(
-        &stamp_trial_module(Totality::Total, true),
+        &stamp_trial_definitions(Totality::Total, true),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -133,11 +137,11 @@ fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
 
 /// Obligation (V) fires at an argument position, where the corpus never reaches it.
 ///
-/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. [`proof_at_an_argument_module`] is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
+/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. [`proof_at_an_argument_definitions`] is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
 #[test]
 fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
     let verdicts = fixture_verdicts(
-        &proof_at_an_argument_module(true),
+        &proof_at_an_argument_definitions(true),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -149,7 +153,7 @@ fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
 
     assert_eq!(
         fixture_verdicts(
-            &proof_at_an_argument_module(false),
+            &proof_at_an_argument_definitions(false),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -174,7 +178,7 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
         [],
         [],
     );
-    assert!(!forged.covers(&stamp_trial_module(Totality::Total, false)));
+    assert!(!forged.covers(&stamp_trial_definitions(Totality::Total, false)));
 
     let carried = carried_beneath_the_lie(&forged);
 
@@ -219,7 +223,7 @@ fn covering_the_library(extra: bool) -> Certification {
 /// Mutation-checked: with `Globals::partial` not asking where the unit holds the name, the proof is refused as `NotTotal` reaching nothing, and no other test in this file fails.
 #[test]
 fn a_record_answers_for_no_name_its_unit_does_not_declare() {
-    let library = stamp_trial_module(Totality::Total, false);
+    let library = stamp_trial_definitions(Totality::Total, false);
     assert!(covering_the_library(false).covers(&library));
     assert!(
         covering_the_library(true).covers(&library),
@@ -243,7 +247,7 @@ fn a_record_answers_for_no_name_its_unit_does_not_declare() {
 fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
     for (first, second) in [("zeta", "alpha"), ("alpha", "zeta")] {
         let verdicts = fixture_verdicts(
-            &two_sinks_module(first, second),
+            &two_sinks_definitions(first, second),
             1_000_000,
             &Globals::default(),
             SYNTAX,

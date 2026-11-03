@@ -268,7 +268,7 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     );
     let name = Global::Authored(Qualifier::from(["c"]));
     let mut forged = 0;
-    for item in program.module.items.iter_mut() {
+    for item in program.definitions.items.iter_mut() {
         let Item::Let(definition) = item else {
             continue;
         };

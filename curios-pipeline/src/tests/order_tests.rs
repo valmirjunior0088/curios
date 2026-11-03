@@ -52,7 +52,7 @@ fn erased(unit: &Unit) -> Vec<u8> {
         .to_vec()
 }
 
-/// A unit and the same declarations written in another order store the same elaborated module, the same record and the same erased forms. The order a module's items are stored in is a function of what they declare and reach (`curios_core::Module::ordered`), and nothing a declaration elaborates or erases to follows where it is written: a witness among them, which is named by what it witnesses (`curios_core::WitnessId`) and so is the same declaration wherever its module writes it. The text stage's part is left out of the comparison, being the text.
+/// A unit and the same declarations written in another order store the same elaborated module, the same record and the same erased forms. The order a module's items are stored in is a function of what they declare and reach (`curios_core::Definitions::ordered`), and nothing a declaration elaborates or erases to follows where it is written: a witness among them, which is named by what it witnesses (`curios_core::WitnessId`) and so is the same declaration wherever its module writes it. The text stage's part is left out of the comparison, being the text.
 #[test]
 fn a_unit_stores_the_same_module_wherever_its_declarations_are_written() {
     let written = written_in([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

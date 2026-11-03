@@ -22,7 +22,7 @@ fn use_of_dual_existence_registers_both() {
 
 #[test]
 fn module_member_is_not_classified_as_a_generated_nominal_member() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         r#"
         struct Foo(A : Type, B : Type) : pub Type { a : A, b : B }
         pub mod Foo
@@ -31,7 +31,7 @@ fn module_member_is_not_classified_as_a_generated_nominal_member() {
         Type
     "#,
     );
-    let bar = module
+    let bar = definitions
         .items
         .iter()
         .find_map(|item| match item {

@@ -27,10 +27,10 @@ use {
     curios_analysis::group_totality,
     curios_common::{Candidates, Plicity, Qualifier, grown},
     curios_core::{
-        Advance, Bound, ConceptDecl, Declarations, Definition, Entrypoint, Free, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Names, Nominal,
-        Order, Places, Quality, RecItem, Revised, StructDecl, Subterm, Telescope, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
+        Advance, Bound, ConceptDecl, Declarations, Definition, Definitions, Entrypoint, Free,
+        FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Names,
+        Nominal, Order, Places, Quality, RecItem, Revised, StructDecl, Subterm, Telescope, Term,
+        Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
         stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
@@ -1284,7 +1284,7 @@ fn settle_published(
     stamp_totality(context, &mut published.item)?;
 
     context.restore_budget();
-    let alone = Module {
+    let alone = Definitions {
         items: vec![carrying(context, published.item.clone())].into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -1315,8 +1315,8 @@ enum Elaborated {
 }
 
 /// `item` as a module of its own, with the registry entries its names declare as the context holds them: what its goals are found in.
-fn alone(context: &Context, item: &Item) -> Module {
-    Module {
+fn alone(context: &Context, item: &Item) -> Definitions {
+    Definitions {
         items: vec![carrying(context, item.clone())].into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -1340,14 +1340,14 @@ fn carrying(context: &Context, item: Item) -> Item {
 
 /// Each witness `module` declares among `items`, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `declarations` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
 fn declared_witnesses(
-    module: &Module,
+    definitions: &Definitions,
     items: &[&Item],
     declarations: &Declarations,
 ) -> Vec<(Global, Declared)> {
     items
         .iter()
         .flat_map(|item| item.definitions())
-        .filter(|definition| module.witnesses.contains(&definition.name))
+        .filter(|definition| definitions.witnesses.contains(&definition.name))
         .map(|definition| {
             let declared = Declared {
                 spelled: definition.name.witness_key(),
@@ -1365,7 +1365,7 @@ fn declared_witnesses(
 /// What one unit's elaboration produced, before anything is finalized: the module itself and the refusals it recovered from.
 struct ElaboratedSuffix {
     /// The items that elaborated, with the registry entries, witness markers and tests of those alone.
-    module: Module,
+    definitions: Definitions,
     /// A program's entry, stating the type it was judged at, when it elaborated and nothing depends on a refusal.
     entry: Option<Entrypoint>,
     /// Every item's refusal in item order, the entry's after them. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
@@ -1382,33 +1382,33 @@ struct ElaboratedSuffix {
     readers: Option<Readers>,
 }
 
-/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and defined *cumulatively among the declarations*, which no frame holds, so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
+/// Elaborate a unit's [`Definitions`] against an already-elaborated scope, returning what it added. Each top-level item is checked and defined *cumulatively among the declarations*, which no frame holds, so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `erase` reads, each item zonked where it was published ([`zonk_published`]).
 ///
 /// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
 /// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]), and so are the declarations a unit compiled `over` a baseline keeps of it: `established` holds the baseline as its last layer ([`Established::keeping`]), answering for every declaration the walk does not hold, and for each it holds from where the walk keeps it. `declarations` are the ones `module`'s items make, by which the walk asks for one.
-fn elaborate_module_suffix<'s>(
+fn elaborate_definitions_suffix<'s>(
     context: &mut Context<'s>,
     established: Option<&'s Established<'_>>,
     over: Option<Over<'_>>,
-    module: &Module,
+    definitions: &Definitions,
     declarations: &Declarations,
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
-    curios_profile::profile!("elaborate_module_suffix");
+    curios_profile::profile!("elaborate_definitions_suffix");
     // The scope is read through, and nothing of it goes in but each unit's mounts, which a privilege question is answered out of and which the unit's own items may ask while they elaborate. `register_*` rejects a key the scope holds, and the unit declares only its own, so the two cannot collide: a baseline answers for no name before the walk keeps its declaration.
     if let Some(established) = established {
         established.coherent()?;
         context.read_through(established);
-        for unit in established.modules() {
+        for unit in established.definitions() {
             context.mount(&unit.mounts);
         }
     }
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
-    context.mount(&module.mounts);
+    context.mount(&definitions.mounts);
 
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
@@ -1425,9 +1425,9 @@ fn elaborate_module_suffix<'s>(
     // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip. Each elaborates when it is asked for, after what it reads, which is `demand`'s; over a baseline, the walk holds what the edit could reach, and the baseline answers for every other declaration from here on.
     //
     // A refused item is reported, undone and poisoned, and the other items are elaborated as if it had never been written; an item that reaches a poisoned name is withheld and reports nothing of its own. What is undone, what is left and why a dependent is silent is `recovery`'s.
-    let entry_stamp = ItemStamp(module.items.len());
+    let entry_stamp = ItemStamp(definitions.items.len());
     let mut demand = Demand::new(
-        module,
+        definitions,
         declarations,
         Poison::seeded(context.take_broken()),
         Survivors::default(),
@@ -1454,14 +1454,14 @@ fn elaborate_module_suffix<'s>(
         }
     }
     for name in held_items.iter().flat_map(|item| item.declared_names()) {
-        if module.witnesses.contains(name) {
+        if definitions.witnesses.contains(name) {
             context.mark_witness_declaration(name);
         }
     }
     check_concept_registry(context)?;
 
     // Where each name of the unit is written, and which of them the walk holds: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its name states, which is what a question about its concept is answered by until it elaborates.
-    for (name, declared) in declared_witnesses(module, &held_items, declarations) {
+    for (name, declared) in declared_witnesses(definitions, &held_items, declarations) {
         context.declare_witness(name, declared);
     }
     context.begin_unit(declarations.clone(), demand.held_names());
@@ -1543,10 +1543,10 @@ fn elaborate_module_suffix<'s>(
     let names = survivors.names();
     let witnesses = names
         .iter()
-        .filter(|name| module.witnesses.contains(*name))
+        .filter(|name| definitions.witnesses.contains(*name))
         .copied()
         .collect();
-    let tests = module
+    let tests = definitions
         .tests
         .iter()
         .filter(|name| names.contains(*name))
@@ -1564,15 +1564,15 @@ fn elaborate_module_suffix<'s>(
         .into_iter()
         .map(|item| carrying(context, item))
         .collect::<Vec<_>>();
-    let module = Module {
+    let definitions = Definitions {
         items: items.into(),
-        mounts: module.mounts.clone(),
+        mounts: definitions.mounts.clone(),
         witnesses,
         tests,
     };
 
     Ok(ElaboratedSuffix {
-        module,
+        definitions,
         entry,
         refusals,
         obligations,
@@ -1611,17 +1611,17 @@ fn elaborate_entry(
 
 /// What finalizing an elaborated unit decided: the module, the entry a program closes with — stating the type it was judged at — and the erasure obligations this checker decides but does not always raise; see [`elaborate_and_zonk_program_reporting`] for why they are reported rather than thrown.
 struct Finalized {
-    module: Module,
+    definitions: Definitions,
     entry: Option<Entrypoint>,
     /// The (T) and (V) obligations, reported rather than raised. Empty when the module and its entry carry none.
     obligations: Vec<Error>,
-    /// The order the module's items were put in ([`Module::in_order`]).
+    /// The order the module's items were put in ([`Definitions::in_order`]).
     order: Order,
 }
 
 /// A program elaborated, zonked and checked, with the erasure obligations elaboration decided over it reported rather than raised — see [`elaborate_and_zonk_program_reporting`].
 pub struct FinalizedProgram {
-    pub module: Module,
+    pub definitions: Definitions,
     /// The entry the program closes with, stating the type it was judged at. `None` only where it was withheld for reaching an item the lowering could not read — see [`elaborate_and_zonk_program`].
     pub entry: Option<Entrypoint>,
     /// The (T) and (V) obligations, reported rather than raised. Empty when the program carries none.
@@ -1642,7 +1642,7 @@ pub struct FinalizedProgram {
 /// `obligations` are the ones the items broke, in item order; the entry's follow them.
 fn finalize_and_check(
     context: &mut Context,
-    module: Module,
+    definitions: Definitions,
     entry: Option<Entrypoint>,
     held: Vec<Holding>,
     mut obligations: Vec<Error>,
@@ -1663,7 +1663,7 @@ fn finalize_and_check(
             .map(|_| entry_terms.next().expect("entry type was finalized")),
     });
 
-    let nothing = Module {
+    let nothing = Definitions {
         items: Vec::new().into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -1674,19 +1674,19 @@ fn finalize_and_check(
     if !(held.is_empty() && sites.is_empty()) {
         return Err(Error::goals(report_written_goals(
             context,
-            &module,
+            &definitions,
             entry.as_ref(),
             held,
             &sites,
         )));
     }
 
-    validate_universes(&module)?;
+    validate_universes(&definitions)?;
     // The order the unit is stored in, given once: every walk after this one takes the items as they come.
-    let (module, order) = module.in_order();
+    let (definitions, order) = definitions.in_order();
     // A refusal of the entry's terms is settled for its reader here, the state it arose in still standing.
     let entry = entry
-        .map(|entry| zonk_entry(context, &module, &entry))
+        .map(|entry| zonk_entry(context, &definitions, &entry))
         .transpose()
         .map_err(|error| error.settled(context))?;
     context.restore_budget();
@@ -1707,7 +1707,7 @@ fn finalize_and_check(
     );
 
     Ok(Finalized {
-        module,
+        definitions,
         entry,
         obligations,
         order,
@@ -1719,7 +1719,7 @@ fn finalize_and_check(
 /// A declaration that wrote a goal is not among `module`'s items, which are the ones that finished. It is put back among them here, once every declaration of the unit has finished, so a goal is offered the definitions written beside its own whichever of them elaborated first. Each declaration's goals are reported in the state it elaborated in ([`Context::within`]), and the entry's in the context's own.
 fn report_written_goals(
     context: &mut Context,
-    module: &Module,
+    definitions: &Definitions,
     entry: Option<&Entrypoint>,
     held: Vec<Holding>,
     sites: &[GoalSite],
@@ -1731,7 +1731,7 @@ fn report_written_goals(
             .and_then(|name| context.written_at(name))
     }
 
-    let mut written = module.items.to_vec();
+    let mut written = definitions.items.to_vec();
     written.extend(
         held.iter()
             .flat_map(|holding| holding.items.iter().map(|(item, _)| item.clone())),
@@ -1760,15 +1760,15 @@ fn report_written_goals(
 }
 
 /// The erasure-obligation verdicts, as one error — how every caller but the path that reports them beside the kernel's verdicts consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
-fn raise(outcome: Finalized) -> Result<(Module, Option<Entrypoint>), Error> {
+fn raise(outcome: Finalized) -> Result<(Definitions, Option<Entrypoint>), Error> {
     let Finalized {
-        module,
+        definitions,
         entry,
         obligations,
         ..
     } = outcome;
     match obligations.is_empty() {
-        true => Ok((module, entry)),
+        true => Ok((definitions, entry)),
         false => Err(Error::batch(obligations)),
     }
 }
@@ -1784,20 +1784,27 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
     Error::batch(errors)
 }
 
-/// Elaborate a whole [`Module`] with no cached prefix, then zonk and check it.
-pub fn elaborate_and_zonk_module(
+/// Elaborate a whole [`Definitions`] with no cached prefix, then zonk and check it.
+pub fn elaborate_and_zonk_definitions(
     context: &mut Context,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
-) -> Result<Module, Error> {
-    curios_profile::profile!("elaborate_and_zonk_module");
+) -> Result<Definitions, Error> {
+    curios_profile::profile!("elaborate_and_zonk_definitions");
     grown(|| {
-        let declarations = Declarations::of(module);
-        let suffix =
-            elaborate_module_suffix(context, None, None, module, &declarations, minted, None)?;
+        let declarations = Declarations::of(definitions);
+        let suffix = elaborate_definitions_suffix(
+            context,
+            None,
+            None,
+            definitions,
+            &declarations,
+            minted,
+            None,
+        )?;
         let finalized = finalize_and_check(
             context,
-            suffix.module,
+            suffix.definitions,
             None,
             suffix.held,
             suffix.obligations,
@@ -1806,7 +1813,7 @@ pub fn elaborate_and_zonk_module(
             return Err(refused(suffix.refusals, finalized));
         }
 
-        raise(finalized?).map(|(module, _)| module)
+        raise(finalized?).map(|(definitions, _)| definitions)
     })
 }
 
@@ -1819,7 +1826,7 @@ pub enum Tail<'a> {
     Tests(&'a [ScheduledTest]),
 }
 
-/// Elaborate one [`Module`] against the units already established, then zonk and check it.
+/// Elaborate one unit's [`Definitions`] against the units already established, then zonk and check it.
 ///
 /// `established` is that scope: the modules elaborated ahead of this one, in dependency order and *borrowed* rather than merged. What a predecessor contributes is read where it stands — a name's type and body, a registry entry, a totality verdict, the witness at a key — and nothing of it is seeded into the [`Context`] but its mounts.
 ///
@@ -1831,11 +1838,11 @@ pub enum Tail<'a> {
 pub fn elaborate_and_zonk_unit<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
-) -> Result<(Module, Traces), Error> {
-    let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, None)?;
-    raise(finalized).map(|(module, _)| (module, traces))
+) -> Result<(Definitions, Traces), Error> {
+    let (finalized, traces) = elaborate_and_zonk(context, established, definitions, minted, None)?;
+    raise(finalized).map(|(definitions, _)| (definitions, traces))
 }
 
 /// [`elaborate_and_zonk_unit`] for a program: `module` and the term `tail` closes it with, both elaborated, zonked and checked.
@@ -1844,12 +1851,12 @@ pub fn elaborate_and_zonk_unit<'s>(
 pub fn elaborate_and_zonk_program<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Tail<'_>,
-) -> Result<(Module, Option<Entrypoint>), Error> {
-    elaborate_and_zonk_entry(context, established, module, minted, tail)
-        .map(|(module, entry, _)| (module, entry))
+) -> Result<(Definitions, Option<Entrypoint>), Error> {
+    elaborate_and_zonk_entry(context, established, definitions, minted, tail)
+        .map(|(definitions, entry, _)| (definitions, entry))
 }
 
 /// [`elaborate_and_zonk_program`] with what each declaration of `module` asked beside it: what a program's declarations are compiled by where they are a unit, kept and compiled over like any other, and the term that closes the program is elaborated in their walk.
@@ -1858,12 +1865,13 @@ pub fn elaborate_and_zonk_program<'s>(
 pub fn elaborate_and_zonk_entry<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Tail<'_>,
-) -> Result<(Module, Option<Entrypoint>, Traces), Error> {
-    let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
-    raise(finalized).map(|(module, entry)| (module, entry, traces))
+) -> Result<(Definitions, Option<Entrypoint>, Traces), Error> {
+    let (finalized, traces) =
+        elaborate_and_zonk(context, established, definitions, minted, Some(tail))?;
+    raise(finalized).map(|(definitions, entry)| (definitions, entry, traces))
 }
 
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
@@ -1872,22 +1880,22 @@ pub fn elaborate_and_zonk_entry<'s>(
 pub fn elaborate_and_zonk_program_reporting<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
     let (
         Finalized {
-            module,
+            definitions,
             entry,
             obligations,
             ..
         },
         _,
-    ) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
+    ) = elaborate_and_zonk(context, established, definitions, minted, Some(tail))?;
 
     Ok(FinalizedProgram {
-        module,
+        definitions,
         entry,
         obligations,
     })
@@ -1897,25 +1905,25 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
 fn elaborate_and_zonk<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Finalized, Traces), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        let declarations = Declarations::of(module);
-        let elaborated = elaborate_module_suffix(
+        let declarations = Declarations::of(definitions);
+        let elaborated = elaborate_definitions_suffix(
             context,
             Some(established),
             None,
-            module,
+            definitions,
             &declarations,
             minted,
             tail,
         )?;
         let finalized = finalize_and_check(
             context,
-            elaborated.module,
+            elaborated.definitions,
             elaborated.entry,
             elaborated.held,
             elaborated.obligations,
@@ -1936,7 +1944,7 @@ fn elaborate_and_zonk<'s>(
 ///
 /// The scope elaboration is handed holds the baseline as its last layer ([`Established::keeping`]), which is the caller's to arrange, as it is that the baseline was compiled after the units this one is.
 pub struct Recompile<'a> {
-    pub baseline: &'a Module,
+    pub baseline: &'a Definitions,
     pub places: &'a Places,
     pub traces: &'a Traces,
     pub readers: &'a Readers,
@@ -1952,7 +1960,7 @@ pub struct Recompile<'a> {
 
 /// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration elaborated again.
 pub struct Recompiled {
-    pub module: Module,
+    pub definitions: Definitions,
     /// Where `module` holds each name, where its baseline's places were handed on with the names of what the walk changed placed again: `None` where they are made the first time something asks.
     pub places: Option<Places>,
     pub traces: Traces,
@@ -1961,17 +1969,17 @@ pub struct Recompiled {
     pub made: BTreeSet<Global>,
 }
 
-/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the walk visits what the edit could reach, a declaration is kept as the baseline holds it where nothing it asked moved, read where the baseline holds it, and every other is elaborated (`demand`). The module holds every item, the baseline's own for a declaration kept, in the order a whole compile stores it in (`Module::ordered`).
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the walk visits what the edit could reach, a declaration is kept as the baseline holds it where nothing it asked moved, read where the baseline holds it, and every other is elaborated (`demand`). The module holds every item, the baseline's own for a declaration kept, in the order a whole compile stores it in (`Definitions::ordered`).
 ///
 /// Everything decided of a declaration is decided of the ones elaborated: each decides its own vectors, totality and erasure obligations as it is published, reading a kept declaration's as the baseline left them, and a kept item is zonked and stamped already, so what is finalized is what was elaborated.
 pub fn elaborate_and_zonk_unit_over<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
 ) -> Result<Recompiled, Error> {
-    elaborate_and_zonk_over(context, established, recompile, module, minted, None)
+    elaborate_and_zonk_over(context, established, recompile, definitions, minted, None)
         .map(|(recompiled, _)| recompiled)
 }
 
@@ -1980,11 +1988,18 @@ pub fn elaborate_and_zonk_entry_over<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
-    elaborate_and_zonk_over(context, established, recompile, module, minted, Some(tail))
+    elaborate_and_zonk_over(
+        context,
+        established,
+        recompile,
+        definitions,
+        minted,
+        Some(tail),
+    )
 }
 
 /// The walk a unit compiled over a baseline is elaborated by, with the term `tail` closes a program with where there is one.
@@ -1992,7 +2007,7 @@ fn elaborate_and_zonk_over<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
-    module: &Module,
+    definitions: &Definitions,
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
@@ -2008,18 +2023,18 @@ fn elaborate_and_zonk_over<'s>(
             established,
             candidates: recompile.candidates,
         };
-        let elaborated = elaborate_module_suffix(
+        let elaborated = elaborate_definitions_suffix(
             context,
             Some(established),
             Some(over),
-            module,
+            definitions,
             recompile.declarations,
             minted,
             tail,
         )?;
         let finalized = finalize_and_check(
             context,
-            elaborated.module,
+            elaborated.definitions,
             elaborated.entry,
             elaborated.held,
             elaborated.obligations,
@@ -2028,7 +2043,7 @@ fn elaborate_and_zonk_over<'s>(
             return Err(refused(elaborated.refusals, finalized));
         }
         let Finalized {
-            module: made,
+            definitions: made,
             entry,
             obligations,
             ..
@@ -2036,30 +2051,30 @@ fn elaborate_and_zonk_over<'s>(
         let (mut traces, made_names, readers) =
             (elaborated.traces, elaborated.made, elaborated.readers);
         let Assembled {
-            module,
+            definitions,
             places,
             order,
         } = {
             curios_profile::profile!("assemble_unit_over");
-            recompile.assembled(module, &made_names, made)
+            recompile.assembled(definitions, &made_names, made)
         };
         traces.ordered(order.clone());
 
         // What was finalized holds the declarations elaborated now, so the entry's universes were held to their schemes alone: here to every declaration's, the kept ones' with them.
         if let Some(entry) = &entry {
-            validate_entry_universes(&module, entry)?;
+            validate_entry_universes(&definitions, entry)?;
         }
 
         raise(Finalized {
-            module,
+            definitions,
             entry,
             obligations,
             order,
         })
-        .map(|(module, entry)| {
+        .map(|(definitions, entry)| {
             (
                 Recompiled {
-                    module,
+                    definitions,
                     places,
                     traces,
                     readers: readers.expect("a walk over a baseline keeps who asked what"),
@@ -2073,7 +2088,7 @@ fn elaborate_and_zonk_over<'s>(
 
 /// What [`Recompile::assembled`] makes of a recompile's declarations: the module, in the order a module is stored in, where it holds each name, where that was handed on, and the order.
 struct Assembled {
-    module: Module,
+    definitions: Definitions,
     places: Option<Places>,
     order: Order,
 }
@@ -2084,12 +2099,12 @@ impl Recompile<'_> {
     /// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
     fn assembled(
         &self,
-        lowered: &Module,
+        lowered: &Definitions,
         made_names: &BTreeSet<Global>,
-        made: Module,
+        made: Definitions,
     ) -> Assembled {
         let made = made.items.into_iter().collect::<Vec<_>>();
-        let module = |items| Module {
+        let definitions = |items| Definitions {
             items,
             mounts: lowered.mounts.clone(),
             witnesses: lowered.witnesses.clone(),
@@ -2105,7 +2120,7 @@ impl Recompile<'_> {
             .revised(self.baseline, self.places, &made, self.dropped)
         {
             return Assembled {
-                module: module(items),
+                definitions: definitions(items),
                 places,
                 order,
             };
@@ -2124,10 +2139,10 @@ impl Recompile<'_> {
                 })
                 .cloned(),
         );
-        let (module, order) = module(items).in_order();
+        let (definitions, order) = definitions(items).in_order();
 
         Assembled {
-            module,
+            definitions,
             places: None,
             order,
         }

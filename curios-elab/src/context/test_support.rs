@@ -9,8 +9,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Declarations, Definition, DefinitionKind, Global, HeadKey, Intrinsic, Item, Module, Term,
-        Totality, UniverseContext, WitnessKey,
+        Declarations, Definition, DefinitionKind, Definitions, Global, HeadKey, Intrinsic, Item,
+        Term, Totality, UniverseContext, WitnessKey,
     },
     std::collections::BTreeSet,
 };
@@ -63,9 +63,9 @@ pub fn declarations(names: &[Global]) -> Declarations {
         })
         .collect::<Vec<_>>();
 
-    Declarations::of(&Module {
+    Declarations::of(&Definitions {
         items: items.into(),
-        ..Module::default()
+        ..Definitions::default()
     })
 }
 

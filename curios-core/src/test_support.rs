@@ -47,15 +47,15 @@ fn after_what_each_reaches(mut pending: Vec<(Global, BTreeSet<Global>, Item)>) -
     stored
 }
 
-/// `module` declaring each of `inducts`, `structs` and `concepts`: carried by the definition of its name where the module holds one, and where it holds none by the former spelled from it ([`Definition::former`]), a family's in a group of its own as the lowering writes one, stored as a module stores an item ([`Module::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
+/// `module` declaring each of `inducts`, `structs` and `concepts`: carried by the definition of its name where the module holds one, and where it holds none by the former spelled from it ([`Definition::former`]), a family's in a group of its own as the lowering writes one, stored as a module stores an item ([`Definitions::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
 ///
 /// How a fixture that names a registry entry builds its module: an entry is carried by a former and by nothing else, so a fixture that wants one and no former of its own is handed the one the entry spells.
 pub fn declaring(
-    module: Module,
+    definitions: Definitions,
     inducts: impl IntoIterator<Item = (Global, InductDecl)>,
     structs: impl IntoIterator<Item = (Global, StructDecl)>,
     concepts: impl IntoIterator<Item = (Global, ConceptDecl)>,
-) -> Module {
+) -> Definitions {
     let mut records = structs.into_iter().collect::<BTreeMap<_, _>>();
     let mut entries = BTreeMap::new();
     for (name, concept) in concepts {
@@ -83,7 +83,7 @@ pub fn declaring(
             *kind = DefinitionKind::Nominal(Rc::new(nominal));
         }
     };
-    let mut items = module.items.to_vec();
+    let mut items = definitions.items.to_vec();
     for item in &mut items {
         match item {
             Item::Let(definition) => carried(&definition.name, &mut definition.kind, &mut entries),
@@ -131,9 +131,9 @@ pub fn declaring(
     }
     stored.extend(formers.into_values().flat_map(after_what_each_reaches));
 
-    Module {
+    Definitions {
         items: stored.into(),
-        ..module
+        ..definitions
     }
 }
 

@@ -24,7 +24,7 @@ use {
         part_digest, structs_alike,
     },
     curios_common::{Candidates, Facet, recurse},
-    curios_core::{Declarations, Global, Item, Module, Nominal, Place, Places, Trace},
+    curios_core::{Declarations, Definitions, Global, Item, Nominal, Place, Places, Trace},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -58,7 +58,7 @@ enum Outcome {
 /// The baseline a unit is compiled over, as its walk reads it: an earlier text of the unit as it elaborated, what each of its declarations asked, and what the new text's lowering made again of it.
 #[derive(Clone, Copy)]
 pub struct Over<'a> {
-    pub baseline: &'a Module,
+    pub baseline: &'a Definitions,
     pub places: &'a Places,
     pub traces: &'a Traces,
     /// The names whose lowered item is not the baseline's own: new to the unit, or lowered again (`PreparedText::lowered_anew`).
@@ -109,7 +109,7 @@ struct Reached {
 
 /// The walk over one unit's declarations.
 pub struct Demand<'a> {
-    module: &'a Module,
+    definitions: &'a Definitions,
     /// The declarations `module`'s items make, by which a name is asked for.
     declarations: &'a Declarations,
     /// The declarations the walk holds, by their written items' places: every one for a unit compiled whole, and for one compiled over a baseline whose edit reached the prover's vocabulary; over a baseline otherwise, the ones the edit could reach. A declaration of the unit the walk does not hold is kept as the baseline holds it, and stands finished from the start.
@@ -159,7 +159,7 @@ impl<'a> Demand<'a> {
 
     /// The walk over `module`, whose items make `declarations`: holding every declaration where the unit is compiled whole, and none until it is told what an edit reached ([`Demand::reach`]) where it is compiled `over` a baseline.
     pub fn new(
-        module: &'a Module,
+        definitions: &'a Definitions,
         declarations: &'a Declarations,
         poison: Poison,
         survivors: Survivors,
@@ -174,7 +174,7 @@ impl<'a> Demand<'a> {
         };
 
         Self {
-            module,
+            definitions,
             declarations,
             held,
             demanded: Vec::new(),
@@ -195,11 +195,11 @@ impl<'a> Demand<'a> {
 
     /// The items of every declaration the walk holds, in the order the declarations are written: whose lowered entries the context registers and whose witnesses it declares, before anything is asked for.
     pub fn held_items(&self) -> impl Iterator<Item = &'a Item> + '_ {
-        let (module, declarations) = (self.module, self.declarations);
+        let (definitions, declarations) = (self.definitions, self.declarations);
         self.held
             .keys()
             .flat_map(move |declaration| declarations.items(*declaration).iter())
-            .map(move |item| &module.items[*item])
+            .map(move |item| &definitions.items[*item])
     }
 
     /// Every name of a declaration the walk holds: the ones not finished when the walk begins.
@@ -478,7 +478,7 @@ impl<'a> Demand<'a> {
         // A key at which the unit declares other witnesses than the baseline did: a witness's name states its key, so a key moved where a witness was gained or dropped there. Every witness the unit declares there is attempted, so the one registered first is the one a whole compile registers.
         let moved = gained
             .iter()
-            .filter(|name| self.module.witnesses.contains(*name))
+            .filter(|name| self.definitions.witnesses.contains(*name))
             .chain(
                 over.dropped
                     .iter()
@@ -491,7 +491,7 @@ impl<'a> Demand<'a> {
                 self.flag(&reader);
             }
             let witnesses = concept.qualifier().map_or_else(Vec::new, |concept| {
-                self.module
+                self.definitions
                     .witnesses_at(concept, key)
                     .copied()
                     .collect::<Vec<_>>()
@@ -529,7 +529,7 @@ impl<'a> Demand<'a> {
             }
             // A witness the units in scope now hold at a key the unit declares one at collides with it.
             let now = self
-                .module
+                .definitions
                 .witnesses
                 .iter()
                 .filter_map(|name| Some((name.witness_key()?, *name)))
@@ -732,11 +732,11 @@ impl<'a> Demand<'a> {
 
     /// The names every item of `declaration` declares.
     fn names(&self, declaration: usize) -> Vec<&'a Global> {
-        let module = self.module;
+        let definitions = self.definitions;
         self.declarations
             .items(declaration)
             .iter()
-            .flat_map(|item| module.items[*item].declared_names())
+            .flat_map(|item| definitions.items[*item].declared_names())
             .collect()
     }
 
@@ -763,12 +763,12 @@ impl<'a> Demand<'a> {
         declaration: usize,
         settled: Result<(), Cycle>,
     ) -> Result<(), Cycle> {
-        let module = self.module;
+        let definitions = self.definitions;
         let outcome = match settled {
             Ok(()) => Ok(()),
             Err(cycle) => {
                 for item in self.declarations.items(declaration).iter() {
-                    let item = &module.items[*item];
+                    let item = &definitions.items[*item];
                     withhold(context, item);
                     self.poison.declare(item);
                 }
@@ -779,9 +779,9 @@ impl<'a> Demand<'a> {
                         .copied()
                         .collect::<BTreeSet<_>>()
                         .into_iter()
-                        .map(|member| &module.items[member])
+                        .map(|member| &definitions.items[member])
                         .collect::<Vec<_>>();
-                    let item = &module.items[declaration];
+                    let item = &definitions.items[declaration];
                     // Placed at the first member's name, as any report with no position of its own is.
                     let error = Error::declaration_cycle(&members)
                         .in_declaration(item.declared_names().into_iter().copied());
@@ -838,14 +838,14 @@ impl<'a> Demand<'a> {
 
     /// Ask for every declaration the lowered forms of `declaration`'s items reach, in the order they are written.
     fn reached(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
-        let module = self.module;
+        let definitions = self.definitions;
         let dependencies = {
             curios_profile::profile!("demand::reached");
             let reached = self
                 .declarations
                 .items(declaration)
                 .iter()
-                .flat_map(|item| module.reaches(&module.items[*item]))
+                .flat_map(|item| definitions.reaches(&definitions.items[*item]))
                 .collect::<Vec<_>>();
 
             self.owners(reached, declaration)
@@ -872,7 +872,7 @@ impl<'a> Demand<'a> {
     /// **A witness is kept where it would register.** A witness registers under its key as its signature elaborates, and the second to register at one key is refused; a kept one registers nothing, so it is asked here what registering would have: that it is the first the unit declares at its key, and that none stands there yet. One that is not is attempted, and refused where a whole compile refuses it.
     fn recorded(&self, context: &Context, declaration: usize) -> Option<HeldTrace> {
         let over = self.over?;
-        let module = self.module;
+        let definitions = self.definitions;
         let names = self.names(declaration);
         let kept = names
             .iter()
@@ -881,7 +881,7 @@ impl<'a> Demand<'a> {
             .declarations
             .items(declaration)
             .iter()
-            .any(|item| self.poison.reaches(module, &module.items[*item]));
+            .any(|item| self.poison.reaches(definitions, &definitions.items[*item]));
         let alone = names
             .iter()
             .all(|name| match context.spelled_witness(name) {
@@ -1045,20 +1045,23 @@ impl<'a> Demand<'a> {
         let Some(candidates) = self.over.and_then(|over| over.candidates) else {
             return false;
         };
-        let module = self.module;
+        let definitions = self.definitions;
         let positions = Rc::clone(self.declarations.items(declaration));
         let names = self.names(declaration);
-        if names.iter().any(|name| module.witnesses.contains(*name))
-            || positions
-                .iter()
-                .any(|position| self.poison.reaches(module, &module.items[*position]))
+        if names
+            .iter()
+            .any(|name| definitions.witnesses.contains(*name))
+            || positions.iter().any(|position| {
+                self.poison
+                    .reaches(definitions, &definitions.items[*position])
+            })
         {
             return false;
         }
         curios_profile::profile!("demand::candidates");
         let Ok(inputs) = positions
             .iter()
-            .map(|position| lowered_digest(module, *position))
+            .map(|position| lowered_digest(definitions, *position))
             .collect::<Result<Vec<_>, _>>()
         else {
             return false;
@@ -1078,7 +1081,7 @@ impl<'a> Demand<'a> {
                 continue;
             };
             let alike = positions.iter().zip(&items).all(|(position, item)| {
-                module.items[*position].declared_names() == item.declared_names()
+                definitions.items[*position].declared_names() == item.declared_names()
             });
             if !alike {
                 continue;
@@ -1185,7 +1188,7 @@ impl<'a> Demand<'a> {
     ///
     /// **Over a baseline, decided unasked where the walk knows how** ([`Demand::unasked`]): kept where no seed reaches it, or what it waited on is decided and none of it moved, and made where it is to be made. Only a declaration asked for ahead of what it waits on, or while the vocabulary is asked for, asks its trace again.
     fn settle(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
-        let module = self.module;
+        let definitions = self.definitions;
         let items = Rc::clone(self.declarations.items(declaration));
         let names = self.names(declaration);
         let unasked = self.unasked(declaration);
@@ -1221,8 +1224,8 @@ impl<'a> Demand<'a> {
             let mut poison = self.poison.clone();
             let mut outcomes = Vec::with_capacity(items.len());
             for position in items.iter() {
-                let item = &module.items[*position];
-                if poison.reaches(module, item) {
+                let item = &definitions.items[*position];
+                if poison.reaches(definitions, item) {
                     poison.declare(item);
                     outcomes.push(Outcome::Withheld);
                     continue;
@@ -1282,7 +1285,7 @@ impl<'a> Demand<'a> {
                         Outcome::Refused(error) => {
                             self.survivors.refuse(ItemStamp(*position), error);
                         }
-                        Outcome::Withheld => withhold(context, &module.items[*position]),
+                        Outcome::Withheld => withhold(context, &definitions.items[*position]),
                     }
                 }
                 // The goals are known in this attempt's state alone, which is kept for their report.
@@ -1296,12 +1299,12 @@ impl<'a> Demand<'a> {
             }
 
             curios_profile::sample!("demand::void", needs.len());
-            mark.void(context, module, &names);
+            mark.void(context, definitions, &names);
             let dependencies = self.owners(needs, declaration);
             assert!(
                 !dependencies.is_empty(),
                 "an attempt needs a declaration other than its own: {}",
-                module.items[items[0]].describe()
+                definitions.items[items[0]].describe()
             );
             for dependency in dependencies {
                 self.declaration(context, dependency)?;

@@ -8,8 +8,8 @@ use {
     curios_cert::Verdict,
     curios_common::{Qualifier, Report},
     curios_core::{
-        Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Universes, Zonked,
-        ZonkedRefusal,
+        Definition, Definitions, Free, Global, Item, Nominal, Program, RecItem, Term, Universes,
+        Zonked, ZonkedRefusal,
     },
     curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
@@ -241,10 +241,10 @@ pub(crate) fn put_program(source: &str) -> Answer {
 }
 
 /// Put a module built by hand to the kernel alone, with the prelude in scope, as a program closing with `body` stated at `type_`.
-fn put_module(module: Module, body: Term, type_: Term) -> Answer {
+fn put_module(definitions: Definitions, body: Term, type_: Term) -> Answer {
     let program = Program {
-        module,
-        entry: curios_core::Entrypoint {
+        definitions,
+        entrypoint: curios_core::Entrypoint {
             body,
             type_: Some(type_),
         },
@@ -266,9 +266,9 @@ impl Proof {
         match self {
             Proof::Program(source) => put_program(source),
             Proof::Module(build) => {
-                let (module, proof) = build();
+                let (definitions, proof) = build();
 
-                put_module(module, proof, false_type())
+                put_module(definitions, proof, false_type())
             }
         }
     }

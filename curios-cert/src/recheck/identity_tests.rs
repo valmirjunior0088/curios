@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Module, Nat, Program,
-        Scope, Subterm, Term, UniverseContext, UniverseParam, Var,
+        Definitions, Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Nat,
+        Program, Scope, Subterm, Term, UniverseContext, UniverseParam, Var,
     },
     std::collections::BTreeSet,
 };
@@ -37,7 +37,7 @@ fn zero() -> Term {
 }
 
 /// A module holding one definition that states `stated` as the sort its value inhabits: `held : Type = Nat`, whose value sort is the position under test.
-fn sorted(stated: Term) -> Module {
+fn sorted(stated: Term) -> Definitions {
     let item = match authored(&held(), Term::type_ground(), nat()) {
         curios_core::Item::Let(definition) => {
             curios_core::Item::Let(Box::new(curios_core::Definition {
@@ -52,8 +52,8 @@ fn sorted(stated: Term) -> Module {
 }
 
 /// A module holding `items` and nothing else.
-fn holding(items: Vec<curios_core::Item>) -> Module {
-    Module {
+fn holding(items: Vec<curios_core::Item>) -> Definitions {
+    Definitions {
         items: items.into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -69,9 +69,9 @@ fn a_definition_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
         let stray = Free::local(index, Some("stray"));
         let function = Term::func_type([(Free::local(9_001, Some("x")), nat())], nat());
-        let module = holding(vec![authored(&held(), function, constant_over(&stray))]);
+        let definitions = holding(vec![authored(&held(), function, constant_over(&stray))]);
 
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(held())
                 && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
@@ -92,9 +92,9 @@ fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
             ),
             [Term::free_var(&stray)],
         );
-        let module = sorted(stated);
+        let definitions = sorted(stated);
 
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(held())
                 && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
@@ -113,9 +113,9 @@ fn a_stated_value_sort_holding_a_metavariable_is_refused() {
         ),
         [Term::hole(7_usize)],
     );
-    let module = sorted(stated);
+    let definitions = sorted(stated);
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         verdicts
             .iter()
@@ -136,9 +136,9 @@ fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
             Term::prop(),
             Term::type_ground(),
         );
-        let module = sorted(stated);
+        let definitions = sorted(stated);
 
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(held())
                 && matches!(&verdict.error, Error::ValueSort { .. })),
@@ -176,9 +176,9 @@ fn a_universe_escape_a_stated_value_sort_discards_is_refused_where_it_is_held() 
         }
         item => item,
     };
-    let module = holding(vec![item]);
+    let definitions = holding(vec![item]);
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         verdicts.iter().any(|verdict| verdict.name == Some(held())
             && matches!(&verdict.error, Error::UnclosedUniverses)),
@@ -192,8 +192,8 @@ fn an_entry_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
         let stray = Free::local(index, Some("stray"));
         let program = Program {
-            module: holding(Vec::new()),
-            entry: Entrypoint {
+            definitions: holding(Vec::new()),
+            entrypoint: Entrypoint {
                 body: Term::apply(
                     constant_over(&stray),
                     [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
@@ -223,7 +223,7 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
         tail: Scope::constant(Many(1), Term::var(Var::bound(1))),
     }));
 
-    for (position, module) in [
+    for (position, definitions) in [
         ("a body", holding(vec![authored(&held(), nat(), loose())])),
         ("a type", holding(vec![authored(&held(), loose(), nat())])),
         ("a stated value sort", sorted(loose())),
@@ -232,7 +232,7 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
             holding(vec![authored(&held(), nat(), past_a_binder)]),
         ),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(held())
                 && matches!(&verdict.error, Error::NotClosed { .. })),
@@ -245,8 +245,8 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
 #[test]
 fn an_entry_holding_a_loose_bound_variable_is_refused() {
     let program = Program {
-        module: holding(Vec::new()),
-        entry: Entrypoint {
+        definitions: holding(Vec::new()),
+        entrypoint: Entrypoint {
             body: Term::var(Var::bound(0)),
             type_: Some(nat()),
         },

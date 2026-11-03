@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     curios_common::{Qualifier, fill},
-    curios_core::{Global, Module},
+    curios_core::{Definitions, Global},
     curios_prelude::with_prelude,
     curios_text::{PreparedText, RootSource, spell},
     curios_unit::Unit,
@@ -169,8 +169,8 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     };
     let alone = last(&[&lib]);
     let after = last(&[&pre, &lib]);
-    let bytes = |module: &Module| {
-        curios_archive::to_bytes(module)
+    let bytes = |definitions: &Definitions| {
+        curios_archive::to_bytes(definitions)
             .expect("a module serializes")
             .to_vec()
     };

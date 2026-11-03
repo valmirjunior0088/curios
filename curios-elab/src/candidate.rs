@@ -13,7 +13,7 @@ use {
         Answered, HeldTrace, Made, Question, Read, TraceRecord, TraceTable, Traces, part_digest,
     },
     curios_common::{Candidates, Digest, Facet, Object},
-    curios_core::{Declarations, Global, Item, ItemRun, Module, Places},
+    curios_core::{Declarations, Definitions, Global, Item, ItemRun, Places},
     std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
 
@@ -28,7 +28,7 @@ pub fn declaration_input(items: impl IntoIterator<Item = Digest>) -> Digest {
 }
 
 /// The digest of the lowered item at `position` of `lowered`, as a store keeps it: the object it was read from, where it was, and its archive otherwise.
-pub fn lowered_digest(lowered: &Module, position: usize) -> Result<Digest, String> {
+pub fn lowered_digest(lowered: &Definitions, position: usize) -> Result<Digest, String> {
     match lowered.items.part(position) {
         Some(stored) => Ok(stored.digest),
         None => curios_archive::to_bytes(&lowered.items[position]).map(|bytes| Digest::of(&bytes)),
@@ -37,11 +37,11 @@ pub fn lowered_digest(lowered: &Module, position: usize) -> Result<Digest, Strin
 
 /// What a filing completes a unit's elaboration records with: its lowered module and the declarations its items make, the digest of each lowered item and of each elaborated one by its place, its elaborated module with where it holds each name, and its traces.
 pub struct Candidating<'a> {
-    lowered: &'a Module,
+    lowered: &'a Definitions,
     declarations: &'a Declarations,
     /// The digest of each lowered item, by its place.
     inputs: HashMap<usize, Digest>,
-    module: &'a Module,
+    definitions: &'a Definitions,
     places: &'a Places,
     /// The identity of each elaborated item, by its place.
     items: HashMap<usize, Digest>,
@@ -53,10 +53,10 @@ pub struct Candidating<'a> {
 impl<'a> Candidating<'a> {
     /// What a filing completes the records of the unit lowered to `lowered`, whose items make `declarations` and digest to `inputs`, and elaborated to `module`, held where `places` says, whose items are named `items`, and whose declarations asked `traces`: `inputs` and `items` each by the place of its item.
     pub fn new(
-        lowered: &'a Module,
+        lowered: &'a Definitions,
         declarations: &'a Declarations,
         inputs: impl IntoIterator<Item = (usize, Digest)>,
-        module: &'a Module,
+        definitions: &'a Definitions,
         places: &'a Places,
         items: impl IntoIterator<Item = (usize, Digest)>,
         traces: &'a Traces,
@@ -65,7 +65,7 @@ impl<'a> Candidating<'a> {
             lowered,
             declarations,
             inputs: inputs.into_iter().collect(),
-            module,
+            definitions,
             places,
             items: items.into_iter().collect(),
             traces,
@@ -111,7 +111,7 @@ impl<'a> Candidating<'a> {
             .collect::<Vec<_>>();
         if names
             .iter()
-            .any(|name| self.module.witnesses.contains(name))
+            .any(|name| self.definitions.witnesses.contains(name))
         {
             return Ok(None);
         }
@@ -174,7 +174,7 @@ impl<'a> Candidating<'a> {
         }
 
         let read = match self.places.place(subject) {
-            Some(_) => part_digest(self.module, self.places, question)
+            Some(_) => part_digest(self.definitions, self.places, question)
                 .ok()
                 .map(|digest| digest.and_then(|digest| bytes_of(&digest))),
             // What a unit records of a read of another is every read but a fixed unit's.

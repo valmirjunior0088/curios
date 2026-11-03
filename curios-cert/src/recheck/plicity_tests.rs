@@ -19,13 +19,13 @@ use {
 fn a_constructors_mark_decides_nothing_of_its_value() {
     assert_eq!(
         fixture_verdicts(
-            &plicity_module(true, 1),
+            &plicity_definitions(true, 1),
             1_000_000,
             &Globals::default(),
             SYNTAX
         ),
         fixture_verdicts(
-            &plicity_module(false, 1),
+            &plicity_definitions(false, 1),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -34,7 +34,7 @@ fn a_constructors_mark_decides_nothing_of_its_value() {
     );
     assert_eq!(
         fixture_verdicts(
-            &plicity_module(false, 1),
+            &plicity_definitions(false, 1),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -49,7 +49,7 @@ fn a_constructors_mark_decides_nothing_of_its_value() {
 fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
     assert!(
         !fixture_verdicts(
-            &plicity_module(false, 0),
+            &plicity_definitions(false, 0),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -66,7 +66,7 @@ fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
 fn an_argument_stands_under_its_parameters_mark() {
     assert_eq!(
         fixture_verdicts(
-            &marked_apply_module(Plicity::Explicit),
+            &marked_apply_definitions(Plicity::Explicit),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -76,7 +76,7 @@ fn an_argument_stands_under_its_parameters_mark() {
     );
 
     let refused = fixture_verdicts(
-        &marked_apply_module(Plicity::Implicit),
+        &marked_apply_definitions(Plicity::Implicit),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -101,7 +101,7 @@ fn an_argument_stands_under_its_parameters_mark() {
 #[test]
 fn an_arm_binds_under_its_payloads_marks() {
     let refused = fixture_verdicts(
-        &arm_module(vec![(Plicity::Implicit, Free::local(996, Some("a")))]),
+        &arm_definitions(vec![(Plicity::Implicit, Free::local(996, Some("a")))]),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -125,7 +125,7 @@ fn an_arm_binds_under_its_payloads_marks() {
 /// The control is the first module, accepted: refusing every type spelled as an applied η-form would pass the refusal alone.
 #[test]
 fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
-    let (honest, built) = eta_former_module(false);
+    let (honest, built) = eta_former_definitions(false);
     assert!(
         matches!(&*built, Subterm::StructType(_)),
         "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
@@ -136,7 +136,7 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
         "an η-form whose binder takes another mark than its former's was refused at the node it builds",
     );
 
-    let (lying, built) = eta_former_module(true);
+    let (lying, built) = eta_former_definitions(true);
     assert!(
         matches!(&*built, Subterm::StructType(_)),
         "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
@@ -161,7 +161,7 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
 fn a_function_forwarding_across_a_mark_is_not_taken_at_the_type_it_contracts_to() {
     assert_eq!(
         fixture_verdicts(
-            &forwarding_module(Plicity::Implicit),
+            &forwarding_definitions(Plicity::Implicit),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -171,7 +171,7 @@ fn a_function_forwarding_across_a_mark_is_not_taken_at_the_type_it_contracts_to(
     );
 
     let refused = fixture_verdicts(
-        &forwarding_module(Plicity::Explicit),
+        &forwarding_definitions(Plicity::Explicit),
         1_000_000,
         &Globals::default(),
         SYNTAX,

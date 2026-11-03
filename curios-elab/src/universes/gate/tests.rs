@@ -2,8 +2,8 @@ use {
     super::*,
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Global, Intrinsic, Item, Level, Minted, Module, Subterm, Term,
-        Totality, UniverseContext, UniverseMetaId, UniverseParam, test_support::*,
+        Definition, DefinitionKind, Definitions, Global, Intrinsic, Item, Level, Minted, Subterm,
+        Term, Totality, UniverseContext, UniverseMetaId, UniverseParam, test_support::*,
     },
 };
 
@@ -12,9 +12,9 @@ fn nat() -> Term {
 }
 
 /// A lowered module holding `body` as its one definition's value.
-fn lowered_module(body: Term) -> Module {
+fn lowered_definitions(body: Term) -> Definitions {
     declaring(
-        Module {
+        Definitions {
             mounts: Vec::new(),
             items: vec![Item::Let(Box::new(Definition {
                 name: Global::Authored(Qualifier::from(["held"])),
@@ -42,10 +42,10 @@ fn lowered_module(body: Term) -> Module {
 
 #[test]
 fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
-    let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))));
+    let definitions = lowered_definitions(Term::type_at(Level::meta(UniverseMetaId(0))));
 
     assert!(matches!(
-        validate_lowered_universe_seeds(&module, &Minted::default()),
+        validate_lowered_universe_seeds(&definitions, &Minted::default()),
         Err(Error::UniverseInvariant(message)) if message.contains("?u0")
     ));
 }

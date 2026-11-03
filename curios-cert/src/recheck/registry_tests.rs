@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
+        Definition, DefinitionKind, Definitions, Global, InductDecl, Intrinsic, Item, Level, Nat,
         Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::*,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -24,7 +24,7 @@ use {
 #[test]
 fn a_registry_index_target_is_checked_rather_than_believed() {
     let verdicts = fixture_verdicts(
-        &indexed_module(Term::hole(7_usize)),
+        &indexed_definitions(Term::hole(7_usize)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -45,7 +45,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 
     assert_eq!(
         fixture_verdicts(
-            &indexed_module(target),
+            &indexed_definitions(target),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -174,8 +174,8 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         ),
     };
 
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: vec![Item::Let(Box::new(definition))].into(),
             witnesses: BTreeSet::new(),
@@ -186,7 +186,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         [],
     );
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         verdicts

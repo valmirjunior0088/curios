@@ -266,15 +266,17 @@ impl Records for AskedItems {
 
 /// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, what the definition is declared as and what it was generated from, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
 pub(super) fn declared_digest(
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     places: &curios_core::Places,
     certification: &curios_core::Certification,
     (name, part): (curios_core::Global, Part),
 ) -> Result<Option<String>, String> {
     match part {
-        Part::Signature => curios_cert::part_digest(module, places, certification, &name, false),
-        Part::Body => curios_cert::part_digest(module, places, certification, &name, true),
-        Part::Kind => declared(module, places, &name)
+        Part::Signature => {
+            curios_cert::part_digest(definitions, places, certification, &name, false)
+        }
+        Part::Body => curios_cert::part_digest(definitions, places, certification, &name, true),
+        Part::Kind => declared(definitions, places, &name)
             .map(|definition| {
                 let kind = (definition.kind.declared(), definition.kind.generated_from());
 

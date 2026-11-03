@@ -90,8 +90,8 @@ fn a_variant_constructs_with_its_registered_schema() {
         [nat_lit(6)],
     );
     let fixture = curios_core::Program {
-        module: curios_core::test_support::declaring(
-            curios_core::Module {
+        definitions: curios_core::test_support::declaring(
+            curios_core::Definitions {
                 mounts: Vec::new(),
                 items: Vec::new().into(),
                 witnesses: BTreeSet::new(),
@@ -101,7 +101,7 @@ fn a_variant_constructs_with_its_registered_schema() {
             [],
             [],
         ),
-        entry: curios_core::Entrypoint { body, type_: None },
+        entrypoint: curios_core::Entrypoint { body, type_: None },
     };
     let erased = erase(&fixture, opt_type());
     assert_eq!(
@@ -172,8 +172,8 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
         ),
     );
     let fixture = curios_core::Program {
-        module: curios_core::test_support::declaring(
-            curios_core::Module {
+        definitions: curios_core::test_support::declaring(
+            curios_core::Definitions {
                 mounts: Vec::new(),
                 items: vec![former, six].into(),
                 witnesses: BTreeSet::new(),
@@ -183,7 +183,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             [],
             [],
         ),
-        entry: curios_core::Entrypoint {
+        entrypoint: curios_core::Entrypoint {
             body: reference("six"),
             type_: None,
         },
@@ -209,7 +209,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             .collect::<Vec<_>>()
     };
 
-    let unit = erase_alone(&zonked(&fixture.module)).expect("the unit erases");
+    let unit = erase_alone(&zonked(&fixture.definitions)).expect("the unit erases");
     let fragment = |name: &str| {
         unit.find(&nominal(name), Sorts::NONE)
             .expect("the unit declares it")
@@ -500,8 +500,8 @@ fn a_variant_match_binds_payload_without_projections() {
         ],
     );
     let fixture = curios_core::Program {
-        module: curios_core::test_support::declaring(
-            curios_core::Module {
+        definitions: curios_core::test_support::declaring(
+            curios_core::Definitions {
                 mounts: Vec::new(),
                 items: Vec::new().into(),
                 witnesses: BTreeSet::new(),
@@ -511,7 +511,7 @@ fn a_variant_match_binds_payload_without_projections() {
             [],
             [],
         ),
-        entry: curios_core::Entrypoint { body, type_: None },
+        entrypoint: curios_core::Entrypoint { body, type_: None },
     };
     let erased = erase(
         &fixture,
@@ -692,8 +692,8 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
             .zip(types),
     );
     let fixture = curios_core::Program {
-        module: curios_core::test_support::declaring(
-            curios_core::Module {
+        definitions: curios_core::test_support::declaring(
+            curios_core::Definitions {
                 mounts: Vec::new(),
                 items: Vec::new().into(),
                 witnesses: BTreeSet::new(),
@@ -703,7 +703,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
             struct_decls,
             [],
         ),
-        entry: curios_core::Entrypoint { body, type_: None },
+        entrypoint: curios_core::Entrypoint { body, type_: None },
     };
     let erased = erase(&fixture, expected);
 

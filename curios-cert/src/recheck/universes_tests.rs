@@ -6,11 +6,11 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Entrypoint, Free, Global, InductDecl, Intrinsic, Item, Level,
-        Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem, ReduceError,
-        StructDecl, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
-        Universes, test_support::*,
+        Definition, DefinitionKind, Definitions, Entrypoint, Free, Global, InductDecl, Intrinsic,
+        Item, Level, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
+        ReduceError, StructDecl, Telescope, Term, Totality, UniverseConstraint,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseParam, Universes, test_support::*,
     },
     std::collections::BTreeSet,
 };
@@ -48,7 +48,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
@@ -56,7 +56,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the kernel assumed a contradiction as a hypothesis without noticing",
     );
 }
@@ -92,7 +92,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
@@ -100,7 +100,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the kernel assumed a constraint about a parameter the declaration does not have",
     );
 }
@@ -118,11 +118,11 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
     let residue = Level::meta(UniverseMetaId::from(0usize));
 
-    for (label, module) in [
+    for (label, definitions) in [
         ("a definition's declared type", level_definition(&residue)),
         ("a registry entry's result sort", level_registry(&residue)),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -186,13 +186,13 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let program = |items: Vec<Item>, body: Term| Program {
-        module: Module {
+        definitions: Definitions {
             mounts: Vec::new(),
             items: items.into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
-        entry: Entrypoint {
+        entrypoint: Entrypoint {
             body,
             type_: Some(nat()),
         },
@@ -200,8 +200,8 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
     let declared = |items: Vec<Item>,
                     inducts: Vec<(Global, InductDecl)>,
                     structs: Vec<(Global, StructDecl)>| Program {
-        module: declaring(program(items, zero()).module, inducts, structs, []),
-        entry: Entrypoint {
+        definitions: declaring(program(items, zero()).definitions, inducts, structs, []),
+        entrypoint: Entrypoint {
             body: zero(),
             type_: Some(nat()),
         },
@@ -297,11 +297,11 @@ fn a_sort_stating_neither_prop_nor_type_is_refused() {
     ] {
         let sort = || Term::sort_at(open, Level::zero());
 
-        for (label, module) in [
+        for (label, definitions) in [
             ("a definition's declared type", sorted_definition(sort())),
             ("a registry entry's result sort", sorted_registry(sort())),
         ] {
-            let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+            let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
             assert!(
                 verdicts
@@ -318,12 +318,12 @@ fn a_sort_stating_neither_prop_nor_type_is_refused() {
 fn a_ground_level_in_the_same_positions_is_accepted() {
     let ground = Level::zero();
 
-    for (label, module) in [
+    for (label, definitions) in [
         ("a definition's declared type", level_definition(&ground)),
         ("a registry entry's result sort", level_registry(&ground)),
     ] {
         assert_eq!(
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -343,7 +343,7 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
 fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
     let escaping = Level::param(UniverseParam(0));
 
-    for (label, module) in [
+    for (label, definitions) in [
         (
             "a definition's declared type",
             scheme_definition(&escaping, 0),
@@ -353,7 +353,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             scheme_registry(&escaping, 0),
         ),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -369,7 +369,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
 fn a_level_naming_a_declared_universe_parameter_is_accepted() {
     let declared = Level::param(UniverseParam(0));
 
-    for (label, module) in [
+    for (label, definitions) in [
         (
             "a definition's declared type",
             scheme_definition(&declared, 1),
@@ -380,7 +380,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
         ),
     ] {
         assert_eq!(
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -435,11 +435,11 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
 /// The control is [`an_instance_below_the_top_of_the_offset_range_is_accepted`], the same two occurrences two below the top, where the definition's own type still has a sort.
 #[test]
 fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
-    for (label, module) in [
+    for (label, definitions) in [
         ("a family's sort", family_instance_at(u32::MAX, 0)),
         ("a definition's type", scheme_instance_at(u32::MAX, 0)),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             matches!(
@@ -457,7 +457,7 @@ fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
 /// The control for the fixture above: the same occurrences two below the top, where every successor the walk takes has an offset to land on.
 #[test]
 fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
-    for (label, module) in [
+    for (label, definitions) in [
         (
             "a family's sort",
             family_instance_at(u32::MAX - 2, u32::MAX - 1),
@@ -468,7 +468,7 @@ fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
         ),
     ] {
         assert_eq!(
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
             "{label}: the kernel refused an instance whose successors all fit",
         );
@@ -500,8 +500,8 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
             "does not satisfy its scheme",
         ),
     ] {
-        let module = universe_scheme_module(Some((open_context(), body)));
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let definitions = universe_scheme_definitions(Some((open_context(), body)));
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -521,7 +521,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
 
     assert_eq!(
         fixture_verdicts(
-            &universe_scheme_module(None),
+            &universe_scheme_definitions(None),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -532,7 +532,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
 
     assert_eq!(
         fixture_verdicts(
-            &universe_scheme_module(Some((scheme_context(), instance))),
+            &universe_scheme_definitions(Some((scheme_context(), instance))),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -542,7 +542,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     );
 
     let zero = Global::Authored(Qualifier::from(["zero"]));
-    let monomorphic = Module {
+    let monomorphic = Definitions {
         mounts: Vec::new(),
         items: vec![
             authored(
@@ -585,8 +585,8 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         ("through the arm", Route::ConstantMotive),
         ("with no arm open", Route::Direct),
     ] {
-        let module = universe_refinement_module(one.clone(), route);
-        let verdicts = fixture_verdicts(&module, 10_000_000, &Globals::default(), SYNTAX);
+        let definitions = universe_refinement_definitions(one.clone(), route);
+        let verdicts = fixture_verdicts(&definitions, 10_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| {
@@ -605,10 +605,10 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
 /// Mutation-checked: emptying `Scope::refinement_of` to `None` leaves the witness above passing and fails this, so the two are not testing one thing twice.
 #[test]
 fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
-    let module = universe_refinement_module(Level::zero(), Route::DependentMotive);
+    let definitions = universe_refinement_definitions(Level::zero(), Route::DependentMotive);
 
     assert_eq!(
-        fixture_verdicts(&module, 10_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 10_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the arm's own case equation stopped refining its scrutinee",
     );
@@ -657,7 +657,7 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
             origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
-    let module = |claimed: Level| Module {
+    let definitions = |claimed: Level| Definitions {
         mounts: Vec::new(),
         items: vec![
             definition(
@@ -683,7 +683,7 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(Level::constant(1)),
+        &definitions(Level::constant(1)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -696,7 +696,7 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
 
     assert_eq!(
         fixture_verdicts(
-            &module(Level::constant(6)),
+            &definitions(Level::constant(6)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -746,7 +746,7 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
             type_,
             body,
         };
-    let module = |claimed: Level| Module {
+    let definitions = |claimed: Level| Definitions {
         mounts: Vec::new(),
         items: vec![
             Item::Rec(RecItem::new(vec![(
@@ -771,7 +771,7 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(Level::constant(1)),
+        &definitions(Level::constant(1)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -784,7 +784,7 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
 
     assert_eq!(
         fixture_verdicts(
-            &module(Level::constant(6)),
+            &definitions(Level::constant(6)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -847,7 +847,7 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
             origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
-    let module = |inhabitant: Level| Module {
+    let definitions = |inhabitant: Level| Definitions {
         mounts: Vec::new(),
         items: vec![
             definition(
@@ -873,7 +873,7 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(Level::constant(6)),
+        &definitions(Level::constant(6)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -886,7 +886,7 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
 
     assert_eq!(
         fixture_verdicts(
-            &module(Level::constant(5)),
+            &definitions(Level::constant(5)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -955,7 +955,7 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
             origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
-    let module = |stated: Level| Module {
+    let definitions = |stated: Level| Definitions {
         mounts: Vec::new(),
         items: vec![
             definition(
@@ -983,7 +983,7 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(Level::constant(2)),
+        &definitions(Level::constant(2)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -998,7 +998,7 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
 
     assert_eq!(
         fixture_verdicts(
-            &module(Level::constant(7)),
+            &definitions(Level::constant(7)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -1054,9 +1054,9 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
             origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
-    let module = |claimed: Level| {
+    let definitions = |claimed: Level| {
         declaring(
-            Module {
+            Definitions {
                 mounts: Vec::new(),
                 items: vec![Item::Let(Box::new(Definition {
                     name: reads,
@@ -1092,7 +1092,7 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(Level::constant(1)),
+        &definitions(Level::constant(1)),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -1105,7 +1105,7 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
 
     assert_eq!(
         fixture_verdicts(
-            &module(Level::constant(6)),
+            &definitions(Level::constant(6)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -1161,7 +1161,7 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
             origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
-    let module = |parameters: usize, instance: Vec<Level>, claimed: Level| Module {
+    let definitions = |parameters: usize, instance: Vec<Level>, claimed: Level| Definitions {
         mounts: Vec::new(),
         items: vec![
             Item::Rec(RecItem::new(vec![(fresh(None), member(parameters))])),
@@ -1186,7 +1186,7 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
     };
 
     let verdicts = fixture_verdicts(
-        &module(1, vec![Level::constant(5)], Level::zero()),
+        &definitions(1, vec![Level::constant(5)], Level::zero()),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -1200,7 +1200,7 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
     let stated = vec![Level::constant(5), Level::constant(6)];
     assert_eq!(
         fixture_verdicts(
-            &module(2, stated, Level::constant(6)),
+            &definitions(2, stated, Level::constant(6)),
             1_000_000,
             &Globals::default(),
             SYNTAX
@@ -1232,34 +1232,35 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
         origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
     let held = Global::Authored(Qualifier::from(["held"]));
-    let module = |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Module {
-        mounts: Vec::new(),
-        items: vec![Item::Let(Box::new(Definition {
-            name: held,
-            kind: DefinitionKind::Authored,
-            universe_context: UniverseContext {
-                parameter_count: parameters,
-                quality_count: 0,
-                constraints,
-            },
-            island: Qualifier::default(),
-            totality: Totality::Total,
-            proof: false,
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
-            value_sort: None,
-            type_,
-            body,
-        }))]
-        .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
+    let definitions =
+        |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Definitions {
+            mounts: Vec::new(),
+            items: vec![Item::Let(Box::new(Definition {
+                name: held,
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext {
+                    parameter_count: parameters,
+                    quality_count: 0,
+                    constraints,
+                },
+                island: Qualifier::default(),
+                totality: Totality::Total,
+                proof: false,
+                variances: Vec::new(),
+                field_variances: Vec::new(),
+                parameter_field: None,
+                value_sort: None,
+                type_,
+                body,
+            }))]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        };
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
-    let looping = module(
+    let looping = definitions(
         1,
         vec![bounded(raised(&first, u32::MAX), first.clone())],
         nat(),
@@ -1273,7 +1274,7 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
         "a loop through the largest offset a level holds was called satisfiable: {verdicts:?}",
     );
 
-    let short = module(
+    let short = definitions(
         2,
         vec![bounded(raised(&first, u32::MAX - 1), second.clone())],
         Term::type_at(second.clone()),
@@ -1289,7 +1290,7 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
 
     assert_eq!(
         fixture_verdicts(
-            &module(
+            &definitions(
                 1,
                 vec![bounded(first.clone(), raised(&first, u32::MAX))],
                 nat(),
@@ -1305,7 +1306,7 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
 
     assert_eq!(
         fixture_verdicts(
-            &module(
+            &definitions(
                 2,
                 vec![bounded(raised(&first, u32::MAX), second.clone())],
                 Term::type_at(second),

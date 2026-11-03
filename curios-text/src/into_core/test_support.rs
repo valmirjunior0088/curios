@@ -201,7 +201,7 @@ pub(super) fn run(src: &str) -> curios_core::Term {
     )
     .unwrap();
 
-    program.entry.body
+    program.entrypoint.body
 }
 
 /// What `src` lowers to as a suite reads it: each definition's name, type and body in the module's order, beside the entry's body.
@@ -213,20 +213,20 @@ pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
     )
     .unwrap();
     let definitions = program
-        .module
+        .definitions
         .items
         .iter()
         .flat_map(curios_core::Item::definitions)
         .map(|definition| (definition.name, definition.type_, definition.body))
         .collect();
 
-    (definitions, program.entry.body)
+    (definitions, program.entrypoint.body)
 }
 
 /// A definition as [`lowered`] reads it: its name, its type and its body.
 pub(super) type Lowered = (curios_core::Global, curios_core::Term, curios_core::Term);
 
-pub(super) fn lowered_module(src: &str) -> curios_core::Module {
+pub(super) fn lowered_definitions(src: &str) -> curios_core::Definitions {
     let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
@@ -234,13 +234,13 @@ pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     )
     .unwrap();
 
-    program.module
+    program.definitions
 }
 
 /// The members of the one item `src` lowers to, where it is a recursive group whose bodies name no declaration but its own members: `None` where it is anything else.
 pub(super) fn closed_group(src: &str) -> Option<Vec<String>> {
-    let module = lowered_module(src);
-    let [curios_core::Item::Rec(group)] = &module.items.iter().collect::<Vec<_>>()[..] else {
+    let definitions = lowered_definitions(src);
+    let [curios_core::Item::Rec(group)] = &definitions.items.iter().collect::<Vec<_>>()[..] else {
         return None;
     };
     let definitions = group.definitions();
@@ -280,18 +280,18 @@ fn elaborate_program(
         syntax(),
     )
     .unwrap();
-    let (module, entry) = curios_elab::elaborate_and_zonk_program(
+    let (definitions, entry) = curios_elab::elaborate_and_zonk_program(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         established,
-        &program.module,
+        &program.definitions,
         &minted,
-        curios_elab::Tail::Entry(&program.entry),
+        curios_elab::Tail::Entry(&program.entrypoint),
     )
     .unwrap();
 
     curios_core::Program {
-        module,
-        entry: entry.expect("nothing here fails to parse, so nothing withholds the entry"),
+        definitions,
+        entrypoint: entry.expect("nothing here fails to parse, so nothing withholds the entry"),
     }
 }
 
@@ -301,8 +301,8 @@ pub(super) fn elaborate_source_program(src: &str) -> curios_core::Program {
 }
 
 /// The module `src` elaborates to with nothing in scope.
-pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
-    elaborate_source_program(src).module
+pub(super) fn elaborate_source(src: &str) -> curios_core::Definitions {
+    elaborate_source_program(src).definitions
 }
 
 pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
@@ -312,13 +312,13 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
         syntax(),
     )
     .unwrap();
-    assert!(lowered.module.items.len() >= 2);
+    assert!(lowered.definitions.items.len() >= 2);
 
-    let mut lowered_prefix = lowered.module.clone();
+    let mut lowered_prefix = lowered.definitions.clone();
     lowered_prefix.items = lowered_prefix.items.iter().take(1).cloned().collect();
     lowered_prefix.witnesses.clear();
     lowered_prefix.tests.clear();
-    let prelude = curios_elab::elaborate_and_zonk_module(
+    let prelude = curios_elab::elaborate_and_zonk_definitions(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
         &minted,
@@ -386,8 +386,8 @@ pub(super) fn write_module(base: &Path, path: &str, source: &str) {
     fs::write(path, source).unwrap();
 }
 
-pub(super) fn universe_parameters(module: &curios_core::Module, name: &str) -> usize {
-    module
+pub(super) fn universe_parameters(definitions: &curios_core::Definitions, name: &str) -> usize {
+    definitions
         .items
         .iter()
         .find_map(|item| match item {

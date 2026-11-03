@@ -132,7 +132,7 @@ fn infer_on_an_unborn_hole_cannot_infer() {
 #[test]
 fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     let mut context = context();
-    // Mirror `elaborate_module_suffix`: written ids live below the lowering's count, so the stand-in type metavariable minted here cannot collide with the goal's.
+    // Mirror `elaborate_definitions_suffix`: written ids live below the lowering's count, so the stand-in type metavariable minted here cannot collide with the goal's.
     let mut seeded = Minted::default();
     seeded.entry = Mints {
         metavariables: 1,

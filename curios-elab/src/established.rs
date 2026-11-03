@@ -13,7 +13,7 @@ use {
     crate::DefinedGroup,
     curios_common::Qualifier,
     curios_core::{
-        ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
+        ConceptDecl, Definitions, Global, InductDecl, Item, Place, Places, RecGroup, RecItem,
         StructDecl, WitnessKey,
     },
     std::{
@@ -32,7 +32,7 @@ enum Placed<'a> {
 /// One unit in scope, answering for its names.
 #[derive(Debug)]
 struct Standing<'a> {
-    module: &'a Module,
+    definitions: &'a Definitions,
     places: Placed<'a>,
     /// Which of its items this unit answers for, where it is a baseline ([`Answering`]). `None` for a unit in scope, which answers for every name it holds.
     answering: Option<RefCell<Answering>>,
@@ -89,7 +89,7 @@ impl<'a> Standing<'a> {
 
     /// The group the item at `item` is.
     fn group(&self, item: usize) -> &'a RecItem {
-        match &self.module.items[item] {
+        match &self.definitions.items[item] {
             Item::Rec(rec) => rec,
             Item::Let(_) => unreachable!("a member's place is a group's"),
         }
@@ -103,7 +103,7 @@ impl<'a> Standing<'a> {
         let place = self.places().place(name)?;
         match place {
             Place::Let(_) => {
-                let Item::Let(definition) = &self.module.items[place.item()] else {
+                let Item::Let(definition) = &self.definitions.items[place.item()] else {
                     unreachable!("a definition's place is a definition's");
                 };
 
@@ -141,34 +141,34 @@ impl<'a> Standing<'a> {
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&'a InductDecl> {
-        self.module
+        self.definitions
             .induct_decl(self.places(), name)
             .filter(|_| self.answers(name))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&'a StructDecl> {
-        self.module
+        self.definitions
             .struct_decl(self.places(), name)
             .filter(|_| self.answers(name))
     }
 
     fn concept(&self, name: &Global) -> Option<&'a ConceptDecl> {
-        self.module
+        self.definitions
             .concept(self.places(), name)
             .filter(|_| self.answers(name))
     }
 
     /// The witnesses this unit answers for, in the order of their names: by concept, then by key.
     fn witnesses(&self) -> impl Iterator<Item = &'a Global> + '_ {
-        self.module
+        self.definitions
             .witnesses
             .iter()
             .filter(|name| self.answers(name))
     }
 
-    /// The first witness this unit answers for at `(concept, key)` ([`Module::witnesses_at`]).
+    /// The first witness this unit answers for at `(concept, key)` ([`Definitions::witnesses_at`]).
     fn witness(&self, concept: &Qualifier, key: &WitnessKey) -> Option<Global> {
-        self.module
+        self.definitions
             .witnesses_at(concept, key)
             .find(|name| self.answers(name))
             .copied()
@@ -176,7 +176,7 @@ impl<'a> Standing<'a> {
 
     /// Each group this unit answers for, with its members' names in member order and the context its declaration states.
     fn groups(&self) -> impl Iterator<Item = DefinedGroup> + '_ {
-        let items = &self.module.items;
+        let items = &self.definitions.items;
 
         items
             .places()
@@ -199,7 +199,7 @@ impl<'a> Standing<'a> {
     }
 
     fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        let names = member_names(self.group(self.places().group(self.module, group)?));
+        let names = member_names(self.group(self.places().group(self.definitions, group)?));
 
         names.iter().all(|name| self.answers(name)).then_some(names)
     }
@@ -219,7 +219,7 @@ pub struct Established<'a> {
     /// The units already elaborated, in dependency order, and last, where a unit is compiled over one, the baseline whose declarations it keeps. Empty for a from-scratch elaboration, where the unit defines every name it mentions.
     units: Vec<Standing<'a>>,
     /// The units in scope, in dependency order: never the baseline, which is the unit being compiled.
-    modules: Vec<&'a Module>,
+    modules: Vec<&'a Definitions>,
     /// Whether any unit in scope is other than the one the baseline was compiled after.
     moved: bool,
 }
@@ -231,13 +231,13 @@ impl<'a> Established<'a> {
     }
 
     /// Everything `modules` established, in dependency order, as scope: each read by places made here, for a module no unit holds.
-    pub fn over(modules: &[&'a Module]) -> Self {
+    pub fn over(modules: &[&'a Definitions]) -> Self {
         Self {
             units: modules
                 .iter()
-                .map(|module| Standing {
-                    module,
-                    places: Placed::Made(Places::of(module)),
+                .map(|definitions| Standing {
+                    definitions,
+                    places: Placed::Made(Places::of(definitions)),
                     answering: None,
                     moved: false,
                     fixed: false,
@@ -249,19 +249,19 @@ impl<'a> Established<'a> {
     }
 
     /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it.
-    pub fn placed(units: &[(&'a Module, &'a Places)]) -> Self {
+    pub fn placed(units: &[(&'a Definitions, &'a Places)]) -> Self {
         Self {
             units: units
                 .iter()
-                .map(|(module, places)| Standing {
-                    module,
+                .map(|(definitions, places)| Standing {
+                    definitions,
                     places: Placed::Kept(places),
                     answering: None,
                     moved: false,
                     fixed: false,
                 })
                 .collect(),
-            modules: units.iter().map(|(module, _)| *module).collect(),
+            modules: units.iter().map(|(definitions, _)| *definitions).collect(),
             moved: false,
         }
     }
@@ -300,9 +300,9 @@ impl<'a> Established<'a> {
     }
 
     /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
-    pub fn keeping(mut self, baseline: &'a Module, places: &'a Places) -> Self {
+    pub fn keeping(mut self, baseline: &'a Definitions, places: &'a Places) -> Self {
         self.units.push(Standing {
-            module: baseline,
+            definitions: baseline,
             places: Placed::Kept(places),
             answering: Some(RefCell::new(Answering::Kept(HashSet::new()))),
             moved: false,
@@ -337,7 +337,7 @@ impl<'a> Established<'a> {
     }
 
     /// The modules in scope, in dependency order.
-    pub fn modules(&self) -> &[&'a Module] {
+    pub fn definitions(&self) -> &[&'a Definitions] {
         &self.modules
     }
 
@@ -370,7 +370,7 @@ impl<'a> Established<'a> {
             return Ok(None);
         };
 
-        part_digest(unit.module, unit.places(), question)
+        part_digest(unit.definitions, unit.places(), question)
     }
 
     /// Refuse a scope two of whose units declare a witness at one concept and one key.

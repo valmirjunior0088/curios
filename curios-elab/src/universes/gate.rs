@@ -6,8 +6,8 @@ mod tests;
 use {
     crate::{Error, universe_context_validate},
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, Entrypoint, Global, InductDecl, Item, Minted, Module,
-        Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
+        Bound, ConceptDecl, DefinitionKind, Definitions, Entrypoint, Global, InductDecl, Item,
+        Minted, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
         rewrite_universe_levels, universe_metas,
     },
     std::{
@@ -141,12 +141,12 @@ struct Schemes {
 
 impl Schemes {
     /// The counts `items`, some of `module`'s, are held to: those of every name they reach, read where `places` says `module` holds each.
-    fn among(module: &Module, places: &Places, items: &[&Item]) -> Self {
-        let (mut definitions, mut inducts, mut structs) =
+    fn among(definitions: &Definitions, places: &Places, items: &[&Item]) -> Self {
+        let (mut lets, mut inducts, mut structs) =
             (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
-        for name in items.iter().flat_map(|item| module.reaches(item)) {
+        for name in items.iter().flat_map(|item| definitions.reaches(item)) {
             if let Some(place) = places.place(&name) {
-                let count = match (place, &module.items[place.item()]) {
+                let count = match (place, &definitions.items[place.item()]) {
                     (Place::Let(_), Item::Let(definition)) => {
                         definition.universe_context.parameter_count
                     }
@@ -155,32 +155,32 @@ impl Schemes {
                         unreachable!("a member's place is a group's")
                     }
                 };
-                definitions.insert(name, count);
+                lets.insert(name, count);
             }
-            if let Some(declaration) = module.induct_decl(places, &name) {
+            if let Some(declaration) = definitions.induct_decl(places, &name) {
                 inducts.insert(name, declaration.universe_context.parameter_count);
             }
-            if let Some(declaration) = module.struct_decl(places, &name) {
+            if let Some(declaration) = definitions.struct_decl(places, &name) {
                 structs.insert(name, declaration.universe_context.parameter_count);
             }
         }
 
         Self {
-            definitions: Rc::new(definitions),
+            definitions: Rc::new(lets),
             inducts: Rc::new(inducts),
             structs: Rc::new(structs),
         }
     }
 
-    fn of(module: &Module) -> Self {
+    fn of(definitions: &Definitions) -> Self {
         Self {
             definitions: Rc::new(
-                definition_schemes(module)
+                definition_schemes(definitions)
                     .map(|(name, _, context)| (name, context.parameter_count))
                     .collect(),
             ),
             inducts: Rc::new(
-                module
+                definitions
                     .induct_decls()
                     .iter()
                     .map(|(name, declaration)| {
@@ -189,7 +189,7 @@ impl Schemes {
                     .collect(),
             ),
             structs: Rc::new(
-                module
+                definitions
                     .struct_decls()
                     .iter()
                     .map(|(name, declaration)| {
@@ -207,9 +207,9 @@ impl Schemes {
 
 /// Each name `module` defines, with how it was introduced and the universe context it is generalized under: a definition's own, a group member's its group's. Read off what an item states of its members, so no group is opened to ask.
 fn definition_schemes(
-    module: &Module,
+    definitions: &Definitions,
 ) -> impl Iterator<Item = (Global, &DefinitionKind, &UniverseContext)> {
-    module.items.iter().flat_map(|item| match item {
+    definitions.items.iter().flat_map(|item| match item {
         Item::Let(definition) => vec![(
             definition.name,
             &definition.kind,
@@ -235,12 +235,12 @@ fn scheme_in<'a>(item: &'a Item, name: &Global) -> Option<&'a UniverseContext> {
     }
 }
 
-fn validate_module_instance_arities(
-    module: &Module,
+fn validate_definitions_instance_arities(
+    definitions: &Definitions,
     places: &Places,
     items: &[&Item],
 ) -> Result<(), Error> {
-    let schemes = Schemes::among(module, places, items);
+    let schemes = Schemes::among(definitions, places, items);
     macro_rules! validate {
         ($value:expr, $owner:expr $(,)?) => {
             schemes.validate($value, $owner)
@@ -313,7 +313,7 @@ fn validate_module_instance_arities(
         match &definition.kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
                 let owner = Global::Authored(*owner);
-                let Some(declaration) = module.induct_decl(places, &owner) else {
+                let Some(declaration) = definitions.induct_decl(places, &owner) else {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {shown} names missing owner {}",
                         owner.faithful()
@@ -328,7 +328,7 @@ fn validate_module_instance_arities(
             }
             DefinitionKind::ConceptMethod { owner } => {
                 let owner = Global::Authored(*owner);
-                if module.concept(places, &owner).is_none() {
+                if definitions.concept(places, &owner).is_none() {
                     return Err(Error::UniverseInvariant(format!(
                         "concept method {shown} names missing owner {}",
                         owner.faithful()
@@ -375,17 +375,17 @@ fn entries_of<'a>(
 }
 
 /// Hold every universe `module` states to the scheme it is stated under: each definition's and registry entry's context, the levels its terms mention, and each instance's arity against the scheme of the name it instantiates.
-pub fn validate_universes(module: &Module) -> Result<(), Error> {
+pub fn validate_universes(definitions: &Definitions) -> Result<(), Error> {
     validate_universes_in(
-        module,
-        &Places::of(module),
-        &module.items.iter().collect::<Vec<_>>(),
+        definitions,
+        &Places::of(definitions),
+        &definitions.items.iter().collect::<Vec<_>>(),
     )
 }
 
 /// [`validate_universes`] for `items`, some of `module`'s, each held to the schemes `module` declares where `places` says it holds each name: what a unit compiled over a baseline validates of what it made again, every other item having been validated where the baseline was compiled.
 pub fn validate_universes_in(
-    module: &Module,
+    definitions: &Definitions,
     places: &Places,
     items: &[&Item],
 ) -> Result<(), Error> {
@@ -480,13 +480,16 @@ pub fn validate_universes_in(
             &format!("concept {shown} parameters"),
         )?;
     }
-    validate_module_instance_arities(module, places, items)?;
+    validate_definitions_instance_arities(definitions, places, items)?;
     Ok(())
 }
 
 /// [`validate_universes`] for a program's entry: its body and the type it states are under no scheme, and every instance in them is held to the one `module` declares for the name it instantiates.
-pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(), Error> {
-    let schemes = Schemes::of(module);
+pub fn validate_entry_universes(
+    definitions: &Definitions,
+    entry: &Entrypoint,
+) -> Result<(), Error> {
+    let schemes = Schemes::of(definitions);
     validate_bound_universes(&entry.body, 0, "module body")?;
     schemes.validate(&entry.body, "module body")?;
     if let Some(type_) = &entry.type_ {
@@ -497,7 +500,10 @@ pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(
 }
 
 /// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from a lowered definition or registry entry must have a seed among those of the declaration it was lowered from, which the lowering fills from index zero for each.
-pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Result<(), Error> {
+pub fn validate_lowered_universe_seeds(
+    definitions: &Definitions,
+    minted: &Minted,
+) -> Result<(), Error> {
     let mut metas: BTreeMap<Global, BTreeSet<UniverseMetaId>> = BTreeMap::new();
     macro_rules! collect {
         ($name:expr, $value:expr) => {
@@ -508,7 +514,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Resu
         };
     }
 
-    for item in &module.items {
+    for item in &definitions.items {
         for definition in item.definitions() {
             collect!(definition.name, &definition.type_);
             collect!(definition.name, &definition.body);
@@ -519,18 +525,18 @@ pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Resu
             }
         }
     }
-    for (name, declaration) in &module.induct_decls() {
+    for (name, declaration) in &definitions.induct_decls() {
         collect!(*name, &declaration.arity);
         collect!(*name, &declaration.result_sort);
         for constructor in declaration.signatures() {
             collect!(*name, &constructor.telescope);
         }
     }
-    for (name, declaration) in &module.struct_decls() {
+    for (name, declaration) in &definitions.struct_decls() {
         collect!(*name, &declaration.arity);
         collect!(*name, &declaration.result_sort);
     }
-    for (name, concept) in &module.concepts() {
+    for (name, concept) in &definitions.concepts() {
         collect!(*name, &concept.params);
     }
 

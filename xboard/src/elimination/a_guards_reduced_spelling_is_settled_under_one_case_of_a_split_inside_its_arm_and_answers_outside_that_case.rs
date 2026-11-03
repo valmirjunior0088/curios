@@ -2,8 +2,8 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, Nominal, Scope,
-        Telescope, Term, UniverseContext, Universes,
+        Atom, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Nominal,
+        Scope, Telescope, Term, UniverseContext, Universes,
     },
     curios_text::SYNTAX,
 };
@@ -122,7 +122,7 @@ const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_UNITS: &str = r#"
 /// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `g : (Bool) -> Bool`, `b : Bool`, `p : Read(b)`, `guard : Holds(read)` and `chosen : Holds(b)`, with `read` standing for `match p at Read(b) : (_, _) => Bool | mk(x) => g(x) end` and every match at `Holds(g(false))`: `match read | false => match guard end | true => match b | false => match chosen end | true => qed end end`, closed at the identity, `true`, `Read/mk(true)` and two `qed`.
 ///
 /// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`. The match fired on the type `p` was assumed at, so `read` named `p` and `g` and not `b`: the `false` arm of the split re-types `p` at `Read(false)`, where `read` was `g(false)`, and a stuck form met while that arm is typed settled the equation's reduced spelling there, as `g(false)`, which the equation rightly answers `true` under that case. The settled spelling stays with the equation when the arm is left, so in the `true` arm, where `read` is `g(true)`, `g(false)` was answered `true` as well, and at the identity what the `qed` proved is `Holds(false)`. The match now fires on the instance it states, `Read(b)`, so `read` is `g(b)` wherever it stands and names `b`: the spelling is settled as `g(b)` under either case, and the `qed` in the `true` arm is refused at `Holds(g(false))`.
-fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
+fn a_guard_settled_under_one_case_of_a_split() -> (Definitions, Term) {
     let family = Global::Authored(Qualifier::from(["Read"]));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
     let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
@@ -150,9 +150,9 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
         variances: Vec::new(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
@@ -225,7 +225,7 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
     let identity = Term::func([(same, bool_type())], Term::free_var(&same));
 
     (
-        module,
+        definitions,
         Term::apply(
             forged,
             [
@@ -242,7 +242,7 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
 /// `induct Two : Prop | a | b end`, and over `c : Bool`, `h : (F(c)) -> Nat`, `k : (Nat) -> Bool`, `p, q : F(c)` and `guard : Holds(read)`, with `F(c)` standing for `match c : (_) => Type | false => Nat | true => Two end`, a proposition in one arm of a match into `Type`, and `read` for `match h(p) == h(q) : (_) => Bool | false => k(1) | true => k(0) end`: `match read : (_) => Holds(k(0)) | false => match guard end | true => let w : True = match c : (_) => True | false => qed | true => let u : Holds(k(0)) = qed; qed end; qed end`, closed at `false`, the identity, `(n) => n == 1`, `0`, `1` and `qed`.
 ///
 /// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, was checked at a `Holds(k(0))` that still answered `True`, and at `false`, where `read` is `k(1)`, what it proved is `Holds(false)`. The kernel now refuses `F(c)` where its `true` arm is typed, a proposition where the motive wants a type.
-fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
+fn a_guard_settled_where_its_operands_are_proofs() -> (Definitions, Term) {
     let two = Global::Authored(Qualifier::from(["Two"]));
 
     let declaration = InductDecl {
@@ -264,26 +264,26 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
         variances: Vec::new(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![declared(two, Nominal::Inductive(declaration))].into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
-    a_guard_settled_where_its_operands_are_one(module, &|| {
+    a_guard_settled_where_its_operands_are_one(definitions, &|| {
         Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new())
     })
 }
 
 /// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion holds `h(p)` and `h(q)` one term there as it does at a proposition. The guard names `p` and `q`, whose type names `c`, so the split's arm restates it and settles it there, and the `qed` after the split is refused at `Holds(k(0))`.
-fn a_guard_settled_where_its_operands_are_units() -> (Module, Term) {
-    a_guard_settled_where_its_operands_are_one(Module::default(), &Term::tuple_type_unit)
+fn a_guard_settled_where_its_operands_are_units() -> (Definitions, Term) {
+    a_guard_settled_where_its_operands_are_one(Definitions::default(), &Term::tuple_type_unit)
 }
 
 /// The term both of those close with, over `module`, with `single` the type `F(c)` is at `true`.
 fn a_guard_settled_where_its_operands_are_one(
-    module: Module,
+    definitions: Definitions,
     single: &dyn Fn() -> Term,
-) -> (Module, Term) {
+) -> (Definitions, Term) {
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
     let nat_type = || Term::intrinsic(Intrinsic::NatType);
     let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
@@ -382,7 +382,7 @@ fn a_guard_settled_where_its_operands_are_one(
     );
 
     (
-        module,
+        definitions,
         Term::apply(
             forged,
             [literal(false), identity, is_one, nat(0), nat(1), qed()],

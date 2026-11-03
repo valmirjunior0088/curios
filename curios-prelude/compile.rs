@@ -4,10 +4,11 @@
 
 use {
     crate::{std_source, sys_source},
-    curios_cert::{Globals, Rechecked, certify_module},
+    curios_cert::{Globals, Rechecked, certify_definitions},
     curios_common::{Qualifier, Report, Source, digest},
     curios_core::{
-        Anchors, Certification, Global, Item, Module, Sharing, Zonked, validate_stored_identities,
+        Anchors, Certification, Definitions, Global, Item, Sharing, Zonked,
+        validate_stored_identities,
     },
     curios_document::Documentation,
     curios_elab::{
@@ -98,8 +99,8 @@ fn documented(
 /// What a refusal says of `module`, a root's lowered or elaborated module, as `format` renders it, spelled against the roots before it: each one's lexicon is made here, where a root is refused, since a build that refuses stops.
 fn reported(
     format: impl FnOnce(&Reading<'_>) -> String,
-    module: &Module,
-    predecessors: &[&Module],
+    definitions: &Definitions,
+    predecessors: &[&Definitions],
     anchors: &Anchors,
 ) -> String {
     let lexicons = predecessors
@@ -108,7 +109,7 @@ fn reported(
         .collect::<Vec<_>>();
 
     format(&Reading {
-        module,
+        definitions,
         kept: None,
         scope: &lexicons.iter().collect::<Vec<_>>(),
         syntax: &SYNTAX,
@@ -205,7 +206,7 @@ fn unit(
 /// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
 fn certified(
     root: &str,
-    core: &Module,
+    core: &Definitions,
     predecessors: &[&Unit],
     anchors: &Anchors,
 ) -> (Certification, ErasedUnit) {
@@ -228,7 +229,7 @@ fn certified(
             certification,
         },
         mut kernel,
-    ) = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+    ) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
 
     if let Some(verdict) = refusals.first() {
         // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
@@ -359,10 +360,10 @@ fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
 /// Check every registered syntax target against the lowered prelude, over the **union** of its roots.
 ///
 /// The union rather than each root in turn, because the registry spans them: `/sys` holds the intrinsic preconditions and `/std` everything the compiler emits by name, so either half alone would report the other's slots as absent.
-fn validate_syntax_targets(modules: &[&curios_core::Module]) {
+fn validate_syntax_targets(modules: &[&curios_core::Definitions]) {
     let names = modules
         .iter()
-        .flat_map(|module| module.items.iter())
+        .flat_map(|definitions| definitions.items.iter())
         .flat_map(Item::declared_names)
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -385,8 +386,8 @@ fn validate_syntax_targets(modules: &[&curios_core::Module]) {
         let field = target.field;
         let concept = modules
             .iter()
-            .find_map(|module| {
-                module
+            .find_map(|definitions| {
+                definitions
                     .concepts()
                     .get(&Global::Authored(target.concept.qualifier()))
                     .copied()

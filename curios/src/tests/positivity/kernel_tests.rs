@@ -4,9 +4,9 @@ use {
     curios_cert::{Error, Verdict},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Definition, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Item, Many,
-        Module, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm, Telescope,
-        Term, UniverseContext, Universes, Zonked,
+        Definition, Definitions, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic,
+        Item, Many, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseContext, Universes, Zonked,
     },
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude},
     curios_text::SYNTAX,
@@ -160,10 +160,10 @@ fn curried(list: impl Fn(Term) -> Term, build: impl Fn(Term) -> Term) -> Term {
 }
 
 /// What the kernel says of `module` closed with `body` at `False`.
-fn verdicts(module: Module, body: Term) -> Vec<Verdict> {
+fn verdicts(definitions: Definitions, body: Term) -> Vec<Verdict> {
     let program = Program {
-        module,
-        entry: Entrypoint {
+        definitions,
+        entrypoint: Entrypoint {
             body,
             type_: Some(false_type()),
         },
@@ -187,16 +187,16 @@ fn only_bad_is_refused_as_not_positive(verdicts: &[Verdict]) -> bool {
 #[test]
 fn curry_through_a_list_is_refused_at_the_family_alone() {
     let fs = Free::local(960, Some("fs"));
-    let module = Module {
+    let definitions = Definitions {
         items: vec![family(
             (fs, Term::intrinsic(Intrinsic::ListType(element()))),
             |payload| payload,
         )]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
-    let verdicts = verdicts(module, curried(|payload| payload, |list| list));
+    let verdicts = verdicts(definitions, curried(|payload| payload, |list| list));
     assert!(
         only_bad_is_refused_as_not_positive(&verdicts),
         "{verdicts:?}"
@@ -240,16 +240,16 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
             polarities: Vec::new(),
             variances: Vec::new(),
         };
-        let module = Module {
+        let definitions = Definitions {
             items: vec![Item::Let(Box::new(Definition::former(
                 bad(),
                 Qualifier::default(),
                 Nominal::Struct(declaration),
             )))]
             .into(),
-            ..Module::default()
+            ..Definitions::default()
         };
-        let verdicts = verdicts(module, false_type());
+        let verdicts = verdicts(definitions, false_type());
 
         assert!(
             verdicts.iter().any(|verdict| verdict.name == Some(bad())

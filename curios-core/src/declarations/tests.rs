@@ -46,17 +46,17 @@ fn method(owner: &str, label: &str) -> Item {
     )
 }
 
-fn module(items: Vec<Item>) -> Module {
-    Module {
+fn definitions(items: Vec<Item>) -> Definitions {
+    Definitions {
         items: items.into(),
-        ..Module::default()
+        ..Definitions::default()
     }
 }
 
 /// A declaration is its written item with every item generated from it, wherever each stands: a concept's method wrappers written ahead of it, a family's constructors with another declaration between them. A name is found at its own item and in its declaration, and the declarations are read back in the order their written items stand.
 #[test]
 fn a_declaration_holds_its_written_item_and_what_was_generated_from_it() {
-    let declarations = Declarations::of(&module(vec![
+    let declarations = Declarations::of(&definitions(vec![
         method("Show", "show"),
         written(&["Show"]),
         written(&["List"]),
@@ -78,7 +78,7 @@ fn a_declaration_holds_its_written_item_and_what_was_generated_from_it() {
 /// Every declaration of `module`, by its written item's place, with its items and the names each declares: what two tables are compared by.
 fn read(
     declarations: &Declarations,
-    module: &Module,
+    definitions: &Definitions,
 ) -> Vec<(usize, Vec<usize>, Vec<Option<usize>>)> {
     declarations
         .each()
@@ -86,7 +86,7 @@ fn read(
             let items = declarations.items(declaration).to_vec();
             let found = items
                 .iter()
-                .flat_map(|item| module.items.names(*item))
+                .flat_map(|item| definitions.items.names(*item))
                 .map(|name| declarations.declaration(name))
                 .collect();
             (declaration, items, found)
@@ -97,7 +97,7 @@ fn read(
 /// Declarations revised by what a version of their module changed are those the version makes: a former replaced in place keeps its constructors, a constructor added joins its former, a declaration taken out takes its names with it.
 #[test]
 fn a_revised_table_is_the_one_its_version_makes() {
-    let earlier = module(vec![
+    let earlier = definitions(vec![
         written(&["List"]),
         constructor("List", "empty"),
         written(&["length"]),
@@ -140,7 +140,7 @@ fn a_revised_table_is_the_one_its_version_makes() {
 /// An item generated from a declaration the module does not hold is a declaration of its own.
 #[test]
 fn an_item_generated_from_a_declaration_the_module_does_not_hold_is_its_own() {
-    let declarations = Declarations::of(&module(vec![constructor("Elsewhere", "case")]));
+    let declarations = Declarations::of(&definitions(vec![constructor("Elsewhere", "case")]));
 
     assert_eq!(declarations.each().collect::<Vec<_>>(), [0]);
     assert_eq!(

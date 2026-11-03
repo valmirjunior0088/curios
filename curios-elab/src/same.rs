@@ -13,9 +13,9 @@ use {
     crate::{Parts, Question},
     curios_common::digest,
     curios_core::{
-        Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, Module,
-        Nominal, ParameterField, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
-        UniverseContext, Variance,
+        Bound, ConceptDecl, Definition, DefinitionKind, Definitions, InductDecl, Item,
+        MetaRenaming, Nominal, ParameterField, Place, Places, RecItem, Sharing, StructDecl,
+        Telescope, Term, UniverseContext, Variance,
     },
 };
 
@@ -147,7 +147,7 @@ impl Same {
 ///
 /// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is held by its inequalities, which is what its equality reads ([`UniverseContext::inequalities`]). Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
 pub fn part_digest(
-    module: &Module,
+    definitions: &Definitions,
     places: &Places,
     question: &Question,
 ) -> Result<Option<String>, String> {
@@ -155,7 +155,7 @@ pub fn part_digest(
         return Ok(None);
     };
 
-    item_part_digest(&module.items[place.item()], place, question)
+    item_part_digest(&definitions.items[place.item()], place, question)
 }
 
 /// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`: what a walk asks of an item it holds in hand, before any module places it.

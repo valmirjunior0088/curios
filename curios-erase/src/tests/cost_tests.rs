@@ -4,7 +4,7 @@ use {
     crate::eraser::test_support::*,
     crate::test_support::*,
     curios_analysis::test_support::*,
-    curios_cert::{Globals, certify_module},
+    curios_cert::{Globals, certify_definitions},
     curios_common::{Plicity, grown},
     curios_elab::DEFAULT_BUDGET,
 };
@@ -34,15 +34,15 @@ fn chain_cost(
             vec![definition("reads", function_type, function)],
             nat_lit(0),
         )
-        .module,
+        .definitions,
     );
     // On a grown stack, as every entry point erases: a chain this deep is walked a frame a level.
     grown(|| {
         let globals = Globals::default();
-        let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-        let places = curios_core::Places::of(unit.as_module());
+        let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let places = curios_core::Places::of(unit.as_definitions());
         kernel.read(|reader| {
-            erase_through(reader, unit.as_module(), &places).expect("the unit erases");
+            erase_through(reader, unit.as_definitions(), &places).expect("the unit erases");
 
             reader.consumed().units()
         })
@@ -206,9 +206,9 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
 /// An erasure that runs out of its budget is refused in erasure's words, at the term it was reading: the program was certified, and only erasing it stopped.
 #[test]
 fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
-    let unit = zonked(&module(Vec::new(), nat_lit(0)).module);
+    let unit = zonked(&module(Vec::new(), nat_lit(0)).definitions);
     let globals = Globals::default();
-    let (_, mut kernel) = certify_module(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     let sum = curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(nat_lit(2), nat_lit(3)));
     let error = kernel.read(|reader| {
         // The whole budget spent, as a reading that ran out of it leaves it.
@@ -221,7 +221,7 @@ fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
     });
     // Spelled as a report spells a unit's terms, the unit's own names by its lexicon.
     let spelling = curios_core::Spelling::default()
-        .with_lexicons(&unit.as_module().lexicon(), &[])
+        .with_lexicons(&unit.as_definitions().lexicon(), &[])
         .with_erased_universes();
 
     assert_eq!(

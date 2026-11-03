@@ -327,7 +327,7 @@ impl WitnessId {
 }
 
 impl fmt::Display for WitnessId {
-    /// Module-qualified, naming the module a reader would look in rather than the mount, then what it witnesses there.
+    /// Definitions-qualified, naming the module a reader would look in rather than the mount, then what it witnesses there.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WitnessId::Spelled {

@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    super::{Global, Items, Module},
+    super::{Definitions, Global, Items},
     curios_common::{Persistent, Sorted},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -27,8 +27,8 @@ pub struct Declarations {
 
 impl Declarations {
     /// The declarations `module`'s items make, each item's read off what its place declares: of a stored module, with nothing restored.
-    pub fn of(module: &Module) -> Self {
-        let items = &module.items;
+    pub fn of(definitions: &Definitions) -> Self {
+        let items = &definitions.items;
         let mut written = Persistent::<Global, usize>::new();
         for place in items.places() {
             if items.generated_from(place).is_none() {

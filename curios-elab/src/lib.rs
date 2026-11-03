@@ -1,12 +1,12 @@
-//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Module`) and `curios-anf` (which consumes the erased output of `curios_erase::erase_unit`). The kernel that independently re-checks what this crate accepts is `curios-cert`.
+//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Definitions`) and `curios-anf` (which consumes the erased output of `curios_erase::erase_unit`). The kernel that independently re-checks what this crate accepts is `curios-cert`.
 //!
-//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; erasure, `curios-erase`, strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
+//! The stage runs module-at-a-time: [`elaborate_and_zonk_definitions`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; erasure, `curios-erase`, strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
 //!
 //! # What this stage starts from
 //!
 //! A compilation unit is elaborated *against* what is already in scope, and that scope is not part of the unit. [`Established`] carries it for elaboration, as a view a context reads through to where its own stores miss — a name's type and body, a registry entry, the witness at a key, each by reference into the unit that holds it — and `curios_erase::Erasures` carries it for erasure, pairing the Core of each unit in scope and the record its certification filed with what its items erased to. `Established::nothing()` is a from-scratch elaboration, so one protocol serves both entry points instead of two implementations kept in agreement by reading.
 //!
-//! That they are types rather than a re-seeded context and two values passed apart is `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`'s decision; the lowered module carries only its own items.
+//! That they are types rather than a re-seeded context and two values passed apart is `documentation/design/compilation/a-unit-holds-its-own-definitions-and-the-prelude-is-an-environment.md`'s decision; the lowered module carries only its own items.
 //!
 //! `Type` is internally indexed by canonical algebraic `Level`s even though the surface term is nullary. Written levels and elaborator classifiers occupy distinct `UniverseMetaId`s, each carrying where it came from — a `Type` written in an input position is chosen, a use's instance level an occurrence, any other inferred; inequalities are solved transactionally with term metavariables, and declaration finalization settles each level by where it stands — one the signature holds where conversion compares it kept as the declaration's parameter, an occurrence nothing holds at its least value, a chosen level bounded only by one other chosen level at that level — before generalizing what is left into a closed `UniverseContext`. A written type therefore sits where its reduct does, which the kernel relies on when it types one as written (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Top-level and local definitions instantiate those contexts freshly, while every member of a recursive group shares one monomorphic instance internally. [`validate_universes`] is the closure and instance-arity gate on zonked Core. The Core-to-ANF boundary then projects through a validated universe-erased module, removing instances, contexts, and nominal vectors before any runtime representation is built.
 //!
@@ -86,8 +86,8 @@ pub use candidate::{Candidating, bytes_of, declaration_input, found, lowered_dig
 mod elaborate;
 use elaborate::*;
 pub use elaborate::{
-    FinalizedProgram, Recompile, Recompiled, Tail, elaborate_and_zonk_entry,
-    elaborate_and_zonk_entry_over, elaborate_and_zonk_module, elaborate_and_zonk_program,
+    FinalizedProgram, Recompile, Recompiled, Tail, elaborate_and_zonk_definitions,
+    elaborate_and_zonk_entry, elaborate_and_zonk_entry_over, elaborate_and_zonk_program,
     elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, elaborate_and_zonk_unit_over,
 };
 

@@ -105,7 +105,7 @@ fn a_declaration_lowers_the_same_whatever_is_written_before_it() {
         .unwrap();
         let name = curios_core::Global::Authored(Qualifier::from(["id"]));
         let item = program
-            .module
+            .definitions
             .items
             .iter()
             .find(|item| item.declared_names().contains(&&name))
@@ -145,8 +145,8 @@ fn cached_and_full_elaboration_have_identical_universe_transactions() {
 fn a_polymorphic_definition_instantiates_at_prop_and_type() {
     let program =
         elaborate_source_program("let id(@A : Type, x : A) -> A = x; (id(Prop), id(Type))");
-    let module = &program.module;
-    let definition = module
+    let definitions = &program.definitions;
+    let definition = definitions
         .items
         .iter()
         .find_map(|item| match item {
@@ -160,7 +160,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .unwrap();
     assert_eq!(definition.universe_context.parameter_count, 1);
 
-    let body = &program.entry.body;
+    let body = &program.entrypoint.body;
     let curios_core::Subterm::Tuple(tuple) = &**body else {
         panic!("the entrypoint is a tuple");
     };
@@ -188,7 +188,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
 
 #[test]
 fn inductive_constructor_ownership_is_explicit() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         r#"
         induct Result(A : Type, E : Type) : Type
         | success(A)
@@ -197,7 +197,7 @@ fn inductive_constructor_ownership_is_explicit() {
         Type
         "#,
     );
-    let schemes = module
+    let schemes = definitions
         .items
         .iter()
         .flat_map(|item| match item {
@@ -254,10 +254,10 @@ fn inductive_constructor_ownership_is_explicit() {
 /// `id` is applied at two different levels in one block, which a local universe scheme once served. Cumulativity carries it instead: `Prop : Type 0` and `Type 0 : Type 1`, so a single monomorphic `A : Type 1` accepts both, and the level order is linear so a sup always exists. The binding therefore carries no scheme of its own — universe polymorphism belongs to declarations, which are frozen into the prelude archive and re-instantiated by later programs.
 #[test]
 fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; (id(Prop), id(Type)); outer",
     );
-    let definition = module
+    let definition = definitions
         .items
         .iter()
         .find_map(|item| match item {
@@ -278,10 +278,10 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
 /// The same, one indirection further: `alias` has no annotation at all, so its type is inferred from `id` and then used at both levels.
 #[test]
 fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         "let outer : {Type, Type} = let id : (@A : Type, A) -> A = (x) => x; let alias = id; (alias(Prop), alias(Type)); outer",
     );
-    let definition = module
+    let definition = definitions
         .items
         .iter()
         .find_map(|item| match item {
@@ -302,20 +302,20 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
 /// A level a caller supplies stays a parameter: `@A : Type` puts the level in an argument position, so each occurrence chooses it.
 #[test]
 fn a_level_in_argument_position_stays_a_parameter() {
-    let module = elaborate_source("pub let pick(@A : Type, x : A) -> A = x; pick");
-    assert_eq!(universe_parameters(&module, "/pick"), 1);
+    let definitions = elaborate_source("pub let pick(@A : Type, x : A) -> A = x; pick");
+    assert_eq!(universe_parameters(&definitions, "/pick"), 1);
 }
 
 /// A level occurring *only* in the result is determined, not chosen: no occurrence of `Holds` can supply it, so generalizing would mint a parameter every use site has to instantiate for nothing. Minimizing it instead is what keeps a literal's per-byte constructor applications from each minting fresh levels — see `result_sort_only_metas`.
 #[test]
 fn a_level_only_in_the_result_is_minimized_away() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         "pub induct Unit : pub Type | only() end
          pub let Holds(x : Unit) -> Type = Unit;
          Holds",
     );
-    assert_eq!(universe_parameters(&module, "/Unit"), 0);
-    assert_eq!(universe_parameters(&module, "/Holds"), 0);
+    assert_eq!(universe_parameters(&definitions, "/Unit"), 0);
+    assert_eq!(universe_parameters(&definitions, "/Holds"), 0);
 }
 
 /// Superclass fields are anonymous positional slots: no namespace binding, no wrapper. Registering their empty labels would make a concept's *second* superclass collide with the first as an empty-named duplicate declaration, refusing the whole module at discovery.
@@ -363,24 +363,24 @@ fn an_operator_in_a_dependent_type_elaborates_after_its_witness_row() {
 /// A generated method wrapper belongs to *its concept's* universe context, not to one generalized from its own signature. The wrapper's type names only the levels its own field needs, yet it also carries `use w : C(…)` applied at all of the concept's; a level outside the wrapper's own generalized set would then have nothing to denote it.
 #[test]
 fn a_concept_method_wrapper_shares_its_concept_universe_context() {
-    let module = elaborate_source("pub concept C(A : Type) : pub Type { f(A) -> A, } C");
-    assert_eq!(universe_parameters(&module, "/C"), 1);
-    assert_eq!(universe_parameters(&module, "/C/f"), 1);
+    let definitions = elaborate_source("pub concept C(A : Type) : pub Type { f(A) -> A, } C");
+    assert_eq!(universe_parameters(&definitions, "/C"), 1);
+    assert_eq!(universe_parameters(&definitions, "/C/f"), 1);
 }
 
 /// The same rule where the concept's levels genuinely exceed any one wrapper's: `left` names `F`'s two levels and `right` `G`'s other two, so generalizing either alone comes out short. A method's own `@A` is its family's domain, so a concept over one family — a monad's `pure` and `bind` — names the same levels in every wrapper and could not tell the two contexts apart.
 #[test]
 fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         "pub concept M(F : (Type) -> Type, G : (Type) -> Type) : pub Type {
              left(@A : Type, value : A) -> F(A),
              right(@B : Type, value : B) -> G(B),
          } M",
     );
     // Four, against each wrapper's own two: the point of the test is lost if the concept ever stops outrunning its wrappers.
-    assert_eq!(universe_parameters(&module, "/M"), 4);
-    assert_eq!(universe_parameters(&module, "/M/left"), 4);
-    assert_eq!(universe_parameters(&module, "/M/right"), 4);
+    assert_eq!(universe_parameters(&definitions, "/M"), 4);
+    assert_eq!(universe_parameters(&definitions, "/M/left"), 4);
+    assert_eq!(universe_parameters(&definitions, "/M/right"), 4);
 }
 
 /// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq()(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.

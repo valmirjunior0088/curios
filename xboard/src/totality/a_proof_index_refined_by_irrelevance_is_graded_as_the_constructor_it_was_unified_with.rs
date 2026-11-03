@@ -2,8 +2,8 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Many, Module, Nominal, Scope, Telescope, Term,
-        UniverseContext,
+        Atom, Definitions, Free, Global, InductDecl, InductParam, Many, Nominal, Scope, Telescope,
+        Term, UniverseContext,
     },
 };
 
@@ -21,7 +21,7 @@ pub(super) const TICKET: Ticket = Ticket {
 /// `induct Wit : Prop | base() | w(inner : Wit) end`, `induct Q : (Wit) -> Prop | c(v : Wit) : (Wit/w(v)) end`, and `rec f : (w0 : Wit, q : Q(w0)) -> False = (w0, q) => match q : (_, _) => False | c(v) => f(v, q) end`, closed with `f(Wit/base(), Q/c(Wit/base()))`.
 ///
 /// The arm's inversion refines `w0` to `Wit/w(v)`, so the size context reads `v` below `w0`; but at a proposition `Wit/w(v)` is every proof of `Wit`, `q` is at `Q(v)` by irrelevance, and the call hands `f` the very `q` it matched, whose payload is `v` again.
-fn a_recursion_on_a_refined_proof_index() -> (Module, Term) {
+fn a_recursion_on_a_refined_proof_index() -> (Definitions, Term) {
     let wit = Global::Authored(Qualifier::from(["Wit"]));
     let family = Global::Authored(Qualifier::from(["Q"]));
     let wit_type = || Term::induct_type(wit, Vec::<Term>::new(), Vec::<Term>::new());
@@ -83,13 +83,13 @@ fn a_recursion_on_a_refined_proof_index() -> (Module, Term) {
         variances: Vec::new(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![
             declared(wit, Nominal::Inductive(wit_decl)),
             declared(family, Nominal::Inductive(q_decl)),
         ]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     let member = Free::local(983, Some("f"));
@@ -137,5 +137,5 @@ fn a_recursion_on_a_refined_proof_index() -> (Module, Term) {
         ),
     );
 
-    (module, proof_term)
+    (definitions, proof_term)
 }

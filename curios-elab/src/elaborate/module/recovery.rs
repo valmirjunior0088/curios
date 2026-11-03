@@ -1,6 +1,6 @@
 //! Per-item recovery: what a refused item leaves in the context and how it is taken back out, which items its refusal withholds, and how an attempt that read something unfinished is undone to be made again.
 //!
-//! **A refused item is undone and poisoned; an item that reaches a poisoned name is withheld, and reports nothing of its own.** Reaching is [`Module::reaches`]: by mention, by constructing a nominal type, through a registry entry, and — the one edge no lowered term shows — through a witness a refused or withheld declaration declares, which resolution meets as a poisoned key: the one its signature is spelled at, whether or not it registered. The withheld item's report would restate the refusal it depends on, and that is the kernel's precedent: a dependent of a refused declaration says nothing in `curios-cert`'s recheck either.
+//! **A refused item is undone and poisoned; an item that reaches a poisoned name is withheld, and reports nothing of its own.** Reaching is [`Definitions::reaches`]: by mention, by constructing a nominal type, through a registry entry, and — the one edge no lowered term shows — through a witness a refused or withheld declaration declares, which resolution meets as a poisoned key: the one its signature is spelled at, whether or not it registered. The withheld item's report would restate the refusal it depends on, and that is the kernel's precedent: a dependent of a refused declaration says nothing in `curios-cert`'s recheck either.
 //!
 //! **What is undone** is everything another item could read: the item's declarations, its registry entries, its witness-table entries (each key poisoned in its place), the parked work it raised, the terms it recorded for the erasure obligations, its universe constraints, and every speculative scope its unwinding left open. **What is left** is what nothing reads: term metavariables it minted, which only its own terms mention and no module walk reaches; the universe metas beside them; its totality verdict, which is recorded on the success path alone; and the caches, cleared wholesale as for a redefinition.
 //!
@@ -8,7 +8,7 @@
 
 use {
     crate::{Attempted, Context, Error, GoalSite},
-    curios_core::{Entrypoint, Global, Item, Module},
+    curios_core::{Definitions, Entrypoint, Global, Item},
     std::collections::{BTreeSet, HashMap},
 };
 
@@ -39,7 +39,7 @@ impl Poison {
     }
 
     /// Whether `item`, as lowered, declares or reaches a poisoned name — the test before it is elaborated. Free when nothing is poisoned, which is every run that refuses nothing.
-    pub fn reaches(&self, module: &Module, item: &Item) -> bool {
+    pub fn reaches(&self, definitions: &Definitions, item: &Item) -> bool {
         if self.names.is_empty() {
             return false;
         }
@@ -47,7 +47,7 @@ impl Poison {
         item.declared_names()
             .into_iter()
             .any(|name| self.names.contains(name))
-            || self.any(&module.reaches(item))
+            || self.any(&definitions.reaches(item))
     }
 
     /// Whether `name` itself is poisoned — asked of a test the tail would schedule, by name, because a test a predecessor unit declared is no item of this module to reach.
@@ -120,7 +120,7 @@ impl ItemMark {
     }
 
     /// Undo an attempt that read something unfinished: what [`ItemMark::undo`] takes back, with nothing poisoned and the declarations left as `module` seeded them, for the attempt to be made again.
-    pub fn void(self, context: &mut Context, module: &Module, declared: &[&Global]) {
+    pub fn void(self, context: &mut Context, definitions: &Definitions, declared: &[&Global]) {
         self.unwind(context);
         for name in declared {
             context.remove_witness(name);
@@ -130,7 +130,7 @@ impl ItemMark {
             context.forget(name);
         }
         // As `module` seeded them: the entry each lowered former carries.
-        let seeded = module
+        let seeded = definitions
             .nominals()
             .filter(|(name, _)| declared.contains(name));
         for (name, nominal) in seeded {

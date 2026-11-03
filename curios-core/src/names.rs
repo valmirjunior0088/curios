@@ -174,7 +174,7 @@ pub struct Mints {
 ///
 /// **Within the declaration, never across declarations.** Every counter starts at zero for each source declaration, and the items one declaration lowers to — a type former with its constructors, a concept with its method wrappers — share its identities, a written type copied into several of them being one level. So what a declaration's lowered form holds depends on nothing written before it, and neither does what its elaboration mints above it: an edit to one declaration renumbers no other. No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing another declaration or a predecessor minted can meet a declaration's walk.
 ///
-/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
+/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Definitions`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
 ///
 /// **By name, persistent**, so what a unit lowered over a baseline minted is the baseline's with the names of what it lowered again placed again; the names of one declaration share its entry.
 #[derive(Debug, Clone, Default, PartialEq)]

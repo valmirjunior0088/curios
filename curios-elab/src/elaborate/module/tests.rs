@@ -5,7 +5,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Module, Nat,
+        Definition, DefinitionKind, Definitions, Free, Global, InductDecl, Intrinsic, Item, Nat,
         Telescope, Term, Totality, UniverseContext, Universes, test_support::*,
     },
     std::{collections::BTreeSet, rc::Rc},
@@ -52,8 +52,8 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
     }))
 }
 
-fn module(items: Vec<Item>) -> Module {
-    Module {
+fn definitions(items: Vec<Item>) -> Definitions {
+    Definitions {
         items: items.into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -62,8 +62,8 @@ fn module(items: Vec<Item>) -> Module {
 }
 
 /// Every refusal one elaboration reports, rendered.
-fn refusals(context: &mut Context, module: &Module) -> Vec<String> {
-    match elaborate_and_zonk_module(context, module, &Rc::default()) {
+fn refusals(context: &mut Context, definitions: &Definitions) -> Vec<String> {
+    match elaborate_and_zonk_definitions(context, definitions, &Rc::default()) {
         Ok(_) => Vec::new(),
         Err(error) => error.each().map(Error::to_string).collect(),
     }
@@ -71,13 +71,13 @@ fn refusals(context: &mut Context, module: &Module) -> Vec<String> {
 
 #[test]
 fn two_independent_refusals_are_both_reported_in_item_order() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item("a", nat(), boolean(true)),
         let_item("b", nat(), nat_lit(1)),
         let_item("c", nat(), boolean(false)),
     ]);
 
-    let reports = refusals(&mut context(), &module);
+    let reports = refusals(&mut context(), &definitions);
 
     assert_eq!(reports.len(), 2, "{reports:?}");
     assert!(
@@ -92,14 +92,14 @@ fn two_independent_refusals_are_both_reported_in_item_order() {
 
 #[test]
 fn a_dependent_of_a_refused_item_is_withheld_and_reports_nothing() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item("a", nat(), boolean(true)),
         let_item("b", nat(), mention("a")),
         let_item("c", nat(), mention("b")),
         let_item("d", nat(), nat_lit(1)),
     ]);
 
-    let reports = refusals(&mut context(), &module);
+    let reports = refusals(&mut context(), &definitions);
 
     assert_eq!(reports.len(), 1, "{reports:?}");
     assert!(
@@ -113,13 +113,13 @@ fn a_dependent_of_a_refused_item_is_withheld_and_reports_nothing() {
 fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_start() {
     let mut context = context();
     context.set_broken(BTreeSet::from([nominal("a")]));
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item("a", nat(), nat_lit(1)),
         let_item("b", nat(), mention("a")),
         let_item("c", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
+    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
         .expect("nothing was refused");
 
     assert_eq!(
@@ -137,7 +137,7 @@ fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_s
 fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     let mut context = context();
     context.set_broken(BTreeSet::from([nominal("T")]));
-    let module = module(vec![let_item(
+    let definitions = definitions(vec![let_item(
         "T",
         Term::type_ground(),
         Term::induct_type(nominal("T"), Vec::<Term>::new(), Vec::<Term>::new()),
@@ -152,9 +152,9 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    let module = declaring(module, [(nominal("T"), entry)], [], []);
+    let definitions = declaring(definitions, [(nominal("T"), entry)], [], []);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
+    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
         .expect("nothing was refused");
 
     assert!(elaborated.items.is_empty());
@@ -165,12 +165,12 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
 /// An item elaborates after what it reads, wherever each was written, and is stored after it: the module is put in the one order its items are stored in.
 #[test]
 fn an_item_written_before_what_it_reads_elaborates_and_is_stored_after_it() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item("b", nat(), mention("a")),
         let_item("a", nat(), nat_lit(1)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context(), &module, &Rc::default())
+    let elaborated = elaborate_and_zonk_definitions(&mut context(), &definitions, &Rc::default())
         .expect("nothing was refused");
 
     assert_eq!(
@@ -186,14 +186,14 @@ fn an_item_written_before_what_it_reads_elaborates_and_is_stored_after_it() {
 /// Two items that read each other have no order to elaborate in: one report, at the first of them as written, naming both, and nothing from what reaches either.
 #[test]
 fn two_items_that_read_each_other_are_refused_as_one_cycle() {
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item("a", nat(), mention("b")),
         let_item("b", nat(), mention("a")),
         let_item("c", nat(), mention("a")),
         let_item("d", nat(), nat_lit(1)),
     ]);
 
-    let reports = refusals(&mut context(), &module);
+    let reports = refusals(&mut context(), &definitions);
 
     assert_eq!(reports.len(), 1, "{reports:?}");
     assert!(
@@ -205,9 +205,10 @@ fn two_items_that_read_each_other_are_refused_as_one_cycle() {
 #[test]
 fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     let mut context = context();
-    let module = module(vec![let_item("a", nat(), boolean(true))]);
+    let definitions = definitions(vec![let_item("a", nat(), boolean(true))]);
 
-    elaborate_and_zonk_module(&mut context, &module, &Rc::default()).expect_err("refused");
+    elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
+        .expect_err("refused");
 
     assert!(context.declared_type(&nominal("a")).is_none());
     assert_eq!(context.parked_len(), 0);
@@ -225,7 +226,7 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
         (proposition, Term::prop()),
         (proof, Term::free_var(&proposition)),
     ];
-    let module = module(vec![
+    let definitions = definitions(vec![
         let_item(
             "same",
             Term::func_type(binders.clone(), Term::free_var(&proposition)),
@@ -234,7 +235,7 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
         let_item("two", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
+    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
         .expect("nothing was refused");
 
     let marked = elaborated

@@ -1,4 +1,4 @@
-//! Lowering one unit's surface modules to a [`curios_core::Module`], over the units already lowered.
+//! Lowering one unit's surface modules to a [`curios_core::Definitions`], over the units already lowered.
 //!
 //! [`into_core_unit`] runs a unit through these passes, in order:
 //!
@@ -297,11 +297,11 @@ impl PathsCell {
     }
 }
 
-/// What a report spells a unit's own names by ([`curios_core::Lexicon`]), made where a report first asks and kept: whole, off the unit's lowered module, or as the lexicon of the unit it was lowered over revised at the names its lowering made or dropped ([`curios_core::Module::lexicon_over`]).
+/// What a report spells a unit's own names by ([`curios_core::Lexicon`]), made where a report first asks and kept: whole, off the unit's lowered module, or as the lexicon of the unit it was lowered over revised at the names its lowering made or dropped ([`curios_core::Definitions::lexicon_over`]).
 ///
 /// **Shared with the units lowered over it**, as a unit's paths are ([`PathsCell`]), so a session that reports at every keystroke over one baseline reads that baseline's declarations once. A cell holds the unit's items as the version they are, which shares them; a unit whose items are a vector of their own is read where its cell is made, since copying them would read them all.
 struct LexiconCell {
-    module: curios_core::Module,
+    module: curios_core::Definitions,
     places: curios_core::Places,
     /// What this lexicon revises: `None` for one made whole, and once it is made.
     earlier: RefCell<Option<LexiconRevising>>,
@@ -320,7 +320,7 @@ impl LexiconCell {
         let items = &unit.core().items;
         if !items.is_shared() {
             return Self {
-                module: curios_core::Module::default(),
+                module: curios_core::Definitions::default(),
                 places: curios_core::Places::default(),
                 earlier: RefCell::new(None),
                 made: OnceCell::from(Rc::new(unit.core().lexicon())),
@@ -328,9 +328,9 @@ impl LexiconCell {
         }
 
         Self {
-            module: curios_core::Module {
+            module: curios_core::Definitions {
                 items: items.clone(),
-                ..curios_core::Module::default()
+                ..curios_core::Definitions::default()
             },
             places: unit.places().clone(),
             earlier: RefCell::new(None),
@@ -342,7 +342,7 @@ impl LexiconCell {
     fn over(
         earlier: &Rc<LexiconCell>,
         names: BTreeSet<curios_core::Global>,
-        module: curios_core::Module,
+        definitions: curios_core::Definitions,
         places: curios_core::Places,
     ) -> Self {
         // An earlier cell that made nothing and revises another is passed over, its names taken with these.
@@ -358,7 +358,7 @@ impl LexiconCell {
         };
 
         Self {
-            module,
+            module: definitions,
             places,
             earlier: RefCell::new(Some(link)),
             made: OnceCell::new(),
@@ -609,7 +609,7 @@ pub struct PreparedText {
     ///
     /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
     #[archived_with(curios_core::WithoutItems)]
-    core: curios_core::Module,
+    core: curios_core::Definitions,
     /// Where the unit's lowered items hold each name it declares, made the first time something asks: what finds a declaration's lowered form by its name, and says what it is with nothing read.
     #[archived_with(curios_archive::Skip)]
     places: OnceCell<curios_core::Places>,
@@ -748,7 +748,7 @@ impl PreparedText {
     }
 
     /// The lowered module: what its elaboration reads, each item of a restored unit read out of its bytes where it is first asked for.
-    pub fn core(&self) -> &curios_core::Module {
+    pub fn core(&self) -> &curios_core::Definitions {
         &self.core
     }
 
@@ -1037,7 +1037,7 @@ impl PreparedText {
         self.paths_cell().paths()
     }
 
-    /// What a report spells this unit's own names by: its lowered module's lexicon ([`curios_core::Module::lexicon`]), made once for the unit, or revised of the unit it was lowered over.
+    /// What a report spells this unit's own names by: its lowered module's lexicon ([`curios_core::Definitions::lexicon`]), made once for the unit, or revised of the unit it was lowered over.
     pub fn lexicon(&self) -> Rc<curios_core::Lexicon> {
         self.lexicon_cell().lexicon()
     }
@@ -2624,7 +2624,7 @@ impl<'a> UnitSource<'a> {
 ///
 /// `predecessors` are in dependency order. Reads span them and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient rather than a copy.
 ///
-/// An entry source's final term is lowered too — a refusal in it is this lowering's — and handed back only by the entry's own spelling, [`into_core_with_prelude`]: a unit is a [`curios_core::Module`] alone.
+/// An entry source's final term is lowered too — a refusal in it is this lowering's — and handed back only by the entry's own spelling, [`into_core_with_prelude`]: a unit is a [`curios_core::Definitions`] alone.
 pub fn into_core_unit(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
@@ -3326,9 +3326,9 @@ fn into_core_unit_within(
         }
     }
 
-    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
+    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-unit-holds-its-own-definitions-and-the-prelude-is-an-environment.md`.
     //
-    // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Module::ordered`).
+    // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Definitions::ordered`).
     let made = flat_items
         .into_iter()
         .map(FlatItem::into_core)
@@ -3622,9 +3622,9 @@ fn into_core_unit_within(
             OnceCell::from(Rc::new(LexiconCell::over(
                 baseline.unit().lexicon_cell(),
                 revision.anew.union(&revision.dropped).copied().collect(),
-                curios_core::Module {
+                curios_core::Definitions {
                     items: items.clone(),
-                    ..curios_core::Module::default()
+                    ..curios_core::Definitions::default()
                 },
                 places
                     .get()
@@ -3650,7 +3650,7 @@ fn into_core_unit_within(
         bodies,
         by_text: texts,
         revision,
-        core: curios_core::Module {
+        core: curios_core::Definitions {
             items,
             mounts: own,
             witnesses,
@@ -3700,8 +3700,8 @@ pub fn into_core(
 
     Ok((
         curios_core::Program {
-            module: unit.core,
-            entry: entry.expect("an entry source's parse holds its final term"),
+            definitions: unit.core,
+            entrypoint: entry.expect("an entry source's parse holds its final term"),
         },
         unit.minted,
         unit.foreigns,
@@ -3922,8 +3922,8 @@ pub fn into_core_with_prelude(
 
     Ok(LoweredEntry {
         program: curios_core::Program {
-            module: unit.core,
-            entry: entry.expect("an entry source's parse holds its final term"),
+            definitions: unit.core,
+            entrypoint: entry.expect("an entry source's parse holds its final term"),
         },
         minted: unit.minted,
         foreigns: unit.foreigns,

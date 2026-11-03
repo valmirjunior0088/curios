@@ -16,7 +16,7 @@ fn an_unchanged_text_reuses_every_item() {
             "{name} was re-elaborated"
         );
     }
-    assert_modules_agree(baseline.core(), again.core());
+    assert_definitions_agree(baseline.core(), again.core());
     assert_stored_alike(&baseline, &again);
 }
 
@@ -34,7 +34,7 @@ fn an_edited_body_is_elaborated_again_and_what_read_its_signature_alone_is_reuse
         "a declaration that read the signature alone was elaborated again"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
@@ -108,7 +108,7 @@ pub let unrelated: Nat = 7;
         "a declaration that unfolded the edited body was reused"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
@@ -167,7 +167,7 @@ fn a_removed_item_is_gone_and_the_rest_is_reused() {
     assert_eq!(incremental.core().items.len(), 2);
     assert!(reuses_body(&baseline, &incremental, "double"));
     assert!(reuses_body(&baseline, &incremental, "twice"));
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
     assert!(
         incremental.certification() == unit_of(&edited).certification(),
@@ -211,7 +211,7 @@ pub let twice: Nat = double(2);
             "{name} was re-elaborated"
         );
     }
-    assert_modules_agree(unit_of(moved).core(), incremental.core());
+    assert_definitions_agree(unit_of(moved).core(), incremental.core());
     assert_stored_alike(&unit_of(moved), &incremental);
 }
 
@@ -247,7 +247,7 @@ pub let measured: Nat = Measured/measure(2);
         2,
         "the unit declares both witnesses"
     );
-    assert_modules_agree(unit_of(&inserted).core(), incremental.core());
+    assert_definitions_agree(unit_of(&inserted).core(), incremental.core());
     assert_stored_alike(&unit_of(&inserted), &incremental);
 }
 
@@ -275,7 +275,7 @@ pub let unrelated: Nat = 7;
         "an item constructing the struct was reused"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(unit_of(&sealed).core(), incremental.core());
+    assert_definitions_agree(unit_of(&sealed).core(), incremental.core());
     assert_stored_alike(&unit_of(&sealed), &incremental);
 }
 
@@ -311,7 +311,7 @@ pub let length(_chain: Chain) -> Nat = 0;
         reuses_body(&baseline, &incremental, "length"),
         "a declaration that read a former elaborated again to what it was was elaborated again"
     );
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
@@ -337,7 +337,7 @@ pub let unrelated: Nat = 7;
         "an item reading the struct was reused"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(unit_of(&hidden).core(), incremental.core());
+    assert_definitions_agree(unit_of(&hidden).core(), incremental.core());
     assert_stored_alike(&unit_of(&hidden), &incremental);
 }
 
@@ -371,7 +371,7 @@ pub let unrelated: Nat = 7;
         carried_variances(&incremental, "Held"),
         [Variance::Irrelevant, Variance::Invariant]
     );
-    assert_modules_agree(unit_of(&pinned).core(), incremental.core());
+    assert_definitions_agree(unit_of(&pinned).core(), incremental.core());
     assert_stored_alike(&unit_of(&pinned), &incremental);
 }
 
@@ -401,7 +401,7 @@ pub let unrelated: Nat = 7;
         "a declaration told no witness stood at a key was reused once one did"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
-    assert_modules_agree(unit_of(&witnessed).core(), incremental.core());
+    assert_definitions_agree(unit_of(&witnessed).core(), incremental.core());
     assert_stored_alike(&unit_of(&witnessed), &incremental);
 }
 
@@ -439,7 +439,7 @@ fn a_declaration_is_lowered_again_where_a_name_it_wrote_resolves_elsewhere() {
         keeps_lowered(&baseline, &incremental, "z"),
         "a declaration that read nothing the edit moved was lowered again"
     );
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
@@ -460,6 +460,6 @@ fn a_declaration_written_between_two_others_leaves_their_lowerings_kept() {
             "{name} was lowered again"
         );
     }
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }

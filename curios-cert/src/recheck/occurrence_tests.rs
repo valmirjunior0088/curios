@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
-        Item, Module, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
+        Atom, Definition, DefinitionKind, Definitions, Free, Func, FuncType, Global, InductParam,
+        Intrinsic, Item, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
         UniverseContext, Universes, test_support::*,
     },
     std::{
@@ -30,7 +30,7 @@ use {
 fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
     for (label, params, indices) in arity_cases() {
         let verdicts = fixture_verdicts(
-            &occurrence_module(params, indices),
+            &occurrence_definitions(params, indices),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -48,13 +48,13 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
 /// The control for the fixture above: one parameter and one index, as declared.
 #[test]
 fn an_occurrence_at_its_declared_arity_is_accepted() {
-    let module = occurrence_module(
+    let definitions = occurrence_definitions(
         vec![Term::intrinsic(Intrinsic::NatType)],
         vec![Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
     );
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -64,7 +64,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 ///
 /// [`an_occurrence_whose_arity_is_not_its_declarations_is_refused`] holds this for the two type formers, where `Sort::of` consults a declaration to answer for an occurrence. It does not reach the value forms: nothing calls `Sort::of` on a `Struct` or a `Variant`, so their carried parameter list needs a check of its own.
 ///
-/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is an `Error`, and `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
+/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is an `Error`, and `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
 ///
 /// A `Variant` instead opens with `open_params`, which is tolerant: too few parameters leaves the declaration's own parameter binders unopened, so they read as *payload* slots and the payload-arity check compares against the wrong number, and only a downstream conversion that happens to reject the short parameter list would refuse it — sound by coincidence rather than by any rule about the value.
 ///
@@ -73,8 +73,8 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 /// The control is [`a_nominal_value_at_its_declared_arity_is_accepted`], both forms at exactly the parameters they declare, which must keep passing: every constructor application and every record literal in every program is one.
 #[test]
 fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
-    for (label, module) in nominal_value_cases() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    for (label, definitions) in nominal_value_cases() {
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -92,7 +92,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
 
     assert_eq!(
         fixture_verdicts(
-            &struct_value_module(vec![nat.clone()]),
+            &struct_value_definitions(vec![nat.clone()]),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -102,7 +102,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
     );
     assert_eq!(
         fixture_verdicts(
-            &variant_value_module(vec![nat]),
+            &variant_value_definitions(vec![nat]),
             1_000_000,
             &Globals::default(),
             SYNTAX,
@@ -126,17 +126,17 @@ fn a_nominal_value_types_its_parameters() {
         [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
     );
 
-    for (label, module) in [
+    for (label, definitions) in [
         (
             "a record literal",
-            struct_value_module(vec![ill_typed.clone()]),
+            struct_value_definitions(vec![ill_typed.clone()]),
         ),
         (
             "a constructor application",
-            variant_value_module(vec![ill_typed]),
+            variant_value_definitions(vec![ill_typed]),
         ),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -151,7 +151,7 @@ fn a_nominal_value_types_its_parameters() {
 ///
 /// Reduction runs on a type position before typing has reached it, so the functions that walk it cannot rest on an invariant typing would establish.
 ///
-/// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda would **abort the walk**; it is stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
+/// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda would **abort the walk**; it is stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
 ///
 /// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm opens the head type's telescope at the arguments supplied, and each entry that remains is still under its own mark, so there is no vector beside the telescope to drift and this fixture keeps the lambda case alone.
 ///
@@ -162,8 +162,8 @@ fn a_nominal_value_types_its_parameters() {
 /// With the declared type typed rather than classified, `infer` refuses the lambda case as `Arity { expected: 2, actual: 1 }` — naming the defect — where reduction going stuck alone would leave a generic `Unclassified`. Both verdicts are accepted here, since which rule reaches the fault first is not what the fixture pins.
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
-    for (label, module) in unsaturated_cases() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    for (label, definitions) in unsaturated_cases() {
+        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -212,7 +212,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
         three,
     );
 
-    let module = Module {
+    let definitions = Definitions {
         mounts: Vec::new(),
         items: vec![former_def, held].into(),
         witnesses: BTreeSet::new(),
@@ -220,7 +220,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "a saturated application in a type position was refused",
     );
@@ -241,10 +241,10 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
 /// The control is [`a_saturated_application_in_a_type_position_is_accepted`] together with [`an_arm_matching_its_payload_still_reduces`]: a guard that merely stopped reducing would pass every witness here while breaking every program.
 #[test]
 fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
-    for (label, module) in unguarded_opener_cases() {
-        // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
+    for (label, definitions) in unguarded_opener_cases() {
+        // The demonstrated defect is the *abort*: `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = catch_unwind(AssertUnwindSafe(|| {
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX)
+            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX)
         }))
         .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
@@ -258,10 +258,10 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
 /// The control for the arm half: an arm binding exactly its constructor's payload still reduces, so the type position it computes is classified.
 #[test]
 fn an_arm_matching_its_payload_still_reduces() {
-    let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
+    let definitions = arm_definitions(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -307,8 +307,8 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new()),
     );
 
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: vec![held].into(),
             witnesses: BTreeSet::new(),
@@ -320,7 +320,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     );
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
     );
 }
@@ -354,8 +354,8 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         Term::tuple([Term::variant(equality_name, [true_type], "refl", [qed])]),
     );
 
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: vec![wrapped].into(),
             witnesses: BTreeSet::new(),
@@ -366,7 +366,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         [],
     );
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         !verdicts.is_empty(),
@@ -415,7 +415,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         body: Term::type_ground(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         mounts: Vec::new(),
         items: vec![Item::Let(Box::new(constructor))].into(),
         witnesses: BTreeSet::new(),
@@ -434,7 +434,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     assert_eq!(
-        refusal.format_with(&module, &[], &SYNTAX),
+        refusal.format_with(&definitions, &[], &SYNTAX),
         "expected `Nat`, found `Box(@Nat)`"
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.

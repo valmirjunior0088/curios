@@ -28,9 +28,9 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
 /// Mutation-checked against the environment's question: with an item's held name never asked after, the module is judged, and `shadowed` is refused where the walk writes it and no sooner.
 #[test]
 fn a_definition_differing_from_the_environments_is_refused() {
-    let module = shadowing_items();
+    let definitions = shadowing_items();
 
-    let alone = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let alone = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         alone
             .iter()
@@ -40,7 +40,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
     );
 
     let verdicts = fixture_verdicts(
-        &module,
+        &definitions,
         1_000_000,
         &already_judged(&judged_environment()).globals(),
         SYNTAX,
@@ -192,11 +192,11 @@ fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
 /// Mutation-checked against the environment's question: with a held name never asked after, the module is judged, and each name is refused where the walk writes it, once for each write.
 #[test]
 fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
-    let mut module = judged_environment();
-    module.items.push(reader());
+    let mut definitions = judged_environment();
+    definitions.items.push(reader());
 
     let rechecked = fixture_certified(
-        &module,
+        &definitions,
         1_000_000,
         &already_judged(&judged_environment()).globals(),
         SYNTAX,
@@ -229,16 +229,16 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
 /// Mutation-checked against the environment's question: with a held name never asked after, the definition is judged and refused where the walk writes it.
 #[test]
 fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
-    let module = definition_under_the_family();
+    let definitions = definition_under_the_family();
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the control stopped certifying: the definition is well typed standing alone",
     );
 
     let verdicts = fixture_verdicts(
-        &module,
+        &definitions,
         1_000_000,
         &already_judged(&judged_environment()).globals(),
         SYNTAX,
@@ -254,16 +254,16 @@ fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
 /// Mutation-checked against the environment's question: with an item's held name never asked after, the group is judged and refused where the walk writes its members, and no sooner.
 #[test]
 fn a_group_the_environment_holds_in_part_is_refused() {
-    let module = group_held_in_part();
+    let definitions = group_held_in_part();
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the control stopped certifying: the group is well formed standing alone",
     );
 
     let verdicts = fixture_verdicts(
-        &module,
+        &definitions,
         1_000_000,
         &already_judged(&judged_environment()).globals(),
         SYNTAX,
@@ -369,7 +369,7 @@ fn a_registry_entry_mounted_twice_is_a_construction_bug() {
 fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
     let alias = Global::Authored(Qualifier::from(["alias"]));
     let three = Global::Authored(Qualifier::from(["three"]));
-    let module = collision_module(
+    let definitions = collision_definitions(
         vec![authored(
             &three,
             Term::instance(alias, Universes::default()),
@@ -378,9 +378,14 @@ fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
         BTreeMap::new(),
     );
     let mounted = |unit: Vec<_>| {
-        let unit = collision_module(unit, BTreeMap::new());
+        let unit = collision_definitions(unit, BTreeMap::new());
 
-        fixture_verdicts(&module, 1_000_000, &already_judged(&unit).globals(), SYNTAX)
+        fixture_verdicts(
+            &definitions,
+            1_000_000,
+            &already_judged(&unit).globals(),
+            SYNTAX,
+        )
     };
     let nat = || Term::intrinsic(Intrinsic::NatType);
 
@@ -451,7 +456,7 @@ fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
         (right, alias_type()),
         (carried, at(&right)),
     ];
-    let module = collision_module(
+    let definitions = collision_definitions(
         vec![authored(
             &coerce,
             Term::func_type(parameters.clone(), at(&left)),
@@ -460,9 +465,14 @@ fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
         BTreeMap::from([(indexed, declaration)]),
     );
     let mounted = |item: Item| {
-        let unit = collision_module(vec![item], BTreeMap::new());
+        let unit = collision_definitions(vec![item], BTreeMap::new());
 
-        fixture_verdicts(&module, 1_000_000, &already_judged(&unit).globals(), SYNTAX)
+        fixture_verdicts(
+            &definitions,
+            1_000_000,
+            &already_judged(&unit).globals(),
+            SYNTAX,
+        )
     };
 
     assert_eq!(

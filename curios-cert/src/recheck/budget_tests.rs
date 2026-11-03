@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Module,
-        Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term, UniverseContext,
+        Atom, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Item,
+        Level, Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term, UniverseContext,
         UniverseParam, Universes, Variance, test_support::*,
     },
     std::collections::BTreeSet,
@@ -22,7 +22,7 @@ fn spent() -> Global {
 }
 
 /// `induct Good | c(x : Alias)` with `Alias : Type = Good`, beside `spent = 0` declared at `Spin : Type = rec s : Type = s`, which no budget converts to `Nat`.
-fn spent_item_beside_an_aliased_payload() -> Module {
+fn spent_item_beside_an_aliased_payload() -> Definitions {
     let alias = Global::Authored(Qualifier::from(["Alias"]));
     let spin = Global::Authored(Qualifier::from(["Spin"]));
     let s = Free::local(930, Some("s"));
@@ -53,7 +53,7 @@ fn spent_item_beside_an_aliased_payload() -> Module {
         variances: Vec::new(),
     };
 
-    Module {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             authored(
@@ -119,7 +119,7 @@ const COSTLY: usize = 20_000;
 const BETWEEN: u64 = 2_000;
 
 /// `induct Held.{u}: (i : Nat) -> Type u | hold() : (Count.{u}(Nat))` over `let Count.{u}(X : Type u) -> Nat = match unfolding | 0 => 0 | _ + 1; ih => ih end`. Typing the target reads `Count`'s type and never its value, and strict positivity reads no target; the variance walk reduces it, to see whether what is left still holds `u`, and that is the fold's every iteration.
-fn held_at_a_counted_index(unfolding: usize) -> Module {
+fn held_at_a_counted_index(unfolding: usize) -> Definitions {
     let level = || Level::param(UniverseParam(0));
     let scheme = || UniverseContext {
         parameter_count: 1,
@@ -181,7 +181,7 @@ fn held_at_a_counted_index(unfolding: usize) -> Module {
         variances: Vec::new(),
     };
 
-    Module {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             alias,

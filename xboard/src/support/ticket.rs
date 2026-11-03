@@ -2,7 +2,7 @@
 
 use {
     crate::{Date, Expected},
-    curios_core::{Module, Term},
+    curios_core::{Definitions, Term},
     std::fmt,
 };
 
@@ -55,7 +55,7 @@ pub(crate) enum Proof {
     /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the kernel over the module it built.
     Program(&'static str),
     /// A module built by hand and the term it closes with, put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
-    Module(fn() -> (Module, Term)),
+    Module(fn() -> (Definitions, Term)),
 }
 
 impl Proof {

@@ -330,7 +330,7 @@ fn no_term_of_the_prelude_names_a_type_former() {
         let roots = prelude.iter().map(|root| root.core()).collect::<Vec<_>>();
         let nominal = roots
             .iter()
-            .flat_map(|module| module.formers())
+            .flat_map(|definitions| definitions.formers())
             .map(|(name, _)| name)
             .collect::<BTreeSet<_>>();
         assert!(!nominal.is_empty(), "the prelude declares formers");
@@ -341,8 +341,8 @@ fn no_term_of_the_prelude_names_a_type_former() {
         };
 
         let mut named = Vec::new();
-        for module in &roots {
-            for item in module.items.iter() {
+        for definitions in &roots {
+            for item in definitions.items.iter() {
                 for definition in item.definitions() {
                     let mut mentioned = definition.mentions();
                     if let DefinitionKind::Nominal(entry) = &definition.kind {

@@ -2,7 +2,7 @@ use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nominal, Scope,
+        Atom, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nominal, Scope,
         Telescope, Term, UniverseContext, Universes,
     },
     curios_text::SYNTAX,
@@ -22,7 +22,7 @@ pub(super) const TICKET: Ticket = Ticket {
 /// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `b : Bool` and `p : Read(b)`, with `read` standing for `match p at Read(b) : (_, _) => Bool | mk(x) => x end`: `((w : True) => (k : Holds(read)) => k)(match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end)(qed)`, closed at `false` and `Read/mk(false)`.
 ///
 /// A match on a proposition whose indices pin its payload fired on the type its scrutinee was assumed at, so `read` was `b` wherever `p : Read(b)` and named `p` and not `b`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` was `true` and `Holds(read)` `True`, and the kernel remembered that reduct under `read`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local were cleared on the way out only where one was dropped. So the `qed` after the match was checked at a `Holds(read)` that still answered `True`, for every `b`, and at `false` what it proved is `Holds(false)`. A bracket that closes an arm's re-typing now clears them as the re-typing does; and the match states the instance it eliminates, so the arm's case is a substitution into it and what is remembered inside the arm is remembered of another term. After the arm `Holds(read)` is `Holds(b)`, which `qed` does not inhabit.
-fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
+fn a_reduct_read_under_an_arms_retyping() -> (Definitions, Term) {
     let family = Global::Authored(Qualifier::from(["Read"]));
     let bool_type = || Term::intrinsic(Intrinsic::BoolType);
     let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
@@ -50,9 +50,9 @@ fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
         variances: Vec::new(),
     };
 
-    let module = Module {
+    let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Module::default()
+        ..Definitions::default()
     };
 
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
@@ -113,7 +113,7 @@ fn a_reduct_read_under_an_arms_retyping() -> (Module, Term) {
     );
 
     (
-        module,
+        definitions,
         Term::apply(
             forged,
             [

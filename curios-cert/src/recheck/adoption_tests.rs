@@ -6,9 +6,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     curios_core::{
-        Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
-        Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
-        Universes, Variance,
+        Certification, Certified, Definition, Definitions, Entrypoint, Free, Global, Intrinsic,
+        Item, ItemRun, Level, Nat, Places, Program, ReadTable, Reads, Term, Totality,
+        UniverseParam, Universes, Variance,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -28,10 +28,10 @@ fn literal(n: usize) -> Term {
 }
 
 /// `alias : Type = <alias>`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => <returned>`, and `five : Nat = identity(5)`: `three` unfolds `alias`, and `five` types `identity` and unfolds nothing.
-fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
+fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definitions {
     let x = Free::local(10, Some("x"));
 
-    Module {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             authored(&global("alias"), Term::type_ground(), alias),
@@ -61,41 +61,45 @@ fn reading_module(alias: Term, returned: impl Fn(&Free) -> Term) -> Module {
 }
 
 /// The module every fixture here is an edit of: `alias` is `Nat` and `identity` returns its argument.
-fn written() -> Module {
-    reading_module(nat(), Term::free_var)
+fn written() -> Definitions {
+    reading_definitions(nat(), Term::free_var)
 }
 
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
-fn walked(module: &Module) -> Rechecked {
-    let rechecked = fixture_certified(module, BUDGET, &Globals::default(), SYNTAX);
+fn walked(definitions: &Definitions) -> Rechecked {
+    let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);
     assert_eq!(rechecked.verdicts, Vec::new());
 
     rechecked
 }
 
 /// `module` walked over `baseline` as `certification` records it.
-fn walked_over(module: &Module, baseline: &Module, certification: &Certification) -> Rechecked {
-    walked_among(module, baseline, certification, None)
+fn walked_over(
+    definitions: &Definitions,
+    baseline: &Definitions,
+    certification: &Certification,
+) -> Rechecked {
+    walked_among(definitions, baseline, certification, None)
 }
 
 /// [`walked_over`], taking what it can from what `store` holds.
 fn walked_among(
-    module: &Module,
-    baseline: &Module,
+    definitions: &Definitions,
+    baseline: &Definitions,
     certification: &Certification,
     store: Option<&dyn Candidates>,
 ) -> Rechecked {
-    let (places, now) = (Places::of(baseline), Places::of(module));
+    let (places, now) = (Places::of(baseline), Places::of(definitions));
     let globals = Globals::default();
 
     super::verdicts_into(
         &mut Kernel::new(BUDGET, SYNTAX),
-        module,
+        definitions,
         None,
         &globals,
         Some(super::Over {
             baseline: Baseline {
-                module: baseline,
+                definitions: baseline,
                 places: &places,
                 certification,
             },
@@ -150,7 +154,7 @@ fn marked() -> Certification {
 fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_changed() {
     let baseline = written();
     let certification = walked(&baseline).certification;
-    let edited = reading_module(Term::intrinsic(Intrinsic::BoolType), Term::free_var);
+    let edited = reading_definitions(Term::intrinsic(Intrinsic::BoolType), Term::free_var);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -165,25 +169,25 @@ fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_chan
 }
 
 /// `module` with its items held as a version's: a module made of it by replacing an item shares every other item with it, as a recompile's module shares the ones it kept with its baseline's.
-fn versioned(module: Module) -> Module {
-    Module {
-        items: module.items.version(),
-        ..module
+fn versioned(definitions: Definitions) -> Definitions {
+    Definitions {
+        items: definitions.items.version(),
+        ..definitions
     }
 }
 
 /// `module`, a version, with the item declaring `name` replaced by `item`.
-fn replaced(module: &Module, name: &str, item: Item) -> Module {
-    let place = Places::of(module)
+fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definitions {
+    let place = Places::of(definitions)
         .place(&global(name))
         .expect("the module declares the name")
         .item();
-    let mut items = module.items.clone();
+    let mut items = definitions.items.clone();
     items.replace(place, item);
 
-    Module {
+    Definitions {
         items,
-        ..module.clone()
+        ..definitions.clone()
     }
 }
 
@@ -208,7 +212,7 @@ fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
     assert_eq!(rechecked.verdicts, Vec::new());
     assert_eq!(
         rechecked.certification,
-        walked(&reading_module(nat(), |_| literal(7))).certification
+        walked(&reading_definitions(nat(), |_| literal(7))).certification
     );
 }
 
@@ -235,7 +239,7 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
         &globals,
         Some(super::Over {
             baseline: Baseline {
-                module: &baseline,
+                definitions: &baseline,
                 places: &places,
                 certification: &certification,
             },
@@ -260,7 +264,10 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
 #[test]
 fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_it() {
     let (_, instance) = scheme_occurrences();
-    let baseline = versioned(universe_scheme_module(Some((scheme_context(), instance))));
+    let baseline = versioned(universe_scheme_definitions(Some((
+        scheme_context(),
+        instance,
+    ))));
     let certification = walked(&baseline).certification;
     let place = Places::of(&baseline)
         .place(&global("A"))
@@ -345,7 +352,7 @@ fn a_declaration_whose_terms_and_reads_stand_takes_the_baselines_verdict() {
 fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
     let baseline = written();
     let certification = marked();
-    let edited = reading_module(nat(), |_| literal(7));
+    let edited = reading_definitions(nat(), |_| literal(7));
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -362,7 +369,7 @@ fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
 }
 
 /// `base : (Nat) -> Nat`, total as `(n) => n` or partial as [`diverging_sink`]'s body, then `middle : Nat = base(1)`, `top : Nat = middle` and `apart : Nat = 7`, the two readers stamped as `base` is: `top` reads `middle` and nothing of `base`.
-fn chained_module(partial: bool) -> Module {
+fn chained_definitions(partial: bool) -> Definitions {
     let n = Free::local(10, Some("n"));
     let stamped = |name: &str, type_: Term, body: Term| match partial {
         true => authored_partial(&global(name), type_, body),
@@ -377,7 +384,7 @@ fn chained_module(partial: bool) -> Module {
         ),
     };
 
-    Module {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             base,
@@ -407,9 +414,9 @@ fn chained_module(partial: bool) -> Module {
 /// Mutation-checked: with the declarations that read a moved one marked and theirs not, `top` keeps the baseline's `Total`.
 #[test]
 fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_stand() {
-    let baseline = chained_module(false);
+    let baseline = chained_definitions(false);
     let certification = walked(&baseline).certification;
-    let edited = chained_module(true);
+    let edited = chained_definitions(true);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -447,7 +454,7 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
             ..certified
         }
     });
-    let edited = reading_module(applied_nat(), Term::free_var);
+    let edited = reading_definitions(applied_nat(), Term::free_var);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -488,8 +495,9 @@ fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
 #[test]
 fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
     let held = two_registry_entries(Varied::Nothing);
-    let family = |module: &Module| (*module.induct_decls()[&shadowed_family()]).clone();
-    let record = |module: &Module| (*module.struct_decls()[&kept_record()]).clone();
+    let family =
+        |definitions: &Definitions| (*definitions.induct_decls()[&shadowed_family()]).clone();
+    let record = |definitions: &Definitions| (*definitions.struct_decls()[&kept_record()]).clone();
 
     let stamped = two_registry_entries(Varied::Stamps);
     assert!(
@@ -533,14 +541,14 @@ fn qed() -> Term {
 }
 
 /// `lemma : Vouched = <proof>`, marked a proof where `marked`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`.
-fn proving_module(proof: Term, marked: bool) -> Module {
+fn proving_definitions(proof: Term, marked: bool) -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
     let lemma = match marked {
         true => authored_proof(&global("lemma"), vouched(), proof),
         false => authored(&global("lemma"), vouched(), proof),
     };
 
-    collision_module(
+    collision_definitions(
         vec![
             lemma,
             authored(&global("spare"), vouched(), qed()),
@@ -562,24 +570,26 @@ fn proved_otherwise() -> Term {
 }
 
 /// A record of `module` in which `corollary` asked for `lemma`'s body, marked as [`marked`] marks `five`: its reads hold `spare`'s signature, which no judgment of `corollary` reads, so a walk that hands the entry back adopted it.
-fn asking(module: &Module) -> Certification {
-    doctored(&walked(module).certification, "corollary", |certified| {
-        Certified {
+fn asking(definitions: &Definitions) -> Certification {
+    doctored(
+        &walked(definitions).certification,
+        "corollary",
+        |certified| Certified {
             reads: Reads {
                 signatures: BTreeSet::from([global("lemma"), global("spare")]),
                 bodies: BTreeSet::from([global("lemma")]),
             },
             ..certified
-        }
-    })
+        },
+    )
 }
 
 /// A proof unfolds to nothing whatever its body, so an edit to one moves no read of it: `lemma` proved another way is judged, and `corollary`, whose record says it asked for `lemma`'s body, takes the baseline's verdict.
 #[test]
 fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
-    let baseline = proving_module(qed(), true);
+    let baseline = proving_definitions(qed(), true);
     let certification = asking(&baseline);
-    let edited = proving_module(proved_otherwise(), true);
+    let edited = proving_definitions(proved_otherwise(), true);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -593,9 +603,9 @@ fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
 /// The control: left unmarked, the same statement unfolds to its body, and the same edit has `corollary` judged again.
 #[test]
 fn a_read_of_an_unmarked_proofs_body_falls_with_an_edit_to_it() {
-    let baseline = proving_module(qed(), false);
+    let baseline = proving_definitions(qed(), false);
     let certification = asking(&baseline);
-    let edited = proving_module(proved_otherwise(), false);
+    let edited = proving_definitions(proved_otherwise(), false);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -610,9 +620,9 @@ fn a_read_of_an_unmarked_proofs_body_falls_with_an_edit_to_it() {
 #[test]
 fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
     for marked in [true, false] {
-        let baseline = proving_module(qed(), marked);
+        let baseline = proving_definitions(qed(), marked);
         let certification = asking(&baseline);
-        let edited = proving_module(qed(), !marked);
+        let edited = proving_definitions(qed(), !marked);
 
         let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -630,8 +640,8 @@ struct Shelf(Vec<Object>);
 
 impl Shelf {
     /// A store holding `certification`, a walk of `module`, its records completed as a filing completes them.
-    fn filed(module: &Module, certification: &Certification) -> Self {
-        complete(module, &Places::of(module), certification);
+    fn filed(definitions: &Definitions, certification: &Certification) -> Self {
+        complete(definitions, &Places::of(definitions), certification);
         let records = certification.records().collect::<Vec<_>>();
         let run = ReadTable::run(
             records
@@ -676,7 +686,7 @@ impl Candidates for Shelf {
 }
 
 /// `written` with `five : Nat = identity(6)`: the edit both walks below are over.
-fn edited_five() -> Module {
+fn edited_five() -> Definitions {
     let five = authored(
         &global("five"),
         nat(),
@@ -718,7 +728,7 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     let store = Shelf::filed(&written(), &unfolding);
     let baseline = edited_five();
     let certification = walked(&baseline).certification;
-    let respelled = reading_module(applied_nat(), Term::free_var);
+    let respelled = reading_definitions(applied_nat(), Term::free_var);
 
     let rechecked = walked_among(&respelled, &baseline, &certification, Some(&store));
 
@@ -755,11 +765,11 @@ fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
 /// Three declarations: `H : Type 5 = h_body` stating its value sort `h_value_sort`, `G : Type 5 = H` stating `g_value_sort`, and `D : (G) -> G = (x) => x`, which reads `G`'s value sort through `Sort::of` when it checks its binder.
 ///
 /// `G`'s declared type is `Type 5` in every version, so cumulativity admits an `H` body at any level up to 5; what moves between versions is the *value* sort `H`'s body reaches, which `G` republishes.
-fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Module {
+fn value_sort_definitions(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Definitions {
     let x = Free::local(10, Some("x"));
     let g = Term::instance(global("G"), Universes::default());
 
-    Module {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             aliased(&global("H"), type_at(5), h_body, h_value_sort),
@@ -791,8 +801,8 @@ fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Mo
 #[test]
 fn a_reader_of_a_moved_value_sort_is_judged_again() {
     // The field, read off the digest: `G`'s part digests apart where its value sort is `Type 0` and where it is `Type 5`.
-    let low = value_sort_module(type_at(4), type_at(5), type_at(0));
-    let high = value_sort_module(type_at(4), type_at(5), type_at(5));
+    let low = value_sort_definitions(type_at(4), type_at(5), type_at(0));
+    let high = value_sort_definitions(type_at(4), type_at(5), type_at(5));
     let (low_places, high_places) = (Places::of(&low), Places::of(&high));
     for body in [false, true] {
         assert_ne!(
@@ -805,7 +815,7 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
     }
 
     // The walk: `G`'s republished value sort moves `Type 0` → `Type 5`, `D` reads it, and the edited module is compiled over the baseline.
-    let baseline = versioned(value_sort_module(nat(), type_at(0), type_at(0)));
+    let baseline = versioned(value_sort_definitions(nat(), type_at(0), type_at(0)));
     let certification = walked(&baseline).certification;
     let edited = replaced(
         &replaced(
@@ -822,7 +832,7 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
         ),
     );
 
-    let whole = walked(&value_sort_module(type_at(4), type_at(5), type_at(5)));
+    let whole = walked(&value_sort_definitions(type_at(4), type_at(5), type_at(5)));
     let over = walked_over(&edited, &baseline, &certification);
 
     assert_eq!(
@@ -850,7 +860,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
     let loop_name = global("loop");
     let absurd_name = global("Absurd");
     let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let mounted = collision_module(
+    let mounted = collision_definitions(
         vec![authored_proof(
             &loop_name,
             absurd.clone(),
@@ -859,13 +869,13 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
         BTreeMap::from([(absurd_name, proposition(Vec::new()))]),
     );
     let reader = || Program {
-        module: Module {
+        definitions: Definitions {
             mounts: Vec::new(),
             items: Vec::new().into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
-        entry: Entrypoint {
+        entrypoint: Entrypoint {
             body: Term::instance(loop_name, Universes::default()),
             type_: Some(absurd.clone()),
         },
@@ -915,8 +925,8 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
 /// Three aliases in a chain, each stating the sort its value inhabits: `H : Type 5 = h_body` stating `h`, `K : Type 5 = H` stating `k`, and `L : Type 5 = K` stating `l`.
 ///
 /// `hold_value_sort` checks `L`'s stated sort against `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so `L`'s verdict is a function of `K`'s `value_sort` and of nothing else about `K`.
-fn chained_sort_module(h_body: Term, h: Term, k: Term, l: Term) -> Module {
-    Module {
+fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
+    Definitions {
         mounts: Vec::new(),
         items: vec![
             aliased(&global("H"), type_at(5), h_body, h),
@@ -942,7 +952,7 @@ fn chained_sort_module(h_body: Term, h: Term, k: Term, l: Term) -> Module {
 /// A level alone does gate a verdict — `hold_value_sort` refuses a stated sort the value does not inhabit, reading the value's sort off a published one — so a walk over a baseline asks that reader's reads again and refuses it where a whole compile refuses it.
 #[test]
 fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it() {
-    let baseline = versioned(chained_sort_module(
+    let baseline = versioned(chained_sort_definitions(
         nat(),
         type_at(0),
         type_at(0),
@@ -988,13 +998,13 @@ fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_i
 }
 
 /// [`walked`] without its assertion, for a module a whole walk refuses.
-fn walked_whole(module: &Module) -> Rechecked {
-    fixture_certified(module, BUDGET, &Globals::default(), SYNTAX)
+fn walked_whole(definitions: &Definitions) -> Rechecked {
+    fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX)
 }
 
 /// `M : Type 5 = L` stating `sort`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
-fn later_alias(sort: Term) -> Module {
-    Module {
+fn later_alias(sort: Term) -> Definitions {
+    Definitions {
         mounts: Vec::new(),
         items: vec![aliased(
             &global("M"),
@@ -1013,7 +1023,7 @@ fn later_alias(sort: Term) -> Module {
 /// No walk files a unit whose own `L` states a sort its value denies — [`a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it`] holds that — so the unit in scope here is the honest one, and what is under test is the reading rather than the record.
 #[test]
 fn a_later_walk_refuses_an_alias_publishing_a_sort_its_value_does_not_inhabit() {
-    let honest = chained_sort_module(type_at(4), type_at(5), type_at(5), type_at(5));
+    let honest = chained_sort_definitions(type_at(4), type_at(5), type_at(5), type_at(5));
     let record = walked(&honest).certification;
     let scope = AlreadyJudged::with(&honest, &record);
     let verdicts =
@@ -1034,17 +1044,17 @@ fn a_later_walk_refuses_an_alias_publishing_a_sort_its_value_does_not_inhabit() 
 /// `Big : (T: Type 5) -> Type 6` with one constructor aiming at `L`, and `f(X: Type 0, b: Big(X)) -> X = match b at X | big() => Type 3 end`.
 ///
 /// The arm's index inversion would refine `X`, an outer binder assumed at `Type 0`, to `L`, and keeps the refinement only where the judge holds `Sort::of(L)` below `Type 0` (`curios_analysis::invert`'s `fits_its_variable`). Kept, the arm's goal is `L`, which `Type 3` inhabits; dropped, the goal stays the abstract `X` and nothing does.
-fn refining_module(body: Term) -> Module {
-    refining_module_at(Term::instance(global("L"), Universes::default()), body)
+fn refining_definitions(body: Term) -> Definitions {
+    refining_definitions_at(Term::instance(global("L"), Universes::default()), body)
 }
 
-/// [`refining_module_at`] with the variable assumed at `Type 0`.
-fn refining_module_at(target: Term, body: Term) -> Module {
-    refining_module_assumed(target, type_at(0), body)
+/// [`refining_definitions_at`] with the variable assumed at `Type 0`.
+fn refining_definitions_at(target: Term, body: Term) -> Definitions {
+    refining_definitions_assumed(target, type_at(0), body)
 }
 
-/// [`refining_module`] with `target` as the index the constructor aims at and `assumed` as the sort the outer variable is assumed at.
-fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
+/// [`refining_definitions`] with `target` as the index the constructor aims at and `assumed` as the sort the outer variable is assumed at.
+fn refining_definitions_assumed(target: Term, assumed: Term, body: Term) -> Definitions {
     use curios_core::{
         Atom, Cases, InductArm, InductDecl, InductParam, Many, Scope, Telescope, UniverseContext,
         test_support::*,
@@ -1090,7 +1100,7 @@ fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
     );
 
     declaring(
-        Module {
+        Definitions {
             mounts: Vec::new(),
             items: vec![item].into(),
             witnesses: BTreeSet::new(),
@@ -1105,19 +1115,20 @@ fn refining_module_assumed(target: Term, assumed: Term, body: Term) -> Module {
 /// The one gate that reads a published level and could admit a term — an index refinement the published sort makes `fits_its_variable` keep — reaches no closed term: the arm is behind a hypothesis the sort the variable is assumed at leaves uninhabited, and the arm's goal, which the publication cannot move, is the case's own target.
 #[test]
 fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
-    let honest = chained_sort_module(type_at(4), type_at(5), type_at(5), type_at(5));
+    let honest = chained_sort_definitions(type_at(4), type_at(5), type_at(5), type_at(5));
     let record = walked(&honest).certification;
     let scope = AlreadyJudged::with(&honest, &record);
-    let verdicts =
-        |module: Module| fixture_certified(&module, BUDGET, &scope.globals(), SYNTAX).verdicts;
+    let verdicts = |definitions: Definitions| {
+        fixture_certified(&definitions, BUDGET, &scope.globals(), SYNTAX).verdicts
+    };
 
     // The arm's body is typed, so what the goal is decides: a body the refined goal does not admit is refused.
-    let bogus = verdicts(refining_module(literal(0)));
+    let bogus = verdicts(refining_definitions(literal(0)));
     assert!(!bogus.is_empty(), "the arm's body is typed: {bogus:?}");
 
     // The refinement is kept: `Type 3` inhabits the refined goal.
     assert_eq!(
-        verdicts(refining_module(type_at(3))),
+        verdicts(refining_definitions(type_at(3))),
         Vec::new(),
         "the arm is admitted",
     );
@@ -1125,7 +1136,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
     // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `MatchResult::at` opens the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
     for assumed in [0, 1, 5] {
         assert_eq!(
-            walked_whole(&refining_module_assumed(
+            walked_whole(&refining_definitions_assumed(
                 type_at(4),
                 type_at(assumed),
                 type_at(3)
@@ -1135,7 +1146,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
             "the goal is the target with the variable assumed at Type {assumed}",
         );
         assert!(
-            !walked_whole(&refining_module_assumed(
+            !walked_whole(&refining_definitions_assumed(
                 type_at(4),
                 type_at(assumed),
                 literal(0)
@@ -1147,7 +1158,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
     }
 
     // The refusal that stops the route: the arm is reachable only through a value of the family at the target, and the target does not inhabit the sort the variable is assumed at, which `subsumes` decides off the declared type and not off any publication.
-    let applied = walked_whole(&applying_module()).verdicts;
+    let applied = walked_whole(&applying_definitions()).verdicts;
     assert!(
         applied
             .iter()
@@ -1157,10 +1168,10 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
     );
 }
 
-/// [`refining_module_at`]'s family and function, with `g : Type 4 = f(Type 4, Big/big())` beside them: the one call the arm is reachable through.
-fn applying_module() -> Module {
-    let module = refining_module_at(type_at(4), type_at(3));
-    let mut items = module.items.clone();
+/// [`refining_definitions_at`]'s family and function, with `g : Type 4 = f(Type 4, Big/big())` beside them: the one call the arm is reachable through.
+fn applying_definitions() -> Definitions {
+    let definitions = refining_definitions_at(type_at(4), type_at(3));
+    let mut items = definitions.items.clone();
     items.push(authored(
         &global("g"),
         type_at(4),
@@ -1173,7 +1184,10 @@ fn applying_module() -> Module {
         ),
     ));
 
-    Module { items, ..module }
+    Definitions {
+        items,
+        ..definitions
+    }
 }
 
 /// One question, one answer: the digest a stage outside the certifier asks a part by ([`part_digest`]) reads a unit's classification where the certifier's own ([`read_digest`]) reads one, off a record that covers its unit and nowhere else, as [`Globals::partial`] does.
@@ -1181,8 +1195,8 @@ fn applying_module() -> Module {
 fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
     use crate::*;
 
-    let module = written();
-    let places = Places::of(&module);
+    let definitions = written();
+    let places = Places::of(&definitions);
     // A record naming one of the unit's four definitions: it covers nothing, so a walk classifies the unit's items from their terms.
     let partial = Certification::of(
         [(
@@ -1197,14 +1211,15 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
         [],
     );
     assert!(
-        !partial.covers(&module),
+        !partial.covers(&definitions),
         "a record naming fewer definitions than its unit holds covers it",
     );
     let mut globals = Globals::default();
-    globals.mount(&module, &places, &partial);
+    globals.mount(&definitions, &places, &partial);
 
     let digest = |verdict| {
-        held_digest(&module, &places, &global("five"), verdict, false).expect("the part digests")
+        held_digest(&definitions, &places, &global("five"), verdict, false)
+            .expect("the part digests")
     };
     assert_eq!(
         read_digest(&globals, &global("five"), false).expect("the part digests"),
@@ -1212,14 +1227,15 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
         "the certifier's own digest reads the name as classified by no record",
     );
     assert_eq!(
-        part_digest(&module, &places, &partial, &global("five"), false).expect("the part digests"),
+        part_digest(&definitions, &places, &partial, &global("five"), false)
+            .expect("the part digests"),
         digest((false, None, None)),
         "and so does the digest a stage outside the certifier asks a part by",
     );
 }
 
 /// `induct Levelled.{u} : Type.{u + 1} | mk(x: Type.{u}) end`, whose entry carries `variances`: a payload's type mentions the level, so the walk computes it invariant.
-fn varied_family(variances: Vec<Variance>) -> Module {
+fn varied_family(variances: Vec<Variance>) -> Definitions {
     use curios_common::Plicity;
     use curios_core::{Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::*};
 
@@ -1250,7 +1266,7 @@ fn varied_family(variances: Vec<Variance>) -> Module {
         variances,
     };
     declaring(
-        Module {
+        Definitions {
             mounts: Vec::new(),
             items: Vec::new().into(),
             witnesses: BTreeSet::new(),
@@ -1295,7 +1311,7 @@ fn a_carried_variance_the_walk_denies_is_refused_where_the_item_is_judged_and_no
     );
 }
 
-/// `A.{u, v} : Type v = Type u` as a one-member group under `universe_context`, the scheme [`universe_scheme_module`] declares as a `let`: its body inhabits `Type (u + 1)`, so it fits the declared type only where the declaration assumes `u + 1 <= v`.
+/// `A.{u, v} : Type v = Type u` as a one-member group under `universe_context`, the scheme [`universe_scheme_definitions`] declares as a `let`: its body inhabits `Type (u + 1)`, so it fits the declared type only where the declaration assumes `u + 1 <= v`.
 fn grouped_scheme(universe_context: curios_core::UniverseContext) -> Item {
     use curios_core::{DefinitionKind, RecItem};
 
@@ -1321,9 +1337,9 @@ fn grouped_scheme(universe_context: curios_core::UniverseContext) -> Item {
 /// A group's universe context dropped: the terms are the baseline's, the context is not, and `Baseline::holds` reads a group by its members' terms, names and marks alone.
 #[test]
 fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_it() {
-    let baseline = versioned(Module {
+    let baseline = versioned(Definitions {
         items: vec![grouped_scheme(scheme_context())].into(),
-        ..Module::default()
+        ..Definitions::default()
     });
     let certification = walked(&baseline).certification;
     let edited = replaced(&baseline, "A", grouped_scheme(open_context()));
@@ -1760,16 +1776,16 @@ fn paradox_module() -> Program {
     );
 
     Program {
-        module: declaring(
-            Module {
+        definitions: declaring(
+            Definitions {
                 items: vec![paradox].into(),
-                ..Module::default()
+                ..Definitions::default()
             },
             BTreeMap::from([(false_name, proposition(Vec::new()))]),
             BTreeMap::from([(boxed_name, boxed_decl)]),
             [],
         ),
-        entry: Entrypoint {
+        entrypoint: Entrypoint {
             body: Term::instance(global("paradox"), Universes::default()),
             type_: Some(false_type()),
         },
@@ -1779,9 +1795,9 @@ fn paradox_module() -> Program {
 /// Hurkens' paradox through a group whose cumulativity a recompile dropped, the route `Baseline::holds` once opened: the walk over the baseline refuses the group as a walk over every declaration refuses it, so no unit is filed carrying a context no walk assumed, and the paradox read through the carrier the baseline's walk judged is refused by the instance that cumulativity does not discharge.
 #[test]
 fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
-    let baseline = versioned(Module {
+    let baseline = versioned(Definitions {
         items: vec![carrier_group(carrier_context())].into(),
-        ..Module::default()
+        ..Definitions::default()
     });
     let certification = walked(&baseline).certification;
     let offered = replaced(&baseline, "carrier", carrier_group(open_carrier_context()));

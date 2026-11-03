@@ -5,8 +5,8 @@ use {super::unit::erase_items, crate::*, curios_cert::Reader};
 /// `module`'s items erased through `reader` with nothing in scope and no baseline: the walk `erase_unit` runs inside the kernel's read, with the reader handed to the suite.
 pub fn erase_through(
     reader: &mut Reader,
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     places: &curios_core::Places,
 ) -> Result<ErasedUnit, Error> {
-    erase_items(reader, Erasures::nothing(), (module, places), None)
+    erase_items(reader, Erasures::nothing(), (definitions, places), None)
 }

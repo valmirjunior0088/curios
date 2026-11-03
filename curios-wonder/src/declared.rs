@@ -42,7 +42,7 @@ pub fn declared_tests(
                 .check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {})?
                 .verdict?;
 
-            declared_test_paths(&program.module)
+            declared_test_paths(&program.definitions)
         }
     };
 

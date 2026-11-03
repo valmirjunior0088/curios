@@ -9,11 +9,11 @@ use {
     },
     curios_common::recurse,
     curios_core::{
-        Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Entrypoint, Extent, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic, Item, Let,
-        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec, RecItem,
-        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
-        Variant, Visit, project_erased_universes,
+        Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
+        Extent, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic,
+        Item, Let, LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec,
+        RecItem, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Universes, Var, Variant, Visit, project_erased_universes,
     },
     std::{
         cell::RefCell,
@@ -827,7 +827,7 @@ pub fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error
 /// Zonk a program's entry — its body and the type it was judged at — and validate its universes against the schemes `module`, the program's zonked module, declares.
 pub fn zonk_entry(
     context: &Context,
-    module: &Module,
+    definitions: &Definitions,
     entry: &Entrypoint,
 ) -> Result<Entrypoint, Error> {
     let context = &Zonk::new(context);
@@ -839,7 +839,7 @@ pub fn zonk_entry(
             .map(|type_| context.zonk_term(type_))
             .transpose()?,
     };
-    validate_entry_universes(module, &entry)?;
+    validate_entry_universes(definitions, &entry)?;
     Ok(entry)
 }
 
@@ -849,7 +849,11 @@ pub type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
 /// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
 /// The walk covers what strict zonking covers, in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
-pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>) -> Vec<GoalSite> {
+pub fn goal_sites(
+    context: &Context,
+    definitions: &Definitions,
+    entry: Option<&Entrypoint>,
+) -> Vec<GoalSite> {
     /// The sites collected so far, shared into the scan closures.
     type GoalSites = Rc<RefCell<Vec<GoalSite>>>;
 
@@ -899,7 +903,7 @@ pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>
         );
         scan(&def.body, Some(&def.name), &goals, &seen_goals, &referenced);
     };
-    for item in &module.items {
+    for item in &definitions.items {
         match item {
             Item::Let(def) => scan_definition(def),
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
@@ -911,7 +915,7 @@ pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>
             scan(type_, None, &goals, &seen_goals, &referenced);
         }
     }
-    for induct_decl in module.induct_decls().values() {
+    for induct_decl in definitions.induct_decls().values() {
         scan(&induct_decl.arity, None, &goals, &seen_goals, &referenced);
         for (_, param) in &induct_decl.constructors {
             scan(&param.telescope, None, &goals, &seen_goals, &referenced);
@@ -924,7 +928,7 @@ pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>
             &referenced,
         );
     }
-    for struct_decl in module.struct_decls().values() {
+    for struct_decl in definitions.struct_decls().values() {
         scan(&struct_decl.arity, None, &goals, &seen_goals, &referenced);
         scan(
             &struct_decl.result_sort,
@@ -934,7 +938,7 @@ pub fn goal_sites(context: &Context, module: &Module, entry: Option<&Entrypoint>
             &referenced,
         );
     }
-    for concept in module.concepts().values() {
+    for concept in definitions.concepts().values() {
         scan(&concept.params, None, &goals, &seen_goals, &referenced);
     }
 

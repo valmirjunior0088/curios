@@ -171,7 +171,7 @@ fn project(
                 return Err(Error::unknown_declaration(*name));
             };
 
-            // The use-site module is the enclosing item's qualifier prefix (`Context::island`, set per item by `elaborate_module_suffix`). A private representation is transparent within its declaring module's subtree, so the check is containment, not equality: the declaring module and its descendants may open it, its ancestors and siblings may not.
+            // The use-site module is the enclosing item's qualifier prefix (`Context::island`, set per item by `elaborate_definitions_suffix`). A private representation is transparent within its declaring module's subtree, so the check is containment, not equality: the declaring module and its descendants may open it, its ancestors and siblings may not.
             if !struct_decl.rep_public
                 && context
                     .island()

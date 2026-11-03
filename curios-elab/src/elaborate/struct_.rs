@@ -218,7 +218,7 @@ pub fn elaborate_struct(
     let (struct_decl, universes) =
         instantiate_struct_decl(context, struct_decl, explicit_universes, occurrence)?;
 
-    // Construction privacy: a private-representation struct may be built only within its declaring module's subtree. Checked here (alongside projection privacy in `elaborate_proj`) via `island`, set per item by `elaborate_module_suffix`.
+    // Construction privacy: a private-representation struct may be built only within its declaring module's subtree. Checked here (alongside projection privacy in `elaborate_proj`) via `island`, set per item by `elaborate_definitions_suffix`.
     if !struct_decl.rep_public
         && context
             .island()

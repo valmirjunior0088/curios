@@ -1,6 +1,6 @@
 //! The Curios core language: the term representation both checkers build on.
 //!
-//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the intrinsic roster ([`Intrinsic`]) with its free-monoid spine algebra and its folds ([`reduce_intrinsic`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Module`], [`Program`], [`Item`], [`Definition`]), compiler names, and the printer.
+//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the intrinsic roster ([`Intrinsic`]) with its free-monoid spine algebra and its folds ([`reduce_intrinsic`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Definitions`], [`Program`], [`Item`], [`Definition`]), compiler names, and the printer.
 //!
 //! The judgments live on either side of it, as `README.md` states. `curios-analysis` holds the rules both checkers run and `curios-cert` the kernel that only one of them does — together, every rule that can admit a program — and `curios-elab` holds everything that makes the *surface language* work: elaboration, unification, zonking, witness resolution, erasure, and the universe *solver*. Both depend on this crate and never the reverse. A [`UniverseContext`] is data the elaborator's solver infers over and each checker decides the satisfiability of for itself, and [`Reducer`] is the seam between a fold's arithmetic and a checker's reduction strategy; both lines are `README.md`'s decisions.
 //!
@@ -26,8 +26,8 @@ pub use read_table::*;
 mod declarations;
 pub use declarations::*;
 
-mod module;
-pub use module::*;
+mod definitions;
+pub use definitions::*;
 
 mod places;
 pub use places::*;

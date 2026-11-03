@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::{Global, Item, Items, Module, RecGroup, RecItem, Term},
+    super::{Definitions, Global, Item, Items, RecGroup, RecItem, Term},
     curios_common::{Keyed, Persistent},
     std::{cell::OnceCell, collections::HashMap, rc::Rc},
 };
@@ -50,11 +50,11 @@ pub struct Places {
 
 impl Places {
     /// The places of `module`'s names: one for each definition and each member of a group, and nothing copied.
-    pub fn of(module: &Module) -> Self {
+    pub fn of(definitions: &Definitions) -> Self {
         let mut places = Self::default();
         // Asked of what each place declares, which a stored module knows without its item: placing a unit's names reads none of its declarations.
-        for place in module.items.places() {
-            places.place_item(&module.items, place);
+        for place in definitions.items.places() {
+            places.place_item(&definitions.items, place);
         }
 
         places
@@ -117,13 +117,13 @@ impl Places {
     }
 
     /// The item of `module` that is `group`, where it holds it.
-    pub fn group(&self, module: &Module, group: &RecGroup) -> Option<usize> {
+    pub fn group(&self, definitions: &Definitions, group: &RecGroup) -> Option<usize> {
         let groups = self.groups.get_or_init(|| {
-            module
+            definitions
                 .items
                 .places()
-                .filter(|place| module.items.is_group(*place))
-                .filter_map(|place| match &module.items[place] {
+                .filter(|place| definitions.items.is_group(*place))
+                .filter_map(|place| match &definitions.items[place] {
                     Item::Rec(rec) => Some((Keyed::new(rec.group.clone()), place)),
                     Item::Let(_) => None,
                 })

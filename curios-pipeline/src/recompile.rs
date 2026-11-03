@@ -9,9 +9,9 @@ use {
         Closing, CompileError, erasure_refusal, globals_after, kernel_refusal, lowering_refusal,
         with_broken,
     },
-    curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_module_over},
+    curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
-    curios_core::{Entrypoint, Module, Places, Zonked},
+    curios_core::{Definitions, Entrypoint, Places, Zonked},
     curios_elab::{
         Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
         elaborate_and_zonk_unit_over,
@@ -28,7 +28,7 @@ use {
 ///
 /// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
 ///
-/// **`candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_module_over`).
+/// **`candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_definitions_over`).
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -179,7 +179,7 @@ pub(crate) fn compile_lowered_over(
     };
     let (
         Recompiled {
-            module: core,
+            definitions: core,
             places,
             traces,
             readers,
@@ -219,7 +219,12 @@ pub(crate) fn compile_lowered_over(
         syntax,
     );
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
+        let refusal = kernel_refusal(
+            verdict,
+            core.as_definitions(),
+            &predecessors.lexicons(),
+            syntax,
+        );
         return Err(refuse(&lowered, refusal));
     }
     let certification = rechecked.certification;
@@ -249,7 +254,7 @@ pub(crate) fn compile_lowered_over(
     .map_err(|error| {
         let refusal = erasure_refusal(
             &error,
-            core.as_module(),
+            core.as_definitions(),
             &predecessors.lexicons(),
             &lowered,
             predecessors,
@@ -260,7 +265,7 @@ pub(crate) fn compile_lowered_over(
     })?;
 
     Ok((
-        Unit::new(lowered, core.into_module(), anf, traces, certification)
+        Unit::new(lowered, core.into_definitions(), anf, traces, certification)
             .reading(readers)
             .placing(Some(places)),
         entry,
@@ -271,7 +276,7 @@ pub(crate) fn compile_lowered_over(
 ///
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub(crate) fn recheck_over<'s>(
-    module: &Zonked<Module>,
+    definitions: &Zonked<Definitions>,
     places: &'s Places,
     budget: u64,
     globals: &'s Globals<'s>,
@@ -282,12 +287,12 @@ pub(crate) fn recheck_over<'s>(
     }: Over<'s>,
     syntax: &SyntaxRegistry,
 ) -> (Rechecked, Kernel<'s>) {
-    certify_module_over(
-        module,
+    certify_definitions_over(
+        definitions,
         budget,
         globals,
         Baseline {
-            module: baseline.core(),
+            definitions: baseline.core(),
             places: baseline.places(),
             certification: baseline.certification(),
         },

@@ -1,8 +1,8 @@
-//! The order a module's items are stored in: each item at its depth, one more than the deepest item of the module it reaches, and among items of one depth by its first name ([`Module::ordered`]), so every item after the items it reaches.
+//! The order a module's items are stored in: each item at its depth, one more than the deepest item of the module it reaches, and among items of one depth by its first name ([`Definitions::ordered`]), so every item after the items it reaches.
 //!
 //! **An item's place is a facet of what it reaches.** Its key, its depth with its name, is read off the keys of what it reaches, so a unit compiled over a baseline gives the order again from the items it made: each takes the depth what it reaches gives it, and an item whose depth moves passes the change on to the items that reach it, in increasing depth, stopping where a depth comes out as it was ([`Order::revised`]). Only an item whose key moved is placed again; every other stands where the baseline holds it.
 //!
-//! **What an item reaches is taken where it is made**, off its terms and the registry entries it declares ([`Module::reaches`]), and kept with the unit ([`Order`]), so no walk reads an item's terms to place it again.
+//! **What an item reaches is taken where it is made**, off its terms and the registry entries it declares ([`Definitions::reaches`]), and kept with the unit ([`Order`]), so no walk reads an item's terms to place it again.
 //!
 //! **Stored with each name written once.** An item reaches the few names its neighbours do, so the stored form holds a table of the names, each once, and each item holds places in it ([`OrderTable`]), as a unit's traces do.
 //!
@@ -12,7 +12,7 @@
 mod tests;
 
 use {
-    crate::{Arranged, Global, Item, Items, Module, Places},
+    crate::{Arranged, Definitions, Global, Item, Items, Places},
     curios_common::{Persistent, Sorted},
     std::{
         borrow::Borrow,
@@ -30,7 +30,7 @@ pub struct Reach {
     pub names: Vec<Global>,
 }
 
-/// Where each item of a module stands in the order it is stored in, by the item's first name: what it reaches and its depth ([`Reach`]). Made where a module is ordered whole ([`Module::in_order`]) and revised by a recompile ([`Order::revised`]); a unit keeps it in its elaborator's record.
+/// Where each item of a module stands in the order it is stored in, by the item's first name: what it reaches and its depth ([`Reach`]). Made where a module is ordered whole ([`Definitions::in_order`]) and revised by a recompile ([`Order::revised`]); a unit keeps it in its elaborator's record.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Order {
@@ -103,10 +103,10 @@ impl Order {
     ///
     /// **Given again from what was made.** Each item made takes the depth what it reaches gives it, and an item whose depth moves passes the change on to the items that reach it, in increasing depth, stopping where a depth comes out as it was. An item made at the key the baseline's item of its first name held stands where that one stood; an item made at another key, and a kept one whose depth moved, is placed after the item whose key comes before its own, in key order, and every other item stands where the baseline holds it, read no more than it was. Where no place is left between two items, the module's items are placed apart again in the order, and where it holds each name is left to be made.
     ///
-    /// `None` where an item made declares no name, the baseline holds an item this order does not place, an item taken out declares a name neither made nor dropped, a kept item reaches a name taken away, or the items reach one another: the module is then ordered whole ([`Module::in_order`]).
+    /// `None` where an item made declares no name, the baseline holds an item this order does not place, an item taken out declares a name neither made nor dropped, a kept item reaches a name taken away, or the items reach one another: the module is then ordered whole ([`Definitions::in_order`]).
     pub fn revised(
         &self,
-        baseline: &Module,
+        baseline: &Definitions,
         places: &Places,
         made: &[Item],
         dropped: &BTreeSet<Global>,
@@ -511,7 +511,7 @@ fn unread(
     }
 }
 
-impl Module {
+impl Definitions {
     /// This module with its items in the order a unit is stored in: each item at its depth, one more than the deepest item it [reaches](Self::reaches), and among items of one depth, the one whose first declared name is least.
     ///
     /// The order is a function of what the items declare and name, and of nowhere they were written: a unit holds the same module wherever its declarations sit in its sources, and whether it was compiled whole or over a baseline. It is given once, where a module is made, and every walk after that takes the items as they come: the certifier, which refuses a name an item reaches before it is defined, erasure, and a program's link.
@@ -521,7 +521,7 @@ impl Module {
         self.in_order().0
     }
 
-    /// [`Module::ordered`], with the order it puts the items in: what each reaches and its depth.
+    /// [`Definitions::ordered`], with the order it puts the items in: what each reaches and its depth.
     pub fn in_order(mut self) -> (Self, Order) {
         let items = mem::take(&mut self.items).into_iter().collect::<Vec<_>>();
         let count = items.len();

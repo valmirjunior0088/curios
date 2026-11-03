@@ -74,7 +74,7 @@ fn locates_a_duplicate_constructor_and_a_duplicate_concept_method() {
 // A superclass field is an anonymous positional slot, so two of them share the empty label and must not collide as a duplicate.
 #[test]
 fn accepts_two_superclass_fields() {
-    lowered_module(
+    lowered_definitions(
         r#"
         concept One(A : Type) : Type { one(x : A) -> Type }
         concept Two(A : Type) : Type { two(x : A) -> Type }
@@ -108,7 +108,7 @@ fn rejects_a_duplicate_struct_field() {
 // Positional fields have no label to collide, so a structure of like-typed slots stays legal.
 #[test]
 fn accepts_a_struct_of_positional_fields() {
-    lowered_module(
+    lowered_definitions(
         r#"
         struct P : Type { Type, Type }
         Type

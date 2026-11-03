@@ -700,7 +700,7 @@ impl Form {
 /// The four describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying kernel's, which holds these units mounted; what this adds is what the kernel does not hold — what kind of definition a name is, read off its item, how each name is bound, read off its erased form, and the record a part read of a unit is digested under.
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
-    cores: &'a [&'a curios_core::Module],
+    cores: &'a [&'a curios_core::Definitions],
     places: &'a [&'a curios_core::Places],
     certifications: &'a [&'a curios_core::Certification],
     erased: &'a [&'a ErasedUnit],
@@ -718,7 +718,7 @@ impl<'a> Erasures<'a> {
 
     /// The units `cores` were certified as, `places` says where each holds its names, `certifications` are the records of and `erased` the erased forms of, in dependency order.
     pub fn of(
-        cores: &'a [&'a curios_core::Module],
+        cores: &'a [&'a curios_core::Definitions],
         places: &'a [&'a curios_core::Places],
         certifications: &'a [&'a curios_core::Certification],
         erased: &'a [&'a ErasedUnit],
@@ -847,11 +847,11 @@ impl<'a> Erasures<'a> {
 
 /// The definition `module` declares under `name` by a `let`, where `places` says it holds one: what kind of definition it is and its body, which erasure reads of a constructor and of a concept method's wrapper, each a `let` of its own.
 pub(super) fn declared<'a>(
-    module: &'a curios_core::Module,
+    definitions: &'a curios_core::Definitions,
     places: &curios_core::Places,
     name: &curios_core::Global,
 ) -> Option<&'a curios_core::Definition> {
-    match &module.items[places.place(name)?.item()] {
+    match &definitions.items[places.place(name)?.item()] {
         curios_core::Item::Let(definition) if definition.name == *name => Some(definition),
         _ => None,
     }

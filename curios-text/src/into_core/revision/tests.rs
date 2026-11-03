@@ -165,7 +165,7 @@ fn same_unit(over: &PreparedText, whole: &PreparedText) {
         let spelling = curios_core::Spelling::default().with_lexicons(&lexicon, &[]);
         whole
             .core()
-            .module_symbols()
+            .symbols()
             .into_iter()
             .map(|name| {
                 (

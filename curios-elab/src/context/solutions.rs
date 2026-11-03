@@ -364,7 +364,7 @@ pub struct SolutionPrefix {
 pub struct Solutions {
     /// Metavariable records indexed by `Metavar::id` — monotonic facts about the program being elaborated, not lexically-scoped bindings.
     entries: Vec<Option<MetaEntry>>,
-    /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with the lowering's count, so core-minted ids sit strictly above `into_core`'s.
+    /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_definitions_suffix` with the lowering's count, so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetavarId>,
     /// Parked conversion constraints — frame-independent, like the entries.
     parked: Parked,

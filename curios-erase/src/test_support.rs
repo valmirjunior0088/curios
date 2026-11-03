@@ -9,7 +9,7 @@ use crate::*;
 #[cfg(test)]
 use {
     curios_analysis::test_support::*,
-    curios_cert::{Globals, certify_module, certify_program},
+    curios_cert::{Globals, certify_definitions, certify_program},
     curios_common::Qualifier,
     curios_core::Zonkable,
     curios_elab::DEFAULT_BUDGET,
@@ -18,21 +18,21 @@ use {
 
 /// The digest of every part of every declaration `module` holds where `places` keeps it, under the record `certification` its walk filed: each signature, body and kind, how an item naming each name reads `erased`'s forms of it, and those forms whole, each beside the name and part it is of. What a unit records of a read: a unit held in hand and the same unit restored from a store are read alike by a unit compiled over either only where these agree.
 pub fn part_digests(
-    module: &curios_core::Module,
+    definitions: &curios_core::Definitions,
     places: &curios_core::Places,
     certification: &curios_core::Certification,
     erased: &ErasedUnit,
 ) -> Vec<(NamedPart, Result<Option<String>, String>)> {
-    module
+    definitions
         .items
         .places()
-        .flat_map(|place| module.items.names(place).into_iter().copied())
+        .flat_map(|place| definitions.items.names(place).into_iter().copied())
         .flat_map(|name| Part::ALL.map(|part| (name, part)))
         .map(|read| {
             let digest = match (read.1, erased.place(&read.0)) {
                 (Part::Binding | Part::Forms, Some(at)) => erased_digest(erased, at, read),
                 (Part::Binding | Part::Forms, None) => Ok(None),
-                _ => declared_digest(module, places, certification, read),
+                _ => declared_digest(definitions, places, certification, read),
             };
 
             (read, digest)
@@ -78,9 +78,11 @@ pub fn fresh(hint: Option<&str>) -> curios_core::Free {
 
 /// `unit` certified with nothing in scope and erased through the kernel that certified it, as the driver erases a unit it compiles.
 #[cfg(test)]
-pub fn erase_alone(unit: &curios_core::Zonked<curios_core::Module>) -> Result<ErasedUnit, Error> {
+pub fn erase_alone(
+    unit: &curios_core::Zonked<curios_core::Definitions>,
+) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_module(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut kernel) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
         rechecked.verdicts.is_empty(),
         "the fixture is certified: {:?}",
@@ -130,13 +132,13 @@ pub fn definition(
 #[cfg(test)]
 pub fn module(items: Vec<curios_core::Item>, body: curios_core::Term) -> curios_core::Program {
     curios_core::Program {
-        module: curios_core::Module {
+        definitions: curios_core::Definitions {
             mounts: Vec::new(),
             items: items.into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
-        entry: curios_core::Entrypoint { body, type_: None },
+        entrypoint: curios_core::Entrypoint { body, type_: None },
     }
 }
 
@@ -149,7 +151,7 @@ pub fn zonked<T: Zonkable>(value: &T) -> curios_core::Zonked<T> {
 #[cfg(test)]
 pub fn stating(program: &curios_core::Program, type_: curios_core::Term) -> curios_core::Program {
     let mut program = program.clone();
-    program.entry.type_ = Some(type_);
+    program.entrypoint.type_ = Some(type_);
     program
 }
 

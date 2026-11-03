@@ -14,8 +14,8 @@ use {
     super::{Globals, Held, held, induct_alike, struct_alike},
     curios_common::{Digest, Qualifier, digest},
     curios_core::{
-        Certification, Concluded, Definition, Global, InductDecl, Item, ItemRun, Module, Nominal,
-        Places, Polarity, Reads, RecDefinition, RecItem, Sharing, StructDecl, Totality,
+        Certification, Concluded, Definition, Definitions, Global, InductDecl, Item, ItemRun,
+        Nominal, Places, Polarity, Reads, RecDefinition, RecItem, Sharing, StructDecl, Totality,
         UniverseContext, Variance,
     },
     std::collections::{BTreeMap, HashMap},
@@ -24,7 +24,7 @@ use {
 /// An earlier walk over another text of the unit a walk judges: the module it judged, where that module holds each name, and the record it filed.
 #[derive(Clone, Copy)]
 pub struct Baseline<'a> {
-    pub module: &'a Module,
+    pub definitions: &'a Definitions,
     pub places: &'a Places,
     pub certification: &'a Certification,
 }
@@ -62,7 +62,7 @@ impl<'a> Baseline<'a> {
         let Some(place) = names.first().and_then(|name| self.places.place(name)) else {
             return false;
         };
-        let held = &self.module.items[place.item()];
+        let held = &self.definitions.items[place.item()];
         let terms = match (item, held) {
             (Item::Let(this), Item::Let(that)) => definition_alike(this, that),
             (Item::Rec(this), Item::Rec(that)) => group_alike(this, that),
@@ -160,19 +160,19 @@ pub(crate) fn read_digest(
 
 /// [`read_digest`] of `name` as `module` holds it where `places` says, under the verdict `partial` and the vectors `polarities` and `variances`: what a walk reads of a declaration of its own unit, as it settled it or as the baseline holds it. `Ok(None)` where the module holds no such name.
 pub(crate) fn held_digest(
-    module: &Module,
+    definitions: &Definitions,
     places: &Places,
     name: &Global,
     (partial, polarities, variances): (bool, Option<&[Polarity]>, Option<&[Variance]>),
     body: bool,
 ) -> Result<Option<String>, String> {
-    let Some(held) = held(module, places, name) else {
+    let Some(held) = held(definitions, places, name) else {
         return Ok(None);
     };
     let read = Readable {
         held,
-        family: module.induct_decl(places, name),
-        record: module.struct_decl(places, name),
+        family: definitions.induct_decl(places, name),
+        record: definitions.struct_decl(places, name),
         partial,
         polarities,
         variances,
@@ -183,23 +183,23 @@ pub(crate) fn held_digest(
 
 /// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the kernel records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
 pub fn part_digest(
-    module: &Module,
+    definitions: &Definitions,
     places: &Places,
     certification: &Certification,
     name: &Global,
     body: bool,
 ) -> Result<Option<String>, String> {
     // A vector is the entry's, filed for a name the unit holds one under, as a unit in scope answers it (`Globals`).
-    let nominal = module.nominal(places, name).is_some();
+    let nominal = definitions.nominal(places, name).is_some();
     // The classification is read only where the record covers its unit, as `Globals::partial` reads one: a record naming fewer definitions than the unit holds was not made by a walk over it, so what it says of a name is nothing a reader may take, here as there.
-    let classified = certification.covers(module);
+    let classified = certification.covers(definitions);
     let verdicts = (
         classified && certification.totality(name) == Some(Totality::Partial),
         certification.polarities(name).filter(|_| nominal),
         certification.variances(name).filter(|_| nominal),
     );
 
-    held_digest(module, places, name, verdicts, body)
+    held_digest(definitions, places, name, verdicts, body)
 }
 
 /// What a read reads of a declaration: its terms, the registry entries its former carries, and the certifier's verdict on it.
@@ -268,12 +268,12 @@ impl Readable<'_> {
 }
 
 /// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a store's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
-pub fn complete(module: &Module, places: &Places, certification: &Certification) {
+pub fn complete(definitions: &Definitions, places: &Places, certification: &Certification) {
     curios_profile::profile!("judgments::complete");
     let mut globals = Globals::default();
-    globals.mount(module, places, certification);
+    globals.mount(definitions, places, certification);
     let mut completing = Completing {
-        module,
+        definitions,
         places,
         certification,
         globals,
@@ -290,7 +290,7 @@ pub fn complete(module: &Module, places: &Places, certification: &Certification)
 
 /// What a filing completes a walk's records with: the unit, held where `places` says and mounted, and what the walk recorded, each part read digested and each item named once however many records ask.
 struct Completing<'a> {
-    module: &'a Module,
+    definitions: &'a Definitions,
     places: &'a Places,
     certification: &'a Certification,
     globals: Globals<'a>,
@@ -304,14 +304,12 @@ impl Completing<'_> {
     /// What judging `name`, which read `reads`, concluded and read: `None` where no record of it can be completed.
     fn concluded(&mut self, name: &Global, reads: &Reads) -> Option<Concluded> {
         let place = self.places.place(name)?.item();
-        let input =
-            *self
-                .identities
-                .entry(place)
-                .or_insert_with(|| match self.module.items.part(place) {
-                    Some(stored) => Some(stored.digest),
-                    None => ItemRun::identity(&self.module.items[place]).ok(),
-                });
+        let input = *self.identities.entry(place).or_insert_with(|| {
+            match self.definitions.items.part(place) {
+                Some(stored) => Some(stored.digest),
+                None => ItemRun::identity(&self.definitions.items[place]).ok(),
+            }
+        });
         let signatures = reads
             .signatures
             .iter()
@@ -457,7 +455,7 @@ impl<'a> Adopting<'a> {
     /// **Told by the digest a read records** ([`held_digest`]), of the declaration as the walk settled it and as the baseline holds it: a part that digests alike is one to every judgment, and one that differs in a binder's name alone is told apart, so a record carried from the baseline digests what a walk that judged every declaration would.
     pub(crate) fn judged(
         &mut self,
-        (module, places): (&Module, &Places),
+        (definitions, places): (&Definitions, &Places),
         item: &Item,
         partial: impl Fn(&Global) -> bool,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
@@ -472,7 +470,7 @@ impl<'a> Adopting<'a> {
                     polarities.get(name).map(Vec::as_slice),
                     variances.get(name).map(Vec::as_slice),
                 );
-                held_digest(module, places, name, verdict, body)
+                held_digest(definitions, places, name, verdict, body)
                     .ok()
                     .flatten()
             };
@@ -482,7 +480,7 @@ impl<'a> Adopting<'a> {
                     certification.polarities(name),
                     certification.variances(name),
                 );
-                held_digest(baseline.module, baseline.places, name, verdict, body)
+                held_digest(baseline.definitions, baseline.places, name, verdict, body)
                     .ok()
                     .flatten()
             };

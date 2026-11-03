@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Entrypoint, Free, Global, Intrinsic, Item, Let, LetBinding, Level, Many, Module, Nat,
+        Definitions, Entrypoint, Free, Global, Intrinsic, Item, Let, LetBinding, Level, Many, Nat,
         Program, Rec, RecGroup, RecItem, RecMemberScopes, Scope, Subterm, Term, Universes,
         test_support::*,
     },
@@ -72,7 +72,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         ),
     )]);
 
-    let module = Module {
+    let definitions = Definitions {
         mounts: Vec::new(),
         items: vec![authored_partial(
             &Global::Authored(Qualifier::from(["ok"])),
@@ -85,7 +85,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
     );
@@ -127,15 +127,15 @@ fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
 }
 
 /// `let bad : Nat = <body>`, the one item of a module built by hand.
-fn bad_module(body: Term) -> Module {
-    Module {
+fn bad_definitions(body: Term) -> Definitions {
+    Definitions {
         items: vec![authored_partial(
             &Global::Authored(Qualifier::from(["bad"])),
             Term::intrinsic(Intrinsic::NatType),
             body,
         )]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     }
 }
 
@@ -150,10 +150,10 @@ fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
         type_: Scope::close(Many(2), &[&f, &g], Term::intrinsic(Intrinsic::NatType)),
         body: Scope::close(Many(2), &[&f, &g], Term::free_var(&f)),
     }]);
-    let module = bad_module(Term::rec_proj(group, 0));
+    let definitions = bad_definitions(Term::rec_proj(group, 0));
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the walk must refuse a group whose member scopes and members disagree in number",
     );
 }
@@ -170,9 +170,9 @@ fn a_group_whose_tail_binds_more_than_its_members_is_refused() {
         Term::free_var(&f),
     )]);
     let tail = Scope::close(Many(2), &[&f, &g], Term::free_var(&f));
-    let module = bad_module(Term::from(Subterm::Rec(Rec { group, tail })));
+    let definitions = bad_definitions(Term::from(Subterm::Rec(Rec { group, tail })));
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
@@ -197,9 +197,9 @@ fn a_let_whose_tail_binds_more_than_its_bindings_is_refused() {
         Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     )];
     let tail = Scope::close(Many(2), &[&x, &y], Term::free_var(&x));
-    let module = bad_module(Term::from(Subterm::Let(Let { bindings, tail })));
+    let definitions = bad_definitions(Term::from(Subterm::Let(Let { bindings, tail })));
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
@@ -218,7 +218,7 @@ fn a_let_whose_tail_binds_more_than_its_bindings_is_refused() {
 /// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`. It is the control the two counts above are read against: one count of a hand-built term was checked before this commit and two were not.
 #[test]
 fn a_projection_past_a_tuples_components_is_refused() {
-    let module = bad_module(Term::proj(
+    let definitions = bad_definitions(Term::proj(
         Term::tuple([
             Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
@@ -227,7 +227,7 @@ fn a_projection_past_a_tuples_components_is_refused() {
     ));
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
+        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the walk must refuse a projection past the components of what it projects from",
     );
 }
@@ -235,7 +235,7 @@ fn a_projection_past_a_tuples_components_is_refused() {
 /// `held : (y : (Type 1) -> Type 1) -> Type 1 = (y) => rec m : Type 1 = y(m) end.0`: the one shape whose projection survives forcing with its declared type a sort.
 ///
 /// `Sort::of` reads a member's declared type only through `sort_of_neutral`, which `reduce_forced` reaches only for a projection `force` left standing — and `force` keeps the folded spelling exactly where the member's body reduces to a neutral *mentioning the group*, which is what the opaque head `y` makes of `y(m)`. The mention is the group's only call, recorded with no arguments and graded unknown, so the group does not descend; and the member's declared type yields a sort, so `check_group`'s local gate is owed a descent. The two halves are the same self-mention, which is why nothing escapes both: `yields_a_sort` peels arrows and projects tuple fields, so an applied or a projected member is inside the gate too.
-fn surviving_projection_module() -> Module {
+fn surviving_projection_definitions() -> Definitions {
     let sort = Term::type_at(Level::zero().succ().expect("a level has a successor"));
     let opaque = Free::local(950, Some("y"));
     let member = Free::local(951, Some("m"));
@@ -249,14 +249,14 @@ fn surviving_projection_module() -> Module {
     );
     let opaque_type = Term::func_type([(Free::local(952, Some("t")), sort.clone())], sort.clone());
 
-    Module {
+    Definitions {
         items: vec![authored(
             &Global::Authored(Qualifier::from(["held"])),
             Term::func_type([(opaque, opaque_type.clone())], sort),
             Term::func([(opaque, opaque_type)], group),
         )]
         .into(),
-        ..Module::default()
+        ..Definitions::default()
     }
 }
 
@@ -264,7 +264,7 @@ fn surviving_projection_module() -> Module {
 #[test]
 fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
     let verdicts = fixture_verdicts(
-        &surviving_projection_module(),
+        &surviving_projection_definitions(),
         1_000_000,
         &Globals::default(),
         SYNTAX,
@@ -316,8 +316,8 @@ fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
     };
 
     Program {
-        module: declaring(
-            Module {
+        definitions: declaring(
+            Definitions {
                 mounts: Vec::new(),
                 items: vec![Item::Rec(RecItem::new(vec![(local, *definition)]))].into(),
                 witnesses: BTreeSet::new(),
@@ -327,7 +327,7 @@ fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
             [],
             [],
         ),
-        entry: Entrypoint {
+        entrypoint: Entrypoint {
             body: Term::instance(name, Universes::default()),
             type_: Some(Term::induct_type(
                 family,

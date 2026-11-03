@@ -41,10 +41,10 @@ fn a_recompile_over_a_recompile_holds_each_name_where_its_module_does() {
 
     let second = recompile_over(&again, &first).unwrap();
 
-    let module = second.core();
-    let fresh = curios_core::Places::of(module);
-    for place in module.items.places() {
-        for name in module.items.names(place) {
+    let definitions = second.core();
+    let fresh = curios_core::Places::of(definitions);
+    for place in definitions.items.places() {
+        for name in definitions.items.names(place) {
             assert_eq!(second.places().place(name), fresh.place(name), "{name:?}");
         }
     }
@@ -78,16 +78,16 @@ pub let twice: Nat = apply(double, 2);
         );
     }
     assert_eq!(incremental.core().items.len(), 4);
-    assert_modules_agree(unit_of(&inserted).core(), incremental.core());
+    assert_definitions_agree(unit_of(&inserted).core(), incremental.core());
     assert_stored_alike(&unit_of(&inserted), &incremental);
 }
 
 /// Every name `unit` declares held where its module holds it: the places a recompile revised are the ones its module would be placed at whole, which every later walk reads a name of the unit by.
 fn assert_placed(unit: &Unit) {
-    let module = unit.core();
-    let fresh = curios_core::Places::of(module);
-    for place in module.items.places() {
-        for name in module.items.names(place) {
+    let definitions = unit.core();
+    let fresh = curios_core::Places::of(definitions);
+    for place in definitions.items.places() {
+        for name in definitions.items.names(place) {
             assert_eq!(unit.places().place(name), fresh.place(name), "{name:?}");
         }
     }
@@ -237,6 +237,6 @@ fn a_declaration_whose_text_changed_is_elaborated_again_and_placed_in_its_new_te
             .any(|(line, text)| (*line, text.as_str()) == (4, "n + n")),
         "the body is placed on its new line: {placed:?}"
     );
-    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_definitions_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }

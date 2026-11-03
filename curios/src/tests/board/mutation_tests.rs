@@ -3,7 +3,7 @@
 //! Filed here because it is a board instrument: it attacks the walk rather than any one rule.
 
 use {
-    curios_core::{Item, Module, Program, Term, Zonked},
+    curios_core::{Definitions, Item, Program, Term, Zonked},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -56,8 +56,8 @@ fn foreign_body() -> Term {
 /// Where `module`'s `let` items sit.
 ///
 /// Every item is the entry program's own: the prelude reaches a compilation as scope rather than as items copied in front of it, so there is nothing here to filter out.
-fn lets(module: &Module) -> Vec<usize> {
-    module
+fn lets(definitions: &Definitions) -> Vec<usize> {
+    definitions
         .items
         .iter()
         .enumerate()
@@ -96,13 +96,13 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
-        for index in lets(&program.module) {
-            let Item::Let(definition) = &program.module.items[index] else {
+        for index in lets(&program.definitions) {
+            let Item::Let(definition) = &program.definitions.items[index] else {
                 unreachable!("the index came from a `let`");
             };
 
             let mut mutant: Program = program.clone();
-            let Item::Let(target) = &mut mutant.module.items[index] else {
+            let Item::Let(target) = &mut mutant.definitions.items[index] else {
                 unreachable!("the item was a `let` a moment ago");
             };
             target.body = foreign_body();
@@ -144,9 +144,9 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
         .program;
 
-        let declared = lets(&program.module)
+        let declared = lets(&program.definitions)
             .into_iter()
-            .map(|index| match &program.module.items[index] {
+            .map(|index| match &program.definitions.items[index] {
                 Item::Let(definition) => (index, definition.type_.clone()),
                 Item::Rec(_) => unreachable!("the index came from a `let`"),
             })
@@ -154,7 +154,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
 
         for (index, _) in &declared {
             for (other, replacement) in &declared {
-                let Item::Let(definition) = &program.module.items[*index] else {
+                let Item::Let(definition) = &program.definitions.items[*index] else {
                     unreachable!("the index came from a `let`");
                 };
                 if other == index || definition.type_ == *replacement {
@@ -162,7 +162,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 }
 
                 let mut mutant: Program = program.clone();
-                let Item::Let(target) = &mut mutant.module.items[*index] else {
+                let Item::Let(target) = &mut mutant.definitions.items[*index] else {
                     unreachable!("the item was a `let` a moment ago");
                 };
                 target.type_ = replacement.clone();
@@ -237,7 +237,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         let host = elaborated(description, host_source);
 
         let donated = donor
-            .module
+            .definitions
             .items
             .iter()
             .find_map(|item| match item {
@@ -257,7 +257,7 @@ fn a_body_grafted_across_an_index_is_refused() {
 
         let mut grafted: Program = host.clone();
         let target = grafted
-            .module
+            .definitions
             .items
             .iter_mut()
             .find_map(|item| match item {

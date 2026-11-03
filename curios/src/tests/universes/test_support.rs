@@ -15,7 +15,7 @@ pub(super) fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
         .program;
 
     program
-        .module
+        .definitions
         .items
         .iter()
         .flat_map(|item| {
@@ -38,7 +38,7 @@ pub(super) fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
         .program;
 
     program
-        .module
+        .definitions
         .items
         .iter()
         .flat_map(|item| {
@@ -58,7 +58,7 @@ pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
         .program;
 
     program
-        .module
+        .definitions
         .induct_decls()
         .iter()
         .map(|(name, declaration)| {
@@ -83,7 +83,7 @@ pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
         .program;
 
     program
-        .module
+        .definitions
         .items
         .iter()
         .flat_map(|item| {
@@ -103,7 +103,7 @@ pub(super) fn definition_variances(source: &str) -> BTreeMap<String, String> {
         .program;
 
     program
-        .module
+        .definitions
         .items
         .iter()
         .filter_map(|item| match item {

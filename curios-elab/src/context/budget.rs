@@ -58,7 +58,7 @@ impl<'s> Context<'s> {
         self.underway.posture.island()
     }
 
-    /// Set the current module before elaborating an item (see `elaborate_module_suffix`).
+    /// Set the current module before elaborating an item (see `elaborate_definitions_suffix`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
         // Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
         self.typing.caches.invalidate_for_island_change();

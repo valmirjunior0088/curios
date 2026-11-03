@@ -13,8 +13,8 @@
 use {
     crate::ErasedSite,
     curios_core::{
-        Bound, Definition, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item, Let, Match,
-        Module, Rec, Struct, Subterm, Telescope, Term, Variant,
+        Bound, Definition, Definitions, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item,
+        Let, Match, Rec, Struct, Subterm, Telescope, Term, Variant,
     },
     std::{
         collections::{BTreeSet, HashSet},
@@ -42,10 +42,10 @@ fn push(positions: &mut Vec<Position>, site: &Rc<ErasedSite>, term: &Term) {
 /// Every term in a type position.
 ///
 /// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`.
-pub fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Position> {
+pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> Vec<Position> {
     let mut positions = Vec::new();
 
-    for definition in definitions(module) {
+    for definition in each_definition(definitions) {
         let name = definition.name;
         let of_type = Rc::new(ErasedSite::TypeOf(name));
         let own = Rc::new(ErasedSite::Within {
@@ -76,7 +76,7 @@ pub fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Positi
     }
 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
-    for (name, declaration) in &module.induct_decls() {
+    for (name, declaration) in &definitions.induct_decls() {
         let site = Rc::new(ErasedSite::ParameterOf(*name));
         entries(&declaration.arity, &site, &mut positions);
         for (tag, constructor) in &declaration.constructors {
@@ -87,7 +87,7 @@ pub fn type_positions(module: &Module, entry: Option<&Entrypoint>) -> Vec<Positi
             entries(&constructor.telescope, &site, &mut positions);
         }
     }
-    for (name, declaration) in &module.struct_decls() {
+    for (name, declaration) in &definitions.struct_decls() {
         let site = Rc::new(ErasedSite::ParameterOf(*name));
         entries(&declaration.arity, &site, &mut positions);
         let site = Rc::new(ErasedSite::FieldOf(*name));
@@ -107,8 +107,8 @@ pub fn seeds(positions: &[Position]) -> BTreeSet<Global> {
 }
 
 /// Every top-level definition in the module, `let` and `rec` alike.
-fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
-    module.items.iter().flat_map(Item::definitions)
+fn each_definition(definitions: &Definitions) -> impl Iterator<Item = Definition> + '_ {
+    definitions.items.iter().flat_map(Item::definitions)
 }
 
 /// Record every definition this term names.

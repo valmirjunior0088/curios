@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
-        Module, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
+        Atom, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Item,
+        Level, Many, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
         UniverseContext, UniverseParam, Universes, test_support::*,
     },
     std::collections::BTreeSet,
@@ -54,9 +54,12 @@ fn at(name: &Global, sorts: impl IntoIterator<Item = Quality>) -> Term {
 }
 
 /// A module of `items` declaring `families`.
-fn module(items: Vec<Item>, families: impl IntoIterator<Item = (Global, InductDecl)>) -> Module {
+fn definitions(
+    items: Vec<Item>,
+    families: impl IntoIterator<Item = (Global, InductDecl)>,
+) -> Definitions {
     declaring(
-        Module {
+        Definitions {
             mounts: Vec::new(),
             items: items.into(),
             witnesses: BTreeSet::new(),
@@ -68,8 +71,8 @@ fn module(items: Vec<Item>, families: impl IntoIterator<Item = (Global, InductDe
     )
 }
 
-fn verdicts(module: &Module) -> Vec<Verdict> {
-    fixture_verdicts(module, 1_000_000, &Globals::default(), SYNTAX)
+fn verdicts(definitions: &Definitions) -> Vec<Verdict> {
+    fixture_verdicts(definitions, 1_000_000, &Globals::default(), SYNTAX)
 }
 
 /// The refusal a verdict reached at one assignment, with the assignment: `None` for a refusal that names none.
@@ -289,7 +292,7 @@ fn one_definition_is_used_at_a_type_and_at_a_proposition() {
     let (held, held_type, qed) = held();
     let id = named("id");
 
-    let module = module(
+    let definitions = definitions(
         vec![
             identity(),
             authored(
@@ -306,7 +309,7 @@ fn one_definition_is_used_at_a_type_and_at_a_proposition() {
         [held],
     );
 
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
 
@@ -323,21 +326,21 @@ fn a_declaration_ill_typed_at_one_sort_alone_is_refused_at_it() {
         };
         let only = named("only");
 
-        for (rule, module) in [
+        for (rule, definitions) in [
             (
                 "a definition",
-                module(vec![handing_back("back", sort.clone())], []),
+                definitions(vec![handing_back("back", sort.clone())], []),
             ),
-            ("a recursive group", module(vec![grouped], [])),
+            ("a recursive group", definitions(vec![grouped], [])),
             (
                 "a registry entry",
-                module(
+                definitions(
                     vec![taking_only(&only, sort.clone())],
                     [holding_through(&only)],
                 ),
             ),
         ] {
-            let verdicts = verdicts(&module);
+            let verdicts = verdicts(&definitions);
 
             assert!(
                 verdicts.iter().any(|verdict| matches!(
@@ -353,8 +356,8 @@ fn a_declaration_ill_typed_at_one_sort_alone_is_refused_at_it() {
 /// The control for the fixture above: the same definition whose codomain is the sort it is handed is well typed at both.
 #[test]
 fn a_definition_well_typed_at_every_sort_is_accepted() {
-    let module = module(vec![handing_back("back", left(0))], []);
-    let verdicts = verdicts(&module);
+    let definitions = definitions(vec![handing_back("back", left(0))], []);
+    let verdicts = verdicts(&definitions);
 
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
@@ -362,10 +365,10 @@ fn a_definition_well_typed_at_every_sort_is_accepted() {
 /// A refusal at one assignment spells the declaration's terms at it, where the declaration's text says `Sort`. Its report restates the type the declaration states, read at the assignment, which is where a reader sees which written sort stood at which.
 #[test]
 fn a_refusal_at_one_sort_restates_the_declaration_at_it() {
-    let module = module(vec![handing_back("back", Term::prop())], []);
-    let reports = verdicts(&module)
+    let definitions = definitions(vec![handing_back("back", Term::prop())], []);
+    let reports = verdicts(&definitions)
         .iter()
-        .map(|verdict| verdict.format_with(&module, &[], &SYNTAX))
+        .map(|verdict| verdict.format_with(&definitions, &[], &SYNTAX))
         .collect::<Vec<_>>();
 
     assert!(
@@ -459,7 +462,7 @@ fn an_occurrence_states_every_sort_its_declaration_leaves() {
     ];
 
     for (label, items, expected) in cases {
-        let verdicts = verdicts(&module(items, []));
+        let verdicts = verdicts(&definitions(items, []));
 
         assert!(
             verdicts.iter().any(|verdict| expected(&verdict.error)),
@@ -472,7 +475,7 @@ fn an_occurrence_states_every_sort_its_declaration_leaves() {
 #[test]
 fn a_sort_past_the_ones_a_declaration_leaves_is_refused() {
     let carrier = Free::local(16, Some("A"));
-    let module = module(
+    let definitions = definitions(
         vec![generic(
             &named("past"),
             1,
@@ -481,7 +484,7 @@ fn a_sort_past_the_ones_a_declaration_leaves_is_refused() {
         )],
         [],
     );
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
 
     assert!(
         verdicts
@@ -516,7 +519,7 @@ fn a_family_over_a_sort_holds_data_and_proofs() {
         )
     };
 
-    let module = module(
+    let definitions = definitions(
         vec![
             boxed(Quality::Type, nat(), zero()),
             boxed(Quality::Prop, held_type, qed),
@@ -524,15 +527,15 @@ fn a_family_over_a_sort_holds_data_and_proofs() {
         [held, (name, declaration)],
     );
 
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
 
 /// A family's own sort is one sort whatever a use states: the rules that tell a proof from data by a declaration read the sort it declares, as written.
 #[test]
 fn a_family_whose_own_sort_is_left_to_its_caller_is_refused() {
-    let module = module(Vec::new(), [box_over_a_sort(left(0))]);
-    let verdicts = verdicts(&module);
+    let definitions = definitions(Vec::new(), [box_over_a_sort(left(0))]);
+    let verdicts = verdicts(&definitions);
 
     assert!(
         verdicts
@@ -550,7 +553,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     let coercion = |to: Quality| {
         let from = family_at(name, [Quality::Prop], Vec::new());
 
-        module(
+        definitions(
             vec![authored(
                 &named("coerce"),
                 Term::func_type([(held, from.clone())], family_at(name, [to], Vec::new())),
@@ -582,7 +585,7 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
         item => item,
     };
 
-    let module = module(
+    let definitions = definitions(
         vec![
             group,
             authored(
@@ -599,7 +602,7 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
         [held],
     );
 
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
 
@@ -607,8 +610,8 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
 #[test]
 fn a_declaration_leaves_no_more_sorts_than_the_limit() {
     let stated = UniverseContext::QUALITY_LIMIT + 1;
-    let module = module(vec![generic(&named("many"), stated, nat(), zero())], []);
-    let verdicts = verdicts(&module);
+    let definitions = definitions(vec![generic(&named("many"), stated, nat(), zero())], []);
+    let verdicts = verdicts(&definitions);
 
     assert!(
         verdicts.iter().any(|verdict| matches!(
@@ -663,7 +666,7 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
         ),
     );
 
-    let verdicts = verdicts(&module(
+    let verdicts = verdicts(&definitions(
         vec![pick],
         [(two, proposition(vec![nullary("a"), nullary("b")]))],
     ));
@@ -693,8 +696,8 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    let module = declaring(
-        Module {
+    let definitions = declaring(
+        Definitions {
             mounts: Vec::new(),
             items: Vec::new().into(),
             witnesses: BTreeSet::new(),
@@ -705,7 +708,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
         [],
     );
 
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
 
     assert!(
         verdicts.iter().any(|verdict| matches!(
@@ -739,7 +742,7 @@ fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
         item => item,
     };
 
-    let verdicts = verdicts(&module(vec![group], []));
+    let verdicts = verdicts(&definitions(vec![group], []));
 
     assert!(
         verdicts.iter().any(|verdict| matches!(
@@ -764,7 +767,7 @@ fn a_group_stating_a_sort_its_context_does_not_leave_is_refused() {
         item => item,
     };
 
-    let verdicts = verdicts(&module(vec![group], []));
+    let verdicts = verdicts(&definitions(vec![group], []));
 
     assert!(
         verdicts
@@ -785,7 +788,7 @@ fn a_value_sort_past_the_sorts_a_declaration_leaves_is_refused() {
         item => item,
     };
 
-    let verdicts = verdicts(&module(vec![item], []));
+    let verdicts = verdicts(&definitions(vec![item], []));
 
     assert!(
         verdicts.iter().any(|verdict| matches!(
@@ -893,7 +896,7 @@ fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
         variances: Vec::new(),
     };
 
-    let verdicts = verdicts(&module(
+    let verdicts = verdicts(&definitions(
         Vec::new(),
         [
             (eq, eq_decl),
@@ -1026,7 +1029,7 @@ fn a_level_a_standing_match_carries_is_held_by_its_family() {
         ]
     };
     let coerce = named("coerce");
-    let module = module(
+    let definitions = definitions(
         vec![authored(
             &coerce,
             Term::func_type(binders(), lv_at(Level::constant(1))),
@@ -1035,7 +1038,7 @@ fn a_level_a_standing_match_carries_is_held_by_its_family() {
         [(eq, eq_decl), (lv, declaration)],
     );
 
-    let verdicts = verdicts(&module);
+    let verdicts = verdicts(&definitions);
 
     assert!(
         !verdicts.iter().any(|verdict| verdict.name == Some(lv)),

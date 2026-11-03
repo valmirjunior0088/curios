@@ -89,7 +89,7 @@ fn allows_pub_on_root_items() {
 // An unannotated local binding pinned through a *type alias* — `let Slot : Type = Cell(Option(Job));` — whose bare written `Type` mints a generalizable level while its value sits at one fixed level.
 #[test]
 fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
-    let module = elaborate_source(
+    let definitions = elaborate_source(
         "induct Box(A : Type) : Type | empty() | wrap(A) end \
          induct Job : Type | job() end \
          let Slot : Type = Box(Job); \
@@ -101,7 +101,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
          outer",
     );
     assert!(
-        module
+        definitions
             .items
             .iter()
             .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.faithful().to_string() == "/outer")),
@@ -208,12 +208,13 @@ fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
 #[test]
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
     // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
-    let module = lowered_module("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
+    let definitions =
+        lowered_definitions("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
     assert_eq!(
-        module.tests,
+        definitions.tests,
         vec![global_name("Inner/inner_holds"), global_name("outer_holds")],
     );
-    let kinds: Vec<_> = module
+    let kinds: Vec<_> = definitions
         .items
         .iter()
         .filter_map(|item| match item {
@@ -296,8 +297,8 @@ fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
 #[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     // A test takes no parameters, but it is still a `() -> Test({})` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
-    let module = lowered_module("test t = Type;\n()");
-    let definition = module
+    let definitions = lowered_definitions("test t = Type;\n()");
+    let definition = definitions
         .items
         .iter()
         .find_map(|item| match item {

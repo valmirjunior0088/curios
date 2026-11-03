@@ -7,7 +7,7 @@ use {
     curios_common::{
         Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::*,
     },
-    curios_core::{Enter, Item, Module, Sharing, Variance},
+    curios_core::{Definitions, Enter, Item, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
     curios_prelude::with_prelude,
@@ -266,7 +266,7 @@ pub(crate) fn elaborated_above(
     source: &UnitSource<'_>,
     predecessors: Predecessors<'_>,
     floor: u64,
-) -> Module {
+) -> Definitions {
     elaborated(source, predecessors, floor, false)
 }
 
@@ -274,7 +274,7 @@ pub(crate) fn elaborated_above(
 pub(crate) fn elaborated_wholesale(
     source: &UnitSource<'_>,
     predecessors: Predecessors<'_>,
-) -> Module {
+) -> Definitions {
     elaborated(source, predecessors, 0, true)
 }
 
@@ -284,7 +284,7 @@ fn elaborated(
     predecessors: Predecessors<'_>,
     floor: u64,
     wholesale: bool,
-) -> Module {
+) -> Definitions {
     let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
         .expect("the unit lowers");
     let mut raised = curios_core::Minted::default();
@@ -310,7 +310,7 @@ fn elaborated(
     };
     context.set_imports(lowered.imports().clone());
     curios_elab::elaborate_and_zonk_unit(&mut context, &established, lowered.core(), &minted)
-        .map(|(module, _)| module)
+        .map(|(definitions, _)| definitions)
         .expect("the unit elaborates")
 }
 
@@ -435,7 +435,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
 }
 
 /// The differential predicate: the two elaborated modules agree item by item in order, on every registry entry, marker and the entry.
-pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
+pub(super) fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) {
     assert_eq!(
         whole.items.len(),
         incremental.items.len(),

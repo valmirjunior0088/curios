@@ -27,8 +27,8 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
 }
 
 /// A module of `items` and nothing else.
-fn over(items: Vec<Item>) -> Module {
-    Module {
+fn over(items: Vec<Item>) -> Definitions {
+    Definitions {
         items: items.into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -37,8 +37,8 @@ fn over(items: Vec<Item>) -> Module {
 }
 
 /// The first name of each item, in the order the module holds them.
-fn names(module: &Module) -> Vec<String> {
-    module.items.iter().map(Item::describe).collect()
+fn names(definitions: &Definitions) -> Vec<String> {
+    definitions.items.iter().map(Item::describe).collect()
 }
 
 /// A module's stored order is every item at its depth and otherwise by name, whatever order the items were handed in.
@@ -66,25 +66,25 @@ fn items_are_ordered_by_depth_and_then_by_name() {
 /// An item stands ahead of every deeper item, whatever their names: `c` reaches nothing, so it stands beside `a` and ahead of `b`, which reaches `a`.
 #[test]
 fn an_item_stands_ahead_of_every_deeper_item_whatever_its_name() {
-    let module = over(vec![
+    let definitions = over(vec![
         reading("b", &["a"]),
         reading("a", &[]),
         reading("c", &[]),
     ]);
 
-    assert_eq!(names(&module.ordered()), ["/a", "/c", "/b"]);
+    assert_eq!(names(&definitions.ordered()), ["/a", "/c", "/b"]);
 }
 
 /// Items that reach one another have no depth: the least-named of them takes the depth of what it reaches that has one, and every item is still stored once.
 #[test]
 fn items_that_reach_one_another_are_broken_at_the_least_named() {
-    let module = over(vec![
+    let definitions = over(vec![
         reading("c", &["b"]),
         reading("b", &["a"]),
         reading("a", &["b"]),
     ]);
 
-    assert_eq!(names(&module.ordered()), ["/a", "/b", "/c"]);
+    assert_eq!(names(&definitions.ordered()), ["/a", "/b", "/c"]);
 }
 
 /// The order says what each item reaches of the module, its own names and other units' left out, and the depth that gives it.
@@ -139,25 +139,25 @@ impl Written {
         reading(name, &mentioned)
     }
 
-    fn module(&self) -> Module {
+    fn definitions(&self) -> Definitions {
         over(self.0.keys().map(|name| self.item(name)).collect())
     }
 }
 
 /// A module as a recompile holds it: its items, where it holds each name, and its order.
 struct Held {
-    module: Module,
+    definitions: Definitions,
     places: Places,
     order: Order,
 }
 
 impl Held {
     fn whole(written: &Written) -> Self {
-        let (module, order) = written.module().in_order();
-        let places = Places::of(&module);
+        let (definitions, order) = written.definitions().in_order();
+        let places = Places::of(&definitions);
 
         Self {
-            module,
+            definitions,
             places,
             order,
         }
@@ -183,24 +183,24 @@ impl Held {
             order,
         } = self
             .order
-            .revised(&self.module, &self.places, &made, &dropped)
+            .revised(&self.definitions, &self.places, &made, &dropped)
             .expect("a revision of a module whose items reach no cycle");
-        let module = Module {
+        let definitions = Definitions {
             items,
             ..over(Vec::new())
         };
 
         let whole = Held::whole(now);
         assert_eq!(
-            names(&module),
-            names(&whole.module),
+            names(&definitions),
+            names(&whole.definitions),
             "the items stand in the order"
         );
         assert!(
             order == whole.order,
             "the order says what ordering whole says"
         );
-        let now_places = Places::of(&module);
+        let now_places = Places::of(&definitions);
         if let Some(places) = &places {
             for name in now.0.keys() {
                 let name = authored(name);
@@ -209,7 +209,7 @@ impl Held {
         }
 
         Self {
-            module,
+            definitions,
             places: places.unwrap_or(now_places),
             order,
         }
@@ -222,7 +222,7 @@ fn stood(then: &Held, now: &Held, name: &str) -> (Option<usize>, Option<usize>) 
     let before = then
         .places
         .place(&name)
-        .map(|place| then.module.items.place_in_version(place.item()));
+        .map(|place| then.definitions.items.place_in_version(place.item()));
 
     (now.places.place(&name).map(|place| place.item()), before)
 }
@@ -235,7 +235,7 @@ fn a_deeper_reference_moves_what_stands_on_it() {
     let held = Held::whole(&then);
 
     let revised = held.revised(&then, &now);
-    assert_eq!(names(&revised.module), ["/c", "/d", "/b", "/a"]);
+    assert_eq!(names(&revised.definitions), ["/c", "/d", "/b", "/a"]);
     for name in ["c", "d"] {
         let (now, before) = stood(&held, &revised, name);
         assert_eq!(now, before, "{name} stands where it stood");
@@ -249,7 +249,7 @@ fn a_reference_taken_away_raises_what_stood_on_it() {
     let now = Written::of(&[("a", &["b"]), ("b", &[]), ("c", &[]), ("d", &["c"])]);
 
     let revised = Held::whole(&then).revised(&then, &now);
-    assert_eq!(names(&revised.module), ["/b", "/c", "/a", "/d"]);
+    assert_eq!(names(&revised.definitions), ["/b", "/c", "/a", "/d"]);
 }
 
 /// An item made at the key it had stands where it stood, and nothing around it moves: `b` comes to reach `c` as well as `a`, both at depth zero.
@@ -274,9 +274,9 @@ fn revisions_over_revisions_carry_their_places() {
     let third = Written::of(&[("a", &[]), ("c", &[]), ("bb", &["a"])]);
 
     let held = Held::whole(&first).revised(&first, &second);
-    assert_eq!(names(&held.module), ["/a", "/b", "/bb", "/c"]);
+    assert_eq!(names(&held.definitions), ["/a", "/b", "/bb", "/c"]);
     let held = held.revised(&second, &third);
-    assert_eq!(names(&held.module), ["/a", "/c", "/bb"]);
+    assert_eq!(names(&held.definitions), ["/a", "/c", "/bb"]);
 }
 
 /// Items put one after another between the same two run out of places between them, and are placed apart again in the order: `zz` stands after every `pNN`, each new one put after the last.
@@ -292,7 +292,10 @@ fn a_run_put_between_the_same_two_is_placed_apart_again() {
         written = now;
     }
 
-    assert_eq!(names(&held.module).last().map(String::as_str), Some("/zz"));
+    assert_eq!(
+        names(&held.definitions).last().map(String::as_str),
+        Some("/zz")
+    );
 }
 
 /// A run of edits — references added and taken away, items new to the module, and items dropped with every reference to them — orders each text as ordering it whole does.
@@ -369,14 +372,14 @@ fn what_no_revision_resolves_is_left_to_the_whole_order() {
     let dropped = BTreeSet::from([authored("a")]);
     assert!(
         held.order
-            .revised(&held.module, &held.places, &[], &dropped)
+            .revised(&held.definitions, &held.places, &[], &dropped)
             .is_none()
     );
 
     let cycle = [reading("a", &["b"])];
     assert!(
         held.order
-            .revised(&held.module, &held.places, &cycle, &BTreeSet::new())
+            .revised(&held.definitions, &held.places, &cycle, &BTreeSet::new())
             .is_none()
     );
 }
@@ -385,7 +388,7 @@ fn what_no_revision_resolves_is_left_to_the_whole_order() {
 #[test]
 fn an_order_is_restored_as_it_was_stored() {
     let (_, order) = Written::of(&[("a", &[]), ("b", &["a"]), ("c", &["a", "b"])])
-        .module()
+        .definitions()
         .in_order();
 
     let bytes = curios_archive::to_bytes(&order).expect("an order archives");
@@ -404,5 +407,5 @@ fn a_module_made_anew_is_placed_from_the_start() {
     let now = Written::of(&[("a", &[]), ("b", &["a"])]);
 
     let revised = Held::whole(&then).revised(&then, &now);
-    assert_eq!(names(&revised.module), ["/a", "/b"]);
+    assert_eq!(names(&revised.definitions), ["/a", "/b"]);
 }

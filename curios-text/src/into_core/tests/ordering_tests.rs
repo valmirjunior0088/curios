@@ -9,7 +9,7 @@ use {
 /// Items leave the lowering as they are written, whatever each names: `f` is written before the `T` its annotation names and the `g` another module declares, and no item is moved for another's sake. Which elaborates first is elaboration's to say, and the order they are stored in is the module's.
 #[test]
 fn items_leave_the_lowering_as_they_are_written() {
-    let module = lowered_module(
+    let definitions = lowered_definitions(
         r#"
         let f : T = /B/g;
         let T : Type = Type;
@@ -21,7 +21,7 @@ fn items_leave_the_lowering_as_they_are_written() {
     );
 
     assert_eq!(
-        module
+        definitions
             .items
             .iter()
             .map(curios_core::Item::describe)

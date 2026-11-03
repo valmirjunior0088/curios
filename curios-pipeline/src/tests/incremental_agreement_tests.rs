@@ -12,7 +12,7 @@ fn a_baseline_of_another_text_keeps_nothing_and_equals_the_whole_compile() {
     let incremental = recompile_over(BASE, &baseline).unwrap();
 
     assert_eq!(incremental.core().items.len(), 3);
-    assert_modules_agree(unit_of(BASE).core(), incremental.core());
+    assert_definitions_agree(unit_of(BASE).core(), incremental.core());
     assert_stored_alike(&unit_of(BASE), &incremental);
 }
 
@@ -108,7 +108,7 @@ fn answers_as_the_whole_compile_does(edited: &str, baseline: &Unit) {
 
     match (whole, incremental) {
         (Ok(whole), Ok(incremental)) => {
-            assert_modules_agree(whole.core(), incremental.core());
+            assert_definitions_agree(whole.core(), incremental.core());
             assert_stored_alike(&whole, &incremental);
         }
         (Err(whole), Err(incremental)) => assert_eq!(

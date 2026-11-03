@@ -7,9 +7,9 @@ use {
 };
 
 /// The totality `stamp_totality` stamped onto every definition in `module`.
-fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
+fn recorded_totality(definitions: &Definitions) -> BTreeMap<Global, Totality> {
     let mut recorded = BTreeMap::new();
-    for item in &module.items {
+    for item in &definitions.items {
         match item {
             Item::Let(definition) => {
                 recorded.insert(definition.name, definition.totality);
@@ -47,8 +47,8 @@ fn mentioning(path: &str, mentions: &str) -> Item {
     }))
 }
 
-fn module(items: Vec<Item>) -> Module {
-    Module {
+fn definitions(items: Vec<Item>) -> Definitions {
+    Definitions {
         mounts: Vec::new(),
         items: items.into(),
         witnesses: BTreeSet::new(),
@@ -101,12 +101,12 @@ fn a_stamp_is_what_the_next_compilation_reads_back() {
 
     // Unstamped reads as partial, which is the fail-closed default rather than a verdict. Stamping against a clean prelude is what makes it total, so the flip is evidence the write landed.
     assert_eq!(
-        recorded_totality(&module(vec![caller.clone()]))[&name("caller")],
+        recorded_totality(&definitions(vec![caller.clone()]))[&name("caller")],
         Totality::Partial
     );
     stamp_totality(&mut context, &mut caller).expect("stamped");
     assert_eq!(
-        recorded_totality(&module(vec![caller]))[&name("caller")],
+        recorded_totality(&definitions(vec![caller]))[&name("caller")],
         Totality::Total
     );
 }
