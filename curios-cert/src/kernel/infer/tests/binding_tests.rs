@@ -282,8 +282,8 @@ fn a_recorded_position_is_stated_by_value() {
         assert!(
             position
                 .term
-                .free_vars()
-                .iter()
+                .mentions()
+                .locals()
                 .all(|name| *name == proposition || *name == proof),
             "a position names a binder the `let` opened: {}",
             position.term

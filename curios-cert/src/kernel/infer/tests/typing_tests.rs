@@ -303,9 +303,9 @@ fn a_shared_closed_term_mints_once_per_node() {
     }
 
     let mut kernel = kernel();
-    let before = kernel.fresh(None).local_index().expect("a local");
+    let before = kernel.fresh(None).index();
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
-    let after = kernel.fresh(None).local_index().expect("a local");
+    let after = kernel.fresh(None).index();
     let minted = after - before - 1;
     assert!(minted <= 40, "minted {minted}");
 }

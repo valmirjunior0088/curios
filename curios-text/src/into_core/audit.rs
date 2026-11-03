@@ -296,7 +296,7 @@ pub(super) fn audit_public_exposures(
             }
 
             if let Some(induct_decl) = scope.induct(&nominal) {
-                let nominal_dependencies = globals(&induct_decl.arity.free_vars());
+                let nominal_dependencies = globals(&induct_decl.arity.mentions());
                 audit_dependencies(audiences, sources, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
@@ -309,16 +309,16 @@ pub(super) fn audit_public_exposures(
                         induct_decl
                             .constructors
                             .iter()
-                            .flat_map(|(_, case)| globals(&case.telescope.free_vars())),
+                            .flat_map(|(_, case)| globals(&case.telescope.mentions())),
                     )
                     .map_err(exposed)?;
                 }
             } else if let Some(struct_decl) = scope.struct_(&nominal) {
-                // The parameter domains alone: `arity.free_vars()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
+                // The parameter domains alone: `arity.mentions()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
                 let mut walk = &struct_decl.arity;
                 let mut param_dependencies = Vec::new();
                 while let curios_core::Telescope::Cons(_, domain, rest, ..) = walk {
-                    param_dependencies.extend(globals(&domain.free_vars()));
+                    param_dependencies.extend(globals(&domain.mentions()));
                     walk = rest.body();
                 }
                 audit_dependencies(audiences, sources, &exposure, &item, param_dependencies)
@@ -330,7 +330,7 @@ pub(super) fn audit_public_exposures(
                         sources,
                         &exposure,
                         &item,
-                        globals(&struct_decl.fields().free_vars()),
+                        globals(&struct_decl.fields().mentions()),
                     )
                     .map_err(exposed)?;
                 }

@@ -203,7 +203,7 @@ impl Eraser<'_> {
         }
         let name = context.fresh(None);
         context.bind(&name, head_type, head);
-        self.environment.bind(&name, atom);
+        self.environment.bind(name, atom);
         Ok(Ok((curios_core::Term::free_var(&name), atom)))
     }
 
@@ -386,7 +386,7 @@ impl Eraser<'_> {
                             operands: vec![scrutinee, one],
                         },
                     ));
-                    lowering.environment.bind(&pred_label, predecessor);
+                    lowering.environment.bind(pred_label, predecessor);
                 }
                 refine(context, head, &successor)?;
 
@@ -419,9 +419,9 @@ impl Eraser<'_> {
         let predecessor = self.builder.value(pred_hint);
         let hypothesis = self.builder.value(hypothesis_hint);
         self.environment
-            .bind(&pred_label, curios_anf::Atom::Value(predecessor));
+            .bind(pred_label, curios_anf::Atom::Value(predecessor));
         self.environment
-            .bind(&hypothesis_label, curios_anf::Atom::Value(hypothesis));
+            .bind(hypothesis_label, curios_anf::Atom::Value(hypothesis));
 
         self.builder.open_block();
         let outcome = context.scoped(|context| {
@@ -495,9 +495,9 @@ impl Eraser<'_> {
         let predecessor = self.builder.value(Some("i".to_string()));
         let hypothesis = self.builder.value(Some("acc".to_string()));
         self.environment
-            .bind(&index_label, curios_anf::Atom::Value(predecessor));
+            .bind(index_label, curios_anf::Atom::Value(predecessor));
         self.environment
-            .bind(&accumulator_label, curios_anf::Atom::Value(hypothesis));
+            .bind(accumulator_label, curios_anf::Atom::Value(hypothesis));
 
         self.builder.open_block();
         let outcome = context.scoped(|context| {
@@ -574,9 +574,9 @@ impl Eraser<'_> {
             let suffix = self.builder.value(suffix_hint);
 
             self.environment
-                .bind(&element_label, curios_anf::Atom::Value(element));
+                .bind(element_label, curios_anf::Atom::Value(element));
             self.environment
-                .bind(&suffix_label, curios_anf::Atom::Value(suffix));
+                .bind(suffix_label, curios_anf::Atom::Value(suffix));
 
             self.builder.open_block();
             let outcome = self.in_arm(context, |lowering, context| {
@@ -625,11 +625,11 @@ impl Eraser<'_> {
         let suffix = self.builder.value(suffix_hint);
         let accumulator = self.builder.value(accumulator_hint);
         self.environment
-            .bind(&element_label, curios_anf::Atom::Value(element));
+            .bind(element_label, curios_anf::Atom::Value(element));
         self.environment
-            .bind(&suffix_label, curios_anf::Atom::Value(suffix));
+            .bind(suffix_label, curios_anf::Atom::Value(suffix));
         self.environment
-            .bind(&accumulator_label, curios_anf::Atom::Value(accumulator));
+            .bind(accumulator_label, curios_anf::Atom::Value(accumulator));
 
         self.builder.open_block();
         let outcome = context.scoped(|context| {

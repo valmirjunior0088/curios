@@ -287,7 +287,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Whether a [`probe_elaborated`](Self::probe_elaborated) `Miss` may be recorded: the purity and groundness condition, plus the *settled-globals* gate. Every global the entry names — in the result, and in the `Check` `expected` half of the key — must already be defined. Definedness is the one ambient fact a pure, ground elaboration reads (through the conversions in `expect`, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define` — the name analogue of the reduction cache's unsolved-metavariable refusal (`Context::reduce`), and what lets [`define_entry`](Self::define_entry) keep the elaboration cache across a fresh definition. A constructor, intrinsic, inductive, or struct is not a free `Var`, so it never trips the gate; only a `/`-qualified definition or a `rec` member does, and a `rec` member is defined (as a slot) before any sibling body elaborates, so it counts as settled here — the slot→member redefinition later clears wholesale.
+    /// Whether a [`probe_elaborated`](Self::probe_elaborated) `Miss` may be recorded: the purity and groundness condition, plus the *settled-globals* gate. Every declaration the entry names — in the result, and in the `Check` `expected` half of the key — must already be defined. Definedness is the one ambient fact a pure, ground elaboration reads (through the conversions in `expect`, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define` — the name analogue of the reduction cache's unsolved-metavariable refusal (`Context::reduce`), and what lets [`define_entry`](Self::define_entry) keep the elaboration cache across a fresh definition. A constructor, intrinsic, inductive, or struct is no reference, so it never trips the gate; only a reference to a definition does.
     fn elaboration_cacheable(
         &self,
         stamp: &ElaborationStamp,
@@ -299,7 +299,11 @@ impl<'s> Context<'s> {
                 && !self.underway.attempt.universe_solver.has_unsolved_meta(t)
                 && !t.has_local_free()
         };
-        let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
+        let settled = |t: &Term| {
+            t.mentions()
+                .declarations()
+                .all(|name| self.is_declaration_defined(name))
+        };
         self.typing.caches.stamps_unchanged(stamp)
             && ground(&result.0)
             && ground(&result.1)

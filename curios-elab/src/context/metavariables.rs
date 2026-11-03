@@ -11,8 +11,8 @@ use {
         read_by_value, zonk_solved_term_metas,
     },
     curios_core::{
-        Bound, Extent, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
-        Names, Subterm, Term, WitnessOrigin,
+        Bound, Extent, Free, Global, ImplicitOrigin, Mention, Metavar, MetavarId, MetavarOrigin,
+        MetavarSpine, Names, Subterm, Term, WitnessOrigin,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -182,10 +182,18 @@ impl<'s> Context<'s> {
         self.solve_metavar(id, term);
     }
 
-    /// [`Frames::is_top_level`](super::Frames::is_top_level): whether `name` is a declaration's, bound wherever a solution may stand. That a declaration is there at all is its signature's to say, so the question is noted as one about it: a candidate a solver admits for naming a declaration is another candidate once the declaration is gone.
-    pub(crate) fn is_top_level(&self, name: &Free) -> bool {
+    /// Whether the declaration `name` is in scope, declared here or by a unit in scope: bound wherever a solution may stand. That a declaration is there at all is its signature's to say, so the question is noted as one about it: a candidate a solver admits for naming a declaration is another candidate once the declaration is gone.
+    pub(crate) fn is_declared(&self, name: &Global) -> bool {
         self.asks(name, Question::Signature);
-        self.typing.frames.is_top_level(name)
+        self.typing.frames.declared_type(name).is_some()
+    }
+
+    /// Whether `name` stands wherever a solution may: a declaration in scope ([`Context::is_declared`]), or a local `local` admits.
+    pub(crate) fn stands_for(&self, name: &Mention, local: impl FnOnce(&Free) -> bool) -> bool {
+        match name {
+            Mention::Declaration(declaration) => self.is_declared(declaration),
+            Mention::Local(name) => local(name),
+        }
     }
 
     pub(crate) fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
@@ -418,14 +426,14 @@ impl<'s> Context<'s> {
                 return None;
             };
             let name = var.as_free()?;
-            if self.is_top_level(name) || births.insert(name, birth).is_some() {
+            if births.insert(name, birth).is_some() {
                 return None;
             }
         }
         let spelled = |term: &Term| {
-            term.free_vars()
+            term.mentions()
                 .iter()
-                .all(|name| births.contains_key(name) || self.is_top_level(name))
+                .all(|name| self.stands_for(name, |local| births.contains_key(local)))
         };
 
         let entries = outer
@@ -456,7 +464,7 @@ impl<'s> Context<'s> {
             .collect::<Vec<_>>();
         if telescope
             .iter()
-            .any(|(_, type_)| type_.free_vars().iter().any(|name| dropped.contains(name)))
+            .any(|(_, type_)| type_.mentions().locals().any(|name| dropped.contains(name)))
         {
             return None;
         }
@@ -476,11 +484,13 @@ impl<'s> Context<'s> {
         // `inner`'s type, spelled over the stand-in's binders: every birth name it mentions is one of the arguments.
         let mut mentioned = Vec::new();
         let mut binders = Vec::new();
-        let named = inner_entry.result().free_vars();
+        let named = inner_entry.result().mentions();
         for name in &named {
-            if self.is_top_level(name) {
-                continue;
-            }
+            let name = match name {
+                Mention::Declaration(declaration) if self.is_declared(declaration) => continue,
+                Mention::Declaration(_) => return None,
+                Mention::Local(name) => name,
+            };
             let position = arguments.iter().position(
                 |argument| matches!(&**argument, Subterm::Var(var) if var.as_free() == Some(name)),
             )?;

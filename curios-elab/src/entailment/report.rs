@@ -210,7 +210,6 @@ pub fn refuted(context: &mut Context, views: &LinearViews, outcome: &SearchOutco
     for (term, value) in &values {
         if let Subterm::Var(var) = &**term
             && let Some(free) = var.as_free()
-            && free.local_index().is_some()
             && let Some(literal) = literal(context, free, value)
         {
             solutions.push((*free, literal));

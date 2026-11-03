@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::held_levels,
     curios_core::{
-        Free, Global, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam,
+        Global, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam,
         Variance,
     },
     curios_utilities::Qualifier,
@@ -92,7 +92,7 @@ fn a_definition_applied_at_two_instances_converts_by_unfolding() {
     let sort = Term::type_at(Level::param(UniverseParam(0)));
     kernel
         .define(
-            &Free::Global(alias),
+            &alias,
             &Term::func_type([(carrier, sort.clone())], sort.clone()),
             &Term::func([(carrier, sort)], Term::free_var(&carrier)),
             &UniverseContext {
@@ -239,7 +239,7 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
     let held = Global::Authored(Qualifier::from(["held"]));
     kernel
         .define(
-            &Free::Global(pair),
+            &pair,
             &Term::tuple_type([
                 (binder(88, "first"), Term::type_at(level())),
                 (binder(89, "second"), nat_type()),
@@ -250,7 +250,7 @@ fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
         .expect("a name is declared once");
     kernel
         .define(
-            &Free::Global(held),
+            &held,
             &Term::tuple_type([(
                 binder(92, "first"),
                 Term::type_at(level().succ().expect("a parameter has a successor")),

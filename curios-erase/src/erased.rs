@@ -210,34 +210,27 @@ impl ErasedItem {
 
     /// How the item binds `name`, where it declares it.
     pub(super) fn export(&self, name: &curios_core::Global) -> Option<Export<'_>> {
-        Some(
-            match self
-                .environment
-                .lookup(&curios_core::Free::from(name), Sorts::NONE)?
-            {
-                Binding::Dropped => Export::Dropped,
-                Binding::Atom(curios_anf::Atom::Constant(constant)) => Export::Constant(
-                    self.module
-                        .constant(constant)
-                        .expect("an exported constant is the fragment's"),
-                ),
-                Binding::Atom(curios_anf::Atom::Value(value)) => {
-                    match self.unforced.contains(&value) {
-                        true => Export::Unforced,
-                        false => Export::Value,
-                    }
-                }
-                Binding::Atom(curios_anf::Atom::Function(function)) => Export::Function {
-                    arity: self
-                        .module
-                        .function(function)
-                        .expect("an exported function is the fragment's")
-                        .params
-                        .len(),
-                    interface: self.interfaces[&function].clone(),
-                },
+        Some(match self.environment.lookup(name, Sorts::NONE)? {
+            Binding::Dropped => Export::Dropped,
+            Binding::Atom(curios_anf::Atom::Constant(constant)) => Export::Constant(
+                self.module
+                    .constant(constant)
+                    .expect("an exported constant is the fragment's"),
+            ),
+            Binding::Atom(curios_anf::Atom::Value(value)) => match self.unforced.contains(&value) {
+                true => Export::Unforced,
+                false => Export::Value,
             },
-        )
+            Binding::Atom(curios_anf::Atom::Function(function)) => Export::Function {
+                arity: self
+                    .module
+                    .function(function)
+                    .expect("an exported function is the fragment's")
+                    .params
+                    .len(),
+                interface: self.interfaces[&function].clone(),
+            },
+        })
     }
 }
 

@@ -3,7 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Free, Global, Intrinsic, Reducer, Term, UniverseContext},
+    curios_core::{Free, Global, Intrinsic, Reducer, Term, UniverseContext, Universes},
+    curios_utilities::Qualifier,
 };
 
 /// The arm rule specializes the *context*, not just the motive. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
@@ -17,7 +18,7 @@ fn a_forced_index_equation_refines_an_outer_hypothesis() {
     let w = binder(3, "w");
     let arm_binder = binder(10, "p");
 
-    let p = opaque_family(&mut kernel, binder(2, "P"));
+    let p = opaque_family(&mut kernel, "P");
     kernel.assume(&b, &nat_type());
     kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&b)]));
 
@@ -54,7 +55,7 @@ fn a_cyclic_index_equation_refines_nothing() {
     let b = binder(0, "b");
     let w = binder(3, "w");
 
-    let p = opaque_family(&mut kernel, binder(2, "P"));
+    let p = opaque_family(&mut kernel, "P");
     kernel.assume(&b, &nat_type());
     kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&b)]));
 
@@ -87,7 +88,7 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     let w = binder(3, "w");
     let motive_binder = binder(51, "x");
 
-    let p = binder(2, "P");
+    let p = Global::Authored(Qualifier::from(["P"]));
     kernel
         .declare(
             &p,
@@ -98,7 +99,7 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
-    let p = Term::free_var(&p);
+    let p = Term::instance(p, Universes::default());
 
     kernel.assume(&h, &Term::intrinsic(Intrinsic::BoolType));
     kernel.assume(&w, &Term::apply(p.clone(), [Term::free_var(&h)]));

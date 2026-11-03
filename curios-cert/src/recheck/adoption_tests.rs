@@ -321,8 +321,8 @@ fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
         whole
             .verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, Error::Unbound(_))),
-        "a walk over every declaration finds `five` unbound at `alias`: {:?}",
+            .any(|verdict| matches!(verdict.error, Error::Undeclared(_))),
+        "a walk over every declaration finds `five` undeclared at `alias`: {:?}",
         whole.verdicts
     );
     assert_eq!(over.verdicts, whole.verdicts);

@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_core::{
         Atom, Cases, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Match,
-        MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext,
+        MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -36,7 +36,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     let applied_to_two = |sort: Term| {
         let mut kernel = kernel();
         let family = declare(&mut kernel, "F", sort);
-        let (h, e) = (binder(60, "h"), binder(61, "e"));
+        let (h, e) = (Global::Authored(Qualifier::from(["h"])), binder(61, "e"));
         let eliminated = Term::from(Subterm::Match(Match {
             head: Term::free_var(&e),
             result: MatchResult::Ambient(nat_type()),
@@ -61,8 +61,14 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
         convert(
             &mut kernel,
             &nat_type(),
-            &Term::apply(Term::free_var(&h), [Term::free_var(&left)]),
-            &Term::apply(Term::free_var(&h), [Term::free_var(&right)]),
+            &Term::apply(
+                Term::instance(h, Universes::default()),
+                [Term::free_var(&left)],
+            ),
+            &Term::apply(
+                Term::instance(h, Universes::default()),
+                [Term::free_var(&right)],
+            ),
         )
     };
 
@@ -89,7 +95,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
 
         // `h(e: F) -> result = match e end`, an elimination with no arm, stuck on a variable.
         let mut define = |index: u32, result: Term| {
-            let h = binder(index, "h");
+            let h = Global::Authored(Qualifier::from([format!("h{index}").as_str()]));
             let eliminated = Term::from(Subterm::Match(Match {
                 head: Term::free_var(&e),
                 result: MatchResult::Ambient(result.clone()),
@@ -108,7 +114,12 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
                 )
                 .expect("a name is declared once");
 
-            move |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)])
+            move |proof: &Free| {
+                Term::apply(
+                    Term::instance(h, Universes::default()),
+                    [Term::free_var(proof)],
+                )
+            }
         };
 
         let arrow = Term::func_type([(x, nat_type())], nat_type());
@@ -713,7 +724,7 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
     let one = Level::zero().succ().expect("level zero has a successor");
 
     // S(c) = match c | false => Type | true => Prop end
-    let sorts = binder(70, "S");
+    let sorts = Global::Authored(Qualifier::from(["S"]));
     let c = binder(71, "c");
     kernel
         .define(
@@ -732,10 +743,11 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
-    let sort_at = |argument: Term| Term::apply(Term::free_var(&sorts), [argument]);
+    let sort_at =
+        |argument: Term| Term::apply(Term::instance(sorts, Universes::default()), [argument]);
 
     // F(c) = match c : (d) => S(d) | false => Nat | true => P end
-    let family = binder(73, "F");
+    let family = Global::Authored(Qualifier::from(["F"]));
     let (c, d, stated) = (binder(74, "c"), binder(75, "d"), binder(76, "c"));
     kernel
         .define(
@@ -754,7 +766,8 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
-    let family_at = |argument: Term| Term::apply(Term::free_var(&family), [argument]);
+    let family_at =
+        |argument: Term| Term::apply(Term::instance(family, Universes::default()), [argument]);
 
     let (p, q) = (binder(77, "p"), binder(78, "q"));
     kernel.assume(&p, &family_at(literal(true)));

@@ -23,8 +23,8 @@ use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
     crate::{hold_proof, instantiate_qualities, yields_a_sort},
     curios_core::{
-        Bound, Free, InductDecl, Quality, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term,
-        Totality, UniverseContext,
+        Bound, Free, Global, InductDecl, Quality, RecGroup, Reducer, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseContext,
     },
 };
 
@@ -79,7 +79,7 @@ fn at_sorts<B: Bound>(value: &B, sorts: &[Quality]) -> B {
 /// `value_sort` is the sort the definition states its value inhabits ([`curios_core::Definition::value_sort`]), held one way too: a stated sort the checked value does not inhabit is refused ([`Error::ValueSort`]), since every judgment that asks a binder of the name its sort reads it unreduced, and a definition stating none is read by its reduct and refused nowhere.
 pub(crate) fn check_definition(
     kernel: &mut Kernel,
-    name: &Free,
+    name: &Global,
     type_: &Term,
     body: &Term,
     proof: bool,
@@ -118,7 +118,7 @@ fn hold_value_sort(kernel: &mut Kernel, stated: &Term, value: &Term) -> Result<(
 /// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does, with the sort its value inhabits where it states one. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
 pub(crate) fn define_as_stated(
     kernel: &mut Kernel,
-    name: &Free,
+    name: &Global,
     type_: &Term,
     body: &Term,
     proof: bool,
@@ -225,7 +225,7 @@ pub(crate) fn check_group<R>(
 /// A group that leaves a sort to its caller is judged at every assignment of them ([`at_every_sort`]), the group read at each, and defined as it is stated. What the obligations read of it under its own spelling is what every assignment says: it descends where it does at each, and a member encloses a group that does not where it does at any.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
-    members: &[(Free, bool)],
+    members: &[(Global, bool)],
     group: &RecGroup,
     universes: &UniverseContext,
 ) -> Result<(), Error> {

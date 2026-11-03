@@ -80,8 +80,8 @@ use {
     super::{Error, UniverseMark},
     crate::{Published, ZonkPass, zonk},
     curios_core::{
-        Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
-        Subterm, Term,
+        Declarations, DefinitionKind, Extent, Global, Imports, Item, MetavarSpine, Mints, Subterm,
+        Term,
     },
     curios_utilities::SyntaxRegistry,
     std::{
@@ -364,10 +364,9 @@ impl<'s> Context<'s> {
                 .collect::<Result<_, Error>>()?,
         };
         for (name, type_, universe_context) in types {
-            let name = Free::from(&name);
             self.forget(&name);
-            self.assume(&name, &type_);
-            self.set_assumption_universe_context(&name, universe_context);
+            self.declare(&name, &type_);
+            self.set_universe_context(&name, universe_context);
         }
 
         Ok(())
@@ -386,10 +385,10 @@ impl<'s> Context<'s> {
         }
         match &published.item {
             Item::Let(definition) => {
-                let name = Free::from(&definition.name);
-                self.reassume(&name, &definition.type_);
+                let name = definition.name;
+                self.redeclare(&name, &definition.type_);
                 self.define_published(&name, &definition.body, &definition.kind, definition.proof);
-                self.set_assumption_universe_context(&name, definition.universe_context.clone());
+                self.set_universe_context(&name, definition.universe_context.clone());
                 self.record_definition_variances(definition);
                 // The sort a value inhabits is published with the body, by the mark that withholds both (`curios_core::Definition::published`).
                 self.typing
@@ -405,10 +404,10 @@ impl<'s> Context<'s> {
             }
             Item::Rec(rec) => {
                 for (index, definition) in rec.definitions.iter().enumerate() {
-                    let name = Free::from(&definition.name);
+                    let name = definition.name;
                     let type_ = rec.group.member_type(index);
-                    self.reassume(&name, &type_);
-                    self.set_assumption_universe_context(&name, rec.universe_context.clone());
+                    self.redeclare(&name, &type_);
+                    self.set_universe_context(&name, rec.universe_context.clone());
                     self.define_published(
                         &name,
                         &Term::rec_proj(rec.group.clone(), index),
@@ -460,9 +459,8 @@ impl<'s> Context<'s> {
                 .collect(),
         };
         for (name, type_) in types {
-            let name = Free::from(&name);
             self.forget(&name);
-            self.assume(&name, &type_);
+            self.declare(&name, &type_);
         }
         self.publish(&published);
         match item {

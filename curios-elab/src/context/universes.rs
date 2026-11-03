@@ -6,7 +6,7 @@ use {
         stamp_if_moved, zonk_universe_levels,
     },
     curios_core::{
-        Bound, Extent, Free, Global, InductDecl, InductInstance, Level, Quality, StructDecl,
+        Bound, Extent, Global, InductDecl, InductInstance, Level, Quality, StructDecl,
         StructInstance, Term, UniverseContext, UniverseError, UniverseMetaId, Universes,
         instantiate_universes,
     },
@@ -42,64 +42,67 @@ impl<'s> Context<'s> {
         universes
     }
 
-    /// The type `name` is assumed at, at a fresh instance of the scheme it was generalized over: the instance of the occurrence written at `extent`, where a term wrote one, which the scheme's constraints are restated under ([`Occurrence`]).
-    pub(crate) fn instantiate_assumption_universes(
+    /// The type the declaration `name` is read at, at a fresh instance of the scheme it was generalized over: the instance of the occurrence written at `extent`, where a term wrote one, which the scheme's constraints are restated under ([`Occurrence`]).
+    pub(crate) fn instantiate_declaration_universes(
         &mut self,
-        name: &Free,
+        name: &Global,
         extent: Option<Extent>,
     ) -> Result<Option<(Term, Universes)>, UniverseError> {
-        let Some(type_) = self.assumption(name).cloned() else {
+        let Some(type_) = self.declared_type(name).cloned() else {
             return Ok(None);
         };
         let universe_context = self
             .typing
             .frames
-            .assumption_universe_context(name)
+            .universe_context(name)
             .unwrap_or_default();
         if universe_context.width() == 0 {
             return Ok(Some((type_, Universes::default())));
         }
+        let occurrence = Occurrence {
+            instantiated: *name,
+            extent,
+        };
         let universes = self
             .universes_mut()
-            .instantiate(&universe_context, Occurrence::naming(name, extent))?;
+            .instantiate(&universe_context, Some(occurrence))?;
         let type_ = instantiate_universes(&type_, &universes)?;
         Ok(Some((type_, universes)))
     }
 
-    pub(crate) fn instantiate_assumption(
+    /// [`Context::instantiate_declaration_universes`], refused as the elaborator refuses.
+    pub(crate) fn instantiate_declaration(
         &mut self,
-        name: &Free,
+        name: &Global,
         extent: Option<Extent>,
     ) -> Result<Option<(Term, Universes)>, Error> {
-        self.instantiate_assumption_universes(name, extent)
+        self.instantiate_declaration_universes(name, extent)
             .map_err(Error::from)
     }
 
-    pub(crate) fn instantiate_assumption_at(
+    /// The type the declaration `name` is read at, at the instance `universes` a reference states, under which the scheme's constraints are restated.
+    pub(crate) fn instantiate_declaration_at(
         &mut self,
-        name: &Free,
+        name: &Global,
         universes: &Universes,
         extent: Option<Extent>,
     ) -> Result<Option<Term>, Error> {
-        let Some(type_) = self.assumption(name).cloned() else {
+        let Some(type_) = self.declared_type(name).cloned() else {
             return Ok(None);
         };
-        let found = self.typing.frames.assumption_universe_context(name);
+        let found = self.typing.frames.universe_context(name);
         #[cfg(feature = "profile")]
         if found
             .as_ref()
             .is_none_or(|context| context.parameter_count != universes.levels.len())
         {
-            let (frames, holders) = self.typing.frames.assumption_universe_holders(name);
             curios_profile::note!(
                 target: "curios_elab::universe",
                 name = %name.faithful(),
                 registered = found.is_some(),
                 expected = found.as_ref().map_or(0, |context| context.parameter_count),
                 got = universes.levels.len(),
-                frames,
-                ?holders,
-                "assumption instance arity mismatch",
+                "declaration instance arity mismatch",
             );
         }
         let universe_context = found.unwrap_or_default();
@@ -107,7 +110,10 @@ impl<'s> Context<'s> {
             .instantiate_at(
                 &universe_context,
                 universes,
-                Occurrence::naming(name, extent),
+                Some(Occurrence {
+                    instantiated: *name,
+                    extent,
+                }),
             )
             .map_err(Error::from)?;
         let type_ = instantiate_universes(&type_, universes).map_err(Error::from)?;
@@ -239,26 +245,20 @@ impl<'s> Context<'s> {
         Ok(instantiated)
     }
 
-    /// [`Frames::set_assumption_universe_context`](super::Frames::set_assumption_universe_context), with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.
+    /// [`Frames::set_universe_context`](super::Frames::set_universe_context), with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.
     ///
     /// A write of the scheme already registered rewrites nothing and clears nothing. Replaying an established scope writes every declaration's scheme once more, and a clear on each — a wholesale one, thousands of times per compilation — would keep the reduction cache from ever holding a reduct across the mentions of one literal.
-    pub(crate) fn set_assumption_universe_context(
+    pub(crate) fn set_universe_context(
         &mut self,
-        name: &Free,
+        name: &Global,
         universe_context: UniverseContext,
     ) {
-        if self
-            .typing
-            .frames
-            .assumption_universe_context(name)
-            .as_ref()
-            == Some(&universe_context)
-        {
+        if self.typing.frames.universe_context(name).as_ref() == Some(&universe_context) {
             return;
         }
         self.typing
             .frames
-            .set_assumption_universe_context(name, universe_context);
+            .set_universe_context(name, universe_context);
         self.typing.caches.invalidate_for_redefinition();
     }
 

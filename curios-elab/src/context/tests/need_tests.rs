@@ -4,7 +4,7 @@ use {
     crate::context::test_support::*,
     crate::*,
     curios_core::{
-        ConceptDecl, Free, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
+        ConceptDecl, DefinitionKind, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
         UniverseContext, Universes, WitnessKey,
     },
     curios_utilities::Qualifier,
@@ -44,7 +44,7 @@ fn a_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     let [a, b] = unit_of_two(&mut context);
     context.attempt(&[&b]);
 
-    assert!(context.assumption(&Free::from(&a)).is_none());
+    assert!(context.declared_type(&a).is_none());
 
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 }
@@ -152,32 +152,23 @@ fn a_declarations_own_entry_and_a_finished_one_are_read_without_a_need() {
 fn a_body_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
-    let name = Free::from(&a);
 
     context.attempt(&[&b]);
-    assert!(context.definition_body(&name).is_none());
+    assert!(context.declaration_body(&a).is_none());
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
     context.attempt(&[&b]);
-    assert!(context.var_reduct(&name).is_none());
-    assert_eq!(context.take_needs(), BTreeSet::from([a]));
-
-    context.attempt(&[&b]);
-    assert!(
-        context
-            .var_reduct_at(&name, &Universes::default())
-            .is_none()
-    );
+    assert!(context.value_at(&a, &Universes::default()).is_none());
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
     // Its own body, and one that is missing for good once its declaration has finished, are no read of another.
     context.attempt(&[&a]);
-    assert!(context.definition_body(&name).is_none());
+    assert!(context.declaration_body(&a).is_none());
     assert!(context.take_needs().is_empty());
     context.finish(&[&a]);
     context.attempt(&[&b]);
-    assert!(context.definition_body(&name).is_none());
-    assert!(context.var_reduct(&name).is_none());
+    assert!(context.declaration_body(&a).is_none());
+    assert!(context.value_at(&a, &Universes::default()).is_none());
     assert!(context.take_needs().is_empty());
 }
 
@@ -188,7 +179,7 @@ fn a_declaration_reads_its_own_name_without_a_need() {
     let [_, b] = unit_of_two(&mut context);
     context.attempt(&[&b]);
 
-    assert!(context.assumption(&Free::from(&b)).is_none());
+    assert!(context.declared_type(&b).is_none());
 
     assert!(context.take_needs().is_empty());
 }
@@ -200,7 +191,7 @@ fn a_finished_declaration_is_no_need_whatever_became_of_it() {
     context.finish(&[&a]);
     context.attempt(&[&b]);
 
-    assert!(context.assumption(&Free::from(&a)).is_none());
+    assert!(context.declared_type(&a).is_none());
 
     assert!(context.take_needs().is_empty());
 }
@@ -224,11 +215,11 @@ fn a_proof_applies_a_name_of_its_unit_once_the_walk_offers_them() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
     for name in [&a, &b] {
-        context.define_assuming(
-            &Free::from(name),
+        context.define_declaring(
+            name,
             &Term::type_ground(),
             &Term::type_ground(),
-            None,
+            &DefinitionKind::Authored,
         );
     }
     context.finish(&[&a, &b]);
@@ -345,11 +336,11 @@ fn a_proof_applies_another_units_name_wherever_it_is_in_scope() {
     context.enter_item(Some(b));
 
     assert!(!context.proof_may_apply(&lemma));
-    context.define_assuming(
-        &Free::from(&lemma),
+    context.define_declaring(
+        &lemma,
         &Term::type_ground(),
         &Term::type_ground(),
-        None,
+        &DefinitionKind::Authored,
     );
     assert!(context.proof_may_apply(&lemma));
     assert!(context.take_needs().is_empty());
@@ -358,14 +349,16 @@ fn a_proof_applies_another_units_name_wherever_it_is_in_scope() {
 #[test]
 fn a_forgotten_declaration_is_bound_nowhere() {
     let mut context = context();
-    let name = Free::from(&Global::Authored(Qualifier::from(["gone"])));
-    context.define_assuming(&name, &Term::type_ground(), &Term::type_ground(), None);
-    context.assume_witness(&name, &Term::type_ground());
+    let name = Global::Authored(Qualifier::from(["gone"]));
+    context.define_declaring(
+        &name,
+        &Term::type_ground(),
+        &Term::type_ground(),
+        &DefinitionKind::Authored,
+    );
 
     context.forget(&name);
 
-    assert!(context.assumption(&name).is_none());
-    assert!(context.definition_body(&name).is_none());
-    assert!(!context.locals().any(|(bound, _)| *bound == name));
-    assert!(!context.witness_scope().any(|(bound, _)| *bound == name));
+    assert!(context.declared_type(&name).is_none());
+    assert!(context.declaration_body(&name).is_none());
 }

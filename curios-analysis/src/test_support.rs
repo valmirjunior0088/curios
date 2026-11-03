@@ -218,6 +218,10 @@ impl Env for Scope {
         self.defined.get(name)
     }
 
+    fn body(&self, _: &Global) -> Option<&Term> {
+        None
+    }
+
     fn induct_decl(&self, _: &Global) -> Option<&InductDecl> {
         None
     }

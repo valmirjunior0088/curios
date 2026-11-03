@@ -2,9 +2,9 @@ use {
     super::{
         Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
         FormerEta, Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label,
-        Let, Match, MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope,
-        Spellings, Struct, StructType, Subterm, Term, Three, Transient, Tuple, TupleType, Two,
-        Universes, Var, Variant, former_eta,
+        Let, Match, MatchResult, Matrix, Mention, Nat, NumLit, Pattern, Proj, Quality, Rec, Row,
+        Scope, Spellings, Struct, StructType, Subterm, Term, Three, Transient, Tuple, TupleType,
+        Two, Universes, Var, Variant, former_eta,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
@@ -322,11 +322,8 @@ impl Spelling {
             .unwrap_or_else(|| name.faithful().to_string())
     }
 
-    /// The display spelling of a name. A global with a shorter in-scope spelling takes it (axis (b)); a local binder gets its pretty rename (axis (a)), falling back to its minting hint. A name in neither map renders verbatim.
+    /// The display spelling of a local binder: its pretty rename (axis (a)), falling back to its minting hint. A name in neither renders verbatim. A declaration is spelled by [`Spelling::symbol`].
     pub fn label(&self, name: &Free) -> String {
-        if let Some(global) = name.as_global() {
-            return self.symbol(global);
-        }
         self.pretty
             .as_ref()
             .and_then(|rename| rename.get(name).cloned())
@@ -464,17 +461,17 @@ impl<'a, T> Spelled<'a, T> {
     }
 }
 
-/// The terms a report renders, gathered so [`build_rename`] can spell every name any of them shows: their free variables, and the binders a render of each opens — which only a render can say, since a scope remembers a binder's hint and not its identity.
+/// The terms a report renders, gathered so [`build_rename`] can spell every name any of them shows: what they mention, and the binders a render of each opens — which only a render can say, since a scope remembers a binder's hint and not its identity.
 #[derive(Debug, Default, Clone)]
 pub struct DisplayNames {
     terms: Vec<Term>,
-    free: BTreeSet<Free>,
+    mentioned: BTreeSet<Mention>,
 }
 
 impl DisplayNames {
     /// Add `term` to what the report renders.
     pub fn add(&mut self, term: &Term) {
-        self.free.extend(term.free_vars().iter().copied());
+        self.mentioned.extend(term.mentions().iter().copied());
         self.terms.push(term.clone());
     }
 }
@@ -496,9 +493,9 @@ pub fn display_names(term: &Term) -> DisplayNames {
 pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> Rename {
     let spelling = Rc::new(spelling.clone());
     let mut shown = names
-        .free
+        .mentioned
         .iter()
-        .map(DisplayKey::of)
+        .map(DisplayKey::mentioned)
         .collect::<BTreeSet<_>>();
     let mut tuple_labels = BTreeSet::new();
     for term in &names.terms {
@@ -520,22 +517,20 @@ fn assign(
     tuple_labels: &BTreeSet<DisplayKey>,
     spelling: &Spelling,
 ) -> Rename {
-    let (literal, prettifiable) = shown
+    // Declarations reserve the spelling they will display under.
+    let mut used = shown
         .iter()
-        .partition::<Vec<&DisplayKey>, _>(|key| key.name.as_global().is_some());
-
-    // Globals reserve the spelling they will display under.
-    let mut used = literal
-        .into_iter()
-        .map(|key| match key.name.as_global() {
-            Some(global) => spelling.symbol(global),
-            None => key.name.faithful().to_string(),
-        })
+        .filter_map(|key| key.name.as_declaration())
+        .map(|declaration| spelling.symbol(declaration))
         .collect::<BTreeSet<_>>();
+    let prettifiable = shown
+        .iter()
+        .filter_map(|key| Some((key, key.name.as_local()?)))
+        .collect::<Vec<_>>();
 
     let mut spellings = HashMap::new();
     for label in tuple_labels {
-        if let Some(hint) = label.name.hint() {
+        if let Some(hint) = label.name.as_local().and_then(Free::hint) {
             used.insert(hint.to_string());
             spellings.insert(*label, hint.to_string());
         }
@@ -543,13 +538,13 @@ fn assign(
 
     let (hinted, hintless) = prettifiable
         .into_iter()
-        .filter(|key| !spellings.contains_key(*key))
-        .partition::<Vec<&DisplayKey>, _>(|key| key.name.hint().is_some());
+        .filter(|(key, _)| !spellings.contains_key(*key))
+        .partition::<Vec<_>, _>(|(_, local)| local.hint().is_some());
 
     // Where each hint's search for a free suffix resumes. Every suffix below it was found taken, and a taken spelling stays taken, so a search begun again for each binder would re-ask what is known — for the like-named binders a large type opens, the square of how many there are.
     let mut resume: HashMap<&str, u32> = HashMap::new();
-    for key in hinted.into_iter().chain(hintless) {
-        let hint = key.name.hint().unwrap_or("x");
+    for (key, local) in hinted.into_iter().chain(hintless) {
+        let hint = local.hint().unwrap_or("x");
         let next = resume.entry(hint).or_insert(2);
         let mut candidate = hint.to_string();
         while used.contains(&candidate) {
@@ -798,13 +793,9 @@ impl Minting {
         }
     }
 
-    /// The label the next binder a render opens is printed under: a global its own name, and a local the identity minted from where the render meets it and the hint its scope remembers — `None` for a `constant` scope, which never had binders written.
+    /// The label the next binder a render opens is printed under: the identity minted from where the render meets it and the hint its scope remembers — none for a `constant` scope, which never had binders written.
     fn label(&self, label: Option<&Label>) -> Free {
-        let name = match label {
-            Some(Label::Global(global)) => Free::Global(*global),
-            Some(Label::Local { hint, .. }) => self.local(*hint),
-            None => self.local(None),
-        };
+        let name = self.local(label.and_then(Label::hint_symbol));
         self.record(&name);
         name
     }
@@ -850,16 +841,26 @@ impl Minting {
 /// A name as a rename tells it apart from the others: any name by itself, and a label a render minted by its position together with its hint. Two terms of one report restart their positions, so the hint is what keeps two binders of different names apart; two of the same name in the same position share a spelling, which is harmless, since the terms are never in scope of each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct DisplayKey {
-    name: Free,
+    name: Mention,
     hint: Option<Symbol>,
 }
 
 impl DisplayKey {
     fn of(name: &Free) -> Self {
-        let printed = name.local_index().is_some_and(|index| index >= PRINTED);
+        let printed = name.index() >= PRINTED;
         Self {
-            name: *name,
+            name: Mention::Local(*name),
             hint: printed.then(|| name.hint_symbol()).flatten(),
+        }
+    }
+
+    fn mentioned(name: &Mention) -> Self {
+        match name {
+            Mention::Local(local) => Self::of(local),
+            Mention::Declaration(_) => Self {
+                name: *name,
+                hint: None,
+            },
         }
     }
 }
@@ -878,14 +879,7 @@ impl Rename {
 }
 
 fn label_terms(binders: &[Free]) -> Vec<Term> {
-    binders
-        .iter()
-        .map(|binder| match binder.as_global() {
-            // A group bound under its members' own names opens to an occurrence of each, as a reference to it is written.
-            Some(name) => Term::instance(*name, Universes::default()),
-            None => Term::free_var(binder),
-        })
-        .collect()
+    binders.iter().map(Term::free_var).collect()
 }
 
 /// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`].
@@ -2075,7 +2069,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             }
         }
         Subterm::Instance(instance) => flat([
-            pure(frame.spelling.label(&Free::Global(instance.name))),
+            pure(frame.spelling.symbol(&instance.name)),
             pure(universe_suffix(&instance.universes, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
@@ -2549,9 +2543,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         ]),
         // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
         Subterm::Transient(Transient::Derive) => pure("derive"),
-        Subterm::Transient(Transient::Name(name)) => {
-            pure(frame.spelling.label(&Free::Global(name)))
-        }
+        Subterm::Transient(Transient::Name(name)) => pure(frame.spelling.symbol(&name)),
         // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds.
         Subterm::Transient(Transient::Matrix(Matrix { head, motive, rows })) => {
             // The motive's binders are opened ahead of the scrutinee's, as a compiled match's are, and the arms' after both.

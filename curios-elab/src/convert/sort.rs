@@ -7,8 +7,8 @@ use {
     super::probe_level_fallback,
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, Free, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced,
-        Quality, ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes,
+        Bound, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced, Quality,
+        ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes,
     },
 };
 
@@ -423,14 +423,11 @@ impl Sort {
         while let Subterm::Apply(apply) = &**head {
             head = &apply.head;
         }
-        let name = match &**head {
-            Subterm::Var(var) => *var.unwrap(),
-            Subterm::Instance(Instance { name, .. }) => Free::Global(*name),
-            _ => return Ok(None),
+        let Subterm::Instance(Instance { name, .. }) = &**head else {
+            return Ok(None);
         };
-        let declared = matches!(&**type_, Subterm::Apply(_))
-            && name.as_global().is_some()
-            && context.assumption(&name).is_some();
+        let declared =
+            matches!(&**type_, Subterm::Apply(_)) && context.declared_type(name).is_some();
         if !declared {
             return Ok(None);
         }
@@ -446,30 +443,21 @@ impl Sort {
         })
     }
 
-    /// The sort `type_` stands at where it is written as a definition that publishes the sort of its value ([`curios_core::Definition::value_sort`]): a name, at the universes an occurrence of it states. Read before anything is run, so the value is not walked to learn it. `None` for any other type.
+    /// The sort `type_` stands at where it is written as a definition that publishes the sort of its value ([`curios_core::Definition::value_sort`]): a reference to one, at the universes it states. Read before anything is run, so the value is not walked to learn it. `None` for any other type.
     pub fn published(context: &mut Context, type_: &Term) -> Result<Option<Sort>, ReduceError> {
         let (name, universes) = match &**type_ {
-            Subterm::Var(var) => match var.unwrap().as_global() {
-                Some(name) => (*name, None),
-                None => return Ok(None),
-            },
             // An instance short of its scheme denotes none of the scheme's instances, and the sort read at it would hold the scheme's own parameters.
             Subterm::Instance(Instance { name, universes })
-                if context.states_scheme(&Free::Global(*name), universes) =>
+                if context.states_scheme(name, universes) =>
             {
-                (*name, Some(universes))
+                (*name, universes)
             }
             _ => return Ok(None),
         };
         let Some(sort) = context.definition_value_sort(&name) else {
             return Ok(None);
         };
-        let sort = match universes {
-            Some(universes) => {
-                instantiate_universes(&sort, universes).map_err(ReduceError::Universe)?
-            }
-            None => sort,
-        };
+        let sort = instantiate_universes(&sort, universes).map_err(ReduceError::Universe)?;
 
         Sort::from_universe(context, &sort).map(Some)
     }

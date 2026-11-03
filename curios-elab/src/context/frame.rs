@@ -16,7 +16,7 @@ pub use frames::*;
 use {
     super::{BirthTelescope, Footing, Window},
     crate::DeadArm,
-    curios_core::{DefinitionKind, Free, MetavarSpine, Term, UniverseContext},
+    curios_core::{DefinitionKind, Free, MetavarSpine, Term},
     curios_utilities::{Keyed, Ordered, Persistent},
     std::{cell::RefCell, collections::HashMap, fmt, hash::Hash, ptr, rc::Rc},
 };
@@ -304,7 +304,6 @@ pub type Projected = Keyed<(Term, usize)>;
 #[derive(Debug, Clone)]
 pub struct Binding {
     type_: Term,
-    universes: UniverseContext,
     place: i64,
     /// The depth of the frame that binds the name: what a settlement reading the binding rests on.
     depth: usize,
@@ -520,7 +519,6 @@ impl Frame {
             name,
             Binding {
                 type_: type_.clone(),
-                universes: UniverseContext::empty(),
                 place,
                 depth: self.depth,
             },
@@ -569,39 +567,6 @@ impl Frame {
         self.assumptions.insert(*name, binding);
         if self.depth > 0 {
             self.restate_scope();
-        }
-    }
-
-    /// Replace the universe context of `name`'s innermost binding.
-    pub fn set_universes(&mut self, name: &Free, universes: UniverseContext) {
-        if let Some(mut binding) = self.assumptions.get(name).cloned() {
-            binding.universes = universes;
-            self.assumptions.insert(*name, binding);
-        }
-    }
-
-    /// Drop the place among the locals `name`'s innermost binding stands at, where it is bound: a binding about to be made again.
-    pub fn unbind_local(&mut self, name: &Free) {
-        if let Some(binding) = self.assumptions.get(name) {
-            let place = binding.place;
-            self.locals.remove(place);
-        }
-    }
-
-    /// Drop every binding of `name`: its assumption, its definition, and its places among the locals and the witness binders.
-    pub fn unbind(&mut self, name: &Free) {
-        if let Some(binding) = self.assumptions.remove(name) {
-            self.locals.remove(binding.place);
-        }
-        self.definitions.remove(name);
-        let witnessed = self
-            .witnesses
-            .iter()
-            .filter(|(_, (bound, _))| bound == name)
-            .map(|(place, _)| place)
-            .collect::<Vec<_>>();
-        for place in witnessed {
-            self.witnesses.remove(place);
         }
     }
 

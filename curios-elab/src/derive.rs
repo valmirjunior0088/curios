@@ -18,8 +18,8 @@ use {
     super::{Context, Error, Mode, Opened, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
-        MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
-        str_literal, syn_call,
+        Mention, MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term,
+        WitnessOrigin, str_literal, syn_call,
     },
     curios_num::Natural,
     curios_utilities::{
@@ -246,7 +246,7 @@ impl Payload {
                 owner: *owner,
                 tag: tag.to_string(),
             },
-            None => CalleeId::Function(Free::Global(*owner)),
+            None => CalleeId::Function(Mention::Declaration(*owner)),
         };
         Self {
             constructor: path(owner, tag),
@@ -306,9 +306,7 @@ fn classify(
 
     // A payload typed by a variable the arm did not bind is typed by the witness's telescope, and the premise that would cover it is the one to add.
     let telescope_variable = match &*reduced {
-        Subterm::Var(var) => var
-            .as_free()
-            .is_some_and(|free| free.is_local() && !opened.binds(free)),
+        Subterm::Var(var) => var.as_free().is_some_and(|free| !opened.binds(free)),
         _ => false,
     };
     Ok(Classified {
@@ -502,8 +500,8 @@ fn witness_call(
         MetavarOrigin::Witness(provenance),
         Vec::new(),
     ));
-    let wrapper = Free::global(field.concept.qualifier().with(field.field));
-    let parameters = match context.assumption(&wrapper).map(|type_| &**type_) {
+    let wrapper = Global::Authored(field.concept.qualifier().with(field.field));
+    let parameters = match context.declared_type(&wrapper).map(|type_| &**type_) {
         Some(Subterm::FuncType(function)) => function
             .plicities()
             .iter()

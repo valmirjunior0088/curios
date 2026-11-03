@@ -201,6 +201,6 @@ pub(super) fn struct_with_field(
 }
 
 /// The name the definitions below are checked under.
-pub(super) fn lemma() -> Free {
-    Free::from(&Global::Authored(Qualifier::from(["lemma"])))
+pub(super) fn lemma() -> Global {
+    Global::Authored(Qualifier::from(["lemma"]))
 }

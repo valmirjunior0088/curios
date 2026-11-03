@@ -235,12 +235,9 @@ impl Linking {
         for (name, binding) in erased.environment().bindings() {
             match binding {
                 Binding::Atom(atom) => {
-                    environment.bind(
-                        &curios_core::Free::from(name),
-                        taken.landed.atom(bound(atom)),
-                    );
+                    environment.bind(name, taken.landed.atom(bound(atom)));
                 }
-                Binding::Dropped => environment.bind_dropped(&curios_core::Free::from(name)),
+                Binding::Dropped => environment.bind_dropped(name),
             }
         }
 

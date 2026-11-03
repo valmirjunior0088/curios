@@ -32,8 +32,8 @@ pub type Declared<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_co
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.
 #[derive(Debug, Default)]
 pub struct ErasedNames {
-    pub values: BTreeMap<curios_anf::ValueId, curios_core::Free>,
-    pub functions: BTreeMap<curios_anf::FunctionId, curios_core::Free>,
+    pub values: BTreeMap<curios_anf::ValueId, curios_core::Mention>,
+    pub functions: BTreeMap<curios_anf::FunctionId, curios_core::Mention>,
 }
 
 impl<'s> Eraser<'s> {
@@ -116,10 +116,10 @@ impl<'s> Eraser<'s> {
     /// A value whose own initializer reads it is refused here, where it is read: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled, the report noting where the value is declared.
     fn external(
         &mut self,
-        name: &curios_core::Free,
+        name: &curios_core::Mention,
         sorts: Sorts,
     ) -> Result<Option<Binding>, Error> {
-        let Some(global) = name.as_global() else {
+        let curios_core::Mention::Declaration(global) = name else {
             return Ok(None);
         };
         let Some(export) = (self.externals)(global, sorts).and_then(|erased| erased.export(global))
@@ -348,10 +348,12 @@ impl<'s> Eraser<'s> {
             | curios_core::Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
             // An instance is its head at the sorts it states: a level carries nothing at run time, and a declaration that leaves sorts open is bound at each of them apart.
             curios_core::Subterm::Instance(instance) => self.erase_name(
-                &curios_core::Free::Global(instance.name),
+                &curios_core::Mention::Declaration(instance.name),
                 Sorts::of(&instance.universes.qualities),
             ),
-            curios_core::Subterm::Var(var) => self.erase_name(var.unwrap(), Sorts::NONE),
+            curios_core::Subterm::Var(var) => {
+                self.erase_name(&curios_core::Mention::Local(*var.unwrap()), Sorts::NONE)
+            }
             curios_core::Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
             curios_core::Subterm::Match(m) => self.erase_match(context, m, hint),
             curios_core::Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
@@ -372,16 +374,16 @@ impl<'s> Eraser<'s> {
     }
 
     /// The operand `name`, read at `sorts`, is bound to: a binder's or one the item declares, and otherwise what another item binds it to, imported the first time it is read.
-    fn erase_name(&mut self, name: &curios_core::Free, sorts: Sorts) -> Result<Outcome, Error> {
-        let sorts = match name.as_global() {
-            Some(global) => self.named(*global, sorts).1,
-            None => sorts,
+    fn erase_name(&mut self, name: &curios_core::Mention, sorts: Sorts) -> Result<Outcome, Error> {
+        let sorts = match name {
+            curios_core::Mention::Declaration(global) => self.named(*global, sorts).1,
+            curios_core::Mention::Local(_) => sorts,
         };
         let binding = match self.environment.lookup(name, sorts) {
             Some(binding) => binding,
-            None => self.external(name, sorts)?.unwrap_or_else(|| {
-                unreachable!("erase: unbound variable {}{sorts}", name.faithful())
-            }),
+            None => self
+                .external(name, sorts)?
+                .unwrap_or_else(|| unreachable!("erase: unbound name {name:?}{sorts}")),
         };
 
         Ok(Outcome::Emitted(match binding {
@@ -415,7 +417,7 @@ impl<'s> Eraser<'s> {
                 let outcome = self.kept_operand(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.bind(&name, &type_, &value);
-                self.environment.bind(&name, atom);
+                self.environment.bind(name, atom);
                 label_terms.push(curios_core::Term::free_var(&name));
             }
 

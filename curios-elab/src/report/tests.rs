@@ -39,7 +39,7 @@ fn root_operands_shared(term: &Term) -> bool {
 
 /// What `context` will mint next, minted.
 fn next_identity(context: &mut Context) -> Option<u64> {
-    context.fresh(None).local_index()
+    Some(context.fresh(None).index())
 }
 
 #[test]

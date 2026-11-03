@@ -13,7 +13,7 @@ use {
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_core::{
-        Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, ReduceError, Spelling,
+        Anchors, CalleeId, Global, Level, Mention, Quality, ReaderPosition, ReduceError, Spelling,
         Subterm, Term, UniverseMetaId, WitnessKey,
     },
     curios_utilities::{LINE_WIDTH, Plicity, Qualifier},
@@ -237,10 +237,10 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
     lines
 }
 
-fn spelled_free(name: &Free, spelling: &Spelling) -> String {
+fn spelled_mention(name: &Mention, spelling: &Spelling) -> String {
     match name {
-        Free::Global(global) => spelling.symbol(global),
-        Free::Local(_) => name.hint().unwrap_or("_").to_string(),
+        Mention::Declaration(declaration) => spelling.symbol(declaration),
+        Mention::Local(local) => local.hint().unwrap_or("_").to_string(),
     }
 }
 
@@ -311,7 +311,7 @@ pub fn declared(names: &[Global], spelling: &Spelling) -> String {
 /// A callee identity spelled the same way, for the reports that carry one whole rather than destructured.
 fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
     match callee {
-        CalleeId::Function(name) => spelled_free(name, spelling),
+        CalleeId::Function(name) => spelled_mention(name, spelling),
         CalleeId::Constructor { owner, tag } => format!("{}/{tag}", spelling.symbol(owner)),
         CalleeId::Witness(global) | CalleeId::Structure(global) => spelling.symbol(global),
         CalleeId::Operator(op) => op.symbol().to_string(),
@@ -323,7 +323,7 @@ impl Callee {
     /// This callee as a report's sentence names it: a function quoted as written, an operator and a witness described, since neither has a name a program writes.
     pub fn phrase(&self, spelling: &Spelling) -> String {
         match self {
-            Callee::Function(name) => format!("'{}'", spelled_free(name, spelling)),
+            Callee::Function(name) => format!("'{}'", spelled_mention(name, spelling)),
             Callee::Constructor { owner, tag } => {
                 format!("'{}/{tag}'", spelling.symbol(owner))
             }
@@ -1275,7 +1275,7 @@ impl fmt::Display for Displayed<'_> {
                         )
                     }
                     Callee::Function(func) => {
-                        let func = spelled_free(func, spelling);
+                        let func = spelled_mention(func, spelling);
                         let argument = match binder {
                             None => "an implicit argument".to_string(),
                             Some(binder) => format!("implicit argument '{binder}'"),

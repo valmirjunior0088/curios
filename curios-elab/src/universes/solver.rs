@@ -16,7 +16,7 @@ mod tests;
 
 use {
     curios_core::{
-        Extent, Free, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
+        Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
@@ -32,19 +32,6 @@ use {
 pub struct Occurrence {
     pub instantiated: Global,
     pub extent: Option<Extent>,
-}
-
-impl Occurrence {
-    /// The occurrence a term written at `extent` is of `name`, where `name` is a declaration's: only a top-level name is generalized over a scheme, so a use of a local instantiates none.
-    pub fn naming(name: &Free, extent: Option<Extent>) -> Option<Self> {
-        match name {
-            Free::Global(instantiated) => Some(Self {
-                instantiated: *instantiated,
-                extent,
-            }),
-            Free::Local(_) => None,
-        }
-    }
 }
 
 /// A stable point to which all universe assignments and constraints can be rolled back after a speculative elaboration branch.

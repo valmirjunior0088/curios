@@ -50,13 +50,13 @@ fn declare_held(context: &mut Context) {
 
     let drop = nominal("Drop");
     let dropped = context.fresh(Some("X"));
-    context.define_assuming(
-        &Free::Global(drop),
+    context.define_declaring(
+        &drop,
         &Term::func_type([(dropped, Term::type_at(level()))], Term::type_ground()),
         &Term::func([(dropped, Term::type_at(level()))], nat_type()),
-        Some(&DefinitionKind::Authored),
+        &DefinitionKind::Authored,
     );
-    context.set_assumption_universe_context(&Free::Global(drop), scheme.clone());
+    context.set_universe_context(&drop, scheme.clone());
 
     let held = context.fresh(Some("held"));
     let payload = Term::apply(Term::instance(drop, vec![level()]), [nat_type()]);
@@ -112,14 +112,13 @@ fn define_pick(context: &mut Context, variance: Variance) {
         body: Term::func([(carrier, sort)], nat(3)),
     };
 
-    let name = Free::from(&definition.name);
-    context.define_assuming(
-        &name,
+    context.define_declaring(
+        &definition.name,
         &definition.type_,
         &definition.body,
-        Some(&definition.kind),
+        &definition.kind,
     );
-    context.set_assumption_universe_context(&name, definition.universe_context.clone());
+    context.set_universe_context(&definition.name, definition.universe_context.clone());
     context.record_definition_variances(&definition);
 }
 
@@ -469,14 +468,13 @@ fn define_records(context: &mut Context) {
             type_,
             body,
         };
-        let free = Free::from(&definition.name);
-        context.define_assuming(
-            &free,
+        context.define_declaring(
+            &definition.name,
             &definition.type_,
             &definition.body,
-            Some(&definition.kind),
+            &definition.kind,
         );
-        context.set_assumption_universe_context(&free, scheme.clone());
+        context.set_universe_context(&definition.name, scheme.clone());
         context.record_definition_variances(&definition);
     }
 }

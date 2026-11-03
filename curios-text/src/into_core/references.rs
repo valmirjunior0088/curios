@@ -25,7 +25,7 @@ pub(crate) struct LoweredItem {
 pub(crate) struct Declared {
     /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines, and what the unit's anchors place a report about it by (`curios_core::Anchors::label`). `None` for a definition that was built rather than written.
     pub label: Option<curios_core::Extent>,
-    /// The top-level definitions its declared type names, in the order a term lists its free variables. Taken of a definition written under its own name alone, the only kind the audit asks of.
+    /// The top-level definitions its declared type names, in the order a term lists the declarations it references. Taken of a definition written under its own name alone, the only kind the audit asks of.
     pub signature: Vec<curios_core::Global>,
     /// What it is a bare, transparent alias of, where it is one.
     pub alias: Option<AliasEdge>,
@@ -54,7 +54,7 @@ impl LoweredItem {
                 .map(|let_| Declared {
                     label: let_.span.as_ref().and_then(&placed),
                     signature: match written_under_its_name(let_) {
-                        true => globals(&let_.type_.free_vars()),
+                        true => globals(&let_.type_.mentions()),
                         false => Vec::new(),
                     },
                     alias: alias_of(let_),
@@ -73,20 +73,17 @@ fn written_under_its_name(let_: &FlatLet) -> bool {
 
 /// Every definition `term` names: the globals it refers to, and the head of every construction in it. A construction's head is no variable — a structure literal, a variant and a type former's normal form hold their name in the node (`Subterm::construction_names`) — so a term that *builds* a structure names it without referring to it. The edges of the `unused-declaration` lint are these, from an item's terms and from the entrypoint's alike.
 pub(super) fn named(term: &curios_core::Term) -> impl Iterator<Item = curios_core::Global> {
-    globals(&term.free_vars())
+    globals(&term.mentions())
         .into_iter()
         .chain(term.construction_names())
 }
 
-/// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
-pub(super) fn globals(names: &curios_core::Frees) -> Vec<curios_core::Global> {
-    names
-        .iter()
-        .filter_map(|name| name.as_global().copied())
-        .collect()
+/// The declarations among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
+pub(super) fn globals(names: &curios_core::Mentions) -> Vec<curios_core::Global> {
+    names.declarations().copied().collect()
 }
 
-/// The full set of names one node's declaration references: its own free vars, plus (for a declared inductive/struct) its registry entry's free vars. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
+/// The full set of names one node's declaration references: the declarations its own terms reference, plus (for a declared inductive/struct) those its registry entry's do. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
 pub(super) fn node_reference_names(
     item: &FlatItem,
     declared: &[curios_core::Global],
@@ -94,13 +91,13 @@ pub(super) fn node_reference_names(
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     syntax: &SyntaxRegistry,
 ) -> HashSet<curios_core::Global> {
-    let mut names = item.free_vars();
+    let mut names = item.declarations_named();
     for name in declared {
         if let Some(induct_decl) = induct_decls.get(name) {
-            names.extend(induct_free_vars(induct_decl));
+            names.extend(induct_references(induct_decl));
         }
         if let Some(struct_decl) = struct_decls.get(name) {
-            names.extend(struct_free_vars(struct_decl));
+            names.extend(struct_references(struct_decl));
         }
     }
     names.extend(derived_vocabulary(item, syntax));
@@ -167,24 +164,22 @@ pub(super) fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_co
         .collect()
 }
 
-/// The external references of an inductive registry entry: every free var of its telescopes. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
-fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
-    globals(&induct_decl.arity.free_vars())
+/// The external references of an inductive registry entry: every declaration its telescopes reference. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
+fn induct_references(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
+    globals(&induct_decl.arity.mentions())
         .into_iter()
         .chain(
             induct_decl
                 .constructors
                 .iter()
-                .flat_map(|(_, param)| globals(&param.telescope.free_vars())),
+                .flat_map(|(_, param)| globals(&param.telescope.mentions())),
         )
         .collect()
 }
 
-/// The external references of a struct registry entry: every free var of its arity — its parameter domains and the field telescope they terminate in. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. intrinsic) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
-fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
-    globals(&struct_decl.arity.free_vars())
-        .into_iter()
-        .collect()
+/// The external references of a struct registry entry: every declaration its arity references — its parameter domains and the field telescope they terminate in. Like `induct_references`, this is what makes a struct's type-former node depend on the (e.g. intrinsic) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
+fn struct_references(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
+    globals(&struct_decl.arity.mentions()).into_iter().collect()
 }
 
 /// A definition whose body is a bare top-level name: what it stands for and, where it is a type alias written out in full, every top-level name its body mentions.
@@ -202,7 +197,7 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 
     Some(AliasEdge {
         target,
-        dependencies: direct.map(|_| globals(&let_.body.free_vars())),
+        dependencies: direct.map(|_| globals(&let_.body.mentions())),
     })
 }
 

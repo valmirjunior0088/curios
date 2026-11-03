@@ -7,8 +7,8 @@ use {
         stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Instance, Level,
-        MetavarId, One, Probe, Scope, Subterm, Telescope, Term, Transient, WitnessOrigin,
+        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, One,
+        Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -372,16 +372,9 @@ pub fn elaborate_apply(
     // Insertion provenance: name the applied function in the uninferred-implicit report.
     //
     // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node would report `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
-    fn innermost_reference(term: &Term) -> Option<Free> {
-        match &**term {
-            Subterm::Var(var) => Some(*var.unwrap()),
-            Subterm::Apply(apply) => innermost_reference(&apply.head),
-            Subterm::Instance(Instance { name, .. })
-            | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
-            _ => None,
-        }
-    }
-    let func_label = innermost_reference(head).map_or(CalleeId::Anonymous, CalleeId::Function);
+    let func_label = head
+        .head_name()
+        .map_or(CalleeId::Anonymous, CalleeId::Function);
 
     let (head, written_type) = elaborate(context, head, Mode::Infer)?;
     // The holes the head's spine leaves open are this call's to await, as the implicits it inserts are: `Eq()(5, b)` reads its arguments against the type the head's own call left open.

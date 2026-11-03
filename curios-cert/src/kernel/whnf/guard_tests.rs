@@ -4,7 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
-    curios_core::{Cost, Exhaustion, Free, Intrinsic, Term},
+    curios_core::{Cost, Exhaustion, Free, Global, Intrinsic, Term, Universes},
+    curios_utilities::Qualifier,
 };
 
 /// A guard's equation is recorded on the guard's written spelling, and the false arm of `n < m` is the fact `m <= n` read the other way: the reducer asks the dual spelling with the literal negated, and the record stays as written.
@@ -102,7 +103,7 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
 #[test]
 fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
     let n = binder(1, "n");
-    let witness = binder(2, "witness");
+    let witness = Global::Authored(Qualifier::from(["witness"]));
     let method = binder(3, "le");
     let a = binder(4, "a");
     let b = binder(5, "b");
@@ -130,7 +131,7 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
         Term::free_var(&positive),
     ));
     let guard = Term::apply(
-        Term::proj(Term::free_var(&witness), 0),
+        Term::proj(Term::instance(witness, Universes::default()), 0),
         [subject.clone(), nat(63)],
     );
     let dual = Term::intrinsic(Intrinsic::nat_lt(nat(63), subject));
@@ -162,7 +163,7 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
 #[test]
 fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
     let n = binder(1, "n");
-    let witness = binder(2, "witness");
+    let witness = Global::Authored(Qualifier::from(["witness"]));
     let method = binder(3, "le");
     let a = binder(4, "a");
     let b = binder(5, "b");
@@ -185,7 +186,7 @@ fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
     kernel.assume(&n, &nat_type());
 
     let guard = Term::apply(
-        Term::proj(Term::free_var(&witness), 0),
+        Term::proj(Term::instance(witness, Universes::default()), 0),
         [Term::free_var(&n), nat(5)],
     );
     let closed = Term::intrinsic(Intrinsic::nat_lte(nat(5), nat(63)));
@@ -216,7 +217,7 @@ fn dispatched_through(kernel: &mut Kernel, layers: usize, subject: &Free) -> Ter
     let mut head = None;
 
     for layer in 0..layers {
-        let name = binder(102 + layer as u32, "layer");
+        let name = Global::Authored(Qualifier::from([format!("layer{layer}").as_str()]));
         kernel
             .define(
                 &name,
@@ -226,14 +227,14 @@ fn dispatched_through(kernel: &mut Kernel, layers: usize, subject: &Free) -> Ter
             )
             .expect("a name is declared once");
         body = Term::apply(
-            Term::free_var(&name),
+            Term::instance(name, Universes::default()),
             [Term::free_var(&first), Term::free_var(&first)],
         );
         head = Some(name);
     }
 
     Term::apply(
-        Term::free_var(&head.expect("a dispatch has a layer")),
+        Term::instance(head.expect("a dispatch has a layer"), Universes::default()),
         [Term::free_var(subject), nat(63)],
     )
 }
@@ -277,7 +278,7 @@ fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
 fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     let budget = Cost::FRAME.get() * 4;
     let n = binder(1, "n");
-    let witness = binder(2, "witness");
+    let witness = Global::Authored(Qualifier::from(["witness"]));
     let method = binder(3, "le");
     let a = binder(4, "a");
     let b = binder(5, "b");
@@ -303,7 +304,7 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
 
     let expensive = chain(100_000);
     let guard = Term::apply(
-        Term::proj(Term::free_var(&witness), 0),
+        Term::proj(Term::instance(witness, Universes::default()), 0),
         [Term::free_var(&n), expensive.clone()],
     );
     let dual = Term::intrinsic(Intrinsic::nat_lt(expensive, Term::free_var(&n)));

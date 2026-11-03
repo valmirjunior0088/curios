@@ -25,17 +25,17 @@ fn collect_ignores_index_names() {
     );
 
     assert_eq!(
-        term.free_vars().iter().copied().collect::<BTreeSet<_>>(),
+        term.mentions().locals().copied().collect::<BTreeSet<_>>(),
         BTreeSet::from([w, z])
     );
 }
 
 /// A chain-shaped term shares its single carrier child's memoized set upward instead of copying it once per link.
 #[test]
-fn free_vars_share_the_single_carrier_child_allocation() {
+fn mentions_share_the_single_carrier_child_allocation() {
     let x = Free::local(0, Some("x"));
     let chain = Term::proj(Term::proj(Term::free_var(&x), 0), 0);
-    chain.free_vars();
+    chain.mentions();
 
     let Subterm::Proj(outer) = chain.as_ref() else {
         panic!("chain changed shape");
@@ -46,10 +46,10 @@ fn free_vars_share_the_single_carrier_child_allocation() {
     assert!(
         chain
             .inner
-            .frees
+            .mentions
             .get()
             .unwrap()
-            .shares(middle.head.inner.frees.get().unwrap())
+            .shares(middle.head.inner.mentions.get().unwrap())
     );
 }
 
@@ -521,16 +521,11 @@ fn universe_params_are_read_at_their_own_index() {
 /// Of two names a reader picks, the first written is the one found, whichever spells first: `F(zeta(Type), alpha(Type))` finds `zeta`, and `F(alpha(Type), zeta(Type))` `alpha`.
 #[test]
 fn the_first_picked_name_is_the_first_written() {
-    let zeta = Free::global(Qualifier::from(["zeta"]));
-    let alpha = Free::global(Qualifier::from(["alpha"]));
-    let f = Free::global(Qualifier::from(["F"]));
-    let named = |name: &Free| {
-        Term::instance(
-            *name.as_global().expect("a declaration"),
-            Universes::default(),
-        )
-    };
-    let applied = |first: &Free, second: &Free| {
+    let zeta = Global::Authored(Qualifier::from(["zeta"]));
+    let alpha = Global::Authored(Qualifier::from(["alpha"]));
+    let f = Global::Authored(Qualifier::from(["F"]));
+    let named = |name: &Global| Term::instance(*name, Universes::default());
+    let applied = |first: &Global, second: &Global| {
         Term::apply(
             named(&f),
             [
@@ -539,13 +534,19 @@ fn the_first_picked_name_is_the_first_written() {
             ],
         )
     };
-    let partial = |name: &Free| *name == zeta || *name == alpha;
+    let partial = |name: &Global| *name == zeta || *name == alpha;
 
-    assert_eq!(applied(&zeta, &alpha).first_free(partial), Some(zeta));
-    assert_eq!(applied(&alpha, &zeta).first_free(partial), Some(alpha));
     assert_eq!(
-        applied(&zeta, &alpha).first_free(|name| *name == alpha),
+        applied(&zeta, &alpha).first_declaration(partial),
+        Some(zeta)
+    );
+    assert_eq!(
+        applied(&alpha, &zeta).first_declaration(partial),
         Some(alpha)
     );
-    assert_eq!(applied(&zeta, &alpha).first_free(|_| false), None);
+    assert_eq!(
+        applied(&zeta, &alpha).first_declaration(|name| *name == alpha),
+        Some(alpha)
+    );
+    assert_eq!(applied(&zeta, &alpha).first_declaration(|_| false), None);
 }

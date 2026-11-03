@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Cost, Exhaustion, Free, Global, Intrinsic, Reducer, Term, Universes},
+    curios_core::{Cost, Exhaustion, Global, Intrinsic, Reducer, Term, Universes},
     curios_utilities::Qualifier,
 };
 
@@ -347,7 +347,7 @@ fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
 #[test]
 fn a_local_free_term_is_never_refined() {
     let n = binder(1, "n");
-    let konst = binder(2, "konst");
+    let konst = Global::Authored(Qualifier::from(["konst"]));
     let x = binder(3, "x");
 
     let mut kernel = kernel();
@@ -361,8 +361,11 @@ fn a_local_free_term_is_never_refined() {
         .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
 
-    let open = Term::apply(Term::free_var(&konst), [Term::free_var(&n)]);
-    let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
+    let open = Term::apply(
+        Term::instance(konst, Universes::default()),
+        [Term::free_var(&n)],
+    );
+    let closed = Term::apply(Term::instance(konst, Universes::default()), [nat(1)]);
 
     let inside = kernel.scoped(|kernel| {
         kernel
@@ -390,7 +393,7 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
         let x = binder(3, "x");
         kernel
             .define(
-                &Free::Global(konst),
+                &konst,
                 &Term::func_type([(x, nat_type())], nat_type()),
                 &Term::func([(x, nat_type())], nat(7)),
                 &monomorphic(),
@@ -431,7 +434,7 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
 fn a_reduct_that_drops_a_local_is_still_reached() {
     let n = binder(1, "n");
     let m = binder(2, "m");
-    let second = binder(3, "second");
+    let second = Global::Authored(Qualifier::from(["second"]));
     let x = binder(4, "x");
     let y = binder(5, "y");
 
@@ -448,7 +451,7 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
     kernel.assume(&m, &nat_type());
 
     let written = Term::apply(
-        Term::free_var(&second),
+        Term::instance(second, Universes::default()),
         [Term::free_var(&n), Term::free_var(&m)],
     );
 
@@ -569,10 +572,13 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
 
     let mut kernel = kernel();
     kernel.assume(&n, &nat_type());
-    kernel.assume(
-        &Free::Global(g),
-        &Term::func_type([(x, nat_type())], nat_type()),
-    );
+    kernel
+        .declare(
+            &g,
+            &Term::func_type([(x, nat_type())], nat_type()),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
 
     kernel.scoped(|kernel| {
         kernel

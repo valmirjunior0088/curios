@@ -322,7 +322,7 @@ fn a_mutual_pair_settles_on_a_later_round() {
 // `Uses.{u}(A: Type u) | c(x: Alias.{u}(A))` over `Alias.{u} = (A: Type u) => A`: the reduct is `A`, which carries no level. With no budget to unfold the alias its instance is read as written, every level invariant, and the refusal is handed back.
 #[test]
 fn an_instance_reduction_removes_leaves_no_level() {
-    let alias = Free::from(&named("Alias"));
+    let alias = named("Alias");
     let carrier = Free::local(1, Some("A"));
 
     for (budget, expected, refused) in [(100_000, "*", false), (0, "=", true)] {
@@ -360,7 +360,7 @@ fn an_instance_reduction_removes_leaves_no_level() {
 // `Uses.{u}(A: Type u) | c(x: Opaque.{u}(A))` over an `Opaque` with a type and no value: its instance survives forcing, and a level on it is compared for equality.
 #[test]
 fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
-    let opaque = Free::from(&named("Opaque"));
+    let opaque = named("Opaque");
     let carrier = Free::local(1, Some("A"));
     let mut kernel = kernel();
     kernel

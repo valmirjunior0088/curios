@@ -183,10 +183,6 @@ pub(super) fn syntax() -> &'static SyntaxRegistry {
 }
 
 /// A top-level definition's identity, from the path a test writes. Fixture-only — production code carries the `Qualifier` from resolution instead of recovering it from a spelling.
-pub(super) fn global(path: &str) -> curios_core::Free {
-    curios_core::Free::global(Qualifier::from(path.trim_start_matches('/').split('/')))
-}
-
 pub(super) fn global_name(path: &str) -> curios_core::Global {
     curios_core::Global::Authored(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
@@ -196,6 +192,7 @@ pub(super) fn fixture_loader() -> RootSource {
     RootSource::none().tested()
 }
 
+/// The entry's body as the lowering writes it, the module it closes over left aside.
 pub(super) fn run(src: &str) -> curios_core::Term {
     let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
@@ -204,8 +201,30 @@ pub(super) fn run(src: &str) -> curios_core::Term {
     )
     .unwrap();
 
-    curios_core::test_support::into_nested_term(program)
+    program.entry.body
 }
+
+/// What `src` lowers to as a suite reads it: each definition's name, type and body in the module's order, beside the entry's body.
+pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
+    let (program, _, _) = super::into_core(
+        &src.parse::<Entrypoint>().unwrap(),
+        &fixture_loader(),
+        syntax(),
+    )
+    .unwrap();
+    let definitions = program
+        .module
+        .items
+        .iter()
+        .flat_map(curios_core::Item::definitions)
+        .map(|definition| (definition.name, definition.type_, definition.body))
+        .collect();
+
+    (definitions, program.entry.body)
+}
+
+/// A definition as [`lowered`] reads it: its name, its type and its body.
+pub(super) type Lowered = (curios_core::Global, curios_core::Term, curios_core::Term);
 
 pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     let (program, _, _) = super::into_core(
@@ -233,11 +252,10 @@ pub(super) fn closed_group(src: &str) -> Option<Vec<String>> {
     definitions
         .iter()
         .all(|definition| {
-            definition
-                .body
-                .free_vars()
-                .iter()
-                .all(|name| name.as_global().is_some_and(|name| members.contains(name)))
+            definition.body.mentions().iter().all(|name| {
+                name.as_declaration()
+                    .is_some_and(|name| members.contains(name))
+            })
         })
         .then(|| {
             definitions

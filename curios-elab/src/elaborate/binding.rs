@@ -9,8 +9,8 @@ use {
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
-        Telescope, Term, Transient, WitnessKey, WitnessOrigin,
+        Instance, Intrinsic, Let, Mention, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec,
+        Subterm, Telescope, Term, Transient, WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity, recurse},
@@ -663,7 +663,7 @@ fn sequencing_witness(
         context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
     let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
     let provenance = WitnessOrigin {
-        func: CalleeId::Function(Free::global(bind)),
+        func: CalleeId::Function(Mention::Declaration(Global::Authored(bind))),
         role: Some(premise_label(1)),
     };
     let (slot, witness) =

@@ -47,7 +47,7 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
                 .ok()?,
         ),
         curios_core::Subterm::Var(var) => {
-            let index = var.as_free()?.local_index()?;
+            let index = var.as_free()?.index();
             name(params.get(usize::try_from(index).ok()?)?)
         }
         // The table states a declaration at no instance: the surface has none to write.
@@ -116,7 +116,7 @@ pub(super) fn projection(
         let curios_core::Subterm::Var(var) = &**operand else {
             return None;
         };
-        let index = usize::try_from(var.as_free()?.local_index()?).ok()?;
+        let index = usize::try_from(var.as_free()?.index()).ok()?;
         let entry = match demand {
             Operand::IsType => (
                 match former {

@@ -46,7 +46,7 @@ fn a_top_level_rec_item_binds_its_members_in_the_shared_group() {
             .unwrap()
             .body
             .body()
-            .free_vars()
+            .mentions()
             .is_empty()
     );
     assert_eq!(

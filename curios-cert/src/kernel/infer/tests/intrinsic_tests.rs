@@ -18,7 +18,7 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
     kernel
         .declare(
-            &Free::Global(holds),
+            &holds,
             &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
             &UniverseContext::default(),
         )
@@ -79,7 +79,7 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
     kernel
         .declare(
-            &Free::Global(holds),
+            &holds,
             &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
             &UniverseContext::default(),
         )

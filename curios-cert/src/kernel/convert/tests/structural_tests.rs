@@ -70,13 +70,18 @@ fn beta_equal_terms_convert() {
 #[test]
 fn a_definition_converts_with_its_value() {
     let mut kernel = kernel();
-    let f = binder(0, "f");
+    let f = Global::Authored(Qualifier::from(["f"]));
     kernel
         .define(&f, &nat_type(), &nat(3), &UniverseContext::default())
         .expect("a name is declared once");
 
     assert_eq!(
-        convert(&mut kernel, &nat_type(), &Term::free_var(&f), &nat(3)),
+        convert(
+            &mut kernel,
+            &nat_type(),
+            &Term::instance(f, Universes::default()),
+            &nat(3)
+        ),
         Ok(true),
     );
 }
@@ -86,7 +91,7 @@ fn a_definition_converts_with_its_value() {
 fn an_intrinsic_is_congruent_in_its_operands() {
     let mut kernel = kernel();
     let n = binder(0, "n");
-    let m = binder(1, "m");
+    let m = Global::Authored(Qualifier::from(["m"]));
     kernel
         .define(
             &m,
@@ -97,7 +102,10 @@ fn an_intrinsic_is_congruent_in_its_operands() {
         .expect("a name is declared once");
 
     let left = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
-    let right = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&m), nat(3)));
+    let right = Term::intrinsic(Intrinsic::nat_mul(
+        Term::instance(m, Universes::default()),
+        nat(3),
+    ));
 
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(true));
 }

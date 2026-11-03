@@ -3,9 +3,7 @@
 use {
     crate::convert::test_support::*,
     crate::*,
-    curios_core::{
-        DefinitionKind, Free, Intrinsic, MetavarId, MetavarOrigin, Subterm, Term, Universes,
-    },
+    curios_core::{DefinitionKind, Intrinsic, MetavarId, MetavarOrigin, Subterm, Term, Universes},
 };
 
 #[test]
@@ -83,11 +81,11 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
 fn two_calls_of_a_definition_that_forgets_its_argument(context: &mut Context) -> Problem {
     let flat = nominal("flat");
     let argument = context.fresh(Some("n"));
-    context.define_assuming(
-        &Free::Global(flat),
+    context.define_declaring(
+        &flat,
         &Term::func_type([(argument, nat_type())], nat_type()),
         &Term::func([(argument, nat_type())], nat(0)),
-        Some(&DefinitionKind::Authored),
+        &DefinitionKind::Authored,
     );
     context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
 

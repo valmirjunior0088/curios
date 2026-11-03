@@ -19,8 +19,8 @@ use {
         Context, Error, HeldFrames, check, expect, pending, reduce_with, resolved_for_display,
     },
     curios_core::{
-        Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, StructType, Subterm,
-        Telescope, Term, Tuple,
+        Atom, Bind, Free, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, StructType,
+        Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
     curios_utilities::{Plicity, recurse},
@@ -85,7 +85,7 @@ struct Line<'m> {
     /// The binders bound ahead of the body, each to what it stands for, in the order they were read: the first is outermost.
     lets: Vec<(Free, Term)>,
     /// Each hypothesis the row writes under a structure's name: what it stands for, the name as written and what it resolves to. Held where the row's body stands ([`Compiler::body_of`]), a hypothesis having no type before its case is entered.
-    held: Vec<(Term, String, Free)>,
+    held: Vec<(Term, String, Mention)>,
     /// The binders of the cases the row states, in the order it states them: what the binders of its own walk are replaced by where a leaf holds its instance.
     cases: Vec<Free>,
 }
@@ -1862,11 +1862,12 @@ fn held_to_structure(
     context: &mut Context,
     column: &Term,
     head: &str,
-    structure: &Free,
+    structure: &Mention,
 ) -> Result<(), Error> {
     // A head that names nothing is reported as the name it is, by the reason the lowering filed for it.
-    let Free::Global(structure) = structure else {
-        return Err(context.unbound_variable(Term::free_var(structure)));
+    let structure = match structure {
+        Mention::Declaration(structure) => structure,
+        Mention::Local(unbound) => return Err(context.unbound_variable(Term::free_var(unbound))),
     };
 
     let (_, type_) = elaborate(context, column, Mode::Infer)?;

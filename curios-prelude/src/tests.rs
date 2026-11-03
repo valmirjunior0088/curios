@@ -368,7 +368,7 @@ fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
             family
                 .constructors
                 .iter()
-                .map(|(_, constructor)| constructor.telescope.free_vars())
+                .map(|(_, constructor)| constructor.telescope.mentions())
                 .collect::<Vec<_>>(),
         ),
         Nominal::Struct(record) | Nominal::Concept { record, .. } => {
@@ -377,11 +377,11 @@ fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
     };
 
     let mut mentions = BTreeSet::new();
-    for frees in [arity.free_vars(), result_sort.free_vars()]
+    for named in [arity.mentions(), result_sort.mentions()]
         .into_iter()
         .chain(constructors)
     {
-        mentions.extend(frees.iter().filter_map(|free| free.as_global().copied()));
+        mentions.extend(named.declarations().copied());
     }
     mentions
 }

@@ -16,8 +16,8 @@ use {
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
     curios_core::{
-        Apply, Bound, Free, ImplicitOrigin, Intrinsic, Metavar, MetavarOrigin, Quality, Subterm,
-        Term, Visit,
+        Apply, Bound, Global, ImplicitOrigin, Intrinsic, Mention, Metavar, MetavarOrigin, Quality,
+        Subterm, Term, Visit,
     },
     std::{
         collections::BTreeMap,
@@ -391,7 +391,10 @@ fn is_sequencing(context: &Context, term: &Term) -> bool {
         return false;
     };
 
-    head.head_name() == Some(Free::global(context.syntax().monad.bind.qualifier()))
+    head.head_name()
+        == Some(Mention::Declaration(Global::Authored(
+            context.syntax().monad.bind.qualifier(),
+        )))
 }
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.

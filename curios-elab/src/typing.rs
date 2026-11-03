@@ -1141,7 +1141,7 @@ pub fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term {
 
 /// The locals `term` names outside its metavariables' occurrences: those [`read_outside_spines`] reads, so a reader gathering values for it gathers none it would leave standing in a spine, which is as wide as the scope the occurrence was born in. Read off the term's free set where it holds no metavariable, and otherwise by a walk that visits each node once, passes over every occurrence and every subterm that names no local, and reads a subterm that holds no metavariable off its free set.
 pub fn locals_outside_spines(term: &Term) -> BTreeSet<Free> {
-    let locals = |term: &Term| term.free_vars().locals().copied().collect::<Vec<_>>();
+    let locals = |term: &Term| term.mentions().locals().copied().collect::<Vec<_>>();
     if !term.has_metavar() {
         return locals(term).into_iter().collect();
     }
@@ -1320,9 +1320,7 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
         Subterm::Var(var) => {
             let name = var.unwrap();
             context.refine(name, value);
-            if !context.is_top_level(name)
-                && let Some(definition) = context.definition_body(name).cloned()
-            {
+            if let Some(definition) = context.definition_body(name).cloned() {
                 refine_head(context, &definition, value)?;
             }
         }

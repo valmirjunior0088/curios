@@ -20,8 +20,8 @@ use {
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
-        ImplicitOrigin, Instance, Metavar, MetavarId, StructType, Subterm, Term, Transient,
-        UniverseContext, Universes, WitnessKey, WitnessOrigin,
+        ImplicitOrigin, Instance, Mention, Metavar, MetavarId, StructType, Subterm, Term,
+        Transient, UniverseContext, Universes, WitnessKey, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxName},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -60,7 +60,7 @@ pub fn callee(context: &Context, func: &CalleeId) -> Callee {
                 .is_some_and(|witness| witness.name == *name)
         })
         .map(|(concept, key)| Callee::Witness { concept, key })
-        .unwrap_or_else(|| Callee::Function(Free::Global(*name))),
+        .unwrap_or_else(|| Callee::Function(Mention::Declaration(*name))),
         CalleeId::Constructor { owner, tag } => Callee::Constructor {
             owner: *owner,
             tag: tag.clone(),
@@ -285,11 +285,11 @@ pub fn written_monad(type_: &Term) -> Option<Term> {
 }
 
 /// The name `head` is: a binder, or a declaration as it is written or at the instance elaboration chose.
-fn named(head: &Term) -> Option<Free> {
+fn named(head: &Term) -> Option<Mention> {
     match &**head {
-        Subterm::Var(var) => var.as_free().copied(),
+        Subterm::Var(var) => var.as_free().copied().map(Mention::Local),
         Subterm::Instance(Instance { name, .. }) | Subterm::Transient(Transient::Name(name)) => {
-            Some(Free::Global(*name))
+            Some(Mention::Declaration(*name))
         }
         _ => None,
     }
@@ -302,8 +302,8 @@ fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
         head = &apply.head;
     }
     let mut result = match named(head)? {
-        Free::Global(name) => context.written_assumption(&name)?,
-        local => context.assumption(&local)?,
+        Mention::Declaration(name) => context.written_assumption(&name)?,
+        Mention::Local(local) => context.assumption(&local)?,
     }
     .clone();
     let mut binders = Vec::new();
@@ -680,11 +680,11 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
 fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     match &**node {
         Subterm::Var(var) => context
-            .instantiate_assumption(var.unwrap(), None)?
-            .map(|(type_, _)| type_)
+            .assumption(var.unwrap())
+            .cloned()
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Instance(Instance { name, universes }) => context
-            .instantiate_assumption_at(&Free::Global(*name), universes, None)?
+            .instantiate_declaration_at(name, universes, None)?
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Proj(proj) => {
             let head_type = node_type(context, &proj.head)?;
@@ -1128,9 +1128,9 @@ pub fn register_witness(
             return Err(Error::non_regular_witness_premise(premise.clone()));
         }
         let bound = premise_args.iter().all(|arg| {
-            arg.free_vars()
-                .iter()
-                .all(|free| matches!(free, Free::Global(_)) || binder_names.contains(free))
+            arg.mentions()
+                .locals()
+                .all(|free| binder_names.contains(free))
         });
         let (premise_size, premise_occurrences) = measure(premise_args, &binder_names);
         let decreasing = premise_size < head_size

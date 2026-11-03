@@ -6,7 +6,7 @@ use {
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many,
         Match, MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term,
-        UniverseContext,
+        UniverseContext, Universes,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -748,8 +748,8 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
 
     let n = context.fresh(Some("n"));
     let mapper_type = Term::func_type([(n, nat_type.clone())], nat_type.clone());
-    let f = context.fresh(Some("f"));
-    context.assume(&f, &mapper_type);
+    let f = Global::Authored(Qualifier::from(["f"]));
+    context.declare(&f, &mapper_type);
 
     context.birth_metavar(MetavarId(0), Vec::new(), mapper_type);
 
@@ -763,7 +763,7 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
         nat_type.clone(),
         nat_type,
         Term::free_var(&xs),
-        Term::free_var(&f),
+        Term::instance(f, Universes::default()),
     ));
 
     assert_eq!(conv(&mut context, &flexible, &rigid), Ok(true));

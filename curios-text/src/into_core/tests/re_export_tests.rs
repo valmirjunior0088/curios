@@ -94,7 +94,8 @@ fn rejects_absolute_use_of_nonexistent_module() {
 #[test]
 fn pub_use_exposes_qualifier() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod Foo
                 pub mod Bar
                     pub let f : Type = Type;
@@ -104,12 +105,11 @@ fn pub_use_exposes_qualifier() {
                 pub use /Foo/{Bar};
             end
             MyMod/Bar/f
-        "#),
-        curios_core::Term::let_(
-            &global("/Foo/Bar/f"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Foo/Bar/f"))
+        "#
+        ),
+        (
+            vec![(global_name("/Foo/Bar/f"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/Foo/Bar/f")),
         ),
     );
 }
@@ -137,7 +137,8 @@ fn rejects_mod_that_overwrites_prior_use() {
 #[test]
 fn use_of_pub_use_path_resolves_through_alias() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod Foo
                 pub mod Bar
                     pub let f : Type = Type;
@@ -148,12 +149,11 @@ fn use_of_pub_use_path_resolves_through_alias() {
             end
             use /MyMod/{Bar};
             Bar/f
-        "#),
-        curios_core::Term::let_(
-            &global("/Foo/Bar/f"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Foo/Bar/f"))
+        "#
+        ),
+        (
+            vec![(global_name("/Foo/Bar/f"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/Foo/Bar/f")),
         ),
     );
 }
@@ -161,7 +161,8 @@ fn use_of_pub_use_path_resolves_through_alias() {
 #[test]
 fn chained_pub_use_re_exports_transitively() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod A
                 pub mod X
                     pub let f : Type = Type;
@@ -174,12 +175,11 @@ fn chained_pub_use_re_exports_transitively() {
                 pub use /B/{X};
             end
             C/X/f
-        "#),
-        curios_core::Term::let_(
-            &global("/A/X/f"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/A/X/f"))
+        "#
+        ),
+        (
+            vec![(global_name("/A/X/f"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/A/X/f")),
         ),
     );
 }
@@ -190,7 +190,8 @@ fn chained_pub_use_re_exports_transitively() {
 #[test]
 fn chained_re_export_resolves_out_of_order() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod A
                 pub use /B/{x};
             end
@@ -201,12 +202,11 @@ fn chained_re_export_resolves_out_of_order() {
                 pub let x : Type = Type;
             end
             A/x
-        "#),
-        curios_core::Term::let_(
-            &global("/C/x"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/C/x"))
+        "#
+        ),
+        (
+            vec![(global_name("/C/x"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/C/x")),
         ),
     );
 }
@@ -258,7 +258,8 @@ fn rejects_two_globs_exposing_same_label() {
 #[test]
 fn deep_facade_traversal_through_re_exported_module() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod B
                 pub mod M
                     pub let x : Type = Type;
@@ -269,12 +270,11 @@ fn deep_facade_traversal_through_re_exported_module() {
             end
             use /A/M/{x};
             x
-        "#),
-        curios_core::Term::let_(
-            &global("/B/M/x"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/B/M/x"))
+        "#
+        ),
+        (
+            vec![(global_name("/B/M/x"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/B/M/x")),
         ),
     );
 }
@@ -283,7 +283,8 @@ fn deep_facade_traversal_through_re_exported_module() {
 #[test]
 fn re_exports_from_own_private_child() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod Facade
                 mod Impl
                     pub let helper : Type = Type;
@@ -292,12 +293,15 @@ fn re_exports_from_own_private_child() {
             end
             use /Facade/{helper};
             helper
-        "#),
-        curios_core::Term::let_(
-            &global("/Facade/Impl/helper"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Facade/Impl/helper"))
+        "#
+        ),
+        (
+            vec![(
+                global_name("/Facade/Impl/helper"),
+                written_type(0),
+                written_type(1)
+            )],
+            curios_core::Term::written(global_name("/Facade/Impl/helper")),
         ),
     );
 }

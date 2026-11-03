@@ -193,7 +193,7 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
 
     kernel
         .define(
-            &Free::Global(scheme),
+            &scheme,
             &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
             &Term::type_at(parameter),
             &UniverseContext {
@@ -222,7 +222,7 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
 
     kernel
         .declare(
-            &Free::Global(scheme),
+            &scheme,
             &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
             &UniverseContext {
                 parameter_count: 1,
@@ -261,7 +261,7 @@ fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Ter
 
     kernel
         .define(
-            &Free::Global(name),
+            &name,
             &Term::func_type([(binder(80, "n"), nat_type.clone())], sort.clone()),
             &Term::func(
                 [(n, nat_type)],

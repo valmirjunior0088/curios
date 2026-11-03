@@ -2,7 +2,7 @@
 
 use {
     crate::{Answered, Context, Question},
-    curios_core::{Consumption, Cost, Free, Global, Minted, ReduceError, Trace},
+    curios_core::{Consumption, Cost, Global, Minted, ReduceError, Trace},
     curios_utilities::Qualifier,
     std::rc::Rc,
 };
@@ -13,11 +13,9 @@ impl<'s> Context<'s> {
         self.typing.traced.take()
     }
 
-    /// Note that the judgment under way asked `question` of the declaration `name` names, where `name` is a declaration's and not a binder's: the part asked is the declaration's to hold.
-    pub(super) fn asks(&self, name: &Free, question: fn(Global) -> Question) {
-        if let Free::Global(global) = name {
-            self.typing.traced.note(question(*global), Answered::Part);
-        }
+    /// Note that the judgment under way asked `question` of the declaration `name`: the part asked is the declaration's to hold.
+    pub(super) fn asks(&self, name: &Global, question: fn(Global) -> Question) {
+        self.typing.traced.note(question(*name), Answered::Part);
     }
 
     /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.

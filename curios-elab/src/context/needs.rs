@@ -5,7 +5,7 @@
 //! None of this exists where nothing is being elaborated: a context that only reads finished terms has no unfinished declaration to need.
 
 use {
-    curios_core::{Free, Global},
+    curios_core::Global,
     std::{cell::RefCell, collections::BTreeSet, mem},
 };
 
@@ -70,14 +70,7 @@ impl Needs {
         self.needed.borrow().is_empty()
     }
 
-    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty, for its type or for its body: the answer is then not that the name means nothing or reduces no further, only that its declaration has not elaborated.
-    pub fn missed(&self, name: &Free) {
-        if let Free::Global(global) = name {
-            self.reads(global);
-        }
-    }
-
-    /// Record a need where `name` keys a registry entry of a declaration of the unit that has not finished, other than the one being attempted. Every entry of a unit is registered as lowered before its first item, so one read before its declaration has elaborated is not the entry the declaration publishes: the read is answered, and the attempt that made it is void, as one that missed a name is.
+    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of the declaration comes back empty, for its type or for its body — the answer is then not that the name means nothing or reduces no further, only that its declaration has not elaborated — and where a registry entry it keys is read: every entry of a unit is registered as lowered before its first item, so one read before its declaration has elaborated is not the entry the declaration publishes, and the read is answered and the attempt that made it is void.
     pub fn reads(&self, name: &Global) {
         if self.unfinished.contains(name) && !self.attempting.contains(name) {
             self.need(*name);

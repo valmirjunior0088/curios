@@ -97,7 +97,8 @@ fn pub_inside_a_private_module_reaches_the_subtree_only() {
 // A glob imports the exported surface, never a subtree-private declaration: reaching one always requires naming it. The reference is left as a bare name for core to reject, rather than silently resolving to `/Owner/helper`.
 #[test]
 fn glob_does_not_import_subtree_private_bindings() {
-    let term = run(r#"
+    let (definitions, _) = lowered(
+        r#"
         pub mod Owner
             let helper : Type = Type;
             pub mod Worker
@@ -106,21 +107,21 @@ fn glob_does_not_import_subtree_private_bindings() {
             end
         end
         Type
-    "#);
-
-    // The reference is left for core to reject. What it must *not* be is any global: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither.
-    let dumped = format!("{term:?}");
-    assert!(
-        dumped.contains("Local(Mint { index: 0, hint: Some(\"helper\"), written: None })"),
-        "unexpected term: {dumped}"
+    "#,
     );
-    // `/Owner/helper` occurs exactly once — as the binder the declaration introduces. A second occurrence would be the reference resolving to it.
-    assert_eq!(
-        dumped
-            .matches("Authored(Qualifier([\"Owner\", \"helper\"]))")
-            .count(),
-        1,
-        "the glob leaked a private binding: {dumped}"
+
+    // The reference is left for core to reject. What it must *not* be is any declaration: `/Owner/helper` would mean the glob leaked a private binding, and a root-level `/helper` would silently capture an entry-module definition of the same name. A binder identity can be neither.
+    let (_, _, body) = definitions
+        .iter()
+        .find(|(name, _, _)| *name == global_name("/Owner/Worker/use_it"))
+        .expect("`use_it` is lowered");
+    assert!(
+        matches!(
+            &**body,
+            curios_core::Subterm::Var(var)
+                if var.as_free().is_some_and(|local| local.hint() == Some("helper"))
+        ),
+        "the glob leaked a private binding: {body:?}"
     );
 }
 

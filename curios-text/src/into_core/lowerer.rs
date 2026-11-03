@@ -478,13 +478,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses, through [`reference()`].
-    pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Free, Error> {
+    pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Mention, Error> {
         if name.is_abs() || !name.is_single() {
             // A path that names nothing refuses the declaration it is written in and no other, as a bare name does below: it lowers to the same binder nothing binds, and what failed is filed under it.
             return match self.context.resolve_term_name(name) {
-                Ok(target) => Ok(curios_core::Free::global(target)),
+                Ok(target) => Ok(curios_core::Mention::Declaration(
+                    curios_core::Global::Authored(target),
+                )),
                 Err(error) => match error.into_unresolved() {
-                    Ok(failure) => Ok(self.context.unbound(&name.join(), failure)),
+                    Ok(failure) => Ok(curios_core::Mention::Local(
+                        self.context.unbound(&name.join(), failure),
+                    )),
                     Err(error) => Err(error),
                 },
             };
@@ -492,17 +496,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // A local binder shadows any like-named module binding, and the innermost one wins. Resolving here — rather than emitting the spelling for a later stage to re-resolve — is what makes shadowing exact: two binders written `go` are two identities from the start.
         if let Some(id) = self.scope.borrow().innermost(name.head()).copied() {
             self.used.borrow_mut().insert(id);
-            return Ok(id);
+            return Ok(curios_core::Mention::Local(id));
         }
         match self.context.resolve_bare(name) {
-            Some(full) => Ok(curios_core::Free::global(full)),
+            Some(full) => Ok(curios_core::Mention::Declaration(
+                curios_core::Global::Authored(full),
+            )),
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
             // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it.
             None => {
                 let failure = self.unbound_here(name.head(), curios_core::Sought::Binding);
 
-                Ok(self.context.unbound(name.head(), failure))
+                Ok(curios_core::Mention::Local(
+                    self.context.unbound(name.head(), failure),
+                ))
             }
         }
     }
@@ -1136,10 +1144,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         name: &Name,
     ) -> Result<Result<curios_core::Global, curios_core::Free>, Error> {
-        let resolved = self.resolve_name(name)?;
-        if let Some(global) = resolved.as_global() {
-            return Ok(Ok(*global));
-        }
+        let resolved = match self.resolve_name(name)? {
+            curios_core::Mention::Declaration(global) => return Ok(Ok(global)),
+            curios_core::Mention::Local(local) => local,
+        };
         if self.context.is_unbound(&resolved) {
             return Ok(Err(resolved));
         }
@@ -1210,8 +1218,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     fn held_frame(&self, head: &Name, binder: curios_core::Free) -> Result<RegionFrame, Error> {
         let structure = match self.resolve_nominal(head)? {
-            Ok(structure) => curios_core::Free::Global(structure),
-            Err(unbound) => unbound,
+            Ok(structure) => curios_core::Mention::Declaration(structure),
+            Err(unbound) => curios_core::Mention::Local(unbound),
         };
         Ok(RegionFrame::Held {
             binder,
@@ -1584,9 +1592,9 @@ fn pattern_names(pattern: &Pattern) -> Vec<String> {
 }
 
 /// The term a resolved name lowers to: a declaration as it is written, whose instance elaboration chooses, or the binder it is.
-pub(super) fn reference(resolved: curios_core::Free) -> curios_core::Term {
+pub(super) fn reference(resolved: curios_core::Mention) -> curios_core::Term {
     match resolved {
-        curios_core::Free::Global(name) => curios_core::Term::written(name),
-        local => curios_core::Term::var(curios_core::Var::free(local)),
+        curios_core::Mention::Declaration(name) => curios_core::Term::written(name),
+        curios_core::Mention::Local(local) => curios_core::Term::var(curios_core::Var::free(local)),
     }
 }

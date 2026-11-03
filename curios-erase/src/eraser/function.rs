@@ -68,7 +68,7 @@ impl Eraser<'_> {
                         let name = advance_assumed(context, &mut walk, &type_);
                         let param = self.builder.value(label);
                         self.state(context, param, &type_)?;
-                        self.environment.bind(&name, curios_anf::Atom::Value(param));
+                        self.environment.bind(name, curios_anf::Atom::Value(param));
                         params.push(param);
                     }
                     curios_core::Step::Mismatch => {
@@ -286,14 +286,11 @@ fn reduces_to_no_function(
     })
 }
 
-/// The definition a call's head names, and the instance it names it at, where the head is a name another item declares: a name standing alone, or at an instance.
-fn named_head(
-    head: &curios_core::Term,
-) -> Option<(&curios_core::Global, Option<&curios_core::Universes>)> {
+/// The definition a call's head names, and the instance it names it at, where the head is a reference to a declaration.
+fn named_head(head: &curios_core::Term) -> Option<(&curios_core::Global, &curios_core::Universes)> {
     match &**head {
-        curios_core::Subterm::Var(var) => Some((var.as_free()?.as_global()?, None)),
         curios_core::Subterm::Instance(curios_core::Instance { name, universes }) => {
-            Some((name, Some(universes)))
+            Some((name, universes))
         }
         _ => None,
     }
@@ -316,10 +313,7 @@ impl Eraser<'_> {
         let curios_core::DefinitionKind::ConceptMethod { .. } = definition.kind else {
             return Ok(None);
         };
-        let body = match universes {
-            Some(universes) => curios_core::instantiate_universes(&definition.body, universes)?,
-            None => definition.body.clone(),
-        };
+        let body = curios_core::instantiate_universes(&definition.body, universes)?;
         let curios_core::Subterm::Func(wrapper) = &*body else {
             return Ok(None);
         };
@@ -351,10 +345,7 @@ impl Eraser<'_> {
         let Some(declaration) = context.induct_decl(&curios_core::Global::Authored(*owner)) else {
             return Ok(false);
         };
-        let result_sort = match universes {
-            Some(universes) => declaration.at(universes).result_sort()?,
-            None => declaration.result_sort.clone(),
-        };
+        let result_sort = declaration.at(universes).result_sort()?;
 
         Ok(matches!(
             &*reduced(context, &result_sort)?,

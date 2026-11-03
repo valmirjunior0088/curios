@@ -303,10 +303,10 @@ impl Opened {
         if self.binders.is_empty() || !term.has_local_free() {
             return false;
         }
-        let frees = term.free_vars();
+        let frees = term.mentions();
 
         match frees.len() < self.binders.len() {
-            true => frees.iter().any(|name| self.binds(name)),
+            true => frees.locals().any(|name| self.binds(name)),
             false => self
                 .binders
                 .iter()
@@ -388,17 +388,14 @@ pub fn synth_neutral(
             if let Some(type_) = opened.type_of(name) {
                 return Ok(Some(type_.clone()));
             }
-            match context
-                .instantiate_assumption_universes(name, None)
-                .map_err(ReduceError::Universe)?
-            {
-                Some((type_, _)) => Ok(Some(type_)),
+            match context.assumption(name) {
+                Some(type_) => Ok(Some(type_.clone())),
                 None => Ok(binders.type_of(name).cloned()),
             }
         }
-        // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
+        // A declaration at the levels this reference chose: the scheme read uninstantiated and substituted at those levels.
         Subterm::Instance(Instance { name, universes }) => {
-            let Some(scheme) = context.assumption(&Free::Global(*name)).cloned() else {
+            let Some(scheme) = context.declared_type(name).cloned() else {
                 return Ok(None);
             };
             instantiate_universes(&scheme, universes)

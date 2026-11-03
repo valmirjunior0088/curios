@@ -469,10 +469,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             if let Some(node) = chain(frame.witnesses).find(|node| &node.label == name) {
                 node.used.set(true);
             }
-            match name {
-                curios_core::Free::Global(name) => global(name, frame)?,
-                local => named(&frame.word(local)),
-            }
+            named(&frame.word(name))
         }
         Core::Transient(curios_core::Transient::NumLit(curios_core::NumLit::Number {
             magnitude,

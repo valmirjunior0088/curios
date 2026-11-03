@@ -40,7 +40,7 @@ mod tests;
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
-        Ascribed, Extent, Free, Func, FuncType, Global, Subterm, Term, Transient, Universes,
+        Ascribed, Extent, Func, FuncType, Global, Subterm, Term, Transient, Universes,
         foreign_operands, foreign_produced, former_spelling, instantiate_universes,
         intrinsic_former,
     },
@@ -185,9 +185,8 @@ fn elaborate_subterm(
             )
         }
         Subterm::Instance(instance) => {
-            let name = Free::Global(instance.name);
             let type_ = context
-                .instantiate_assumption_at(&name, &instance.universes, term.extent())?
+                .instantiate_declaration_at(&instance.name, &instance.universes, term.extent())?
                 .ok_or_else(|| context.unbound_variable(term.clone()))?;
             (term.clone(), type_)
         }
@@ -215,8 +214,8 @@ fn elaborate_subterm(
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         // A binder, which no instance is chosen for: only a declaration is generalized.
-        Subterm::Var(var) => match context.instantiate_assumption(var.unwrap(), term.extent())? {
-            Some((type_, _)) => (term.clone(), type_),
+        Subterm::Var(var) => match context.assumption(var.unwrap()) {
+            Some(type_) => (term.clone(), type_.clone()),
             None => return Err(context.unbound_variable(term.clone())),
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
@@ -291,7 +290,7 @@ pub fn reference(
             .assumption(&local)
             .cloned()
             .map(|type_| (type_, Universes::default())),
-        None => context.instantiate_assumption(&Free::Global(name), extent)?,
+        None => context.instantiate_declaration(&name, extent)?,
     };
     let Some((type_, universes)) = assumed else {
         return Ok(None);

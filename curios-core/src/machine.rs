@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes,
-        eta_head, instantiate_universes, project_literal, reduce_intrinsic,
+        Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Mention, Nat,
+        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term,
+        Universes, eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -51,11 +51,11 @@ fn machine_frame() -> Cost {
 
 /// What the machine asks of its host: the reduction seam every intrinsic fold already drives — a fresh binder identity for the eta probe among it — plus the judgment the strategy owns, which is what a global unfolds to. Charges land on the host's counter through [`Reducer::spend`], so both checkers price a machine run identically because both run the same machine.
 pub trait ClosedHost: Reducer {
-    /// What `name` unfolds to through a bare occurrence. A universe-polymorphic definition is withheld, exactly as the host's own delta withholds it.
+    /// What the local `name` unfolds to: the value it was let-bound to, where it was.
     fn closed_body(&self, name: &Free) -> Option<&Term>;
 
-    /// What `name` unfolds to at the stated universe instance `universes` — the one position a polymorphic definition may be unfolded from, and only where the instance states its scheme whole ([`UniverseContext::stated_by`](crate::UniverseContext::stated_by)).
-    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term>;
+    /// What the declaration `name` unfolds to at the stated universe instance `universes`, only where the instance states its scheme whole ([`UniverseContext::stated_by`](crate::UniverseContext::stated_by)).
+    fn closed_body_at(&self, name: &Global, universes: &Universes) -> Option<&Term>;
 
     /// The payload the one arm of a closed match binds, read off the instance the match states ([`Cases::stated`]) with the scrutinee unevaluated: the payload of `tag`, where `stated` is an instance of a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine reads no declaration, which is why this is the host's.
     fn stated_payload(
@@ -94,7 +94,7 @@ impl AsideAnswers {
     }
 
     /// Forget every answer set aside that names `name`, as [`ClosedMemo::retain_without`] does.
-    pub fn retain_without(&mut self, name: &Free) {
+    pub fn retain_without(&mut self, name: &Mention) {
         self.0.retain_without(name);
     }
 }
@@ -114,9 +114,9 @@ impl Answers {
         self.forced.clear();
     }
 
-    fn retain_without(&mut self, name: &Free) {
-        self.values.retain(|_, value| !value.mentions_free(name));
-        self.forced.retain(|_, value| !value.mentions_free(name));
+    fn retain_without(&mut self, name: &Mention) {
+        self.values.retain(|_, value| !value.mentions_name(name));
+        self.forced.retain(|_, value| !value.mentions_name(name));
     }
 
     fn plain(&self, term: &Term) -> Option<&Term> {
@@ -152,7 +152,7 @@ impl ClosedMemo {
     }
 
     /// Forget every answer that names `name`: a name defined since can only move a value that read its absence, and a value that did holds the name.
-    pub fn retain_without(&mut self, name: &Free) {
+    pub fn retain_without(&mut self, name: &Mention) {
         self.lasting.retain_without(name);
         self.scoped.retain_without(name);
     }
@@ -636,10 +636,7 @@ impl Machine {
             Subterm::Instance(instance) => {
                 let universes = instance.universes;
                 let name = instance.name;
-                let Some(reduct) = host
-                    .closed_body_at(&Free::Global(name), &universes)
-                    .cloned()
-                else {
+                let Some(reduct) = host.closed_body_at(&name, &universes).cloned() else {
                     return Ok(Step::Value(Term::instance(name, universes)));
                 };
                 // A stored body holding a projection needs no special case: a group binds no universe, so the levels its members spell are this declaration's and one walk substitutes them with every other level the instance states.

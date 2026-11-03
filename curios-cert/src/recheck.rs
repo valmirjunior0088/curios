@@ -61,10 +61,10 @@ use {
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
-        Abroad, Bound, Certification, Certified, Changes, Concluded, Entrypoint, Free, Global,
-        HeldReads, InductDecl, Item, ItemRun, Level, Lexicon, MetavarId, Module, Places, Polarity,
-        Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext,
-        Variance, Zonked,
+        Abroad, Bound, Certification, Certified, Changes, Concluded, Entrypoint, Global, HeldReads,
+        InductDecl, Item, ItemRun, Level, Lexicon, MetavarId, Module, Places, Polarity, Program,
+        ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext, Variance,
+        Zonked,
     },
     curios_utilities::{Candidates, Facet, SyntaxRegistry, grown},
     std::{
@@ -381,7 +381,7 @@ fn redeclarations(module: &Module, globals: &Globals) -> Vec<Verdict> {
         if refused.insert(*name) {
             redeclared.push(Verdict {
                 name: Some(*name),
-                error: Error::Redeclared(Free::from(name)),
+                error: Error::Redeclared(*name),
             });
         }
     };
@@ -732,7 +732,7 @@ fn verdicts_within<'s>(
                 let before = kernel.partial_groups();
                 let outcome = check_definition(
                     kernel,
-                    &Free::from(&definition.name),
+                    &definition.name,
                     &definition.type_,
                     &definition.body,
                     definition.proof,
@@ -741,7 +741,7 @@ fn verdicts_within<'s>(
                 );
                 // Whether the definition holds a group that does not descend, noted where the group was typed — see `Kernel::definition_encloses_partial`.
                 if kernel.partial_groups() > before {
-                    kernel.note_enclosing_partial(&Free::from(&definition.name));
+                    kernel.note_enclosing_partial(&definition.name);
                 }
 
                 if let Err(error) = outcome {
@@ -751,7 +751,7 @@ fn verdicts_within<'s>(
                     });
                     if let Err(error) = define_as_stated(
                         kernel,
-                        &Free::from(&definition.name),
+                        &definition.name,
                         &definition.type_,
                         &definition.body,
                         definition.proof,
@@ -769,7 +769,7 @@ fn verdicts_within<'s>(
                 let members = rec
                     .definitions
                     .iter()
-                    .map(|definition| (Free::from(&definition.name), definition.proof))
+                    .map(|definition| (definition.name, definition.proof))
                     .collect::<Vec<_>>();
                 let universes = rec.universe_context.clone();
 
@@ -1396,15 +1396,9 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
                        proof: bool,
                        value_sort: Option<&Term>,
                        universes: &UniverseContext| {
-        if let Err(error) = define_as_stated(
-            kernel,
-            &Free::from(name),
-            type_,
-            body,
-            proof,
-            value_sort,
-            universes,
-        ) {
+        if let Err(error) =
+            define_as_stated(kernel, name, type_, body, proof, value_sort, universes)
+        {
             refusals.push(Verdict {
                 name: Some(*name),
                 error,

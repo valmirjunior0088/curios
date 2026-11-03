@@ -1,4 +1,4 @@
-//! The lexical half of the elaborator's state: assumptions, local definitions, counterfactual refinements, and the witness scope, a stack of frames ([`Frame`]) bracket-disciplined by `enter`/`leave`.
+//! The lexical half of the elaborator's state: the declarations made so far, and the assumptions, local definitions, counterfactual refinements and witness scope of a stack of frames ([`Frame`]) bracket-disciplined by `enter`/`leave`.
 //!
 //! Everything here lives and dies with binder frames — the opposite lifetime from the flat stores in [`Program`](crate::context::Program) and [`Solutions`](crate::context::Solutions). Cache coordination stays with the `Context` façade: a frame write that must clear or stamp the caches does so there, so this type's methods are pure store operations.
 //!
@@ -10,13 +10,11 @@
 //!
 //! **A frame is shared, and copied for a writer.** What waits takes the frames above the base as they stand ([`HeldFrames`]), a parked problem where it parks and a metavariable where it is born, and a write to a frame something holds copies the frame first, so a holder has what stood and nothing written since. A judgment made away from the live context stands on the frames held ([`Frames::stand_on`]), a retry on its problem's and what is judged of a metavariable on its birth's: the live ones above the base are set aside, the held ones stand in their place, and nothing is assumed, defined or registered again, so the frame an entry stands in is the frame it was registered in.
 
-#[cfg(test)]
-mod test_support;
-
 use {
     super::{
         Binding, ByValue, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry,
-        ScrutineeEntry, Settled, Spelling, at, refined_through, refinements_within, stand,
+        Recorded, ScrutineeEntry, Settled, Spelling, at, refined_through, refinements_within,
+        stand,
     },
     crate::DefinedGroup,
     crate::{
@@ -25,7 +23,8 @@ use {
         locals_outside_spines, read_outside_spines,
     },
     curios_core::{
-        Free, Global, HeadTag, RecGroup, Term, UniverseContext, Universes, project_erased_universes,
+        Free, Global, HeadTag, Mention, RecGroup, Term, UniverseContext, Universes,
+        project_erased_universes,
     },
     curios_utilities::Keyed,
     std::{
@@ -38,9 +37,11 @@ use {
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
 #[derive(Debug)]
 pub struct Frames<'s> {
-    /// The units in scope, beneath the base frame: asked where no frame holds a name, and never written.
+    /// The units in scope, beneath the declarations: asked where the elaboration has declared no name, and never written.
     scope: Option<&'s dyn InScope>,
-    /// The base frame: it persists for the whole elaboration and holds the top-level names, which are assumed into it and never inside a frame.
+    /// The declarations the elaboration has made: they persist for the whole elaboration, beneath every frame.
+    declarations: Declarations,
+    /// The base frame: it persists for the whole elaboration, beneath every frame entered.
     base: Frame,
     /// The innermost local frame, which holds every local frame beneath it: `None` where none stands.
     top: Option<Rc<Frame>>,
@@ -50,7 +51,7 @@ pub struct Frames<'s> {
     stands: Vec<u64>,
     /// How many judgments have stood on held frames: the number the next stand takes. The live frames stand in none, numbered zero.
     stood: u64,
-    /// Each top-level `rec` group the base frame defines a member of, beside the globals its members are defined under, in member order: its definitions read the other way, kept as each member is defined so that a reader holding a group and one of its names asks for the rest and scans nothing. Two declarations that define one group are two lists, each in the order its members were defined. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
+    /// Each top-level `rec` group a declaration is defined as a member of, beside the globals its members are defined under, in member order: its definitions read the other way, kept as each member is defined so that a reader holding a group and one of its names asks for the rest and scans nothing. Two declarations that define one group are two lists, each in the order its members were defined. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
     members: HashMap<Keyed<RecGroup>, Vec<Vec<Option<Global>>>>,
     /// How much of the refinement stack a settlement withholds from the inside, as the depth of the frame the entry being settled was registered in — `None` for none of it.
     ///
@@ -111,6 +112,7 @@ impl<'s> Frames<'s> {
     pub fn new() -> Self {
         Self {
             scope: None,
+            declarations: Declarations::default(),
             base: Frame::base(),
             top: None,
             aside: Vec::new(),
@@ -156,12 +158,9 @@ impl<'s> Frames<'s> {
         self.scope = Some(scope);
     }
 
-    /// What a unit in scope declares under `name`, which only a global names.
-    fn in_scope(&self, name: &Free) -> Option<Defined<'s>> {
-        match name {
-            Free::Global(global) => self.scope?.definition(global),
-            _ => None,
-        }
+    /// What a unit in scope declares under `name`.
+    fn in_scope(&self, name: &Global) -> Option<Defined<'s>> {
+        self.scope?.definition(name)
     }
 
     /// The innermost frame, to write to: where a binding, a definition and a refinement land. Copied first where something holds it, so a holder keeps what stood.
@@ -234,12 +233,38 @@ impl<'s> Frames<'s> {
         self.base.body || self.top.as_ref().is_some_and(|top| top.body)
     }
 
-    /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark. The base frame holds one binding of a name: a top-level name assumed again replaces the binding it had.
+    /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark.
     pub fn assume(&mut self, name: &Free, type_: &Term) {
-        if self.top.is_none() {
-            self.base.unbind_local(name);
-        }
         self.innermost().bind(*name, type_.clone());
+    }
+
+    /// Declare `name : type_`, generalized over no universe yet: what the name is read at from here on, replacing whatever it was declared at before.
+    pub fn declare(&mut self, name: &Global, type_: &Term) {
+        self.declarations.assumptions.insert(
+            *name,
+            Declared {
+                type_: type_.clone(),
+                universes: UniverseContext::empty(),
+            },
+        );
+    }
+
+    /// Replace the type `name` is declared at, its universe context kept: a declaration's signature upgraded to its rebuilt form, as [`Frames::reassume`] upgrades a binder's. Panics where `name` is not declared.
+    pub fn redeclare(&mut self, name: &Global, type_: &Term) {
+        self.declarations
+            .assumptions
+            .get_mut(name)
+            .unwrap_or_else(|| panic!("redeclare: '{}' is not declared", name.faithful()))
+            .type_ = type_.clone();
+    }
+
+    /// The type the declaration `name` is read at: as declared here, or as a unit in scope declares it.
+    pub fn declared_type(&self, name: &Global) -> Option<&Term> {
+        self.declarations
+            .assumptions
+            .get(name)
+            .map(|declared| &declared.type_)
+            .or_else(|| self.in_scope(name).map(|defined| defined.type_))
     }
 
     /// [`Frames::assume`] of each of `bindings` in order, the innermost frame restating its scope once for all of them ([`Frame::bind_all`]).
@@ -282,9 +307,7 @@ impl<'s> Frames<'s> {
     }
 
     pub fn assumption(&self, name: &Free) -> Option<&Term> {
-        self.binding(name)
-            .map(|binding| &binding.type_)
-            .or_else(|| self.in_scope(name).map(|defined| defined.type_))
+        self.binding(name).map(|binding| &binding.type_)
     }
 
     /// The innermost binding of `name` a frame holds.
@@ -401,64 +424,38 @@ impl<'s> Frames<'s> {
         self.withhold_refinements_from = aside.withheld;
     }
 
-    /// Drop every base-frame binding of `name`: its assumption, its universe context, its definition, and its places in the local and witness scopes. Base frame only — an inner frame is popped whole by [`Frames::leave`] — because the one binding that needs forgetting singly is a top-level declaration's, undone when its item is refused.
-    pub fn forget(&mut self, name: &Free) {
-        assert!(
-            self.top.is_none(),
-            "forget: '{}' outside the base frame",
-            name.faithful()
-        );
+    /// Drop the declaration `name`: its type, its universe context and its definition, undone when its item is refused.
+    pub fn forget(&mut self, name: &Global) {
         self.unname_member(name);
-        self.base.unbind(name);
-    }
-    /// The innermost registered universe context for `name`, if any.
-    pub fn assumption_universe_context(&self, name: &Free) -> Option<UniverseContext> {
-        self.binding(name)
-            .map(|binding| &binding.universes)
-            .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
-            .cloned()
-    }
-    /// Overwrite the innermost universe context registered for `name`. Panics if none exists.
-    pub fn set_assumption_universe_context(
-        &mut self,
-        name: &Free,
-        universe_context: UniverseContext,
-    ) {
-        self.binder_of(name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "'{}' has no assumption universe context to replace",
-                    name.faithful()
-                )
-            })
-            .set_universes(name, universe_context);
+        self.declarations.assumptions.remove(name);
+        self.declarations.definitions.remove(name);
     }
 
-    /// The `(depth, parameter_count)` holders of `name`'s universe context, the base frame's and the innermost local binding's, beside how many frames stand — diagnostics for the instantiation mismatch traces.
-    #[cfg(feature = "profile")]
-    pub fn assumption_universe_holders(&self, name: &Free) -> (usize, Vec<(usize, usize)>) {
-        let local = self.top.as_ref().and_then(|top| {
-            let binding = top.assumptions.get(name)?;
-            Some((top.depth, binding.universes.parameter_count))
-        });
-        let base = self
-            .base
+    /// The universe context the declaration `name` is generalized over, where it is declared.
+    pub fn universe_context(&self, name: &Global) -> Option<UniverseContext> {
+        self.scheme(name).cloned()
+    }
+
+    /// Overwrite the universe context the declaration `name` is generalized over. Panics where `name` is not declared.
+    pub fn set_universe_context(&mut self, name: &Global, universe_context: UniverseContext) {
+        self.declarations
             .assumptions
-            .get(name)
-            .map(|binding| (0, binding.universes.parameter_count));
-
-        (
-            self.top.as_ref().map_or(1, |top| top.depth + 1),
-            base.into_iter().chain(local).collect(),
-        )
+            .get_mut(name)
+            .unwrap_or_else(|| panic!("'{}' has no universe context to replace", name.faithful()))
+            .universes = universe_context;
     }
 
-    /// Whether `label` currently has a definition entry in some frame — the settled-globals gate for the elaboration cache. A name defined here will only ever be *re*defined (which clears both caches wholesale), never freshly defined, so an elaboration entry naming it is safe to keep across a later fresh `define`.
+    /// Whether `name` has a definition entry in some frame. A name defined here will only ever be *re*defined (which clears both caches wholesale), never freshly defined, so an elaboration entry naming it is safe to keep across a later fresh `define`.
     pub fn is_defined(&self, name: &Free) -> bool {
-        self.defined(name).is_some() || self.in_scope(name).is_some()
+        self.defined(name).is_some()
     }
 
-    /// The locals of the frames past the base, in scope order: the binders a term stands under, without the declarations of every unit in scope the base frame holds, so a question about them costs the scope a judgment stands in and not the program's size.
+    /// Whether the declaration `name` is defined, here or in a unit in scope: the settled-globals gate for the elaboration cache, as [`Frames::is_defined`] is for a local.
+    pub fn is_declaration_defined(&self, name: &Global) -> bool {
+        self.declarations.definitions.contains_key(name) || self.in_scope(name).is_some()
+    }
+
+    /// The locals of the frames past the base, in scope order: the binders a term stands under, which no declaration is, so a question about them costs the scope a judgment stands in and not the program's size.
     pub fn local_binders(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.read_scope();
         self.top
@@ -469,45 +466,45 @@ impl<'s> Frames<'s> {
 
     /// Insert `name`'s definition into the innermost frame. The façade decides the cache protocol from [`Frames::is_defined`] first.
     pub fn define(&mut self, name: Free, entry: DefEntry) {
-        if self.top.is_none() {
-            self.unname_member(&name);
-            if let (Free::Global(global), Some((group, index))) =
-                (&name, entry.body().as_rec_proj())
-            {
-                let lists = self.members.entry(Keyed::new(group.clone())).or_default();
-                // A member joins the first list its place is open in: the declaration defining the group's members defines them in a row.
-                let open = lists
-                    .iter()
-                    .position(|names| names.get(index).is_some_and(Option::is_none));
-                let names = match open {
-                    Some(open) => &mut lists[open],
-                    None => {
-                        lists.push(vec![None; group.length()]);
-                        lists.last_mut().expect("just pushed")
-                    }
-                };
-                if let Some(slot) = names.get_mut(index) {
-                    *slot = Some(*global);
-                }
-            }
-        }
         let frame = self.innermost();
         let depth = frame.depth;
         frame.definitions.insert(name, entry.defined_at(depth));
         frame.defines = true;
     }
 
-    /// Take `name` out of the group the base frame defines it as a member of, where it defines it as one: before the name is defined again, or forgotten. A group left with no named member is dropped.
-    fn unname_member(&mut self, name: &Free) {
+    /// Define the declaration `name` as `entry`, beneath every frame. The façade decides the cache protocol from [`Frames::is_declaration_defined`] first.
+    pub fn define_declaration(&mut self, name: &Global, entry: DefEntry) {
+        self.unname_member(name);
+        if let Some((group, index)) = entry.body().as_rec_proj() {
+            let lists = self.members.entry(Keyed::new(group.clone())).or_default();
+            // A member joins the first list its place is open in: the declaration defining the group's members defines them in a row.
+            let open = lists
+                .iter()
+                .position(|names| names.get(index).is_some_and(Option::is_none));
+            let names = match open {
+                Some(open) => &mut lists[open],
+                None => {
+                    lists.push(vec![None; group.length()]);
+                    lists.last_mut().expect("just pushed")
+                }
+            };
+            if let Some(slot) = names.get_mut(index) {
+                *slot = Some(*name);
+            }
+        }
+        self.declarations
+            .definitions
+            .insert(*name, entry.defined_at(0));
+    }
+
+    /// Take `name` out of the group it is defined as a member of, where it is defined as one: before the name is defined again, or forgotten. A group left with no named member is dropped.
+    fn unname_member(&mut self, name: &Global) {
         let Some((group, index)) = self
-            .base
+            .declarations
             .definitions
             .get(name)
             .and_then(|entry| entry.body().as_rec_proj())
         else {
-            return;
-        };
-        let Free::Global(global) = name else {
             return;
         };
         let group = Keyed::new(group.clone());
@@ -516,7 +513,7 @@ impl<'s> Frames<'s> {
         };
         for names in lists.iter_mut() {
             if let Some(slot) = names.get_mut(index)
-                && *slot == Some(*global)
+                && *slot == Some(*name)
             {
                 *slot = None;
             }
@@ -527,7 +524,7 @@ impl<'s> Frames<'s> {
         }
     }
 
-    /// The globals `group`'s members are defined under, in member order, by the definitions `name` is one of: the base frame's, where it defines every one, and otherwise a unit's in scope that names `name` among them.
+    /// The globals `group`'s members are defined under, in member order, by the definitions `name` is one of: this elaboration's declarations, where they define every one, and otherwise a unit's in scope that names `name` among them.
     pub fn member_names(&self, group: &RecGroup, name: Global) -> Option<Vec<Global>> {
         match self.members.get(&Keyed::new(group.clone())) {
             Some(lists) => lists
@@ -556,29 +553,25 @@ impl<'s> Frames<'s> {
         entry
     }
 
-    /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Frames::var_reduct_at`] would silently mean something else inside a match arm.
-    ///
-    /// A proof a declaration published unfolds to nothing, in a frame as in a unit in scope: this is the one place a definition's body is handed out, so no reader of one is handed a proof's.
+    /// What the local `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Frames::var_reduct`] would silently mean something else inside a match arm.
     pub fn definition_body(&self, name: &Free) -> Option<&Term> {
-        match self.defined(name) {
+        self.defined(name).and_then(DefEntry::reduct)
+    }
+
+    /// What the declaration `name` is defined as, here or in a unit in scope, under its own universe parameters.
+    ///
+    /// A proof a declaration published unfolds to nothing, here as in a unit in scope: this is the one place a declaration's body is handed out, so no reader of one is handed a proof's.
+    pub fn declaration_body(&self, name: &Global) -> Option<&Term> {
+        match self.declarations.definitions.get(name) {
             Some(entry) => entry.reduct(),
             None => self.in_scope(name).and_then(|defined| defined.body),
         }
     }
 
-    /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
+    /// Every top-level `rec` group defined so far, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
     pub fn rec_definitions(&self) -> Vec<DefinedGroup> {
-        self.read_scope();
         let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();
-        let definitions = self
-            .base
-            .definitions
-            .iter()
-            .chain(self.top.iter().flat_map(|top| top.definitions.iter()));
-        for (name, entry) in definitions {
-            let Free::Global(global) = name else {
-                continue;
-            };
+        for (global, entry) in self.declarations.definitions.iter() {
             let Some((group, index)) = entry.body().as_rec_proj() else {
                 continue;
             };
@@ -600,7 +593,7 @@ impl<'s> Frames<'s> {
                 // The context a group's members' levels mean is the declaration's, which every member of it was assumed under.
                 let universe_context = names
                     .first()
-                    .and_then(|name| self.assumption_universe_context(&Free::Global(*name)))
+                    .and_then(|name| self.universe_context(name))
                     .unwrap_or_default();
 
                 Some(DefinedGroup {
@@ -613,8 +606,8 @@ impl<'s> Frames<'s> {
             .collect()
     }
 
-    /// The reduct of a variable: its definition, or — from the frames no settlement withholds — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
-    fn raw_var_reduct(&self, name: &Free) -> Option<&Term> {
+    /// What the local `name` reduces to: its definition, or — from the frames no settlement withholds — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
+    pub fn var_reduct(&self, name: &Free) -> Option<&Term> {
         if let Some(term) = self.refinement_of(name) {
             return Some(term);
         }
@@ -622,35 +615,25 @@ impl<'s> Frames<'s> {
         self.definition_body(name)
     }
 
-    /// Reduce a bare variable only when its definition is monomorphic.
-    ///
-    /// A polymorphic definition's stored body is scoped by its universe context: its parameter levels are not meaningful at an occurrence until elaboration has rebuilt that occurrence as an `Instance`. Letting a raw variable unfold would leak those bound parameters into the ambient solver. The explicit-instance reducer uses [`Frames::var_reduct_at`] after it has the occurrence's level arguments.
-    pub fn var_reduct(&self, name: &Free) -> Option<&Term> {
-        let is_polymorphic = self
-            .scheme(name)
-            .is_some_and(|context| context.parameter_count != 0);
-        (!is_polymorphic)
-            .then(|| self.raw_var_reduct(name))
-            .flatten()
-    }
-
-    /// What `name` unfolds to at the universe instance `universes`, where that instance states its scheme ([`Frames::states_scheme`]). An instance short of its scheme denotes none of the scheme's instances, and unfolding it would leak the scheme's parameters as [`Frames::var_reduct`] says a bare variable would.
-    pub fn var_reduct_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+    /// What the declaration `name` unfolds to at the universe instance `universes`, where that instance states its scheme ([`Frames::states_scheme`]). An instance short of its scheme denotes none of the scheme's instances, and unfolding it would leak the scheme's parameters into the ambient solver.
+    pub fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.states_scheme(name, universes)
-            .then(|| self.raw_var_reduct(name))
+            .then(|| self.declaration_body(name))
             .flatten()
     }
 
-    /// Whether `universes` states the scheme `name` is bound under whole ([`UniverseContext::stated_by`]), a name bound under none by an instance stating nothing: what an instance must do to be read at `name`'s body or sort.
-    pub fn states_scheme(&self, name: &Free, universes: &Universes) -> bool {
+    /// Whether `universes` states the scheme the declaration `name` is generalized over whole ([`UniverseContext::stated_by`]), a name declared under none by an instance stating nothing: what an instance must do to be read at `name`'s body or sort.
+    pub fn states_scheme(&self, name: &Global, universes: &Universes) -> bool {
         self.scheme(name)
             .map_or(universes.is_empty(), |scheme| scheme.stated_by(universes))
     }
 
-    /// The universe scheme `name` is bound under: its binding's, or that of the definition in scope.
-    fn scheme(&self, name: &Free) -> Option<&UniverseContext> {
-        self.binding(name)
-            .map(|binding| &binding.universes)
+    /// The universe scheme the declaration `name` is generalized over: as declared here, or as a unit in scope declares it.
+    fn scheme(&self, name: &Global) -> Option<&UniverseContext> {
+        self.declarations
+            .assumptions
+            .get(name)
+            .map(|declared| &declared.universes)
             .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
     }
 
@@ -714,14 +697,14 @@ impl<'s> Frames<'s> {
         }
     }
     /// Forget the settled spellings a fresh definition of `name` can change: the ones naming it, which were stuck on its absence, and the ones that refused. Asked of the frames that stand and of those set aside, where a frame that registers a scrutinee entry is one that registers a refinement: a frame that has left the context names no binder defined since.
-    pub fn forget_spellings_naming(&mut self, name: &Free) {
+    pub fn forget_spellings_naming(&mut self, name: &Mention) {
         for frame in self.refined_everywhere() {
             for spellings in frame.scrutinee_spellings.borrow_mut().iter_mut() {
                 spellings.retain(|_, spelling| {
                     spelling
                         .settled
                         .as_ref()
-                        .is_some_and(|settled| !settled.unerased.mentions_free(name))
+                        .is_some_and(|settled| !settled.unerased.mentions_name(name))
                 });
             }
             for kept in frame.settled_windows.borrow_mut().iter_mut().flatten() {
@@ -954,14 +937,9 @@ impl<'s> Frames<'s> {
         self.withhold_refinements_from = previous;
     }
 
-    /// Whether `name` is bound at the top level (the persistent base frame) — a global definition, always in scope. The metavariable solver admits such names in a solution even though they are not in the metavariable's Γ/spine (which holds only local binders): a solution may freely mention a global constant without that constant being a context binder.
-    pub fn is_top_level(&self, name: &Free) -> bool {
-        self.base.assumptions.contains_key(name) || self.in_scope(name).is_some()
-    }
-
     /// The frozen telescope and identity spine for the *current* Γ, shared: the innermost frame's, which the frames extend a binder at a time ([`Frame`]), so minting a metavariable costs nothing more than the one before it, whatever the scope.
     ///
-    /// Γ is the *local* binders only — the locals of the frames past the base, each name once at its innermost binding. Top-level definitions are excluded so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable). Globals a solution mentions are admitted by the solver's scope check via [`Frames::is_top_level`] instead.
+    /// Γ is the *local* binders only — the locals of the frames past the base, each name once at its innermost binding. Declarations are no binders, so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable).
     pub fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
         self.read_scope();
         match &self.top {
@@ -980,4 +958,27 @@ fn forget_settled_windows(frame: &Frame) {
 #[derive(Debug)]
 pub struct SetAside {
     withheld: Option<usize>,
+}
+
+/// What the elaboration holds of the declarations it has made: each top-level name's type and universe scheme, and its definition where it has one, read back in the order they were defined ([`Recorded`]). Beneath every frame and never inside one, since a declaration stands for the whole elaboration: only one whose item is refused is forgotten ([`Frames::forget`]).
+#[derive(Debug)]
+struct Declarations {
+    assumptions: HashMap<Global, Declared>,
+    definitions: Recorded<Global, DefEntry>,
+}
+
+impl Default for Declarations {
+    fn default() -> Self {
+        Self {
+            assumptions: HashMap::new(),
+            definitions: Recorded::new(),
+        }
+    }
+}
+
+/// The type a declaration is read at, under the universe context it is generalized over.
+#[derive(Debug)]
+struct Declared {
+    type_: Term,
+    universes: UniverseContext,
 }

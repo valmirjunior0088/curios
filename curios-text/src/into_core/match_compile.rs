@@ -215,8 +215,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Struct { head, fields } => curios_core::Pattern::Struct {
                 head: head.join(),
                 structure: match self.resolve_nominal(head)? {
-                    Ok(structure) => curios_core::Free::Global(structure),
-                    Err(unbound) => unbound,
+                    Ok(structure) => curios_core::Mention::Declaration(structure),
+                    Err(unbound) => curios_core::Mention::Local(unbound),
                 },
                 fields: self.fields(fields, binders)?,
             },
@@ -295,8 +295,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             Pattern::Struct { head, fields } => curios_core::Bind::Struct {
                 head: head.join(),
                 structure: match self.resolve_nominal(head)? {
-                    Ok(structure) => curios_core::Free::Global(structure),
-                    Err(unbound) => unbound,
+                    Ok(structure) => curios_core::Mention::Declaration(structure),
+                    Err(unbound) => curios_core::Mention::Local(unbound),
                 },
                 fields: self.binds(fields, binders)?,
             },

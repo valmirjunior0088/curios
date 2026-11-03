@@ -3,7 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Term, UniverseContext},
+    curios_core::{Global, Term, UniverseContext, Universes},
+    curios_utilities::Qualifier,
 };
 
 /// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted, Without this, `Eq/subst` is unstatable.
@@ -38,7 +39,7 @@ fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
 fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     let mut kernel = kernel();
     let a = binder(0, "a");
-    let blur = binder(1, "blur");
+    let blur = Global::Authored(Qualifier::from(["blur"]));
     let arm_binder = binder(10, "a");
 
     kernel
@@ -57,7 +58,10 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
             "mk",
             a,
             nat_type(),
-            Term::apply(Term::free_var(&blur), [Term::free_var(&a)]),
+            Term::apply(
+                Term::instance(blur, Universes::default()),
+                [Term::free_var(&a)],
+            ),
         )],
     );
 

@@ -4,7 +4,7 @@
 
 use {
     super::{
-        Extent, Free, Frees, Global, Level, LevelHead, MetavarSpine, Quality, Subterm, Term,
+        Extent, Free, Global, Level, LevelHead, Mentions, MetavarSpine, Quality, Subterm, Term,
         UniverseError, UniverseMetaId, UniverseParam, Universes,
     },
     curios_utilities::{Keyed, Symbol},
@@ -113,7 +113,7 @@ enum VarType {
     Bound(usize),
 }
 
-/// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption or global definition) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
+/// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Var {
@@ -157,7 +157,7 @@ impl Var {
 
 // === Bound ===================================================================
 
-/// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); `shift`, `capture` and `release` are derived from `traverse` alone, and `free_vars` is each carrier's own, read off its terms' memoized sets.
+/// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); `shift`, `capture` and `release` are derived from `traverse` alone, and `mentions` is each carrier's own, read off its terms' memoized sets.
 pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single intrinsic the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
@@ -192,7 +192,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     ///
-    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And where every binder is a local, a subterm whose every local is older than each binder, with no loose index to shift, is handed back unwalked, since nothing in it is a binder's occurrence. Binders are minted as they are opened and closed innermost first, so a body's own locals are older than the binder closing it: a nest of lambdas whose bodies name only an outer binder closes each lambda without walking the lambdas within it.
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And a subterm whose every local is older than each binder, with no loose index to shift, is handed back unwalked, since nothing in it is a binder's occurrence. Binders are minted as they are opened and closed innermost first, so a body's own locals are older than the binder closing it: a nest of lambdas whose bodies name only an outer binder closes each lambda without walking the lambdas within it.
     fn capture(&self, binders: &[&Free]) -> Self {
         capture_placed(self, binders.len(), oldest_local(binders), |name| {
             binders.iter().position(|&candidate| name == candidate)
@@ -217,8 +217,8 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The free-variable identities this value holds: the union of its terms' memoized sets ([`Term::free_vars`]), so a value is read in the size of those sets and never by a walk of its tree, which a value whose terms share their nodes holds once for every path.
-    fn free_vars(&self) -> Frees;
+    /// What this value mentions, the declarations it references and the free variables it holds: the union of its terms' memoized sets ([`Term::mentions`]), so a value is read in the size of those sets and never by a walk of its tree, which a value whose terms share their nodes holds once for every path.
+    fn mentions(&self) -> Mentions;
 }
 
 /// A constructor's index targets, which is all its signature's terminal carries: the family and its parameters are fixed by the declaration, so nothing else in a terminal is information.
@@ -234,8 +234,8 @@ impl Bound for Vec<Term> {
         self.iter().map(Bound::reach).max().unwrap_or(0)
     }
 
-    fn free_vars(&self) -> Frees {
-        Frees::union(self.iter().map(Term::free_vars))
+    fn mentions(&self) -> Mentions {
+        Mentions::union(self.iter().map(Term::mentions))
     }
 
     fn has_metavar(&self) -> bool {
@@ -262,8 +262,8 @@ impl Bound for () {
         0
     }
 
-    fn free_vars(&self) -> Frees {
-        Frees::empty()
+    fn mentions(&self) -> Mentions {
+        Mentions::empty()
     }
 
     fn has_metavar(&self) -> bool {
@@ -279,11 +279,11 @@ impl Bound for () {
     }
 }
 
-/// [`Bound::capture`] over `count` binders, `place` answering a name's index among them and `oldest` the oldest of them where every one is a local ([`oldest_local`]): for a caller that closes terms over the prefixes of one list, which looks a name's place up once for all of them where a capture would search each prefix at each occurrence.
+/// [`Bound::capture`] over `count` binders, `place` answering a name's index among them and `oldest` the oldest of them ([`oldest_local`]): for a caller that closes terms over the prefixes of one list, which looks a name's place up once for all of them where a capture would search each prefix at each occurrence.
 pub(crate) fn capture_placed<B: Bound>(
     value: &B,
     count: usize,
-    oldest: Option<u64>,
+    oldest: u64,
     place: impl Fn(&Free) -> Option<usize>,
 ) -> B {
     value.traverse(&mut Visit::capturing(oldest, |depth, var| {
@@ -297,11 +297,13 @@ pub(crate) fn capture_placed<B: Bound>(
     }))
 }
 
-/// The oldest of `binders` where every one is a local, which a capture passes over a subterm holding only older locals by; `None` where one is a global.
-pub(crate) fn oldest_local(binders: &[&Free]) -> Option<u64> {
-    binders.iter().try_fold(u64::MAX, |oldest, binder| {
-        binder.as_local().map(|mint| oldest.min(mint.index()))
-    })
+/// The oldest of `binders`, which a capture passes over a subterm holding only older locals by; past every local where there is none.
+pub(crate) fn oldest_local(binders: &[&Free]) -> u64 {
+    binders
+        .iter()
+        .map(|binder| binder.index())
+        .min()
+        .unwrap_or(u64::MAX)
 }
 
 /// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-ANF lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over the atoms of a carrier whose values hold no type ([`same_atom`](crate::same_atom)), where no level can reach the value, and `documentation/design/soundness/case-equations-and-their-key.md` records the route it admits anywhere else.
@@ -531,85 +533,62 @@ pub fn stamp_declaration_instance<B: Bound>(
 
 // === Scope ===================================================================
 
-/// What a scope remembers of one binder it closed over: a global's name, which means the same in every compilation, or a local's display hint.
+/// What a scope remembers of one binder it closed over: its display hint, `None` where it was minted hintless, where it sits among its declaration's written binders, when the lowering wrote it, and whether it binds a proof.
 ///
 /// **Never a local's identity.** That is minted by the compilation that closed the scope, and a stored scope keeping it would carry a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
+///
+/// **`proof` is stated once, when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub(crate) enum Label {
-    /// A global a `rec` group's binder closes over, rendered as its path as a free occurrence of it would be.
-    Global(Global),
-    /// A local binder: its display hint, `None` where it was minted hintless, where it sits among its declaration's written binders, when the lowering wrote it, and whether it binds a proof.
-    ///
-    /// **`proof` is stated once, when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
-    Local {
-        hint: Option<Symbol>,
-        written: Option<u32>,
-        proof: bool,
-    },
+pub(crate) struct Label {
+    hint: Option<Symbol>,
+    written: Option<u32>,
+    proof: bool,
 }
 
 impl Label {
     /// What a scope closing over `binder` remembers of it.
     fn of(binder: Free) -> Self {
-        match binder {
-            Free::Global(global) => Label::Global(global),
-            Free::Local(mint) => Label::Local {
-                hint: mint.hint_symbol(),
-                written: mint.written(),
-                proof: false,
-            },
+        Label {
+            hint: binder.hint_symbol(),
+            written: binder.written(),
+            proof: false,
         }
     }
 
-    /// The same label rendering as `hint`. A global has no hint to replace — its rendering is its path — so it is returned unchanged.
+    /// The same label rendering as `hint`.
     ///
     /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
     fn relabelled(&self, hint: &str) -> Self {
-        match self {
-            Label::Local { written, proof, .. } => Label::Local {
-                hint: (!hint.is_empty()).then(|| Symbol::new(hint)),
-                written: *written,
-                proof: *proof,
-            },
-            Label::Global(_) => *self,
+        Label {
+            hint: (!hint.is_empty()).then(|| Symbol::new(hint)),
+            ..*self
         }
     }
 
-    /// The same label stating whether its binder binds a proof. A global binds a `rec` group's member, which is none by its binder, so it is returned unchanged.
+    /// The same label stating whether its binder binds a proof.
     fn proving(&self, proof: bool) -> Self {
-        match self {
-            Label::Local { hint, written, .. } => Label::Local {
-                hint: *hint,
-                written: *written,
-                proof,
-            },
-            Label::Global(_) => *self,
-        }
+        Label { proof, ..*self }
     }
 
-    /// Whether this binder binds a proof, as its declaration stated when it was published; `false` for a global, and for a binder nothing has decided.
+    /// Whether this binder binds a proof, as its declaration stated when it was published; `false` for a binder nothing has decided.
     pub(crate) fn binds_proof(&self) -> bool {
-        match self {
-            Label::Local { proof, .. } => *proof,
-            Label::Global(_) => false,
-        }
+        self.proof
     }
 
-    /// The hint a local binder was written with; `None` for a global, whose rendering is its path, and for a hintless local.
+    /// The hint the binder was written with; `None` for a hintless one.
     pub(crate) fn hint(&self) -> Option<&'static str> {
-        match self {
-            Label::Local { hint, .. } => hint.map(|hint| hint.as_str()),
-            Label::Global(_) => None,
-        }
+        self.hint.map(|hint| hint.as_str())
     }
 
-    /// Where a local binder sits among its declaration's written binders, when the lowering wrote it.
+    /// The hint the binder was written with, as the symbol a local is minted from.
+    pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
+        self.hint
+    }
+
+    /// Where the binder sits among its declaration's written binders, when the lowering wrote it.
     pub(crate) fn written(&self) -> Option<u32> {
-        match self {
-            Label::Local { written, .. } => *written,
-            Label::Global(_) => None,
-        }
+        self.written
     }
 }
 
@@ -726,7 +705,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
             self.arity(),
             "one answer per binder of the scope"
         );
-        let unlabelled = Label::Local {
+        let unlabelled = Label {
             hint: None,
             written: None,
             proof: false,
@@ -1024,11 +1003,9 @@ impl PassOver {
 }
 
 enum Mode {
-    /// Rebuild every node, rewriting variables only.
-    Plain,
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
-    /// [`Mode::Plain`] for a capture of local binders, the oldest of them at `oldest`: skip subtrees with no local as new as it and no loose index the capture would shift.
+    /// A capture, the oldest of its binders at `oldest`: rebuild every node, rewriting variables only, and skip subtrees with no local as new as it and no loose index the capture would shift.
     Capturing { oldest: u64 },
     /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
     Rewriting(Rewrite),
@@ -1067,21 +1044,18 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `oldest` is the oldest binder being captured where every one is a local, which is what lets it pass over a subterm that holds only older locals.
-    fn capturing(oldest: Option<u64>, visit: F) -> Self {
+    /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `oldest` is the oldest binder being captured, which is what lets it pass over a subterm that holds only older locals.
+    fn capturing(oldest: u64, visit: F) -> Self {
         Self {
             term_depth: 0,
             visit,
-            mode: match oldest {
-                Some(oldest) => Mode::Capturing { oldest },
-                None => Mode::Plain,
-            },
+            mode: Mode::Capturing { oldest },
             memo: Memo::ByNodeAndDepth(HashMap::new()),
             spines: HashMap::new(),
         }
     }
 
-    /// Like `new`, but lets a `Term::traverse` impl skip (and structurally share) subtrees the visit provably leaves unchanged. Only sound for index-monotonic visits whose effect depends solely on bound indices `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture` (rewrites free names) or `free_vars` (must observe every node).
+    /// Like `new`, but lets a `Term::traverse` impl skip (and structurally share) subtrees the visit provably leaves unchanged. Only sound for index-monotonic visits whose effect depends solely on bound indices `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture` (rewrites free names) or `mentions` (must observe every node).
     fn pruning(visit: F) -> Self {
         Self {
             term_depth: 0,
@@ -1311,8 +1285,7 @@ where
                 children.push(term.clone());
                 Some(placeholder.clone())
             }
-            Mode::Plain
-            | Mode::Pruning
+            Mode::Pruning
             | Mode::Capturing { .. }
             | Mode::RewritingLevels(..)
             | Mode::ErasingUniverses

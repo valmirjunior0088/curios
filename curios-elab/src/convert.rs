@@ -40,8 +40,8 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Frees, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
-        Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
+        Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level, Lockstep,
+        Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
         Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseError, Universes, Variance, Variant,
@@ -365,8 +365,8 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
         .filter(|entry| metavar.spine.is_identity() && entry.scoped() == Scoped::Held)
         .map(|entry| entry.frames().clone());
     let named = match birth {
-        Some(_) => Frees::empty(),
-        None => metavar.spine.free_vars(),
+        Some(_) => Mentions::empty(),
+        None => metavar.spine.mentions(),
     };
     let names = |name: &Free| match &birth {
         Some(frames) => frames.binds_locally(name),
@@ -377,7 +377,6 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
     loop {
         let values = locals_outside_spines(&candidate)
             .into_iter()
-            // A block's local is a binder, and the test asks nothing of a declaration: `Context::is_top_level` would note a question in the trace for every declaration a candidate names.
             .filter(|name| !names(name))
             .filter_map(|name| {
                 let value = context.definition_body(&name)?;
@@ -986,15 +985,10 @@ impl Convert {
             return Ok(Spun::Apart);
         }
         let global = |head: &Term| match &**applied_head(head) {
-            Subterm::Var(var) => var
-                .as_free()
-                .and_then(Free::as_global)
-                .map(|global| (*global, false)),
-            Subterm::Instance(Instance { name, .. }) => Some((*name, true)),
+            Subterm::Instance(Instance { name, .. }) => Some(*name),
             _ => None,
         };
-        let (Some((this_global, polymorphic)), Some((that_global, _))) =
-            (global(&this.head), global(&that.head))
+        let (Some(this_global), Some(that_global)) = (global(&this.head), global(&that.head))
         else {
             return Ok(Spun::Apart);
         };
@@ -1015,25 +1009,14 @@ impl Convert {
                 false => Spun::Apart,
             }
         };
-        if !holding && polymorphic && flexible {
+        if !holding && flexible {
             return Ok(apart(context));
         }
 
         let param_types = apply_param_types(context, binders, &this.head, &this.arguments)?;
         let mark = context.solution_mark();
         let committed = context.solutions_committed();
-        let mut converts = polymorphic
-            || matches!(
-                convert_under(
-                    context,
-                    binders,
-                    pairs,
-                    &Term::type_ground(),
-                    &this.head,
-                    &that.head
-                )?,
-                Outcome::Converts
-            );
+        let mut converts = true;
         let open_slot = |context: &Context, term: &Term| matches!(&**term, Subterm::Metavar(metavar) if matches!(metavar.origin, MetavarOrigin::Witness(_)) && context.metavar_solution(metavar.id).is_none());
         let mut passed_over = false;
         for (index, (a, b)) in this.arguments.iter().zip(&that.arguments).enumerate() {
@@ -1060,7 +1043,7 @@ impl Convert {
         // Agreement reached by solving a metavariable is one answer among those a function that is not injective has: no verdict of conversion's, until the pair's term asks for it. It does say the two calls are not apart.
         let solvable = converts && !holding && context.solutions_committed() != committed;
         converts &= !solvable;
-        if polymorphic && converts {
+        if converts {
             // A family's name applied in full by one spine is the node it builds, and a definition's is its value at those arguments: the two instances are identified by the name's vector. A curried head is identified as two heads are, and where that declines, the pair goes on to reduction and meets as what it reduces to.
             let instances = this_term
                 .applied_in_full(&*context)
@@ -1793,7 +1776,7 @@ impl Convert {
             return Ok(Solved::Postponed);
         }
 
-        // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
+        // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `mentions` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
         // And spell the published recursive members it holds by their names: a candidate arrives reduced, a stuck call headed by its member's group, and committed so it would hold a copy of the callee for the re-validation below to elaborate again ([`named_members`]).
         // And read by value the `let`'s locals the occurrence does not name ([`by_value`]), ahead of the scope check that would fail the candidate for them.
         let t = &named_members(
@@ -1904,14 +1887,14 @@ impl Convert {
 
         // An identity spine over a telescope its birth frames bind names each birth binder as itself: the candidate is in birth names as it stands, no entry is a subject, and the round trip is the candidate. What is left is the scope check, each free name a binder those frames bind or a declaration's, and an inversion that reads the spine would cost every solve the scope the metavariable was born in.
         let inverted = if metavar.spine.is_identity() && scoped == Scoped::Held {
-            for name in &t.free_vars() {
-                if born.binds_locally(name) || context.is_top_level(name) {
+            for name in &t.mentions() {
+                if context.stands_for(name, |local| born.binds_locally(local)) {
                     continue;
                 }
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    name = %name.faithful(),
+                    name = ?name,
                     mentioned = false,
                     "scope check rejected a free name",
                 );
@@ -1994,20 +1977,17 @@ impl Convert {
                 .map(|(name, _)| *name)
                 .chain(subjects.iter().map(|(_, birth)| *birth))
                 .collect::<HashSet<_>>();
-            for name in &abstracted.free_vars() {
-                if allowed.contains(name) {
-                    continue;
-                }
-                // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
-                if context.is_top_level(name) {
+            for name in &abstracted.mentions() {
+                // A declaration is in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention one freely. This is what lets an item elaborate independently of the ambient prelude.
+                if context.stands_for(name, |local| allowed.contains(local)) {
                     continue;
                 }
                 let mentioned =
-                    entries.is_empty() || entries.iter().any(|entry| entry.mentions_free(name));
+                    entries.is_empty() || entries.iter().any(|entry| entry.mentions_name(name));
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    name = %name.faithful(),
+                    name = ?name,
                     mentioned,
                     "scope check rejected a free name",
                 );

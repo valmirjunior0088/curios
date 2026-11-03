@@ -63,7 +63,7 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
     let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let alias = Free::local(1, Some("D"));
+    let alias = Global::Authored(Qualifier::from(["D"]));
     kernel
         .define(
             &alias,
@@ -83,7 +83,10 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     );
     inducts.insert(
         bad_name,
-        single_payload(Term::free_var(&alias), Term::type_ground()),
+        single_payload(
+            Term::instance(alias, Universes::default()),
+            Term::type_ground(),
+        ),
     );
     for (name, entry) in &inducts {
         kernel
@@ -114,7 +117,7 @@ fn a_payload_behind_a_universe_instance_of_an_alias_is_refused_by_the_rule() {
     let alias = Global::Authored(Qualifier::from(["D"]));
     kernel
         .define(
-            &Free::Global(alias),
+            &alias,
             &Term::type_ground(),
             &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
             &UniverseContext {
@@ -163,7 +166,7 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
     for budget in [0, 100_000] {
         let mut kernel = Kernel::new(budget, SYNTAX);
 
-        let alias = Free::local(1, Some("D"));
+        let alias = Global::Authored(Qualifier::from(["D"]));
         kernel
             .define(
                 &alias,
@@ -176,7 +179,10 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
         let mut inducts = BTreeMap::new();
         inducts.insert(
             good_name,
-            single_payload(Term::free_var(&alias), Term::type_ground()),
+            single_payload(
+                Term::instance(alias, Universes::default()),
+                Term::type_ground(),
+            ),
         );
         for (name, entry) in &inducts {
             kernel
@@ -206,7 +212,7 @@ fn a_set_the_driver_cannot_finish_reading_is_refused_for_the_budget() {
     for budget in [0, 100_000] {
         let mut kernel = Kernel::new(budget, SYNTAX);
 
-        let alias = Free::local(1, Some("D"));
+        let alias = Global::Authored(Qualifier::from(["D"]));
         kernel
             .define(
                 &alias,
@@ -219,7 +225,10 @@ fn a_set_the_driver_cannot_finish_reading_is_refused_for_the_budget() {
         let mut inducts = BTreeMap::new();
         inducts.insert(
             wrap_name,
-            single_payload(Term::free_var(&alias), Term::type_ground()),
+            single_payload(
+                Term::instance(alias, Universes::default()),
+                Term::type_ground(),
+            ),
         );
         for (name, entry) in &inducts {
             kernel

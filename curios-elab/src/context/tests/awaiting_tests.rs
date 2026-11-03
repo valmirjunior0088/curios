@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{CalleeId, Free, Intrinsic, MetavarId, Nat, Term, WitnessOrigin},
+    curios_core::{CalleeId, Free, Intrinsic, Mention, MetavarId, Nat, Term, WitnessOrigin},
     std::collections::BTreeSet,
 };
 
@@ -26,7 +26,7 @@ fn awaited(context: &Context, id: usize) -> bool {
 /// Where a fixture's witness goal says it came from.
 fn premise() -> WitnessOrigin {
     WitnessOrigin {
-        func: CalleeId::Function(Free::local(0, None)),
+        func: CalleeId::Function(Mention::Local(Free::local(0, None))),
         role: Some("key".into()),
     }
 }

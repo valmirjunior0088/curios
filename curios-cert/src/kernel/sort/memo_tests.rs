@@ -170,7 +170,7 @@ fn family_over_a_proof(kernel: &mut Kernel) -> (Term, Term) {
     let g = nominal("g");
     kernel
         .declare(
-            &Free::Global(g),
+            &g,
             &Term::func_type([(binder(90, "x"), proposition.clone())], nat_type.clone()),
             &UniverseContext::default(),
         )

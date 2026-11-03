@@ -9,8 +9,8 @@ use {
     curios_analysis::{DeclaredPart, Erased},
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
-        Free, Global, Islands, Item, Level, Lexicon, Module, Places, Polarity, ReaderNames,
-        ReaderPosition, ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term,
+        Free, Global, Islands, Item, Level, Lexicon, Mention, Module, Places, Polarity,
+        ReaderNames, ReaderPosition, ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term,
         UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, build_rename,
     },
     curios_num::{Integer, Natural},
@@ -354,7 +354,7 @@ impl ArgumentSite {
 #[derive(Debug, Clone)]
 pub enum Callee {
     /// A function or constructor the program names, carried as its identity rather than its text so the report spells it under the names in scope — the shorten map and the unit's import spellings, exactly as every term in the same report is spelled.
-    Function(Free),
+    Function(Mention),
     /// An infix operator, beside the wrapper of the concept method it dispatches through — the call a program can write where the operator takes no argument.
     Operator { op: InfixOp, method: Global },
     /// A constructor, named by its declaration and tag.

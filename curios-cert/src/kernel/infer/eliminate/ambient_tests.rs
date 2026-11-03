@@ -5,10 +5,10 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,
-        Two, UniverseContext, test_support::*,
+        Atom, Carrier, Cases, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term, Two,
+        UniverseContext, Universes, test_support::*,
     },
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// `F : (Nat) -> Type` with `a : F(0)` and `b(m : Nat) : F(m + 1)`.
@@ -26,7 +26,8 @@ fn family(kernel: &mut Kernel) -> Global {
 }
 
 /// An opaque `Q : (n : Nat, x : F(n), p : P(n, x)) -> Type`: a type former whose last parameter is typed by the scrutinee and its index, so a goal stating it about a hypothesis can be written where that hypothesis stands and nowhere else.
-fn dependent_family(kernel: &mut Kernel, name: Free, family: &Global, p: &Term) -> Term {
+fn dependent_family(kernel: &mut Kernel, name: &str, family: &Global, p: &Term) -> Term {
+    let name = Global::Authored(Qualifier::from([name]));
     let n = binder(94, "n");
     let x = binder(95, "x");
     let at = Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&n)]);
@@ -48,7 +49,7 @@ fn dependent_family(kernel: &mut Kernel, name: Free, family: &Global, p: &Term) 
         )
         .expect("a name is declared once");
 
-    Term::free_var(&name)
+    Term::instance(name, Universes::default())
 }
 
 /// The two arms of an elimination of `F`, each `body`, as `Cases::Induct` in declaration order.
@@ -78,8 +79,8 @@ fn arms(body: &Term) -> Cases {
 fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
     let mut kernel = kernel();
     let family = family(&mut kernel);
-    let p = scrutinee_family(&mut kernel, binder(60, "P"), &family);
-    let q = dependent_family(&mut kernel, binder(61, "Q"), &family, &p);
+    let p = scrutinee_family(&mut kernel, "P", &family);
+    let q = dependent_family(&mut kernel, "Q", &family, &p);
 
     let n = binder(62, "n");
     let x = binder(63, "x");
@@ -142,7 +143,7 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
 fn a_lying_ambient_goal_is_refused() {
     let mut kernel = kernel();
     let family = family(&mut kernel);
-    let p = scrutinee_family(&mut kernel, binder(60, "P"), &family);
+    let p = scrutinee_family(&mut kernel, "P", &family);
 
     let n = binder(62, "n");
     let x = binder(63, "x");
@@ -165,10 +166,10 @@ fn a_lying_ambient_goal_is_refused() {
 fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     let mut kernel = kernel();
     let family = family(&mut kernel);
-    let p = scrutinee_family(&mut kernel, binder(60, "P"), &family);
+    let p = scrutinee_family(&mut kernel, "P", &family);
 
     // `f : (Nat) -> F(0)` applied to a parameter is an expression scrutinee typed at index `0`, so only the `a` arm is reachable, and `b`'s targets clash with the actual index.
-    let f = binder(62, "f");
+    let f = Global::Authored(Qualifier::from(["f"]));
     let n = binder(63, "n");
     let at_zero = Term::induct_type(family, Vec::<Term>::new(), [nat(0)]);
     kernel
@@ -179,7 +180,10 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
         )
         .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
-    let expression = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
+    let expression = Term::apply(
+        Term::instance(f, Universes::default()),
+        [Term::free_var(&n)],
+    );
     let h = binder(65, "h");
     let goal = Term::apply(p, [nat(0), expression.clone()]);
     kernel.assume(&h, &goal);

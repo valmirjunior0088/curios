@@ -3,8 +3,8 @@
 use {
     crate::{Answered, Context, Declared, Error, Question, Witness},
     curios_core::{
-        ConceptDecl, Definition, Free, Global, HeadKey, InductDecl, ParameterField, StructDecl,
-        Term, Totality, UniverseContext, Variance, WitnessKey,
+        ConceptDecl, Definition, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term,
+        Totality, UniverseContext, Variance, WitnessKey,
     },
     curios_utilities::{Mount, Qualifier},
     std::{
@@ -44,13 +44,8 @@ impl<'s> Context<'s> {
         self.underway.needs.take()
     }
 
-    /// [`Needs::missed`](super::Needs::missed).
-    pub(super) fn missed(&self, name: &Free) {
-        self.underway.needs.missed(name);
-    }
-
     /// [`Needs::reads`](super::Needs::reads).
-    fn reads_entry(&self, name: &Global) {
+    pub(super) fn reads_entry(&self, name: &Global) {
         self.underway.needs.reads(name);
     }
 
@@ -66,12 +61,9 @@ impl<'s> Context<'s> {
                 return false;
             }
         }
-        self.asks(&Free::Global(*name), Question::Signature);
+        self.asks(name, Question::Signature);
 
-        self.typing
-            .frames
-            .assumption(&Free::Global(*name))
-            .is_some()
+        self.typing.frames.declared_type(name).is_some()
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
@@ -90,7 +82,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
-        self.asks(&Free::Global(*name), Question::Totality);
+        self.asks(name, Question::Totality);
         self.typing.program.definition_totality(name)
     }
 
@@ -101,12 +93,12 @@ impl<'s> Context<'s> {
 
     /// The sort `name`'s value inhabits, where it is a definition whose value is a type ([`curios_core::Definition::value_sort`]): a read of that part of the definition alone.
     pub(crate) fn definition_value_sort(&self, name: &Global) -> Option<Term> {
-        self.asks(&Free::Global(*name), Question::Sort);
+        self.asks(name, Question::Sort);
         self.typing.program.definition_value_sort(name).cloned()
     }
 
     pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
-        self.asks(&Free::Global(*name), Question::Variances);
+        self.asks(name, Question::Variances);
         self.typing.program.definition_variances(name)
     }
 
@@ -116,13 +108,13 @@ impl<'s> Context<'s> {
         name: &Global,
         slot: usize,
     ) -> Option<(&[Variance], usize)> {
-        self.asks(&Free::Global(*name), Question::Variances);
+        self.asks(name, Question::Variances);
         self.typing.program.field_variances(name, slot)
     }
 
     /// The field of one of its binders a definition's value is, with its arity: a read of the definition's vectors, as [`Self::definition_variances`] is.
     pub(crate) fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
-        self.asks(&Free::Global(*name), Question::Variances);
+        self.asks(name, Question::Variances);
         self.typing.program.parameter_field(name)
     }
 
@@ -157,7 +149,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.asks(&Free::Global(*name), Question::Induct);
+        self.asks(name, Question::Induct);
         self.reads_entry(name);
         self.typing.program.induct_decl(name)
     }
@@ -175,7 +167,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.asks(&Free::Global(*name), Question::Struct);
+        self.asks(name, Question::Struct);
         self.reads_entry(name);
         self.typing.program.struct_decl(name)
     }
@@ -189,7 +181,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
-        self.asks(&Free::Global(*name), Question::Concept);
+        self.asks(name, Question::Concept);
         self.reads_entry(name);
         self.typing.program.concept(name)
     }

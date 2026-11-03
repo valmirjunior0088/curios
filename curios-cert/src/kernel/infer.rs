@@ -124,7 +124,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             Ok(type_)
         }
 
-        // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.
+        // A variable has the type it was bound at. There is no fallback: an unbound name in a finished term is a broken term.
         //
         // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
         Subterm::Var(var) => {
@@ -133,7 +133,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             }
 
             kernel
-                .type_of(var.unwrap())?
+                .local_type(var.unwrap())
                 .cloned()
                 .ok_or_else(|| Error::Unbound(*var.unwrap()))
         }
@@ -430,7 +430,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         Subterm::Instance(instance) => match synth_neutral(kernel, term)? {
             Some(type_) => Ok(type_),
             // An instance's type is its scheme's, so one with none names no declaration in scope.
-            None => Err(Error::Unbound(Free::Global(instance.name))),
+            None => Err(Error::Undeclared(instance.name)),
         },
 
         // Elaboration-only syntax. Reaching a metavariable or any transient means a term arrived here before elaboration was finished with it.

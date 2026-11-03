@@ -3,8 +3,8 @@
 use {
     crate::kernel::infer::{subsumes, test_support::*},
     crate::*,
-    curios_core::{Free, Term, UniverseContext},
-    curios_utilities::Plicity,
+    curios_core::{Free, Global, Term, UniverseContext, Universes},
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// The subsumption fork, which the soundness board records as having no fixture in either direction.
@@ -106,9 +106,8 @@ fn a_definition_naming_a_sort_or_a_function_type_is_subsumed_as_what_it_names() 
     let mut kernel = kernel();
     let x = binder(903, "x");
     let pi = |codomain: Term| Term::func_type([(x, nat_type())], codomain);
-    let family = binder(904, "Family");
-    let predicate = binder(905, "Predicate");
-    let small = binder(906, "Small");
+    let declared = |path: &str| Global::Authored(Qualifier::from([path]));
+    let (family, predicate, small) = (declared("Family"), declared("Predicate"), declared("Small"));
     for (name, value) in [
         (family, pi(Term::type_ground())),
         (predicate, pi(Term::prop())),
@@ -123,7 +122,7 @@ fn a_definition_naming_a_sort_or_a_function_type_is_subsumed_as_what_it_names() 
             )
             .expect("a name is declared once");
     }
-    let named = |name: &Free| Term::free_var(name);
+    let named = |name: &Global| Term::instance(*name, Universes::default());
 
     assert_eq!(
         subsumes(&mut kernel, &named(&family), &pi(Term::type_at(one()))),

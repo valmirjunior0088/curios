@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        Bound, Field, Free, Frees, Global, Label, MetavarId, One, Proj, Scope, Subterm, Term, Var,
-        Visit, capture_placed, oldest_local,
+        Bound, Field, Free, Global, Label, Mentions, MetavarId, One, Proj, Scope, Subterm, Term,
+        Var, Visit, capture_placed,
     },
     curios_utilities::Plicity,
     std::{
@@ -85,14 +85,10 @@ impl<B: Bound> Telescope<B> {
                 Some(count - 1 - nearest)
             }
         };
-        let mut oldest = vec![Some(u64::MAX)];
+        let mut oldest = vec![u64::MAX];
         for (_, binder, _) in &entries {
             let before = *oldest.last().expect("seeded with the oldest of no binder");
-            oldest.push(
-                oldest_local(&[binder])
-                    .zip(before)
-                    .map(|(this, before)| this.min(before)),
-            );
+            oldest.push(before.min(binder.index()));
         }
         let closed =
             |value: &Term, count: usize| capture_placed(value, count, oldest[count], place(count));
@@ -909,18 +905,18 @@ impl<B: Bound> Bound for Telescope<B> {
         }
     }
 
-    fn free_vars(&self) -> Frees {
+    fn mentions(&self) -> Mentions {
         let mut sets = Vec::new();
         let mut current = self;
         loop {
             match current {
                 Telescope::Cons(_, ty, rest, ..) => {
-                    sets.push(ty.free_vars());
+                    sets.push(ty.mentions());
                     current = rest.body();
                 }
                 Telescope::Done(body) => {
-                    sets.push(body.free_vars());
-                    return Frees::union(sets);
+                    sets.push(body.mentions());
+                    return Mentions::union(sets);
                 }
             }
         }

@@ -4,8 +4,8 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_core::{
-        Cases, Exhaustion, Free, Global, InductDecl, Intrinsic, Match, MatchResult, MetavarId,
-        StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
+        Cases, DefinitionKind, Exhaustion, Free, Global, InductDecl, Intrinsic, Match, MatchResult,
+        MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -458,11 +458,11 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
                 stated: None,
             },
         }));
-        context.define_assuming(
-            &Free::Global(h),
+        context.define_declaring(
+            &h,
             &Term::func_type([(e, family.clone())], nat_type()),
             &Term::func([(e, family.clone())], eliminated),
-            None,
+            &DefinitionKind::Authored,
         );
         let call = |proof: &Free| {
             Term::apply(

@@ -4,9 +4,10 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_core::{
-        CalleeId, DefinitionKind, Free, Intrinsic, Level, MetavarId, MetavarOrigin, Subterm, Term,
-        Universes, WitnessOrigin,
+        CalleeId, DefinitionKind, Global, Intrinsic, Level, Mention, MetavarId, MetavarOrigin,
+        Subterm, Term, Universes, WitnessOrigin,
     },
+    curios_utilities::Qualifier,
 };
 
 // === Metavariables / unification ===========================================
@@ -84,11 +85,11 @@ fn scope_check_rejects_out_of_context_variable() {
 #[test]
 fn a_candidate_names_a_lets_local_by_its_value() {
     let mut context = context();
-    let f = context.fresh(Some("f"));
+    let f = Global::Authored(Qualifier::from(["f"]));
     let x = context.fresh(Some("x"));
     let n = context.fresh(Some("n"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    context.assume(
+    context.declare(
         &f,
         &Term::func_type([(x, nat_type.clone())], nat_type.clone()),
     );
@@ -96,13 +97,19 @@ fn a_candidate_names_a_lets_local_by_its_value() {
 
     context.with_frame(|context| {
         context.define_assuming(&n, &nat_type, &nat(2), None);
-        let candidate = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
+        let candidate = Term::apply(
+            Term::instance(f, Universes::default()),
+            [Term::free_var(&n)],
+        );
         assert_eq!(conv(context, &Term::hole(0), &candidate), Ok(true));
     });
 
     assert_eq!(
         context.metavar_solution(MetavarId(0)),
-        Some(&Term::apply(Term::free_var(&f), [nat(2)]))
+        Some(&Term::apply(
+            Term::instance(f, Universes::default()),
+            [nat(2)]
+        ))
     );
 }
 
@@ -304,12 +311,7 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
             (context.fresh(Some("first")), nat_type()),
             (context.fresh(Some("second")), nat_type()),
         ]);
-        context.define_assuming(
-            &Free::Global(dictionary),
-            &type_,
-            &methods(),
-            Some(&DefinitionKind::Authored),
-        );
+        context.define_declaring(&dictionary, &type_, &methods(), &DefinitionKind::Authored);
         context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
         let slot = Term::metavar_birthed(0, origin, Vec::new());
         assert_eq!(
@@ -325,7 +327,7 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
         context.metavar_solution(MetavarId(0)).cloned()
     };
     let premise = MetavarOrigin::Witness(WitnessOrigin {
-        func: CalleeId::Function(Free::from(&nominal("holds"))),
+        func: CalleeId::Function(Mention::Declaration(nominal("holds"))),
         role: Some("key".into()),
     });
 
@@ -346,11 +348,11 @@ fn a_solution_met_through_a_solved_metavariable_keeps_the_name_it_spells() {
     let flat = nominal("flat");
     let argument = context.fresh(Some("n"));
     let type_ = Term::func_type([(argument, nat_type())], nat_type());
-    context.define_assuming(
-        &Free::Global(flat),
+    context.define_declaring(
+        &flat,
         &type_,
         &Term::func([(argument, nat_type())], nat(0)),
-        Some(&DefinitionKind::Authored),
+        &DefinitionKind::Authored,
     );
     context.birth_metavar(MetavarId(0), Vec::new(), type_.clone());
     context.birth_metavar(MetavarId(1), Vec::new(), type_.clone());

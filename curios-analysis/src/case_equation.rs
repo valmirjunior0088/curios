@@ -147,10 +147,10 @@ pub fn read_scrutinee_classed(
 ///
 /// Relaxing it to admit everything refuses nothing that holds, and admits the respellings named above — what it costs is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equation_scope_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
 pub fn could_reduce_to(key: &Term, candidate: &Term, proofs: &[Free]) -> bool {
-    let allowed = key.free_vars();
+    let allowed = key.mentions();
 
     candidate
-        .free_vars()
+        .mentions()
         .locals()
         .all(|name| allowed.contains(name) || proofs.contains(name))
 }

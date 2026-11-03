@@ -180,8 +180,7 @@ impl FlatLet {
 
     /// Whether this definition's type or body names the definition itself — what makes a lone `let` the recursive group of one the kernel needs it to be.
     pub(super) fn mentions_itself(&self) -> bool {
-        let name = curios_core::Free::Global(self.name);
-        self.type_.mentions_free(&name) || self.body.mentions_free(&name)
+        self.type_.mentions_declaration(&self.name) || self.body.mentions_declaration(&self.name)
     }
 }
 
@@ -242,8 +241,8 @@ impl FlatItem {
             )
     }
 
-    /// Every global this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
-    pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
+    /// Every declaration this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
+    pub(super) fn declarations_named(&self) -> HashSet<curios_core::Global> {
         self.lets()
             .iter()
             .flat_map(|let_| named(&let_.type_).chain(named(&let_.body)))

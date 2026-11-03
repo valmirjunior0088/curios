@@ -16,7 +16,7 @@ use {
     super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
     curios_analysis::Erased,
     curios_core::{
-        Enter, Free, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
+        Enter, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -139,9 +139,7 @@ impl<'g> Totals<'g> {
         for (index, definition) in item.definitions().into_iter().enumerate() {
             let encloses = match (typed, item) {
                 (true, Item::Rec(rec)) => kernel.member_encloses_partial(&rec.group, index),
-                (true, Item::Let(_)) => {
-                    kernel.definition_encloses_partial(&Free::from(&definition.name))
-                }
+                (true, Item::Let(_)) => kernel.definition_encloses_partial(&definition.name),
                 // A group stands in a term as a `Rec` node or as the member a universe instance is taken of, and `Term::has_group` is where that relation is stated: either is a group with no verdict here, and so one that does not descend.
                 (false, _) => definition.body.has_group() || definition.type_.has_group(),
             };
@@ -201,11 +199,7 @@ pub(crate) fn check_positions(
     for position in positions {
         if let Some(reached) = position
             .term
-            .first_free(|free| {
-                free.as_global()
-                    .is_some_and(|name| totals.partial(kernel, name))
-            })
-            .and_then(|free| free.as_global().copied())
+            .first_declaration(|name| totals.partial(kernel, name))
         {
             return Err(Error::NotTotal {
                 erased: position.erased,

@@ -1,6 +1,6 @@
 //! What is in scope beyond the walk: top-level definitions, and the nominal registry.
 //!
-//! This is the one component that exists to answer with something other than the term in hand, which is exactly what a definition store is for. Everything about it is therefore stated rather than assumed: a definition unfolds through a bare occurrence only when it is monomorphic, the registry is data no judgment in this crate types, and a name is written once, every way of writing one refusing a name already held.
+//! This is the one component that exists to answer with something other than the term in hand, which is exactly what a definition store is for. Everything about it is therefore stated rather than assumed: a definition unfolds only at an instance that states its scheme whole, the registry is data no judgment in this crate types, and a name is written once, every way of writing one refusing a name already held.
 //!
 //! # Two ways to reach a declaration, and they are not the same question
 //!
@@ -22,15 +22,15 @@ use {
     super::Error,
     crate::Baseline,
     curios_core::{
-        Certification, Free, Global, InductDecl, Item, Module, Place, Places, Polarity, StructDecl,
-        Term, Totality, UniverseContext, Universes, Variance,
+        Certification, Global, InductDecl, Item, Module, Place, Places, Polarity, StructDecl, Term,
+        Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
 
 /// A top-level name's entry as a judgment reads it: what it is, and what it unfolds to if anything.
 ///
-/// The universe context is not decoration. A definition with universe parameters is *not* unfoldable through a bare occurrence, because such an occurrence denotes no particular instance; it reduces only through an [`Instance`](curios_core::Instance) that says which one.
+/// The universe context is not decoration: a definition unfolds only through an [`Instance`](curios_core::Instance) that states its scheme whole ([`UniverseContext::stated_by`]), which says at which levels.
 #[derive(Clone, Copy)]
 pub(crate) struct Held<'a> {
     pub(crate) type_: &'a Term,
@@ -401,7 +401,7 @@ pub(super) struct Environment<'s> {
     unvisited: Option<Unvisited<'s>>,
     /// The names whose verdict the walk adopted: each is read where the baseline holds it, which is the declaration the walk was handed under that name, term for term.
     adopted: HashSet<Global>,
-    definitions: HashMap<Free, Definition>,
+    definitions: HashMap<Global, Definition>,
     inducts: BTreeMap<Global, InductDecl>,
     structs: BTreeMap<Global, StructDecl>,
     /// The polarity vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what strict positivity composes through where a family it analyzes mentions this one. The vector an entry carries is elaboration's, which nothing here reads; an entry with no vector filed answers `Mixed`.
@@ -454,7 +454,7 @@ impl<'s> Environment<'s> {
     }
 
     /// What `name` is held at: as the walk wrote it, as the baseline it adopted it from holds it, or as a unit in scope does.
-    fn held(&self, name: &Free) -> Option<Held<'_>> {
+    fn held(&self, name: &Global) -> Option<Held<'_>> {
         if let Some(definition) = self.definitions.get(name) {
             return Some(Held {
                 type_: &definition.type_,
@@ -464,7 +464,6 @@ impl<'s> Environment<'s> {
             });
         }
 
-        let name = name.as_global()?;
         let adopted = self
             .baseline
             .filter(|_| self.adopted.contains(name) || self.passed(name))
@@ -478,7 +477,7 @@ impl<'s> Environment<'s> {
     /// **Written once.** A judgment reads what a name means when it is made, and a remembered reduct is a function of the definitions it unfolded. An entry written over a held name would leave both stating what the environment no longer holds, so the write is refused and neither is ever revisited: the memos, a sibling component, need to know nothing of this one.
     pub(super) fn insert(
         &mut self,
-        name: &Free,
+        name: &Global,
         type_: &Term,
         value: Option<&Term>,
         value_sort: Option<&Term>,
@@ -506,8 +505,8 @@ impl<'s> Environment<'s> {
         let held = self
             .baseline
             .and_then(|baseline| held(baseline.module, baseline.places, name));
-        if held.is_none() || self.held(&Free::from(name)).is_some() {
-            return Err(Error::Redeclared(Free::from(name)));
+        if held.is_none() || self.held(name).is_some() {
+            return Err(Error::Redeclared(*name));
         }
 
         self.adopted.insert(*name);
@@ -522,7 +521,7 @@ impl<'s> Environment<'s> {
         declaration: &InductDecl,
     ) -> Result<(), Error> {
         if self.induct_decl(name).is_some() {
-            return Err(Error::Redeclared(Free::from(name)));
+            return Err(Error::Redeclared(*name));
         }
 
         self.inducts.insert(*name, declaration.clone());
@@ -537,7 +536,7 @@ impl<'s> Environment<'s> {
         declaration: &StructDecl,
     ) -> Result<(), Error> {
         if self.struct_decl(name).is_some() {
-            return Err(Error::Redeclared(Free::from(name)));
+            return Err(Error::Redeclared(*name));
         }
 
         self.structs.insert(*name, declaration.clone());
@@ -630,41 +629,25 @@ impl<'s> Environment<'s> {
             .or_else(|| self.scope.and_then(|scope| scope.struct_decl(name)))
     }
 
-    /// The universe scheme `name` was generalized under, for a use that states its own instance.
-    pub(super) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
+    /// The universe scheme `name` was generalized under, for a reference that states its instance.
+    pub(super) fn scheme_of(&self, name: &Global) -> Option<(&Term, &UniverseContext)> {
         self.held(name).map(|held| (held.type_, held.universes))
     }
 
-    /// What `name` unfolds to through a bare occurrence.
-    ///
-    /// A definition with universe parameters is withheld: see [`Held`].
-    pub(super) fn value(&self, name: &Free) -> Option<&Term> {
-        self.held(name)
-            .filter(|held| held.universes.width() == 0)
-            .and_then(|held| held.value)
-    }
-
-    /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
     /// The value `name` was defined at, under its own universe parameters: what a definition is, read as an analysis of the scheme reads it rather than at an occurrence.
-    pub(super) fn body(&self, name: &Free) -> Option<&Term> {
+    pub(super) fn body(&self, name: &Global) -> Option<&Term> {
         self.held(name).and_then(|held| held.value)
     }
 
-    pub(super) fn value_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+    /// What `name` unfolds to at a stated universe instance, only where the instance states its scheme whole: see [`Held`].
+    pub(super) fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.held(name)
             .filter(|held| held.universes.stated_by(universes))
             .and_then(|held| held.value)
     }
 
-    /// The sort `name`'s value inhabits through a bare occurrence, where it states one: a definition with universe parameters is withheld, as its value is.
-    pub(super) fn value_sort(&self, name: &Free) -> Option<&Term> {
-        self.held(name)
-            .filter(|held| held.universes.width() == 0)
-            .and_then(|held| held.value_sort)
-    }
-
-    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one: an instance short of the scheme is withheld, as its value is.
-    pub(super) fn value_sort_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+    /// The sort `name`'s value inhabits at a stated universe instance, under its own parameters, where it states one: an instance short of the scheme is withheld, as its value is.
+    pub(super) fn value_sort_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.held(name)
             .filter(|held| held.universes.stated_by(universes))
             .and_then(|held| held.value_sort)

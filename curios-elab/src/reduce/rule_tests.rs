@@ -5,8 +5,9 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Apply, Atom, Bound, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
-        MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes,
+        Apply, Atom, Bound, DefinitionKind, Exhaustion, Free, InductDecl, InductParam, Intrinsic,
+        Level, MetavarId, MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext,
+        UniverseParam, Universes,
     },
     curios_utilities::Qualifier,
 };
@@ -318,13 +319,10 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
     let mut context = context();
     let poly = nominal("poly");
     let parameter = Level::param(UniverseParam(0));
-    context.assume(
-        &Free::Global(poly),
-        &Term::type_at(parameter.succ().unwrap()),
-    );
-    context.define(&Free::Global(poly), &Term::type_at(parameter), None);
-    context.set_assumption_universe_context(
-        &Free::Global(poly),
+    context.declare(&poly, &Term::type_at(parameter.succ().unwrap()));
+    context.define_declaration(&poly, &Term::type_at(parameter), &DefinitionKind::Authored);
+    context.set_universe_context(
+        &poly,
         UniverseContext {
             parameter_count: 1,
             quality_count: 0,

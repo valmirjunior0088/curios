@@ -33,17 +33,18 @@ use {
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
-        FreeMonoid, Func, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj,
-        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var, Variant,
-        Visit,
+        FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe,
+        Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var,
+        Variant, Visit,
     },
     curios_utilities::recurse,
 };
 
-/// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+/// The kernel's side of the closed-machine seam: the same delta `step_instance` performs, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Kernel<'_> {
-    fn closed_body(&self, name: &Free) -> Option<&Term> {
-        self.value(name)
+    /// None: the kernel holds no local by name, a `let` being substituted by value before reduction meets its binder (`step_var`).
+    fn closed_body(&self, _: &Free) -> Option<&Term> {
+        None
     }
 
     fn stated_payload(
@@ -54,7 +55,7 @@ impl ClosedHost for Kernel<'_> {
         stated_payload(self, stated, tag)
     }
 
-    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+    fn closed_body_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.value_at(name, universes)
     }
 
@@ -428,19 +429,14 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
     Ok(Subterm::Intrinsic(rebuilt).into())
 }
 
-/// Delta: unfold a definition, or leave the variable as the normal form it is.
-///
-/// The body is reduced by a nested `whnf`, which remembers it under the body's term for the rest of the declaration, so the next occurrence of the name in this declaration continues from the reduct instead of re-deriving it — and nothing is remembered past the declaration. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
+/// A free variable is the normal form it is: the kernel holds no local by name, a `let` being read by value before reduction meets its binder ([`Kernel::bind`]).
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
     assert!(
         !kernel.binds(var.unwrap()),
         "a `let`-bound local reached reduction by name"
     );
-    let Some(body) = kernel.value(var.unwrap()).cloned() else {
-        return Ok(Step::Stop(Term::var(var)));
-    };
 
-    Ok(Step::Continue(whnf(kernel, body)?))
+    Ok(Step::Stop(Term::var(var)))
 }
 
 /// Beta: open a function's telescope over the arguments applied to it.
@@ -607,13 +603,11 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
     Ok(let_.tail.open(&refs))
 }
 
-/// Instantiate a universe-polymorphic definition at a stated instance.
-///
-/// This is the only position from which a polymorphic definition unfolds — a bare occurrence of one denotes no particular instance, so [`Kernel::value`](super::Kernel) withholds it there.
+/// Delta: unfold a definition at the instance its reference states, which is the one position a definition unfolds from, and only where the instance states its scheme whole ([`curios_core::UniverseContext::stated_by`]); otherwise the reference is the normal form it is.
 fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
     let Instance { name, universes } = instance;
 
-    let reduct = match kernel.value_at(&Free::Global(name), &universes).cloned() {
+    let reduct = match kernel.value_at(&name, &universes).cloned() {
         Some(reduct) => reduct,
         None => return Ok(Step::Stop(Term::instance(name, universes))),
     };

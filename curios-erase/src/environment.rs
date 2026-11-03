@@ -63,7 +63,7 @@ pub struct ImportedFamily {
 #[curios_archive::archived]
 pub struct Environment {
     /// What each name is bound to, at the sorts it is read at: a binder and a name the item declares at none.
-    values: BTreeMap<(curios_core::Free, Sorts), Binding>,
+    values: BTreeMap<(curios_core::Mention, Sorts), Binding>,
     /// The rows this fragment's item declares, by declaration and sorts: its own at none.
     struct_decls: BTreeMap<AtSorts, ProductRow>,
     induct_decls: BTreeMap<AtSorts, FamilyRow>,
@@ -82,7 +82,7 @@ impl Environment {
         self.values.retain(|(name, sorts), _| {
             sorts.is_none()
                 && name
-                    .as_global()
+                    .as_declaration()
                     .is_some_and(|global| declared.contains(&global))
         });
 
@@ -90,25 +90,31 @@ impl Environment {
     }
 
     /// Bind `name`, a binder or a name the item declares, which stands at no sorts.
-    pub fn bind(&mut self, name: &curios_core::Free, atom: curios_anf::Atom) {
+    pub fn bind(&mut self, name: impl Into<curios_core::Mention>, atom: curios_anf::Atom) {
         self.bind_at(name, Sorts::NONE, atom);
     }
 
-    pub fn bind_dropped(&mut self, name: &curios_core::Free) {
+    pub fn bind_dropped(&mut self, name: impl Into<curios_core::Mention>) {
         self.bind_dropped_at(name, Sorts::NONE);
     }
 
     /// Bind `name` as it is read at `sorts`.
-    pub fn bind_at(&mut self, name: &curios_core::Free, sorts: Sorts, atom: curios_anf::Atom) {
-        self.values.insert((*name, sorts), Binding::Atom(atom));
+    pub fn bind_at(
+        &mut self,
+        name: impl Into<curios_core::Mention>,
+        sorts: Sorts,
+        atom: curios_anf::Atom,
+    ) {
+        self.values
+            .insert((name.into(), sorts), Binding::Atom(atom));
     }
 
-    pub fn bind_dropped_at(&mut self, name: &curios_core::Free, sorts: Sorts) {
-        self.values.insert((*name, sorts), Binding::Dropped);
+    pub fn bind_dropped_at(&mut self, name: impl Into<curios_core::Mention>, sorts: Sorts) {
+        self.values.insert((name.into(), sorts), Binding::Dropped);
     }
 
-    pub fn lookup(&self, name: &curios_core::Free, sorts: Sorts) -> Option<Binding> {
-        self.values.get(&(*name, sorts)).copied()
+    pub fn lookup(&self, name: impl Into<curios_core::Mention>, sorts: Sorts) -> Option<Binding> {
+        self.values.get(&(name.into(), sorts)).copied()
     }
 
     /// Every top-level name bound here at no sorts, which in an exported environment is every name the item declares, with what it is bound to.
@@ -116,7 +122,7 @@ impl Environment {
         self.values
             .iter()
             .filter(|((_, sorts), _)| sorts.is_none())
-            .filter_map(|((name, _), binding)| Some((name.as_global()?, *binding)))
+            .filter_map(|((name, _), binding)| Some((name.as_declaration()?, *binding)))
     }
 
     /// File the row this fragment declares for `name` at `sorts`: its own item's at none.

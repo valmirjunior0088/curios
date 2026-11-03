@@ -11,7 +11,7 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     let binder = Free::local(0, Some("helper"));
     let names = DisplayNames {
         terms: Vec::new(),
-        free: BTreeSet::from([Free::Global(global), binder]),
+        mentioned: BTreeSet::from([Mention::Declaration(global), Mention::Local(binder)]),
     };
     let rename = build_rename(
         &names,
@@ -126,10 +126,11 @@ fn like_named_binders_take_the_least_free_suffixes() {
         .collect::<Vec<_>>();
     let names = DisplayNames {
         terms: Vec::new(),
-        free: binders
+        mentioned: binders
             .iter()
             .copied()
-            .chain([Free::Global(taken)])
+            .map(Mention::Local)
+            .chain([Mention::Declaration(taken)])
             .collect(),
     };
     let shorten = build_shorten(std::slice::from_ref(&taken));

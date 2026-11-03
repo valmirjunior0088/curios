@@ -33,7 +33,7 @@ use {
     crate::{case_target_indices, instantiate_universes, pinned_instance, struct_reaches_itself},
     curios_analysis::{Classes, Within},
     curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Free, Func, FuncType, Global, InductType,
+        Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
         Instance, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality, ReduceError, Reducer,
         Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes,
         Variant,
@@ -390,10 +390,6 @@ fn one_definition_by_its_spines(
     let one_head = match rec_instances(kernel, &left.head, &right.head) {
         Some(verdict) => verdict,
         None => match (&*left.head, &*right.head) {
-            (Subterm::Var(left), Subterm::Var(right)) => {
-                let name = left.unwrap();
-                name == right.unwrap() && kernel.value(name).is_some()
-            }
             (
                 Subterm::Instance(Instance {
                     name: left,
@@ -405,9 +401,7 @@ fn one_definition_by_its_spines(
                 }),
             ) => {
                 left == right
-                    && kernel
-                        .value_at(&Free::Global(*left), left_universes)
-                        .is_some()
+                    && kernel.value_at(left, left_universes).is_some()
                     && kernel.universes_eq(left_universes, right_universes)
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {

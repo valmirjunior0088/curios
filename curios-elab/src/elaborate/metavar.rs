@@ -5,7 +5,8 @@ use {
         stuck_on_metavar,
     },
     curios_core::{
-        CalleeId, Free, Global, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term, Transient,
+        CalleeId, Free, Global, Mention, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term,
+        Transient,
     },
     curios_utilities::Plicity,
 };
@@ -103,12 +104,12 @@ pub fn waits_as_reference(
     term: &Term,
     expected: &Term,
 ) -> Result<bool, Error> {
-    let name = match &**term {
-        Subterm::Var(var) => *var.unwrap(),
-        Subterm::Transient(Transient::Name(name)) => Free::Global(*name),
+    let type_ = match &**term {
+        Subterm::Var(var) => context.assumption(var.unwrap()),
+        Subterm::Transient(Transient::Name(name)) => context.declared_type(name),
         _ => return Ok(false),
     };
-    let Some(type_) = context.assumption(&name).cloned() else {
+    let Some(type_) = type_.cloned() else {
         return Ok(false);
     };
     let hidden = match &*reduce_with(context, &type_)? {
@@ -165,8 +166,8 @@ pub fn insert_implicits_on_check(
 
     let ift = ift.clone();
     let func_label = match &**term {
-        Subterm::Var(var) => CalleeId::Function(*var.unwrap()),
-        Subterm::Instance(instance) => CalleeId::Function(Free::Global(instance.name)),
+        Subterm::Var(var) => CalleeId::Function(Mention::Local(*var.unwrap())),
+        Subterm::Instance(instance) => CalleeId::Function(Mention::Declaration(instance.name)),
         _ => CalleeId::Anonymous,
     };
 

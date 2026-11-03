@@ -13,7 +13,7 @@ use {
     super::{Error, Kernel},
     crate::{decide, grade, member_arities, nonzero_by, refined_by_arm},
     curios_analysis::{Call, SizeContext},
-    curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     curios_utilities::Keyed,
     std::collections::{HashMap, HashSet},
 };
@@ -31,7 +31,7 @@ pub(super) struct Calls {
     /// For each group checked, whether each member's signature or body enclosed a group of its own that does not descend.
     members_enclosing: HashMap<Keyed<RecGroup>, Vec<bool>>,
     /// The definitions whose check enclosed a group that does not descend.
-    definitions_enclosing: HashSet<Free>,
+    definitions_enclosing: HashSet<Global>,
     /// Whether the next judgment types the head of an application spine, which is part of the call the spine makes rather than a call of its own.
     spine_head: bool,
     /// Whether the lambdas the next check opens are a member body's leading lambdas, whose binders are the member's parameters.
@@ -335,7 +335,7 @@ impl Kernel<'_> {
     }
 
     /// Whether the definition `name`'s check enclosed a group that does not descend.
-    pub(crate) fn definition_encloses_partial(&self, name: &Free) -> bool {
+    pub(crate) fn definition_encloses_partial(&self, name: &Global) -> bool {
         self.calls.definitions_enclosing.contains(name)
     }
 
@@ -345,7 +345,7 @@ impl Kernel<'_> {
     }
 
     /// The definition `name`'s check enclosed a group that does not descend.
-    pub(crate) fn note_enclosing_partial(&mut self, name: &Free) {
+    pub(crate) fn note_enclosing_partial(&mut self, name: &Global) {
         self.calls.definitions_enclosing.insert(*name);
     }
 }

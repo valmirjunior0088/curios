@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
-        Totality, Two, UniverseContext, test_support::*,
+        Totality, Two, UniverseContext, Universes, test_support::*,
     },
     curios_utilities::Qualifier,
 };
@@ -120,7 +120,7 @@ fn a_descent_through_an_applied_lambda_is_read_through_its_binder() {
 #[test]
 fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let mut kernel = kernel();
-    let is_zero = binder(10, "is_zero");
+    let is_zero = Global::Authored(Qualifier::from(["is_zero"]));
     let x = binder(11, "x");
     kernel
         .define(
@@ -137,7 +137,10 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let (f, signature) = member();
     let n = binder(1, "n");
     let body = match_ambient(
-        Term::apply(Term::free_var(&is_zero), [Term::free_var(&n)]),
+        Term::apply(
+            Term::instance(is_zero, Universes::default()),
+            [Term::free_var(&n)],
+        ),
         Term::type_ground(),
         Cases::Bool {
             false_case: call(

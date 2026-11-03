@@ -24,8 +24,8 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Polarity,
-        RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Mention,
+        Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     curios_utilities::recurse,
     std::{
@@ -197,15 +197,9 @@ pub fn struct_reaches_itself<E: Env>(env: &E, name: &Global) -> bool {
     false
 }
 
-/// The globals `type_` names: those among its free variables, and the head of each construction and type former in it ([`Subterm::construction_names`]), which no variable names.
+/// The globals `type_` names: the declarations it references, and the head of each construction and type former in it ([`Subterm::construction_names`]), which no reference names.
 fn globals_named(type_: &Term, named: &mut BTreeSet<Global>) {
-    named.extend(
-        type_
-            .free_vars()
-            .iter()
-            .filter_map(Free::as_global)
-            .copied(),
-    );
+    named.extend(type_.mentions().declarations().copied());
     named.extend(type_.construction_names());
 }
 
@@ -519,10 +513,10 @@ struct Walk<'a, E: Env> {
     params: Vec<Free>,
     vectors: &'a Vectors,
     /// Definitions already unfolded on this traversal. A type-level `let` can be mentioned from many positions, and a recursive group can mention itself; without this the sweep in `blocked` would not terminate.
-    unfolded: BTreeSet<Free>,
+    unfolded: BTreeSet<Mention>,
     /// The `rec` members this walk is already inside, innermost last — the path, not the traversal.
     ///
-    /// [`Self::unfolded`] cannot serve. It keys on `Free`, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
+    /// [`Self::unfolded`] cannot serve. It keys on a name, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
     forcing: Vec<(RecGroup, usize)>,
     /// The nodes this traversal has entered. A node entered again at the same polarity inside the same members records what it recorded, so a node a reduct shares is walked once however many paths reach it — where [`Self::forcing`]'s sibling occurrences, on paths inside different members, are each still walked.
     entered: HashSet<Entered>,
@@ -648,11 +642,15 @@ impl<E: Env> Walk<'_, E> {
 
     /// Walk the body of every definition `term` names, at `Mixed`. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
     fn definitions(&mut self, term: &Term) {
-        for name in term.free_vars().iter().copied() {
+        for name in term.mentions().iter().copied() {
             if !self.unfolded.insert(name) {
                 continue;
             }
-            let Some(body) = self.env.unfold(&name).cloned() else {
+            let body = match &name {
+                Mention::Local(local) => self.env.unfold(local),
+                Mention::Declaration(declaration) => self.env.body(declaration),
+            };
+            let Some(body) = body.cloned() else {
                 continue;
             };
             self.walk(&body, Polarity::Mixed);

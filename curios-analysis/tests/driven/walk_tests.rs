@@ -737,7 +737,9 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     let n = Global::Authored(Qualifier::from(["n"]));
     let k = Free::local(901, Some("k"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    kernel.assume(&Free::Global(n), &nat_type);
+    kernel
+        .declare(&n, &nat_type, &UniverseContext::default())
+        .expect("a name is declared once");
     kernel.assume(&k, &nat_type);
     // At a level, since an instance that states none is its bare name.
     let instance = Term::instance(n, vec![Level::zero()]);
@@ -830,7 +832,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
 }
 
 /// A `Bool` the kernel holds as `true`, or as a name with no value, for a match on it to fire or to stand stuck on a neutral.
-fn define_guard(kernel: &mut Kernel, guard: &Free, defined: bool) {
+fn define_guard(kernel: &mut Kernel, guard: &Global, defined: bool) {
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
     match defined {
         true => kernel.define(
@@ -849,9 +851,9 @@ fn define_guard(kernel: &mut Kernel, guard: &Free, defined: bool) {
 fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
     let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let guard = Free::local(30, Some("g"));
+    let guard = Global::Authored(Qualifier::from(["g"]));
     let payload = Term::bool_match(
-        Term::free_var(&guard),
+        Term::instance(guard, Universes::default()),
         None,
         Term::type_ground(),
         Term::intrinsic(Intrinsic::NatType),
@@ -898,9 +900,9 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     let f = Free::local(2, Some("f"));
     let a = Free::local(3, Some("a"));
     let t = Free::local(5, Some("t"));
-    let guard = Free::local(30, Some("g"));
+    let guard = Global::Authored(Qualifier::from(["g"]));
     let argument = Term::bool_match(
-        Term::free_var(&guard),
+        Term::instance(guard, Universes::default()),
         None,
         self_type.clone(),
         Term::free_var(&t),

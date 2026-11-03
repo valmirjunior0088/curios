@@ -14,7 +14,7 @@ mod tests;
 
 use {
     crate::{
-        Declared, Free, Func, Global, Intrinsic, Spelling, Subterm, Telescope, Term, Transient,
+        Declared, Func, Global, Intrinsic, Mention, Spelling, Subterm, Telescope, Term, Transient,
         TupleType,
     },
     curios_utilities::{Plicity, Qualifier, Table, intern},
@@ -212,8 +212,8 @@ impl HeadKey {
                     Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
                     // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. The head of its application spine names the former — through a curried family's calls, `(n : Nat) => Sized(T)(n)` names `Sized` — a registry entry and its type-former definition share one finalized context, so where the head is a former the reference's global *is* the declaration's key. Where it is a definition, not read through under the binder, the key names the definition, which no declaration has; the elaborator refuses a witness keyed there, and a goal is keyed beneath its binders, where the definition has unfolded. The universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
                     Subterm::Apply(_) => match body.head_name()? {
-                        Free::Global(global) => Some(HeadKey::Nominal(global)),
-                        Free::Local(_) => None,
+                        Mention::Declaration(global) => Some(HeadKey::Nominal(global)),
+                        Mention::Local(_) => None,
                     },
                     _ => None,
                 }
@@ -473,7 +473,7 @@ impl Keying<'_> {
             Subterm::Apply(_) => {
                 let name = body
                     .head_name()
-                    .and_then(|free| free.as_global().copied())?;
+                    .and_then(|name| name.as_declaration().copied())?;
                 match (self.written)(&name) {
                     Written::Former => Some(HeadKey::Nominal(name)),
                     Written::Defined(defined) => match &*defined {
@@ -520,9 +520,9 @@ fn terminal(type_: &Term) -> &Term {
 /// The top-level name `term` is, the universes it is instantiated at left aside.
 fn named(term: &Term) -> Option<Global> {
     match &**term {
-        Subterm::Var(_) | Subterm::Instance(_) | Subterm::Transient(Transient::Name(_)) => {
-            term.head_name().and_then(|free| free.as_global().copied())
-        }
+        Subterm::Var(_) | Subterm::Instance(_) | Subterm::Transient(Transient::Name(_)) => term
+            .head_name()
+            .and_then(|name| name.as_declaration().copied()),
         _ => None,
     }
 }

@@ -45,6 +45,10 @@ impl Env for Probe {
         None
     }
 
+    fn body(&self, _: &Global) -> Option<&Term> {
+        None
+    }
+
     fn induct_decl(&self, _: &Global) -> Option<&InductDecl> {
         None
     }

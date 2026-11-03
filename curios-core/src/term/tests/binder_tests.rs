@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::Plicity,
     std::{collections::hash_map::RandomState, hash::BuildHasher, rc::Rc},
 };
 
@@ -13,16 +13,16 @@ fn archive_resets_caches_and_preserves_rc_sharing() {
     let term = Term::tuple([shared.clone(), shared]);
     term.get_or_init_hash();
     term.reach();
-    term.free_vars();
+    term.mentions();
     term.has_local_free();
     term.has_metavar();
     assert!(term.inner.scalars.is_filled());
-    assert!(term.inner.frees.is_filled());
+    assert!(term.inner.mentions.is_filled());
 
     let bytes = curios_archive::to_bytes(&term).unwrap();
     let restored = curios_archive::from_bytes::<Term>(&bytes).unwrap();
     assert!(!restored.inner.scalars.is_filled());
-    assert!(!restored.inner.frees.is_filled());
+    assert!(!restored.inner.mentions.is_filled());
 
     let Subterm::Tuple(tuple) = restored.as_ref() else {
         panic!("restored term changed shape");
@@ -194,9 +194,9 @@ fn inductive_match_case_binders_are_captured() {
         [("success", vec![value], Term::free_var(&value))],
     );
 
-    let free = term.free_vars();
-    assert!(free.contains(&r));
-    assert!(!free.contains(&value));
+    let free = term.mentions();
+    assert!(free.contains(r));
+    assert!(!free.contains(value));
 }
 
 #[test]
@@ -283,17 +283,6 @@ fn tuple_type_field_labels_are_identity() {
         this,
         Term::tuple_type([(cp, Term::type_ground()), (v, Term::free_var(&cp))])
     );
-}
-
-/// A replacement that is not a global replaces an instance whole, as it replaces a bare occurrence of the global, since only a declaration has levels to instantiate ([`Instance::name`]).
-#[test]
-fn a_replacement_that_is_not_a_global_replaces_the_instance() {
-    let f = Global::Authored(Qualifier::from(["f"]));
-    let instance = Term::instance(f, vec![Level::zero()]);
-    let scope = Scope::close(Many(1), &[&Free::Global(f)], instance);
-    let value = Term::intrinsic(Intrinsic::NatType);
-
-    assert_eq!(scope.open(&[&value]), value);
 }
 
 /// Names and terms for the one-pass builders' tests: three binders whose later types and values name the earlier ones, and an outer loose index that every binder must shift past.

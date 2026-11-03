@@ -5,15 +5,15 @@ use crate::into_core::test_support::*;
 #[test]
 fn single_let_binding() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             let x : Type = Type;
             x
-        "#),
-        curios_core::Term::let_(
-            &global("/x"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/x"))
+        "#
+        ),
+        (
+            vec![(global_name("/x"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/x")),
         ),
     );
 }
@@ -21,17 +21,17 @@ fn single_let_binding() {
 #[test]
 fn nested_module_binding_reference() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             mod Foo
                 pub let f : Type = Type;
             end
             Foo/f
-        "#),
-        curios_core::Term::let_(
-            &global("/Foo/f"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Foo/f"))
+        "#
+        ),
+        (
+            vec![(global_name("/Foo/f"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/Foo/f")),
         ),
     );
 }
@@ -39,17 +39,17 @@ fn nested_module_binding_reference() {
 #[test]
 fn module_named_after_type_resolves_by_qualified_path() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             mod Nat
                 pub let double : Type = Type;
             end
             Nat/double
-        "#),
-        curios_core::Term::let_(
-            &global("/Nat/double"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Nat/double"))
+        "#
+        ),
+        (
+            vec![(global_name("/Nat/double"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/Nat/double")),
         ),
     );
 }
@@ -57,7 +57,8 @@ fn module_named_after_type_resolves_by_qualified_path() {
 #[test]
 fn use_shorthand_resolves_qualifier() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             mod Foo
                 pub mod Bar
                     pub let f : Type = Type;
@@ -65,12 +66,11 @@ fn use_shorthand_resolves_qualifier() {
             end
             use Foo/{Bar};
             Bar/f
-        "#),
-        curios_core::Term::let_(
-            &global("/Foo/Bar/f"),
-            written_type(0),
-            written_type(1),
-            curios_core::Term::written(global_name("/Foo/Bar/f"))
+        "#
+        ),
+        (
+            vec![(global_name("/Foo/Bar/f"), written_type(0), written_type(1))],
+            curios_core::Term::written(global_name("/Foo/Bar/f")),
         ),
     );
 }

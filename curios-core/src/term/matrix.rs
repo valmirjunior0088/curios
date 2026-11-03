@@ -3,7 +3,7 @@
 //! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its motive and its rows' bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them.
 
 use {
-    crate::{Atom, Free, Term},
+    crate::{Atom, Mention, Term},
     curios_num::Natural,
     curios_utilities::Plicity,
 };
@@ -68,7 +68,7 @@ pub enum Pattern {
     /// A struct pattern: the head it is written with, which a report prints, and the structure that head resolved to, or the binder it lowered to where it names none.
     Struct {
         head: String,
-        structure: Free,
+        structure: Mention,
         #[archived_omit_bounds]
         fields: Vec<(Option<String>, Pattern)>,
     },
@@ -123,7 +123,7 @@ pub enum Bind {
     /// A structure's fields under the name the structure is written by: `head` as written and `structure` what it resolves to, as [`Pattern::Struct`] holds them. The hypothesis is held to that structure where it is bound.
     Struct {
         head: String,
-        structure: Free,
+        structure: Mention,
         #[archived_omit_bounds]
         fields: Vec<(Option<String>, Bind)>,
     },

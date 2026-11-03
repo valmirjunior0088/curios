@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Free, Global, Intrinsic, Level, Many, Scope, Term, UniverseContext},
-    curios_utilities::Plicity,
+    curios_core::{Free, Global, Intrinsic, Level, Many, Scope, Term, UniverseContext, Universes},
+    curios_utilities::{Plicity, Qualifier},
 };
 
 fn bool_type() -> Term {
@@ -348,7 +348,7 @@ fn an_equation_between_two_types_one_former_builds_teaches_an_arm_nothing_of_the
         vec![Term::type_ground()],
         vec![],
     );
-    let opaque = binder(30, "F");
+    let opaque = Global::Authored(Qualifier::from(["F"]));
     kernel
         .declare(
             &opaque,
@@ -366,7 +366,7 @@ fn an_equation_between_two_types_one_former_builds_teaches_an_arm_nothing_of_the
             Term::induct_type(declared, Vec::<Term>::new(), [t])
         }),
         ("an opaque global", &|t| {
-            Term::apply(Term::free_var(&opaque), [t])
+            Term::apply(Term::instance(opaque, Universes::default()), [t])
         }),
         ("a function type", &|t| {
             Term::func_type([(binder(32, "x"), t)], nat_type())

@@ -64,8 +64,8 @@ impl ClosedHost for Context<'_> {
         })
     }
 
-    fn closed_body_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
-        self.var_reduct_at(name, universes)
+    fn closed_body_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
+        self.value_at(name, universes)
     }
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
@@ -157,10 +157,9 @@ impl curios_analysis::Env for Context<'_> {
         Context::assumption(self, name)
     }
 
-    /// A local binder in scope, whether assumed or kept as a `let` definition. `Context::assumption` answers for top-level names too, which the kernel's locals never include.
+    /// A local binder in scope, whether assumed or kept as a `let` definition.
     fn is_local(&self, name: &Free) -> bool {
-        name.is_local()
-            && (Context::assumption(self, name).is_some() || self.definition_body(name).is_some())
+        Context::assumption(self, name).is_some() || self.definition_body(name).is_some()
     }
 
     fn fresh(&mut self, hint: Option<&str>) -> Free {
@@ -169,6 +168,10 @@ impl curios_analysis::Env for Context<'_> {
 
     fn unfold(&self, name: &Free) -> Option<&Term> {
         self.definition_body(name)
+    }
+
+    fn body(&self, name: &Global) -> Option<&Term> {
+        self.declaration_body(name)
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
@@ -814,10 +817,7 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, ReduceError> {
     let Instance { name, universes } = instance;
 
-    let reduct = match context
-        .var_reduct_at(&Free::Global(name), &universes)
-        .cloned()
-    {
+    let reduct = match context.value_at(&name, &universes).cloned() {
         Some(reduct) => reduct,
         None => return Ok(Reduce::Break(Term::instance(name, universes))),
     };
@@ -1071,12 +1071,12 @@ fn could_settle(
     )
 }
 
-/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier. A global is passed over, as the kernel passes over one: the filter this answers for tests a local alone (`could_reduce_to`).
+/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier: the filter this answers for tests a local alone (`could_reduce_to`).
 ///
 /// Each binder is asked once and remembered for the declaration, by plain reduction, and counted not a proof while it is being asked. One whose type still holds an unsolved metavariable is not known to be a proof and is asked again, since a solution may make it one.
 fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, ReduceError> {
     let mut proofs = Vec::new();
-    for name in probe.free_vars().locals() {
+    for name in probe.mentions().locals() {
         let proof = match context.cached_proof(name) {
             Some(proof) => proof,
             None => {

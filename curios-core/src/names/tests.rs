@@ -20,8 +20,7 @@ fn a_witness_is_not_the_definition_named_after_its_module() {
 #[test]
 fn witnesses_sharing_a_module_stay_distinct() {
     let module = Qualifier::from(["std", "Nat"]);
-    let witnesses =
-        (0..9).map(|n| Free::Global(Global::Witness(WitnessId::Unspelled { module, place: n })));
+    let witnesses = (0..9).map(|n| Global::Witness(WitnessId::Unspelled { module, place: n }));
 
     assert_eq!(witnesses.collect::<HashSet<_>>().len(), 9);
 }
@@ -43,15 +42,15 @@ fn one_place_under_two_modules_is_two_witnesses() {
     assert_eq!(there.faithful().to_string(), "/json/Value/witness@0");
 }
 
-// A global and a local are different kinds of thing, not two spellings — a distinction a test for a marker character would draw, and a marker collision break.
+// A declaration and a local are different kinds of thing, not two spellings — a distinction a test for a marker character would draw, and a marker collision break.
 #[test]
-fn a_global_never_equals_a_local() {
-    assert_ne!(
-        Free::Global(authored(["std", "Nat"])),
-        Free::local(0, Some("Nat")),
-    );
-    assert!(Free::local(0, None).is_local());
-    assert!(!Free::Global(authored(["std", "Nat"])).is_local());
+fn a_declaration_never_equals_a_local() {
+    let declaration = Mention::Declaration(authored(["std", "Nat"]));
+    let local = Mention::Local(Free::local(0, Some("Nat")));
+
+    assert_ne!(declaration, local);
+    assert!(local.as_local().is_some() && local.as_declaration().is_none());
+    assert!(declaration.as_declaration().is_some() && declaration.as_local().is_none());
 }
 
 // Identity is the qualifier's segments, not its rendered spelling: `/Foo/bar` and a single segment that happens to contain a slash are different names. Nothing may collapse them by comparing joined text.
@@ -82,9 +81,6 @@ fn a_hint_never_splits_one_identity() {
     let rebuilt = Mint::new(7, None);
 
     assert_eq!(written, rebuilt);
-    assert_eq!(
-        HashSet::from([Free::Local(written), Free::Local(rebuilt)]).len(),
-        1
-    );
+    assert_eq!(HashSet::from([Free(written), Free(rebuilt)]).len(), 1);
     assert_eq!(written.hint(), Some("xs"));
 }

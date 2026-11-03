@@ -177,7 +177,7 @@ fn a_catch_all_sees_its_own_scrutinee() {
             carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
-    let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
+    let p = scrutinee_family(&mut kernel, "P", &family);
 
     kernel.assume(
         &subject,
@@ -229,7 +229,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
             carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
         ],
     );
-    let p = scrutinee_family(&mut kernel, binder(2, "P"), &family);
+    let p = scrutinee_family(&mut kernel, "P", &family);
 
     let family_at_b = Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]);
     kernel.assume(&subject, &family_at_b);

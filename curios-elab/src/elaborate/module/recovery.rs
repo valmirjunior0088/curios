@@ -2,13 +2,13 @@
 //!
 //! **A refused item is undone and poisoned; an item that reaches a poisoned name is withheld, and reports nothing of its own.** Reaching is [`Module::reaches`]: by mention, by constructing a nominal type, through a registry entry, and — the one edge no lowered term shows — through a witness a refused or withheld declaration declares, which resolution meets as a poisoned key: the one its signature is spelled at, whether or not it registered. The withheld item's report would restate the refusal it depends on, and that is the kernel's precedent: a dependent of a refused declaration says nothing in `curios-cert`'s recheck either.
 //!
-//! **What is undone** is everything another item could read: the item's base-frame bindings, its registry entries, its witness-table entries (each key poisoned in its place), the parked work it raised, the terms it recorded for the erasure obligations, its universe constraints, and every speculative scope its unwinding left open. **What is left** is what nothing reads: term metavariables it minted, which only its own terms mention and no module walk reaches; the universe metas beside them; its totality verdict, which is recorded on the success path alone; and the caches, cleared wholesale as for a redefinition.
+//! **What is undone** is everything another item could read: the item's declarations, its registry entries, its witness-table entries (each key poisoned in its place), the parked work it raised, the terms it recorded for the erasure obligations, its universe constraints, and every speculative scope its unwinding left open. **What is left** is what nothing reads: term metavariables it minted, which only its own terms mention and no module walk reaches; the universe metas beside them; its totality verdict, which is recorded on the success path alone; and the caches, cleared wholesale as for a redefinition.
 //!
 //! **A void attempt is undone as a refused item is, and poisons nothing.** An attempt that read a declaration not yet elaborated concluded nothing ([`Context::need`]), so it leaves no refusal, no poisoned key and no dependent to withhold: its declaration goes back to what the unit seeded — its lowered registry entries, no binding, no table entry, a witness still declared under the key it is spelled at — and is attempted again once what it needed has elaborated.
 
 use {
     crate::{Attempted, Context, Error, GoalSite},
-    curios_core::{Entrypoint, Free, Global, Item, Module},
+    curios_core::{Entrypoint, Global, Item, Module},
     std::collections::{BTreeSet, HashMap},
 };
 
@@ -68,7 +68,7 @@ pub fn withhold(context: &mut Context, item: &Item) {
     withdraw(context, &item.declared_names());
 }
 
-/// Take `declared` out of every store another item could read: the witness table, poisoning each key a witness held; the witnesses the unit declares and has not elaborated, poisoning the key each was spelled at; the registries; and the base frame. Asked for a refused item and for a withheld one, whose registry entries were seeded before any item elaborated.
+/// Take `declared` out of every store another item could read: the witness table, poisoning each key a witness held; the witnesses the unit declares and has not elaborated, poisoning the key each was spelled at; the registries; and the declarations. Asked for a refused item and for a withheld one, whose registry entries were seeded before any item elaborated.
 pub fn withdraw(context: &mut Context, declared: &[&Global]) {
     for name in declared {
         for (concept, key) in context.remove_witness(name) {
@@ -78,7 +78,7 @@ pub fn withdraw(context: &mut Context, declared: &[&Global]) {
         context.remove_induct(name);
         context.remove_struct(name);
         context.remove_concept(name);
-        context.forget(&Free::from(*name));
+        context.forget(name);
     }
 }
 
@@ -127,7 +127,7 @@ impl ItemMark {
             context.remove_induct(name);
             context.remove_struct(name);
             context.remove_concept(name);
-            context.forget(&Free::from(*name));
+            context.forget(name);
         }
         // As `module` seeded them: the entry each lowered former carries.
         let seeded = module

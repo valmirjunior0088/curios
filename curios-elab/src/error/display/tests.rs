@@ -144,7 +144,11 @@ fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
 /// A watched slot with no name is described rather than quoted: an implicit binder written `_` reads as the callee's implicit argument, and a witness slot, which never has a name, by what it is to the callee.
 #[test]
 fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
-    let callee = || Callee::Function(Free::Global(Global::Authored(Qualifier::from(["f"]))));
+    let callee = || {
+        Callee::Function(Mention::Declaration(Global::Authored(Qualifier::from([
+            "f",
+        ]))))
+    };
     let shown = |watched: Watched| {
         let error = Error::rejected_candidate(
             watched,

@@ -3,7 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
+    curios_core::{Free, Global, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
+    curios_utilities::Qualifier,
 };
 
 /// A definition marked a proof is checked as any other and brought into scope with nothing to unfold to: its body is its own check's to read, and no judgment's after it. Left unmarked, the same definition unfolds.
@@ -32,7 +33,10 @@ fn a_definition_marked_a_proof_unfolds_to_nothing() {
             ),
             Ok(()),
         );
-        assert_eq!(kernel.value(&lemma()), (!proof).then_some(&body));
+        assert_eq!(
+            kernel.value_at(&lemma(), &Universes::default()),
+            (!proof).then_some(&body)
+        );
     }
 }
 
@@ -103,7 +107,7 @@ fn a_definition_stating_its_value_a_level_below_the_one_it_inhabits_is_refused()
         infer(
             &mut kernel,
             &Term::intrinsic(Intrinsic::list_type(Term::instance(
-                *lemma().as_global().expect("a declaration"),
+                lemma(),
                 Universes::default()
             )))
         ),
@@ -130,7 +134,7 @@ fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_a
     assert!(matches!(
         check_definition(
             &mut kernel,
-            &Free::local(2, Some("at_a_type")),
+            &Global::Authored(Qualifier::from(["at_a_type"])),
             &over(Term::type_ground()),
             &Term::variant(
                 fam(),
@@ -171,5 +175,5 @@ fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_a
         ),
         Ok(()),
     );
-    assert_eq!(kernel.value(&lemma()), None);
+    assert_eq!(kernel.value_at(&lemma(), &Universes::default()), None);
 }

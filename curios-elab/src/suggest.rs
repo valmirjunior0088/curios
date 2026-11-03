@@ -146,7 +146,7 @@ fn suggest_in_scope(
         let head = Term::written(name);
         // A candidate is a use of its declaration, so its type is read at an instance of its own, as an occurrence's is: the levels and the sorts the declaration leaves to a caller are the goal's to state. The instance goes with the attempt.
         let mark = context.solution_mark();
-        let fit = match context.instantiate_assumption(&Free::Global(name), None) {
+        let fit = match context.instantiate_declaration(&name, None) {
             Ok(Some((type_, _))) => apply_fit(context, telescope, &head, &type_, goal_type, &hole),
             Ok(None) | Err(_) => None,
         };
@@ -193,9 +193,7 @@ fn module_pool(
 
     let mut definitions = |definition: &curios_core::Definition| {
         own.insert(definition.name);
-        if Some(&definition.name) != owner
-            && context.assumption(&Free::Global(definition.name)).is_some()
-        {
+        if Some(&definition.name) != owner && context.declared_type(&definition.name).is_some() {
             pool.push((3, definition.name));
         }
     };
@@ -207,13 +205,7 @@ fn module_pool(
     }
 
     let mut referenced = BTreeSet::new();
-    let mut collect = |term: &Term| {
-        for free in &term.free_vars() {
-            if let Free::Global(global) = free {
-                referenced.insert(*global);
-            }
-        }
-    };
+    let mut collect = |term: &Term| referenced.extend(term.mentions().declarations().copied());
     for item in written {
         match item {
             Item::Let(definition) => {
@@ -235,7 +227,7 @@ fn module_pool(
         if own.contains(global) || Some(global) == owner {
             continue;
         }
-        if context.assumption(&Free::Global(*global)).is_some() {
+        if context.declared_type(global).is_some() {
             pool.push((4, *global));
         }
     }
@@ -251,7 +243,7 @@ fn module_pool(
         {
             continue;
         }
-        if context.assumption(&Free::Global(*global)).is_some() {
+        if context.declared_type(global).is_some() {
             pool.push((5, *global));
         }
     }

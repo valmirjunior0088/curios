@@ -17,7 +17,7 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
     matches!(
         verdicts,
         [Verdict { name: Some(owner), error: Error::Redeclared(redeclared) }]
-            if owner == name && *redeclared == Free::from(name)
+            if owner == name && redeclared == name
     )
 }
 
@@ -212,7 +212,7 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
         .collect::<Vec<_>>();
     assert_eq!(
         refused,
-        [shadowed_family(), shadowed_name()].map(|name| (Some(name), Some(Free::from(&name)))),
+        [shadowed_family(), shadowed_name()].map(|name| (Some(name), Some(name))),
         "a module carrying its environment's own declarations was not refused once for each name",
     );
     assert_eq!(

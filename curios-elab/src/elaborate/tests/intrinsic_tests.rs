@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Nat, Term, Universes},
+    curios_core::{Global, Intrinsic, Nat, Term, Universes},
 };
 
 #[test]
@@ -11,8 +11,8 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     let mut context = Context::with_default_budget(SYNTAX);
     let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
     let b = context.fresh(Some("b"));
-    context.assume(
-        &Free::Global(holds),
+    context.declare(
+        &holds,
         &Term::func_type([(b, Term::intrinsic(Intrinsic::BoolType))], Term::prop()),
     );
     let proof = context.fresh(Some("positive"));

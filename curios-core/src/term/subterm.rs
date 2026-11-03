@@ -3,11 +3,11 @@
 //! [`Term`] is the reference-counted handle and [`Subterm`] is what it points at, which is why the two are separate files rather than separate concepts. Everything that asks *what a term is* — its head, its children, whether it is a value — is answered here, and so is [`Bound`], the traversal that opens and closes every binder in the language exactly once per shape.
 
 use {
-    super::{Frees, Union},
+    super::{Mentions, Union},
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
-        Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat, Proj, Quality,
-        Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
+        Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Nat, Proj,
+        Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
         UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
@@ -145,12 +145,12 @@ impl Subterm {
         }
     }
 
-    /// The free-variable identities occurring in this subterm — the inherent-method spelling of [`Bound::free_vars`], callable without importing the trait.
-    pub fn free_vars(&self) -> Frees {
-        <Subterm as Bound>::free_vars(self)
+    /// What this subterm mentions, the declarations it references and the free variables it holds — the inherent-method spelling of [`Bound::mentions`], callable without importing the trait.
+    pub fn mentions(&self) -> Mentions {
+        <Subterm as Bound>::mentions(self)
     }
 
-    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; what follows a declaration's references, the lowering's unused-declaration lint, needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/std/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
+    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not references (they live in the registry, not the variable graph), so they do not appear in `mentions`; what follows a declaration's references, the lowering's unused-declaration lint, needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/std/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();
         self.collect_construction_names(&mut names);
@@ -410,12 +410,10 @@ impl Subterm {
         }
     }
 
-    /// The newest binder occurring free in this subterm, by its index, or `None` where every free variable is a top-level definition — the uncached spelling of [`Term::newest_local`], which supplies the per-node memoization.
-    ///
-    /// A local is a [`Free::Local`], so this is a discriminant test rather than a search for a marker character in the spelling, which a compiler-made *global* could set by accident.
+    /// The newest binder occurring free in this subterm, by its index, or `None` where it holds no free variable — the uncached spelling of [`Term::newest_local`], which supplies the per-node memoization.
     pub(crate) fn newest_local(&self) -> Option<u64> {
         match self {
-            Subterm::Var(var) => var.as_free().and_then(Free::as_local).map(Mint::index),
+            Subterm::Var(var) => var.as_free().map(Free::index),
             Subterm::Metavar(Metavar { spine, .. }) => spine.newest_local(),
             _ => {
                 let mut newest = None;
@@ -551,25 +549,25 @@ impl Subterm {
         }
     }
 
-    /// This subterm's free-variable set, read off what its children have filled: a free `Var`'s is its own name, a metavariable's is its spine's, and any other node's is its children's merged smaller into larger ([`Union`]), so a node whose children add nothing to its largest child's set holds that set itself. [`Term::get_or_init_free_vars`] fills a deep spine with it bottom-up, each node paying for the names it adds.
-    pub(super) fn free_vars_from_children(&self) -> Frees {
+    /// This subterm's mentions, read off what its children have filled: a free `Var`'s is its own name, a reference's the declaration it names, a metavariable's is its spine's, and any other node's is its children's merged smaller into larger ([`Union`]), so a node whose children add nothing to its largest child's set holds that set itself. [`Term::get_or_init_mentions`] fills a deep spine with it bottom-up, each node paying for the names it adds.
+    pub(super) fn mentions_from_children(&self) -> Mentions {
         if let Subterm::Var(var) = self
             && let Some(name) = var.as_free()
         {
-            return Frees::single(*name);
+            return Mentions::single(Mention::Local(*name));
         }
-        // A declaration's name is its own identity exactly as a bare `Var`'s is, and neither an instance nor a written name has child terms to union.
+        // Neither an instance nor a written name has child terms to union.
         if let Subterm::Instance(Instance { name, .. })
         | Subterm::Transient(Transient::Name(name)) = self
         {
-            return Frees::single(Free::Global(*name));
+            return Mentions::single(Mention::Declaration(*name));
         }
         if let Subterm::Metavar(Metavar { spine, .. }) = self {
-            return spine.free_vars();
+            return spine.mentions();
         }
         let mut union = Union::default();
         self.any_child_term(&mut |child| {
-            union.add(child.get_or_init_free_vars());
+            union.add(child.get_or_init_mentions());
             false
         });
         union.finish()
@@ -771,25 +769,11 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 tail: visit.visit_scope(tail),
             }),
-            // The global goes through the hook as a bare occurrence of it would. Another global renames the instance; anything else replaces it whole, as it replaces the bare occurrence, since only a declaration has levels to instantiate.
-            Subterm::Instance(Instance { name, universes }) => {
-                let name = match visit.call(&Var::free(Free::Global(*name))) {
-                    None => *name,
-                    Some(replacement) => {
-                        if let Subterm::Var(var) = &replacement
-                            && let Some(Free::Global(renamed)) = var.as_free()
-                        {
-                            *renamed
-                        } else {
-                            return replacement;
-                        }
-                    }
-                };
-                Subterm::Instance(Instance {
-                    name,
-                    universes: visit.visit_universes(universes),
-                })
-            }
+            // A reference holds no variable for the hook: only its levels are visited.
+            Subterm::Instance(Instance { name, universes }) => Subterm::Instance(Instance {
+                name: *name,
+                universes: visit.visit_universes(universes),
+            }),
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so an untouched entry is kept as it stands and an entirely untouched spine is the spine itself, identity and all.
             // A run of entries the visit would leave as they are is passed over by what the spine keeps of it, as a term is by its scalars ([`Visit::passes_over`]): a capture of the binders just opened reads the entries holding them.
@@ -922,8 +906,8 @@ impl Bound for Subterm {
         Subterm::has_universe_meta(self)
     }
 
-    fn free_vars(&self) -> Frees {
-        self.free_vars_from_children()
+    fn mentions(&self) -> Mentions {
+        self.mentions_from_children()
     }
 }
 

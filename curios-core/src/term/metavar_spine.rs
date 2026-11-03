@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{
-        Bound, Free, Frees, Names, Term,
+        Bound, Free, Mention, Mentions, Names, Term,
         rank::{Ranked, SpineRanked},
     },
     curios_utilities::{Ordered, Sorted, Summary},
@@ -100,22 +100,22 @@ fn placed_hash(rank: i64, hash: u64) -> u64 {
 /// The free names a spine's entries hold: how many entries hold each, and the set of them, which a name enters with the first entry holding it and leaves with the last. Counted so that an entry taken out takes out only the names no other entry holds, as the containment counts beside it do.
 #[derive(Clone)]
 struct Held {
-    counts: Sorted<Free, u32>,
-    names: Frees,
+    counts: Sorted<Mention, u32>,
+    names: Mentions,
 }
 
 impl Default for Held {
     fn default() -> Self {
         Self {
             counts: Sorted::new(),
-            names: Frees::empty(),
+            names: Mentions::empty(),
         }
     }
 }
 
 impl Held {
     fn add(&mut self, entry: &Term) {
-        for name in &entry.free_vars() {
+        for name in &entry.mentions() {
             match self.counts.get(name).copied() {
                 Some(count) => self.counts.insert(*name, count + 1),
                 None => {
@@ -127,7 +127,7 @@ impl Held {
     }
 
     fn remove(&mut self, entry: &Term) {
-        for name in &entry.free_vars() {
+        for name in &entry.mentions() {
             match self.counts.get(name).copied() {
                 Some(1) => {
                     self.counts.remove(name);
@@ -264,7 +264,7 @@ impl MetavarSpine {
     }
 
     /// The free names its entries hold, kept as the spine is built and rewritten: a metavariable's free variables, read without reading an entry.
-    pub fn free_vars(&self) -> Frees {
+    pub fn mentions(&self) -> Mentions {
         self.held.names.clone()
     }
 

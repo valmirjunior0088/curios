@@ -14,7 +14,7 @@ use {
 /// A member or a callee of a refusal the erased verifier raised: the name erasure minted it for, or the erased program's own name for it where erasure minted it for none.
 #[derive(Debug, Clone)]
 pub enum ErasedName {
-    Named(curios_core::Free),
+    Named(curios_core::Mention),
     Erased(String),
 }
 
@@ -22,8 +22,10 @@ impl ErasedName {
     /// This name as its reader writes it: a declaration as resolution reaches it, a local binder by its label.
     fn spelled(&self, spelling: &curios_core::Spelling) -> String {
         match self {
-            ErasedName::Named(curios_core::Free::Global(global)) => spelling.symbol(global),
-            ErasedName::Named(local) => local.hint().unwrap_or("_").to_string(),
+            ErasedName::Named(curios_core::Mention::Declaration(global)) => spelling.symbol(global),
+            ErasedName::Named(curios_core::Mention::Local(local)) => {
+                local.hint().unwrap_or("_").to_string()
+            }
             ErasedName::Erased(name) => name.clone(),
         }
     }
@@ -95,7 +97,7 @@ impl Error {
     }
 
     /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
-    pub fn evaluates_itself(member: curios_core::Free) -> Self {
+    pub fn evaluates_itself(member: curios_core::Mention) -> Self {
         Self::EvaluationCycle {
             steps: vec![(ErasedName::Named(member), None)],
         }
@@ -277,7 +279,7 @@ impl Error {
     ) -> Vec<Note> {
         match self {
             Self::EvaluationCycle { steps } => match steps.as_slice() {
-                [(named @ ErasedName::Named(curios_core::Free::Global(member)), None)] => {
+                [(named @ ErasedName::Named(curios_core::Mention::Declaration(member)), None)] => {
                     declared_here(member, named, spelling, anchors)
                 }
                 _ => Vec::new(),

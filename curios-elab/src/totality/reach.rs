@@ -113,12 +113,7 @@ fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
 
 /// Record every definition this term names.
 fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
-    seeds.extend(
-        term.free_vars()
-            .iter()
-            .filter_map(|free| free.as_global())
-            .cloned(),
-    );
+    seeds.extend(term.mentions().declarations().copied());
 }
 
 /// Take every entry of a telescope.

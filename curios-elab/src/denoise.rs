@@ -137,7 +137,7 @@ pub fn named_members(context: &Context, term: &Term) -> Term {
     named_with(&Rc::new(groups), term)
 }
 
-/// The terms naming `group`'s members, in member order: each member's global where the base frame defines the group itself, and none otherwise.
+/// The terms naming `group`'s members, in member order: each member's global where this elaboration's declarations define the group itself, and none otherwise.
 fn members_named(context: &Context, group: &RecGroup) -> Option<Vec<Term>> {
     let names = context.member_names(group)?;
 

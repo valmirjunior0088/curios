@@ -4,14 +4,15 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Intrinsic, Reducer, Term, UniverseContext},
+    curios_core::{Global, Intrinsic, Reducer, Term, UniverseContext, Universes},
+    curios_utilities::Qualifier,
 };
 
 /// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.
 #[test]
 fn a_memoized_unfold_answers_the_same_across_scopes() {
     let mut kernel = kernel();
-    let name = binder(0, "two");
+    let name = Global::Authored(Qualifier::from(["two"]));
     kernel
         .define(
             &name,
@@ -26,12 +27,12 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
         kernel.assume(&binder_, &nat_type());
 
         kernel
-            .reduce_forced(Term::free_var(&name))
+            .reduce_forced(Term::instance(name, Universes::default()))
             .expect("reduces")
     });
 
     let outside = kernel
-        .reduce_forced(Term::free_var(&name))
+        .reduce_forced(Term::instance(name, Universes::default()))
         .expect("reduces");
     assert_eq!(inside, outside);
     assert_eq!(outside, nat(2));
@@ -41,14 +42,14 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
 #[test]
 fn a_redefinition_is_refused() {
     let mut kernel = kernel();
-    let name = binder(0, "n");
+    let name = Global::Authored(Qualifier::from(["n"]));
 
     kernel
         .define(&name, &nat_type(), &nat(1), &UniverseContext::default())
         .expect("a name is declared once");
     assert_eq!(
         kernel
-            .reduce_forced(Term::free_var(&name))
+            .reduce_forced(Term::instance(name, Universes::default()))
             .expect("reduces"),
         nat(1),
     );
@@ -59,7 +60,7 @@ fn a_redefinition_is_refused() {
     );
     assert_eq!(
         kernel
-            .reduce_forced(Term::free_var(&name))
+            .reduce_forced(Term::instance(name, Universes::default()))
             .expect("reduces"),
         nat(1),
     );
@@ -100,8 +101,8 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
 /// Mutation-checked: keeping any reduct table across [`Kernel::restore_budget`] fails it.
 #[test]
 fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
-    let name = binder(0, "chain");
-    let occurrence = Term::free_var(&name);
+    let name = Global::Authored(Qualifier::from(["chain"]));
+    let occurrence = Term::instance(name, Universes::default());
     let defining = || {
         let mut kernel = kernel();
         kernel
@@ -156,9 +157,9 @@ fn a_remembered_reducts_hit_mints_nothing() {
 
     let mut kernel = kernel();
     kernel.assume(&n, &nat_type());
-    let before = kernel.fresh(None).local_index().expect("a local");
+    let before = kernel.fresh(None).index();
     kernel.reduce_forced(term).expect("reduces");
-    let after = kernel.fresh(None).local_index().expect("a local");
+    let after = kernel.fresh(None).index();
     let minted = after - before - 1;
     assert!(minted <= 40, "minted {minted}");
 }
@@ -182,8 +183,8 @@ fn restoring_the_budget_forgets_a_remembered_sort() {
         Term::func([(x, Term::type_ground())], Term::free_var(&x)),
         [nat_type()],
     );
-    let alias = binder(1, "alias");
-    let scoped = Term::free_var(&alias);
+    let alias = Global::Authored(Qualifier::from(["alias"]));
+    let scoped = Term::instance(alias, Universes::default());
 
     for type_ in [closed, scoped] {
         let mut kernel = kernel();
@@ -228,8 +229,8 @@ fn restoring_the_budget_forgets_a_remembered_type_and_a_remembered_check() {
         Term::func([(x, Term::type_ground())], Term::free_var(&x)),
         [nat_type()],
     );
-    let alias = binder(1, "alias");
-    let scoped = Term::free_var(&alias);
+    let alias = Global::Authored(Qualifier::from(["alias"]));
+    let scoped = Term::instance(alias, Universes::default());
 
     for judge in [inferring, checking] {
         for term in [&closed, &scoped] {

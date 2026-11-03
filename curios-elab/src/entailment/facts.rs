@@ -1687,10 +1687,7 @@ fn beneath(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> 
         return Ok(context.var_reduct(name).cloned());
     }
     if let Subterm::Instance(Instance { name, universes }) = &**stated {
-        let Some(value) = context
-            .var_reduct_at(&Free::Global(*name), universes)
-            .cloned()
-        else {
+        let Some(value) = context.value_at(name, universes).cloned() else {
             return Ok(None);
         };
         return Ok(Some(
@@ -1728,13 +1725,9 @@ fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
 }
 
 /// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
-/// The hole's own binders, in scope order: the frames past the base, since a global of every mounted unit is an assumption in the base frame and none is a fact about this scope.
+/// The hole's own binders, in scope order: the frames past the base.
 pub fn binders(context: &Context) -> Vec<(Free, Term)> {
-    context
-        .local_binders()
-        .filter(|(name, _)| name.as_global().is_none())
-        .cloned()
-        .collect()
+    context.local_binders().cloned().collect()
 }
 
 /// What a hypothesis states, each statement beside the proof that inhabits it and where it came from: the hypothesis itself, or the fields of a tuple or a structure, one level down and in their order.

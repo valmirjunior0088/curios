@@ -4,7 +4,7 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam,
     },
@@ -137,7 +137,7 @@ fn a_definition_checks_under_its_own_constraints() {
         Level::param(UniverseParam(1)),
     );
     let x = binder(0, "x");
-    let name = binder(1, "poly");
+    let name = Global::Authored(Qualifier::from(["poly"]));
 
     let type_ = Term::func_type([(x, Term::type_at(u.clone()))], Term::type_at(w.clone()));
     let body = Term::func([(x, Term::type_at(u.clone()))], Term::free_var(&x));
@@ -187,7 +187,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
     let mut kernel = kernel();
     kernel
         .declare(
-            &Free::Global(name),
+            &name,
             &Term::type_at(u.clone()),
             &UniverseContext {
                 parameter_count: 2,

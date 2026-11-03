@@ -12,7 +12,7 @@ struct Scene {
 }
 
 fn scene(kernel: &mut Kernel) -> Scene {
-    let p = opaque_family(kernel, binder(50, "P"));
+    let p = opaque_family(kernel, "P");
     let at = |index: Term| Term::apply(p.clone(), [index]);
 
     let z = binder(51, "z");

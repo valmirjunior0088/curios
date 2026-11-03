@@ -126,12 +126,12 @@ impl fmt::Display for Counted {
 pub enum Error {
     /// Reduction failed — the budget ran out, or a partial intrinsic was folded outside its domain.
     Reduce(ReduceError),
-    /// A variable with no binder and no definition. In a well-formed module this cannot happen, which is why it is an error rather than a stuck neutral: the kernel is checking a *finished* term.
+    /// A variable with no binder. In a well-formed module this cannot happen, which is why it is an error rather than a stuck neutral: the kernel is checking a *finished* term.
     Unbound(Free),
-    /// A nominal type with no registry entry, so its fields, constructors, and result sort are all unknown.
+    /// A reference to a declaration the environment does not hold: a definition with no entry, or a nominal type with no registry entry, so its fields, constructors, and result sort are all unknown.
     Undeclared(Global),
     /// A declaration under a name already declared: one the environment holds, whatever is declared under it, or one an earlier item of its module declares. A name is one declaration, so the second is refused whatever it is.
-    Redeclared(Free),
+    Redeclared(Global),
     /// A type whose sort the kernel could not determine. Guessing here is the unsound direction, so it refuses. See the module documentation.
     Unclassified(Term),
     /// A term used as a universe that is neither `Type` nor `Prop`.
@@ -219,8 +219,6 @@ pub enum Error {
     UnsatisfiableUniverses,
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
-    /// An occurrence of a universe-polymorphic definition that states no instance. Such an occurrence denotes no particular instance, which is why a bare occurrence is handed no body to unfold; reading its *type* regardless hands back the scheme's own parameters, which are then read as the ambient item's, and skips `check_instance` entirely — so the scheme's constraints are discharged by nothing and a use the stated-instance spelling refuses is admitted by dropping the instance.
-    MissingUniverseInstance { name: Free, expected: usize },
 }
 
 impl Exhaustion for Error {
@@ -527,18 +525,11 @@ impl fmt::Display for Displayed<'_> {
                 formatter,
                 "this instance does not satisfy its scheme's `{lower} <= {upper}`",
             ),
-            Error::MissingUniverseInstance { name, expected } => write!(
-                formatter,
-                "this occurrence of `{}` states no universe instance, and its scheme declares {expected}",
-                name.faithful()
-            ),
         }
     }
 }
 
 /// The kernel's side of the shared-analysis seam.
-///
-/// `assumption` reads the *locals* rather than `Kernel::type_of`, because a shared analysis asking what a binder was assumed at means the binder in scope, not a top-level name that happens to share its spelling. That matches what the elaborator's `Context::assumption` answers, which is the point of the seam.
 impl Env for Kernel<'_> {
     type Error = Error;
 
@@ -559,8 +550,13 @@ impl Env for Kernel<'_> {
         Kernel::fresh(self, hint)
     }
 
-    fn unfold(&self, name: &Free) -> Option<&Term> {
-        self.body(name)
+    /// None: the kernel holds no local by name, a `let` being substituted by value before a judgment meets its binder.
+    fn unfold(&self, _: &Free) -> Option<&Term> {
+        None
+    }
+
+    fn body(&self, name: &Global) -> Option<&Term> {
+        Kernel::body(self, name)
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
@@ -980,7 +976,7 @@ impl<'s> Kernel<'s> {
     /// Refused as [`Error::Redeclared`] where a definition already stands under `name`. The environment is written once, as every entry point below writes it: a judgment made and a reduct remembered are about what a name meant when they were, and nothing here lets it mean anything else afterwards.
     pub fn define(
         &mut self,
-        name: &Free,
+        name: &Global,
         type_: &Term,
         value: &Term,
         universes: &UniverseContext,
@@ -992,7 +988,7 @@ impl<'s> Kernel<'s> {
     /// [`Kernel::define`] with the sort `value` inhabits where it is a type and the walk checked it at one ([`curios_core::Definition::value_sort`]).
     pub(crate) fn define_sorted(
         &mut self,
-        name: &Free,
+        name: &Global,
         type_: &Term,
         value: &Term,
         value_sort: Option<&Term>,
@@ -1005,7 +1001,7 @@ impl<'s> Kernel<'s> {
     /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. A walk records a definition marked a proof so ([`curios_core::Definition::proof`]), once its body is checked; every other item is defined with its body, and a `foreign` is a term `infer` types rather than a name, so the other callers are the fixtures that need an opaque head. Refused where a definition already stands under `name`, as [`Kernel::define`] is.
     pub fn declare(
         &mut self,
-        name: &Free,
+        name: &Global,
         type_: &Term,
         universes: &UniverseContext,
     ) -> Result<(), Error> {
@@ -1066,9 +1062,7 @@ impl<'s> Kernel<'s> {
     ///
     /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_of`).
     pub fn assume(&mut self, name: &Free, type_: &Term) {
-        if let Some(index) = name.local_index() {
-            self.spend.reserve(index);
-        }
+        self.spend.reserve(name.index());
         // A re-typed local is what a remembered sort of a type naming it was read off, and what a comparison that looked its type up was decided by.
         if self.scope.assume(name, type_) {
             self.memos.begin_equations();
@@ -1081,9 +1075,7 @@ impl<'s> Kernel<'s> {
     ///
     /// **A `let` is bound for typing and read by value by everything else.** The tail is typed over the binder, so a value named twice is typed once; a variable is typed by the binder's type. Whatever reads a term for more than its type is handed the term with the name unfolded ([`Kernel::by_value`]), which is the term a substituted `let` leaves, so reduction's tables, an arm's equations, the recorded positions and the graded calls are keyed and read as they are where a `let` is substituted. The local stands for one value for as long as its opening does, so what the typing tables remember of a term naming it stays true while its binder stands — the life they have.
     pub(crate) fn bind(&mut self, name: &Free, type_: &Term, value: &Term, encloses_partial: bool) {
-        if let Some(index) = name.local_index() {
-            self.spend.reserve(index);
-        }
+        self.spend.reserve(name.index());
         let over_nothing = self.scope.assumes(name);
         // A local bound again stands for another value, which is what a term naming it was typed through: the typings go, and nothing else does, since every other table is keyed by value and names no `let`.
         if self.scope.bind(name, type_, value, encloses_partial) {
@@ -1276,7 +1268,7 @@ impl<'s> Kernel<'s> {
     /// **Each binder is asked once**, where a stuck form naming it first reaches the equations in force, and remembered with the binder. It is asked by plain reduction, which no question interrupts, and counted not a proof while it is being asked, so a type whose classification comes back to its own binder ends there, toward refusal. A failure that is no exhaustion of the budget is that the binder is not known to be a proof.
     pub(crate) fn proofs_named(&mut self, term: &Term) -> Result<Vec<Free>, ReduceError> {
         let mut proofs = Vec::new();
-        for name in term.free_vars().iter() {
+        for name in term.mentions().locals() {
             let proof = match self.scope.classified(name) {
                 Some(proof) => proof,
                 None => {
@@ -1407,31 +1399,9 @@ impl<'s> Kernel<'s> {
         self.scope.local_type(name)
     }
 
-    /// The type `name` was bound or declared at. Locals shadow definitions.
-    ///
-    /// A definition with universe parameters is refused here rather than answered, which is [`Kernel::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
-    pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, Error> {
-        if let Some(local) = self.scope.local_type(name) {
-            return Ok(Some(local));
-        }
-
-        match self.scheme_of(name) {
-            None => Ok(None),
-            Some((type_, universes)) => match universes.width() {
-                0 => Ok(Some(type_)),
-                expected => Err(Error::MissingUniverseInstance {
-                    name: *name,
-                    expected,
-                }),
-            },
-        }
-    }
-
-    /// The universe scheme `name` was generalized under, for a use that states its own instance.
-    pub(crate) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
-        if let Some(global) = name.as_global() {
-            self.reads.signature(global);
-        }
+    /// The universe scheme the declaration `name` was generalized under, for a reference that states its instance.
+    pub(crate) fn scheme_of(&self, name: &Global) -> Option<(&Term, &UniverseContext)> {
+        self.reads.signature(name);
         self.globals.scheme_of(name)
     }
 
@@ -1455,43 +1425,21 @@ impl<'s> Kernel<'s> {
         self.spend.fresh(hint)
     }
 
-    /// What `name` unfolds to through a bare occurrence. A definition with universe parameters is withheld.
-    pub(crate) fn value(&self, name: &Free) -> Option<&Term> {
-        if let Some(global) = name.as_global() {
-            self.reads.body(global);
-        }
-        self.globals.value(name)
-    }
-
-    /// The value `name` was defined at, under its own universe parameters, noted as read: what a definition is to an analysis of its scheme, which asks what the body names and reads no level of it.
-    pub(crate) fn body(&self, name: &Free) -> Option<&Term> {
-        if let Some(global) = name.as_global() {
-            self.reads.body(global);
-        }
+    /// The value the declaration `name` was defined at, under its own universe parameters, noted as read: what a definition is to an analysis of its scheme, which asks what the body names and reads no level of it.
+    pub(crate) fn body(&self, name: &Global) -> Option<&Term> {
+        self.reads.body(name);
         self.globals.body(name)
     }
 
-    /// What `name` unfolds to at the stated universe instance `universes`, which is the one position a polymorphic definition may be unfolded from, and only where the instance states its scheme whole ([`UniverseContext::stated_by`]).
-    pub(crate) fn value_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
-        if let Some(global) = name.as_global() {
-            self.reads.body(global);
-        }
+    /// What the declaration `name` unfolds to at the stated universe instance `universes`, only where the instance states its scheme whole ([`UniverseContext::stated_by`]).
+    pub(crate) fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
+        self.reads.body(name);
         self.globals.value_at(name, universes)
     }
 
-    /// The sort `name`'s value inhabits through a bare occurrence, where it states one ([`curios_core::Definition::value_sort`]): a read of its body, of which the sort is a fact. A definition with universe parameters is withheld.
-    pub(crate) fn value_sort(&self, name: &Free) -> Option<&Term> {
-        if let Some(global) = name.as_global() {
-            self.reads.body(global);
-        }
-        self.globals.value_sort(name)
-    }
-
-    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one.
-    pub(crate) fn value_sort_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
-        if let Some(global) = name.as_global() {
-            self.reads.body(global);
-        }
+    /// The sort the declaration `name`'s value inhabits at a stated universe instance, under its own parameters, where it states one ([`curios_core::Definition::value_sort`]): a read of its body, of which the sort is a fact.
+    pub(crate) fn value_sort_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
+        self.reads.body(name);
         self.globals.value_sort_at(name, universes)
     }
 
@@ -1557,9 +1505,7 @@ impl<'s> Kernel<'s> {
     pub fn restore_budget(&mut self) {
         self.spend.restore_budget();
         for name in self.scope.local_names() {
-            if let Some(index) = name.local_index() {
-                self.spend.reserve(index);
-            }
+            self.spend.reserve(name.index());
         }
         self.memos.begin_declaration();
     }

@@ -15,8 +15,8 @@ use {
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
-        MatchResult, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
-        Transient, TupleType, Visit, WitnessOrigin,
+        MatchResult, Mention, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Transient, TupleType, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     curios_utilities::{Plicity, recurse},
@@ -152,7 +152,7 @@ impl Writing {
                     .induct_decl(&induct_type.name)
                     .map(|declaration| declaration.arity.marks())
                     .unwrap_or_default();
-                let callee = CalleeId::Function(Free::Global(induct_type.name));
+                let callee = CalleeId::Function(Mention::Declaration(induct_type.name));
                 let mut written = induct_type.clone();
                 written.params = self.marked(context, &induct_type.params, &marks, &callee);
                 written.indices = induct_type
@@ -167,7 +167,7 @@ impl Writing {
                     .struct_decl(&struct_type.name)
                     .map(|declaration| declaration.arity.marks())
                     .unwrap_or_default();
-                let callee = CalleeId::Function(Free::Global(struct_type.name));
+                let callee = CalleeId::Function(Mention::Declaration(struct_type.name));
                 let mut written = struct_type.clone();
                 written.params = self.marked(context, &struct_type.params, &marks, &callee);
                 rebuilt(term, Subterm::StructType(written))
@@ -184,7 +184,7 @@ impl Writing {
                             .map(|(_, signature)| signature.plicities())
                     })
                     .unwrap_or_default();
-                let callee = CalleeId::Function(Free::Global(variant.name));
+                let callee = CalleeId::Function(Mention::Declaration(variant.name));
                 let (leading, payload) = marks.split_at(variant.params.len().min(marks.len()));
                 let params = self.released_all(&variant.params);
                 let filled =
@@ -400,7 +400,7 @@ impl Writing {
         };
         let wrapper = Global::Authored(path.with(&label));
         let merged = context
-            .instantiate_assumption(&Free::Global(wrapper), None)
+            .instantiate_declaration(&wrapper, None)
             .ok()
             .flatten()
             .is_some_and(|(type_, _)| {
@@ -414,7 +414,7 @@ impl Writing {
             })
             .chain(std::iter::once(Argument {
                 term: context.open_witness_slot(WitnessOrigin {
-                    func: CalleeId::Function(Free::Global(wrapper)),
+                    func: CalleeId::Function(Mention::Declaration(wrapper)),
                     role: None,
                 }),
                 plicity: Plicity::Witness,
@@ -429,7 +429,7 @@ impl Writing {
                         Plicity::Witness => self.witness(
                             context,
                             &argument.term,
-                            CalleeId::Function(Free::Global(wrapper)),
+                            CalleeId::Function(Mention::Declaration(wrapper)),
                         ),
                         _ => self.term(context, &argument.term),
                     },

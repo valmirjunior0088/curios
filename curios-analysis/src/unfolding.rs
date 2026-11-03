@@ -40,8 +40,8 @@ impl<'a, E: Env> Unfolding<'a, E> {
     /// `term` with every local definition it mentions that this unfolding reaches replaced by that definition, unfolded in turn.
     pub fn term(&mut self, term: &Term) -> Term {
         let expansions = term
-            .free_vars()
-            .iter()
+            .mentions()
+            .locals()
             .filter_map(|name| Some((*name, self.expansion(name)?)))
             .collect::<Vec<_>>();
 
@@ -93,7 +93,7 @@ pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
     let mut seen = BTreeSet::new();
     let mut pending = Vec::new();
     for term in terms {
-        pending.extend(term.free_vars().iter().copied());
+        pending.extend(term.mentions().locals().copied());
     }
 
     while let Some(name) = pending.pop() {
@@ -101,7 +101,7 @@ pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
             continue;
         }
         match env.unfold(&name) {
-            Some(definition) => pending.extend(definition.free_vars().iter().copied()),
+            Some(definition) => pending.extend(definition.mentions().locals().copied()),
             None => locals.push(name),
         }
     }

@@ -54,6 +54,10 @@ impl Eraser<'_> {
                     &curios_core::Term::rec_proj(group.clone(), index),
                 );
             }
+            let names = names
+                .iter()
+                .map(|name| curios_core::Mention::Local(*name))
+                .collect::<Vec<_>>();
             self.emit_group(context, &names, &hints, &members)?;
             self.walk(context, &tail, expected, hint)
         })
@@ -74,7 +78,7 @@ impl Eraser<'_> {
         let names = rec
             .definitions
             .iter()
-            .map(|definition| curios_core::Free::from(&definition.name))
+            .map(|definition| curios_core::Mention::Declaration(definition.name))
             .collect::<Vec<_>>();
         let occurrences = rec
             .definitions
@@ -104,7 +108,7 @@ impl Eraser<'_> {
     fn emit_group(
         &mut self,
         context: &mut Reader,
-        names: &[curios_core::Free],
+        names: &[curios_core::Mention],
         hints: &[Option<String>],
         members: &[(curios_core::Term, curios_core::Term)],
     ) -> Result<(), Error> {

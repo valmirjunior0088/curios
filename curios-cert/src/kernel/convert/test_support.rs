@@ -200,7 +200,7 @@ pub(super) fn declare_wrap(
     );
     let value = former.spell(binder(87, "Wrap"), &type_, value);
     kernel
-        .define(&Free::from(&name), &type_, &value, &scheme)
+        .define(&name, &type_, &value, &scheme)
         .expect("a name is declared once");
 
     name
@@ -249,7 +249,7 @@ pub(super) fn declare_leaf(
     );
     let value = former.spell(binder(86, "Leaf"), &type_, node);
     kernel
-        .define(&Free::from(&name), &type_, &value, &scheme)
+        .define(&name, &type_, &value, &scheme)
         .expect("a name is declared once");
 
     name

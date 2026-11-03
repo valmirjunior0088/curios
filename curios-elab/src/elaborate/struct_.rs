@@ -7,8 +7,9 @@ use {
         reduce_with, resolve_witness_goal,
     },
     curios_core::{
-        CalleeId, Free, Global, ImplicitOrigin, Probe, Struct, StructDecl, StructEntry, StructType,
-        Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin, instantiate_universes,
+        CalleeId, Global, ImplicitOrigin, Mention, Probe, Struct, StructDecl, StructEntry,
+        StructType, Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
+        instantiate_universes,
     },
     curios_utilities::Plicity,
 };
@@ -73,7 +74,7 @@ pub fn elaborate_struct_type(
             decl.result_sort.clone(),
         )
     }) else {
-        return Err(match context.assumption(&Free::from(name)) {
+        return Err(match context.declared_type(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
             None => Error::unknown_declaration(*name),
         });
@@ -106,7 +107,7 @@ pub fn elaborate_struct_type(
                 ty,
                 term.extent(),
                 ImplicitOrigin {
-                    func: CalleeId::Function(Free::Global(*name)),
+                    func: CalleeId::Function(Mention::Declaration(*name)),
                     binder,
                 },
                 proposition,
@@ -204,7 +205,7 @@ pub fn elaborate_struct(
     } = s;
 
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Err(match context.assumption(&Free::from(name)) {
+        return Err(match context.declared_type(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
             None => Error::unknown_declaration(*name),
         });
@@ -421,7 +422,7 @@ pub fn elaborate_struct(
                 },
                 // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label, which it does not have. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
-                    func: CalleeId::Function(Free::Global(*name)),
+                    func: CalleeId::Function(Mention::Declaration(*name)),
                     edge: use_positions
                         .iter()
                         .find(|(index, _)| *index == position)
@@ -475,7 +476,7 @@ pub fn resolve_struct_params(
             Some(arg) => check(context, arg, ty.clone())?,
             None if premise => {
                 let provenance = WitnessOrigin {
-                    func: CalleeId::Function(Free::Global(*name)),
+                    func: CalleeId::Function(Mention::Declaration(*name)),
                     role: Some(premise_label(premises)),
                 };
                 let (id, metavar) =
@@ -491,7 +492,7 @@ pub fn resolve_struct_params(
                         ty.clone(),
                         term.extent(),
                         ImplicitOrigin {
-                            func: CalleeId::Function(Free::Global(*name)),
+                            func: CalleeId::Function(Mention::Declaration(*name)),
                             binder,
                         },
                         proposition,

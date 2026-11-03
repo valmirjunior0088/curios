@@ -11,7 +11,10 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_cert::Kernel,
-    curios_core::{Free, Intrinsic, Reducer, Term, UniverseContext},
+    curios_core::{
+        DefinitionKind, Free, Global, Intrinsic, Reducer, Term, UniverseContext, Universes,
+    },
+    curios_utilities::Qualifier,
 };
 
 /// The kernel these fixtures are put to.
@@ -221,7 +224,7 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     let mut context = context();
     let mut kernel = kernel();
     let n = context.fresh(Some("n"));
-    let small = context.fresh(Some("small"));
+    let small = Global::Authored(Qualifier::from(["small"]));
     let x = context.fresh(Some("x"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
@@ -231,7 +234,10 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
         [(x, nat_type.clone())],
         Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&x), nat(10))),
     );
-    let guard = Term::apply(Term::free_var(&small), [Term::free_var(&n)]);
+    let guard = Term::apply(
+        Term::instance(small, Universes::default()),
+        [Term::free_var(&n)],
+    );
     // The carrier the unfolded guard picks: `Nat` below ten, `Bool` otherwise.
     let carrier = Term::bool_match(
         Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(10))),
@@ -263,8 +269,7 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
         "the kernel answers the unfolded guard in each arm"
     );
 
-    context.assume(&small, &small_type);
-    context.define(&small, &small_body, None);
+    context.define_declaring(&small, &small_type, &small_body, &DefinitionKind::Authored);
     context.assume(&n, &nat_type);
     for (value, expected) in [(true, nat_type), (false, bool_type)] {
         let reduced = context.with_frame(|context| {

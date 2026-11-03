@@ -51,7 +51,7 @@ pub fn pattern_variables(context: &Context, metavar: &Metavar, apply: &Apply) ->
             return None;
         };
         let name = *var.as_free()?;
-        if !name.is_local() || context.is_top_level(&name) || variables.contains(&name) {
+        if variables.contains(&name) {
             return None;
         }
         variables.push(name);

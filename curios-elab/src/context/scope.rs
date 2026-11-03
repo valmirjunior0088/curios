@@ -1,8 +1,5 @@
 //! The context's doors to the frames: binders entered and left, arms opened and ruled out, what is assumed and defined in scope, and the refinements an arm installs.
 
-#[cfg(test)]
-mod test_support;
-
 use {
     super::{Bracket, ByValue, DefEntry, KeptWindow},
     crate::DefinedGroup,
@@ -12,8 +9,8 @@ use {
     },
     curios_analysis::{reads_solved, records_case_equation},
     curios_core::{
-        Advance, DefinitionKind, Free, Global, HeadTag, RecGroup, Subterm, Term, Universes,
-        project_erased_universes,
+        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
+        Universes, project_erased_universes,
     },
     curios_utilities::Plicity,
     std::rc::Rc,
@@ -94,7 +91,7 @@ impl<'s> Context<'s> {
     pub(crate) fn written_assumption(&self, name: &Global) -> Option<&Term> {
         match self.group_member(name) {
             Some(local) => self.assumption(&local),
-            None => self.assumption(&Free::Global(*name)),
+            None => self.declared_type(name),
         }
     }
 
@@ -128,6 +125,12 @@ impl<'s> Context<'s> {
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.typing.caches.note_write();
         self.typing.frames.assume(name, type_);
+    }
+
+    /// [`Frames::declare`](super::Frames::declare), stamping the write.
+    pub(crate) fn declare(&mut self, name: &Global, type_: &Term) {
+        self.typing.caches.note_write();
+        self.typing.frames.declare(name, type_);
     }
 
     /// [`Context::assume`] of each of `bindings` in order, the scope restated once for all of them: an arm's retyped locals.
@@ -170,15 +173,26 @@ impl<'s> Context<'s> {
         self.typing.frames.reassume(name, type_);
     }
 
-    /// The type `name` is assumed at. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
+    /// [`Frames::redeclare`](super::Frames::redeclare), invalidating the elaboration cache as [`Context::reassume`] does.
+    pub(crate) fn redeclare(&mut self, name: &Global, type_: &Term) {
+        self.typing.caches.invalidate_for_reassumption();
+        self.typing.frames.redeclare(name, type_);
+    }
+
+    /// The type the local `name` is assumed at.
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
+        self.typing.frames.assumption(name)
+    }
+
+    /// The type the declaration `name` is read at, before an instance of it is chosen. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
+    pub(crate) fn declared_type(&self, name: &Global) -> Option<&Term> {
         self.asks(name, Question::Signature);
-        let assumed = self.typing.frames.assumption(name);
-        if assumed.is_none() {
-            self.missed(name);
+        let declared = self.typing.frames.declared_type(name);
+        if declared.is_none() {
+            self.reads_entry(name);
         }
 
-        assumed
+        declared
     }
 
     /// [`Frames::rec_definitions`](super::Frames::rec_definitions): every top-level `rec` group defined so far, with its members' names.
@@ -191,14 +205,15 @@ impl<'s> Context<'s> {
         let opened = self.typing.caches.opened_from(group)?;
         let names = self.typing.frames.member_names(group, opened);
         for name in names.iter().flatten() {
-            self.asks(&Free::Global(*name), Question::Body);
+            self.asks(name, Question::Body);
         }
 
         names
     }
 
-    pub(super) fn is_defined(&self, name: &Free) -> bool {
-        self.typing.frames.is_defined(name)
+    /// [`Frames::is_declaration_defined`](super::Frames::is_declaration_defined).
+    pub(super) fn is_declaration_defined(&self, name: &Global) -> bool {
+        self.typing.frames.is_declaration_defined(name)
     }
 
     /// [`Frames::local_binders`](super::Frames::local_binders).
@@ -207,30 +222,39 @@ impl<'s> Context<'s> {
     }
 
     fn define_entry(&mut self, name: Free, entry: DefEntry) {
+        self.fresh_or_redefined(self.typing.frames.is_defined(&name), Mention::Local(name));
+        let zonked = zonk_solved_term_metas(self, entry.body());
+        let by_value = ByValue {
+            term: self.by_value(&zonked),
+            erased: self.erased_by_value(&zonked),
+        };
+        self.typing
+            .frames
+            .define(name, entry.read_by_value(by_value));
+    }
+
+    /// [`Context::define_entry`] for the declaration `name`, which is never read by value.
+    fn define_declaration_entry(&mut self, name: &Global, entry: DefEntry) {
+        self.fresh_or_redefined(
+            self.typing.frames.is_declaration_defined(name),
+            Mention::Declaration(*name),
+        );
+        self.typing.frames.define_declaration(name, entry);
+    }
+
+    /// The cache protocol of a definition of `name`, `defined` saying whether it is defined already.
+    fn fresh_or_redefined(&mut self, defined: bool, name: Mention) {
         // A *fresh* definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF (the name analogue of the unsolved-metavariable argument in `Context::reduce`) — so the reduction cache retains every entry whose result does not mention it instead of clearing wholesale. This keeps reducts warm across the definitions one declaration mints, and across erasure's items, which erasure walks under one budget: it re-derives an item right after its `define`, and a cold re-reduction of a deep closed spine (a string literal's scan-state chain) would repeat all of its work.
         //
-        // The elaboration cache survives the same fresh definition with no retain at all: its insert gate (`elaboration_cacheable`) already refused every entry naming a not-yet-defined global, so the fresh name appears in no surviving entry. A minted `let` binder — which the frame elaborators mint — is excluded from caching outright (`has_local_free`), and a global is only ever referenced once defined; so not clearing lets a deep spine memoize once across those definitions instead of re-elaborating its shared subterms after each.
+        // The elaboration cache survives the same fresh definition with no retain at all: its insert gate (`elaboration_cacheable`) already refused every entry naming a not-yet-defined declaration, so the fresh name appears in no surviving entry. A minted `let` binder — which the frame elaborators mint — is excluded from caching outright (`has_local_free`), and a declaration is only ever referenced once defined; so not clearing lets a deep spine memoize once across those definitions instead of re-elaborating its shared subterms after each.
         //
         // A *redefinition* voids both arguments — the frame elaborators define under labels that can rebind or shadow, and the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the label — so there both caches clear wholesale.
-        if self.typing.frames.is_defined(&name) {
+        if defined {
             self.typing.caches.invalidate_for_redefinition();
         } else {
             self.typing.caches.retain_reductions_without(&name);
             self.typing.frames.forget_spellings_naming(&name);
         }
-
-        let entry = match name.is_local() {
-            true => {
-                let zonked = zonk_solved_term_metas(self, entry.body());
-                let by_value = ByValue {
-                    term: self.by_value(&zonked),
-                    erased: self.erased_by_value(&zonked),
-                };
-                entry.read_by_value(by_value)
-            }
-            false => entry,
-        };
-        self.typing.frames.define(name, entry);
     }
 
     /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`](crate::read_outside_spines)): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
@@ -255,15 +279,17 @@ impl<'s> Context<'s> {
     /// Define `name` as a published item binds it: [`Context::define`], and where `proof`, to a term no reduction unfolds it to ([`curios_core::Definition::proof`]). Until its item is published a proof unfolds as any definition does, which is what its own check reads it by.
     pub(super) fn define_published(
         &mut self,
-        name: &Free,
+        name: &Global,
         term: &Term,
         kind: &DefinitionKind,
         proof: bool,
     ) {
-        self.define_entry(
-            *name,
-            DefEntry::published(term.clone(), kind.clone(), proof),
-        );
+        self.define_declaration_entry(name, DefEntry::published(term.clone(), kind.clone(), proof));
+    }
+
+    /// Define the declaration `name` as `term`, as it is defined while its item elaborates: [`Context::define`] for a declaration.
+    pub(crate) fn define_declaration(&mut self, name: &Global, term: &Term, kind: &DefinitionKind) {
+        self.define_declaration_entry(name, DefEntry::new(term.clone(), Some(kind.clone())));
     }
 
     pub(crate) fn define_assuming(
@@ -277,8 +303,20 @@ impl<'s> Context<'s> {
         self.define(name, term, kind);
     }
 
+    /// [`Context::define_assuming`] for a declaration: declared at `type_` and defined as `term`.
+    pub(crate) fn define_declaring(
+        &mut self,
+        name: &Global,
+        type_: &Term,
+        term: &Term,
+        kind: &DefinitionKind,
+    ) {
+        self.declare(name, type_);
+        self.define_declaration(name, term, kind);
+    }
+
     /// Undo a top-level declaration's bindings ([`Frames::forget`](super::Frames::forget)) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
-    pub(crate) fn forget(&mut self, name: &Free) {
+    pub(crate) fn forget(&mut self, name: &Global) {
         self.typing.frames.forget(name);
         self.typing.caches.invalidate_for_redefinition();
     }
@@ -383,16 +421,26 @@ impl<'s> Context<'s> {
         self.typing.frames.refine_projection(base, index, value);
     }
 
-    /// [`Frames::definition_body`](super::Frames::definition_body), and a need where the body is missing because its declaration has not finished ([`Context::missed`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
+    /// [`Frames::definition_body`](super::Frames::definition_body), and a name a fresh definition can unstick a reduct on where there is none ([`Context::absent`]).
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
-        self.asks(name, Question::Body);
         let body = self.typing.frames.definition_body(name);
-        match body {
-            Some(body) => self.opens(name, body),
-            None => self.absent(name),
+        if body.is_none() {
+            self.absent(&Mention::Local(*name));
         }
 
         self.unless_member(body)
+    }
+
+    /// [`Frames::declaration_body`](super::Frames::declaration_body), and a need where the body is missing because its declaration has not finished ([`Context::absent`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
+    pub(crate) fn declaration_body(&self, name: &Global) -> Option<&Term> {
+        self.asks(name, Question::Body);
+        let body = self.typing.frames.declaration_body(name);
+        match body {
+            Some(body) => self.opens(name, body),
+            None => self.absent(&Mention::Declaration(*name)),
+        }
+
+        body
     }
 
     /// `body`, unless it is the protected slot of a member of a group being checked: a member named in a body stands for nothing there, as the kernel checks a group's bodies over members that stand for nothing, and a signature reads it through its slot instead (`elaborate_rec`).
@@ -400,46 +448,46 @@ impl<'s> Context<'s> {
         body.filter(|body| !matches!(&***body, Subterm::Metavar(slot) if self.is_rec_slot(slot.id)))
     }
 
-    /// [`Frames::var_reduct`](super::Frames::var_reduct), and a need as [`Context::definition_body`] records one.
+    /// [`Frames::var_reduct`](super::Frames::var_reduct), and a name to unstick as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
-        self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct(name);
-        match reduct {
-            Some(reduct) => self.opens(name, reduct),
-            None => self.absent(name),
+        if reduct.is_none() {
+            self.absent(&Mention::Local(*name));
         }
 
         self.unless_member(reduct)
     }
 
-    /// `name` has no definition to unfold to: a need where its declaration has not finished ([`Context::missed`]), and a name a fresh definition can unstick a reduct on ([`Caches::note_absent`](super::Caches::note_absent)).
-    fn absent(&self, name: &Free) {
-        self.missed(name);
+    /// `name` has no definition to unfold to: a need where it is a declaration that has not finished ([`Context::reads_entry`]), and a name a fresh definition can unstick a reduct on ([`Caches::note_absent`](super::Caches::note_absent)).
+    fn absent(&self, name: &Mention) {
+        if let Mention::Declaration(declaration) = name {
+            self.reads_entry(declaration);
+        }
         self.typing.caches.note_absent(name);
     }
 
-    /// `name` unfolded to `reduct`: where it is a member of a top-level group, the group is filed as opened from it ([`Caches::note_opened`](super::Caches::note_opened)).
-    fn opens(&self, name: &Free, reduct: &Term) {
-        if let (Free::Global(global), Some((group, _))) = (name, reduct.as_rec_proj()) {
-            self.typing.caches.note_opened(group, *global);
+    /// The declaration `name` unfolded to `reduct`: where it is a member of a top-level group, the group is filed as opened from it ([`Caches::note_opened`](super::Caches::note_opened)).
+    fn opens(&self, name: &Global, reduct: &Term) {
+        if let Some((group, _)) = reduct.as_rec_proj() {
+            self.typing.caches.note_opened(group, *name);
         }
     }
 
     /// [`Frames::states_scheme`](super::Frames::states_scheme).
-    pub(crate) fn states_scheme(&self, name: &Free, universes: &Universes) -> bool {
+    pub(crate) fn states_scheme(&self, name: &Global, universes: &Universes) -> bool {
         self.typing.frames.states_scheme(name, universes)
     }
 
-    /// [`Frames::var_reduct_at`](super::Frames::var_reduct_at), and a need as [`Context::definition_body`] records one.
-    pub(crate) fn var_reduct_at(&self, name: &Free, universes: &Universes) -> Option<&Term> {
+    /// [`Frames::value_at`](super::Frames::value_at), and a need as [`Context::declaration_body`] records one.
+    pub(crate) fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.asks(name, Question::Body);
-        let reduct = self.typing.frames.var_reduct_at(name, universes);
+        let reduct = self.typing.frames.value_at(name, universes);
         match reduct {
             Some(reduct) => self.opens(name, reduct),
-            None => self.absent(name),
+            None => self.absent(&Mention::Declaration(*name)),
         }
 
-        self.unless_member(reduct)
+        reduct
     }
 
     /// [`Frames::projection_entry`](super::Frames::projection_entry)'s value, with `base` and the base the arm scrutinized held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]).

@@ -4,9 +4,9 @@ use {
     crate::context::test_support::*,
     crate::*,
     curios_core::{
-        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseMetaId, UniverseRole, Universes,
-        WitnessOrigin,
+        CalleeId, DefinitionKind, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
+        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseMetaId, UniverseRole,
+        Universes, WitnessOrigin,
     },
     curios_utilities::Qualifier,
     std::{collections::BTreeSet, rc::Rc},
@@ -251,14 +251,13 @@ fn a_closed_reduct_does_not_outlive_its_declaration() {
 fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let chain = Global::Authored(Qualifier::from(["chain"]));
-    let name = Free::Global(chain);
     let body = (0..64).fold(literal(0), |sum, _| {
         Term::intrinsic(Intrinsic::nat_add(sum, literal(1)))
     });
     let occurrence = Term::instance(chain, Universes::default());
     let defining = || {
         let mut context = context();
-        context.define(&name, &body, None);
+        context.define_declaration(&chain, &body, &DefinitionKind::Authored);
         context
     };
     let spent = |context: &mut Context, term: Term| {

@@ -58,7 +58,7 @@ pub fn retyped<E: Env>(
 ///
 /// **What an equation's reduced spelling rests on.** A settlement reduces the equation's key with the equations inside it withheld, and reads, besides the definition store and the equations outside it, each local the key names: a local definition by its value, and every local at its type, where a question reduction puts to conversion is answered. A case moves exactly those readings: it re-types each local whose type names a variable it solves ([`retyped`]), and the kernel binds again each local definition whose value names one. So a spelling settled under the case's arm rests on its solution where this holds and nowhere else, and such an equation is restated in the arm rather than settled there (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_equations`).
 ///
-/// `reads` answers nothing for a name no binder in scope opened: a top-level name's meaning is no case's to move.
+/// A declaration `term` references is not followed: a top-level name's meaning is no case's to move.
 pub fn reads_solved(
     term: &Term,
     solutions: &[(Free, Term)],
@@ -68,7 +68,7 @@ pub fn reads_solved(
         return false;
     }
     let mut seen = HashSet::new();
-    let mut pending = term.free_vars().iter().copied().collect::<Vec<_>>();
+    let mut pending = term.mentions().locals().copied().collect::<Vec<_>>();
     while let Some(name) = pending.pop() {
         if !seen.insert(name) {
             continue;
@@ -77,7 +77,7 @@ pub fn reads_solved(
             return true;
         }
         for read in reads(&name) {
-            pending.extend(read.free_vars().iter().copied());
+            pending.extend(read.mentions().locals().copied());
         }
     }
 

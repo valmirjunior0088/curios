@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Atom, Free, InductDecl, InductParam, Intrinsic, Level, ReduceError, Subterm, Telescope,
-        Term, UniverseContext, UniverseMetaId, UniverseRole,
+        Atom, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, ReduceError,
+        Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseRole,
     },
     curios_num::{Binary, Integer},
     curios_utilities::{Plicity, Qualifier},
@@ -22,8 +22,8 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let mut context = context();
     let partial = nominal("partial");
     let ignored = context.fresh(Some("ignored"));
-    context.define(
-        &Free::Global(partial),
+    context.define_declaration(
+        &partial,
         &Term::func(
             [(ignored, Term::intrinsic(Intrinsic::NatType))],
             Term::intrinsic(Intrinsic::bytes_get(
@@ -32,7 +32,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
                 qed(),
             )),
         ),
-        None,
+        &DefinitionKind::Authored,
     );
     let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
     let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);

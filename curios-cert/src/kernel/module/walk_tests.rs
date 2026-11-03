@@ -18,13 +18,10 @@ fn a_restored_budget_starts_the_identities_over() {
     kernel.restore_budget();
     assert_eq!(kernel.fresh(None), first);
 
-    let held = Free::local(
-        first.local_index().expect("a binder is a local") + 7,
-        Some("held"),
-    );
+    let held = Free::local(first.index() + 7, Some("held"));
     kernel.assume(&held, &Term::intrinsic(Intrinsic::NatType));
     kernel.restore_budget();
-    assert!(kernel.fresh(None).local_index() > held.local_index());
+    assert!(kernel.fresh(None).index() > held.index());
 }
 
 /// What a typing hit recalls lives as long as the typing it was filed with: a term typed under one arm, where its typing closed a group that does not descend, and typed again under another, where it closed none, recalls nothing once the first arm's entry is gone.

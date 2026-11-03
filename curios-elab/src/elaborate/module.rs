@@ -478,10 +478,9 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
     );
 }
 
-/// Type-check a single non-recursive top-level definition, `define` it into the *current* (persistent base) frame, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
+/// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item, Error> {
-    // Γ and the definition store key on the free-variable identity; the nominal registries key on the definition's own name.
-    let name = Free::from(&def.name);
+    let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
     // A struct's former is typed over its parameters, which are sized at the levels that typing reads ([`elaborate_struct`]).
@@ -535,7 +534,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
 
     if !recursive {
         // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity.
-        context.define_assuming(&name, &type_, &body, Some(&def.kind));
+        context.define_declaring(&name, &type_, &body, &def.kind);
     }
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
@@ -579,8 +578,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         };
         let rec = RecItem::try_new(vec![(own, definition)]).map_err(Error::from)?;
         let member = Term::rec_proj(rec.group.clone(), 0);
-        context.define_assuming(&name, &type_, &member, Some(&def.kind));
-        context.set_assumption_universe_context(&name, universe_context.clone());
+        context.define_declaring(&name, &type_, &member, &def.kind);
+        context.set_universe_context(&name, universe_context.clone());
         context.update_witness_scheme(&def.name, universe_context, type_);
         record_variances(context, &[def.name])?;
         context.restore_checked_site(outer_site);
@@ -594,9 +593,9 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         return Ok(Item::Rec(rec));
     }
 
-    context.reassume(&name, &type_);
-    context.define(&name, &body, Some(&def.kind));
-    context.set_assumption_universe_context(&name, universe_context.clone());
+    context.redeclare(&name, &type_);
+    context.define_declaration(&name, &body, &def.kind);
+    context.set_universe_context(&name, universe_context.clone());
     if context.is_witness_declaration(&def.name) {
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
@@ -866,14 +865,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
-        let name = Free::from(&definition.name);
-        context.define_assuming(
+        let name = definition.name;
+        context.define_declaring(
             &name,
             &rec.group.member_type(index),
             &Term::rec_proj(rec.group.clone(), index),
-            Some(&definition.kind),
+            &definition.kind,
         );
-        context.set_assumption_universe_context(&name, universe_context.clone());
+        context.set_universe_context(&name, universe_context.clone());
         if context.is_witness_declaration(&definition.name) {
             context.update_witness_scheme(
                 &definition.name,
@@ -1100,33 +1099,33 @@ fn group_parts(
         .map(|(name, (type_, body))| {
             let mut reached = type_.reaches();
             reached.extend(body.reaches());
-            let mut frees = vec![type_.free_vars(), body.free_vars()];
+            let mut frees = vec![type_.mentions(), body.mentions()];
             if let Some(entry) = context.induct_decl(name) {
                 reached.extend(entry.reaches());
-                frees.push(entry.arity.free_vars());
-                frees.push(entry.result_sort.free_vars());
+                frees.push(entry.arity.mentions());
+                frees.push(entry.result_sort.mentions());
                 frees.extend(
                     entry
                         .constructors
                         .iter()
-                        .map(|(_, constructor)| constructor.telescope.free_vars()),
+                        .map(|(_, constructor)| constructor.telescope.mentions()),
                 );
             }
             if let Some(entry) = context.struct_decl(name) {
                 reached.extend(entry.reaches());
-                frees.push(entry.arity.free_vars());
-                frees.push(entry.result_sort.free_vars());
+                frees.push(entry.arity.mentions());
+                frees.push(entry.result_sort.mentions());
             }
             if let Some(entry) = context.concept(name) {
                 reached.extend(entry.reaches());
-                frees.push(entry.params.free_vars());
+                frees.push(entry.params.mentions());
             }
             names
                 .iter()
                 .zip(locals)
                 .enumerate()
                 .filter(|(_, (other, local))| {
-                    reached.contains(other) || frees.iter().any(|free| free.contains(local))
+                    reached.contains(other) || frees.iter().any(|free| free.contains(*local))
                 })
                 .map(|(index, _)| index)
                 .collect::<Vec<_>>()
@@ -1383,7 +1382,7 @@ struct ElaboratedSuffix {
     readers: Option<Readers>,
 }
 
-/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
+/// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and defined *cumulatively among the declarations*, which no frame holds, so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is what `erase` reads, each item zonked where it was published ([`zonk_published`]).
 ///

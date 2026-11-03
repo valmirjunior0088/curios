@@ -6,7 +6,7 @@ use {
         AwaitId, Context, Error, HeldFrames, ParkedChoice, ParkedConversion, ParkedProblem,
         ParkedWork, ReaderScope, Scoped,
     },
-    curios_core::{Bound, Extent, MetavarId, MetavarOrigin, NumLit, Term},
+    curios_core::{Bound, Extent, Mention, MetavarId, MetavarOrigin, NumLit, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -54,8 +54,9 @@ impl<'s> Context<'s> {
             self.typing.caches.note_redefinition();
         }
         for name in &fresh {
-            self.typing.caches.retain_reductions_without(name);
-            self.typing.frames.forget_spellings_naming(name);
+            let name = Mention::Local(*name);
+            self.typing.caches.retain_reductions_without(&name);
+            self.typing.frames.forget_spellings_naming(&name);
         }
 
         let aside = self.typing.frames.stand_on(held);

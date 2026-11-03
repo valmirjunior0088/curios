@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
+    curios_core::{Enter, Global, Instance, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
     curios_text::RootSource,
     curios_unit::Unit,
@@ -72,10 +72,8 @@ fn typed_mentions(term: &Term, visited: &mut HashSet<Term>, into: &mut BTreeSet<
                     }
                     Enter::Skip(())
                 }
-                Subterm::Var(var) => {
-                    if let Some(global) = var.as_free().and_then(Free::as_global) {
-                        into.insert(*global);
-                    }
+                Subterm::Instance(Instance { name, .. }) => {
+                    into.insert(*name);
                     Enter::Skip(())
                 }
                 _ => Enter::Descend,

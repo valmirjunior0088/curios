@@ -19,24 +19,27 @@ fn beta_opens_a_function_over_its_arguments() {
 #[test]
 fn delta_unfolds_a_monomorphic_definition() {
     let mut kernel = kernel();
-    let f = binder(0, "f");
+    let f = Global::Authored(Qualifier::from(["f"]));
     kernel
         .define(&f, &nat_type(), &nat(3), &monomorphic())
         .expect("a name is declared once");
 
-    assert_eq!(whnf(&mut kernel, Term::free_var(&f)), Ok(nat(3)));
+    assert_eq!(
+        whnf(&mut kernel, Term::instance(f, Universes::default())),
+        Ok(nat(3))
+    );
 }
 
-/// A definition generalized over universe parameters denotes no particular instance, so a bare occurrence of it is a normal form. Unfolding it here would silently pick an instance nobody stated.
+/// A definition generalized over universe parameters denotes no particular instance, so a reference to it stating none is a normal form. Unfolding it here would silently pick an instance nobody stated.
 #[test]
 fn delta_withholds_a_universe_polymorphic_definition() {
     let mut kernel = kernel();
-    let f = binder(0, "f");
+    let f = Global::Authored(Qualifier::from(["f"]));
     kernel
         .define(&f, &nat_type(), &nat(3), &polymorphic())
         .expect("a name is declared once");
 
-    let occurrence = Term::free_var(&f);
+    let occurrence = Term::instance(f, Universes::default());
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
 }
 
@@ -46,7 +49,7 @@ fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let mut kernel = kernel();
     let f = Global::Authored(Qualifier::from(["f"]));
     kernel
-        .define(&Free::Global(f), &nat_type(), &nat(3), &polymorphic())
+        .define(&f, &nat_type(), &nat(3), &polymorphic())
         .expect("a name is declared once");
 
     let instance = Term::instance(f, vec![Level::zero()]);
@@ -88,12 +91,15 @@ fn zeta_substitutes_let_bindings_left_to_right() {
 #[test]
 fn intrinsics_fold_through_the_reducer_seam() {
     let mut kernel = kernel();
-    let x = binder(0, "x");
+    let x = Global::Authored(Qualifier::from(["x"]));
     kernel
         .define(&x, &nat_type(), &nat(2), &monomorphic())
         .expect("a name is declared once");
 
-    let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(2)));
+    let term = Term::intrinsic(Intrinsic::nat_add(
+        Term::instance(x, Universes::default()),
+        nat(2),
+    ));
 
     assert_eq!(whnf(&mut kernel, term), Ok(nat(4)));
 }

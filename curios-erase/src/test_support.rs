@@ -90,12 +90,6 @@ pub fn erase_alone(unit: &curios_core::Zonked<curios_core::Module>) -> Result<Er
     erase_unit(&mut kernel, Erasures::nothing(), unit)
 }
 
-/// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
-#[cfg(test)]
-pub fn global(path: &str) -> curios_core::Free {
-    curios_core::Free::global(Qualifier::from([path]))
-}
-
 /// A reference to the top-level definition `path` names, at no levels: what elaboration leaves for one generalized over none. Fixture-only.
 #[cfg(test)]
 pub fn reference(path: &str) -> curios_core::Term {

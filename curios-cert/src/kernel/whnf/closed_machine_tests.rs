@@ -21,7 +21,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     let define = |kernel: &mut Kernel| {
         kernel
             .define(
-                &Free::Global(g),
+                &g,
                 &unary,
                 &Term::func(
                     [(x, nat_type())],
@@ -32,7 +32,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
             .expect("a name is declared once");
         kernel
             .define(
-                &Free::Global(twice),
+                &twice,
                 &Term::func_type([(f, unary.clone())], unary.clone()),
                 &Term::func(
                     [(f, unary.clone())],
@@ -66,7 +66,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
         "the machine and the strategy agree on the function handed back"
     );
     assert!(
-        reduct.mentions_free(&Free::Global(g)),
+        reduct.mentions_declaration(&g),
         "the argument survives as the name it was passed as:\n{reduct}"
     );
 }
@@ -82,7 +82,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     let define = |kernel: &mut Kernel| {
         kernel
             .define(
-                &Free::Global(g),
+                &g,
                 &unary,
                 &Term::func(
                     [(x, nat_type())],
@@ -93,7 +93,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
             .expect("a name is declared once");
         kernel
             .define(
-                &Free::Global(twice),
+                &twice,
                 &Term::func_type([(f, unary.clone())], unary.clone()),
                 &Term::func(
                     [(f, unary.clone())],
@@ -131,7 +131,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
         "the machine and the strategy agree on the function handed back"
     );
     assert!(
-        witness.mentions_free(&Free::Global(g)),
+        witness.mentions_declaration(&g),
         "the witness survives as the instance it was passed as:\n{witness}"
     );
 
@@ -139,7 +139,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
         .reduce(passed(Plicity::Explicit))
         .expect("the machine reduces");
     assert!(
-        !ordinary.mentions_free(&Free::Global(g)),
+        !ordinary.mentions_declaration(&g),
         "an instance passed as an ordinary argument is evaluated:\n{ordinary}"
     );
 }
@@ -623,11 +623,11 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
 
     let mut machined = kernel();
     machined
-        .declare(&Free::Global(g), &unary, &monomorphic())
+        .declare(&g, &unary, &monomorphic())
         .expect("declared once");
     let mut strategy = strategy_kernel();
     strategy
-        .declare(&Free::Global(g), &unary, &monomorphic())
+        .declare(&g, &unary, &monomorphic())
         .expect("declared once");
 
     assert_eq!(
@@ -647,11 +647,11 @@ fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_
     let unary = Term::func_type([(x, nat_type())], nat_type());
     let declare = |kernel: &mut Kernel| {
         kernel
-            .declare(&Free::Global(g), &unary, &monomorphic())
+            .declare(&g, &unary, &monomorphic())
             .expect("declared once");
         kernel
             .define(
-                &Free::Global(wrap),
+                &wrap,
                 &unary,
                 &Term::func(
                     [(x, nat_type())],

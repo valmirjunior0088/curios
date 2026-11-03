@@ -1,7 +1,9 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term, Universes},
+    curios_core::{
+        DefinitionKind, Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term, Universes,
+    },
     curios_utilities::Qualifier,
     std::rc::Rc,
 };
@@ -80,16 +82,24 @@ fn spin(context: &mut Context) -> RecGroup {
 /// A group two declarations define is named by the one reduction opened it from, in either order the two are defined: what a committed term calls it follows what its own declaration unfolded, and no order the unit's declarations were elaborated in.
 #[test]
 fn a_group_two_names_define_is_named_by_the_one_reduction_opened() {
-    let name = |label: &str| Free::Global(Global::Authored(Qualifier::from([label])));
+    let name = |label: &str| Global::Authored(Qualifier::from([label]));
 
     for order in [["first", "second"], ["second", "first"]] {
         let mut context = Context::new(100_000, SYNTAX);
         let group = spin(&mut context);
         for label in order {
-            context.define(&name(label), &Term::rec_proj(group.clone(), 0), None);
+            context.define_declaration(
+                &name(label),
+                &Term::rec_proj(group.clone(), 0),
+                &DefinitionKind::Authored,
+            );
         }
 
-        assert!(context.var_reduct(&name("first")).is_some());
+        assert!(
+            context
+                .value_at(&name("first"), &Universes::default())
+                .is_some()
+        );
         assert_eq!(
             super::named_members(&context, &Term::rec_proj(group, 0)),
             Term::instance(

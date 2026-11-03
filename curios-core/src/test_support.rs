@@ -1,8 +1,8 @@
-//! Re-folding a finished [`Program`] into one nested term, for the suites that assert against that shape.
+//! Scaffolding other crates' suites build Core fixtures with.
 //!
-//! A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_core::test_support::into_nested_term(module)` says at its use site that the caller reached for scaffolding rather than product API, which a `Module::into_nested_term` method sitting beside `nominal_plicities` would not. The path is the warning label.
+//! A namespace rather than a root export, for `curios-native`'s `test_support` reason: a call through `curios_core::test_support` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
 //!
-//! **Behind `test-support`, not `#[cfg(test)]`.** The caller is `curios-text`'s lowering suite, a different crate, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to it. The gate is also what keeps a shape no compiler stage produces out of every build that ships.
+//! **Behind `test-support`, not `#[cfg(test)]`.** The callers are other crates' suites, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to them. The gate is also what keeps a shape no compiler stage produces out of every build that ships.
 
 use {
     crate::*,
@@ -12,26 +12,6 @@ use {
         rc::Rc,
     },
 };
-
-/// Re-fold the program's flat module into a nested `Let`/`Rec` [`Term`] around the entry's body (items are already in binding order).
-///
-/// Lets the `into_core` suite assert against a single term. Drops the entry's type, which that suite's `run` helper does not return.
-pub fn into_nested_term(program: Program) -> Term {
-    program
-        .module
-        .items
-        .into_iter()
-        .rev()
-        .fold(program.entry.body, |acc, item| match item {
-            Item::Let(def) => Term::let_(&Free::from(&def.name), def.type_, def.body, acc),
-            Item::Rec(rec) => Term::rec(
-                rec.definitions()
-                    .into_iter()
-                    .map(|def| (Free::from(&def.name), def.type_, def.body)),
-                acc,
-            ),
-        })
-}
 
 /// A match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`]. The elaborator builds one where it decides the result, so the node whole is a fixture's to ask for.
 pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases) -> Term {

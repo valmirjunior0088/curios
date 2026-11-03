@@ -4,7 +4,7 @@
 
 use {
     crate::{Context, declared},
-    curios_core::{Advance, Free, Func, Global, Struct, Subterm, Term, Universes},
+    curios_core::{Advance, Func, Global, Struct, Subterm, Term, Universes},
 };
 
 /// `body`, the zonked body of the witness `name`, with every read of one of its own methods that does not itself mention `name` replaced by that method's term.
@@ -12,7 +12,9 @@ use {
 /// Rewritten to a fixed point, since a method cleared of the name is one the others may then read. A body that is no concept literal under its parameters, and one that reads no such method, is returned as it stands.
 pub fn own_methods_read(context: &mut Context, name: Global, body: &Term) -> Term {
     // What the body names the witness by: the local its group names it by while it elaborates ([`Context::within_group`]).
-    let free = context.group_member(&name).unwrap_or(Free::Global(name));
+    let free = context
+        .group_member(&name)
+        .expect("a witness's own methods are read while its group names it");
     if !body.mentions_free(&free) {
         return body.clone();
     }

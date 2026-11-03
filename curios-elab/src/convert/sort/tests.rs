@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term, Universes},
+    curios_core::{DefinitionKind, Free, Global, Intrinsic, Level, Nat, Quality, Term, Universes},
     curios_utilities::Qualifier,
 };
 
@@ -139,18 +139,17 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
 
     let mut declare = |path: &str, sort: Term| {
         let declared = Global::Authored(Qualifier::from([path]));
-        let name = Free::Global(declared);
-        context.assume(
-            &name,
+        context.declare(
+            &declared,
             &Term::func_type([(Free::local(80, Some("n")), nat_type.clone())], sort),
         );
-        context.define(
-            &name,
+        context.define_declaration(
+            &declared,
             &Term::func(
                 [(Free::local(81, Some("n")), nat_type.clone())],
                 Term::free_var(&proposition),
             ),
-            None,
+            &DefinitionKind::Authored,
         );
 
         Term::instance(declared, Universes::default())

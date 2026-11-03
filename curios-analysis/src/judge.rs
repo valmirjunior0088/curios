@@ -64,11 +64,14 @@ pub trait Env {
     /// `&mut self` for the *implementors'* sake — both mint from an interior counter and could take `&self`, but the elaborator's method is spelled `&mut` and a trait should not force a signature change to satisfy it.
     fn fresh(&mut self, hint: Option<&str>) -> Free;
 
-    /// Whether `name` is a local the walk in progress opened, as opposed to a top-level name, whose meaning no case can refine. A local may carry a definition — the elaborator keeps a `let` as one, where the kernel hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
+    /// Whether the local `name` is in scope of the walk in progress. A local may carry a definition — the elaborator keeps a `let` as one, where the kernel hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
     fn is_local(&self, name: &Free) -> bool;
 
-    /// What `name` unfolds to through its *definition* — never through a refinement. The two implementations are semantically identical, which is deliberate: a definitions-only reading needs no invariant about when the elaborator's refinement store happens to be empty.
+    /// What the local `name` unfolds to through its *definition* — never through a refinement, which a definitions-only reading needs no invariant about.
     fn unfold(&self, name: &Free) -> Option<&Term>;
+
+    /// What the declaration `name` was defined as, under its own universe parameters: what a definition is to an analysis of its scheme, which asks what the body names and reads no level of it. The two implementations are semantically identical.
+    fn body(&self, name: &Global) -> Option<&Term>;
 
     /// The registry entry for an `induct` declaration, or `None` when the name is not one.
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl>;

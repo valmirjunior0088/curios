@@ -265,12 +265,7 @@ fn a_reader_looks_up_and_notes_what_it_read() {
     let family = declare_ix(&mut kernel);
     let name = Global::Authored(Qualifier::from(["three"]));
     kernel
-        .define(
-            &Free::Global(name),
-            &nat_type(),
-            &nat(3),
-            &UniverseContext::default(),
-        )
+        .define(&name, &nat_type(), &nat(3), &UniverseContext::default())
         .expect("a name is defined once");
     let _ = kernel.take_reads();
 

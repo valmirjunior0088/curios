@@ -89,17 +89,22 @@ fn only_a_walk_that_rewrites_an_entry_loses_the_identity() {
 #[test]
 fn a_spine_holds_the_names_of_its_entries() {
     let (a, b) = (local(1, "a"), local(2, "b"));
-    let g = Free::Global(Global::Authored(Qualifier::from(["g"])));
+    let g = Global::Authored(Qualifier::from(["g"]));
     let spine = MetavarSpine::from(vec![
         Term::free_var(&a),
         Term::apply(
-            Term::instance(*g.as_global().expect("a declaration"), Universes::default()),
+            Term::instance(g, Universes::default()),
             [Term::free_var(&a)],
         ),
         Term::free_var(&b),
     ]);
-    let names = |spine: &MetavarSpine| spine.free_vars().iter().copied().collect::<Vec<_>>();
-    assert_eq!(names(&spine), [g, a, b]);
+    let names = |spine: &MetavarSpine| spine.mentions().iter().copied().collect::<Vec<_>>();
+    let (g, held_a, held_b) = (
+        Mention::Declaration(g),
+        Mention::Local(a),
+        Mention::Local(b),
+    );
+    assert_eq!(names(&spine), [g, held_a, held_b]);
 
     let rewritten = spine
         .rewritten(
@@ -107,7 +112,7 @@ fn a_spine_holds_the_names_of_its_entries() {
             |entry| (*entry == Term::free_var(&a)).then(|| Term::var(Var::bound(0))),
         )
         .expect("an entry was rewritten");
-    assert_eq!(names(&rewritten), [g, a, b]);
+    assert_eq!(names(&rewritten), [g, held_a, held_b]);
 
     let rewritten = rewritten
         .rewritten(
@@ -115,7 +120,7 @@ fn a_spine_holds_the_names_of_its_entries() {
             |entry| (*entry == Term::free_var(&b)).then(|| Term::var(Var::bound(1))),
         )
         .expect("an entry was rewritten");
-    assert_eq!(names(&rewritten), [g, a]);
+    assert_eq!(names(&rewritten), [g, held_a]);
     assert!(rewritten.mentions_any(&Names::new([a, b])));
     assert!(!rewritten.mentions_any(&Names::new([b])));
 }
@@ -126,11 +131,11 @@ fn a_metavariables_set_is_its_spines() {
     let spine = MetavarSpine::identity_over(&[local(0, "a"), local(1, "b"), local(2, "c")]);
     let hole = Term::metavar_birthed(MetavarId(5), MetavarOrigin::Hole, spine.clone());
 
-    assert!(hole.free_vars().shares(&spine.free_vars()));
+    assert!(hole.mentions().shares(&spine.mentions()));
     assert!(
         Term::tuple([hole.clone(), Term::free_var(&local(1, "b"))])
-            .free_vars()
-            .shares(&spine.free_vars())
+            .mentions()
+            .shares(&spine.mentions())
     );
 }
 
@@ -157,7 +162,7 @@ fn a_rewrite_passes_over_the_runs_it_cannot_change() {
     assert_eq!(visited, 1);
     assert_eq!(captured.reach(), 1);
     assert_eq!(captured.newest_local(), Some(9_998));
-    assert_eq!(captured.free_vars().len(), 9_999);
+    assert_eq!(captured.mentions().len(), 9_999);
 }
 
 /// The metavariables born under one scope share its spine, and a capture over that scope's binders rewrites it once for all of them: a codomain holding an operator a parameter would otherwise rewrite the whole scope at each of the operator's metavariables.

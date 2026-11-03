@@ -53,11 +53,6 @@ impl Mint {
         self.hint.map(|hint| hint.as_str())
     }
 
-    /// The index, for a node's cache, which keeps the newest local the node holds packed as a number and compares it against a binder's ([`Term::newest_local`](crate::Term)). Read to compare, never as a count.
-    pub(crate) fn index(&self) -> u64 {
-        self.index
-    }
-
     /// The hint as the interned symbol it is kept as, for a scope that remembers it without re-interning its spelling.
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
         self.hint
@@ -145,8 +140,8 @@ impl Global {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum CalleeId {
-    /// A function or constructor the program names — a top-level definition, or a local binder holding one. A local carries no path to shorten, so only the global case meets the spelling tables.
-    Function(Free),
+    /// A function or constructor the program names — a declaration, or a local binder holding one. A local carries no path to shorten, so only a declaration meets the spelling tables.
+    Function(Mention),
     /// A constructor, carried as the declaration it belongs to together with its own tag, because that pair is how a program writes one: a bare tag is not a name in scope, and the declaration alone does not say which constructor.
     Constructor { owner: Global, tag: String },
     /// A witness, which is anonymous by design: carried as its own identity, and named by concept and key when a report renders it.
@@ -288,27 +283,22 @@ impl curios_archive::Proxy<Sorted<Global, Rc<Mints>>> for ByDeclarationProxy {
     }
 }
 
-/// A free variable's identity: a top-level definition, or a binder some scope opened.
-///
-/// The distinction is a discriminant rather than a spelling convention. Asking "is this a local?" is a `matches!` — exact, and impossible to get wrong the way a marker character in a string could be.
+/// A free variable's identity: a binder some scope opened. A declaration is no variable — a term names one by its instance ([`Instance`](crate::Instance)) or, before elaboration, as it is written ([`Transient::Name`](crate::Transient::Name)) — so a name a term mentions is a [`Mention`], of which a free variable is one kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-pub enum Free {
-    Global(Global),
-    Local(Mint),
-}
+pub struct Free(Mint);
 
 impl Free {
     /// A local binder with identity `index`, rendering as `hint`.
     ///
     /// An index means something within the declaration that minted it and nowhere else: the lowering and the elaborator share one space per declaration, the elaborator's counter starting above the lowering's count ([`Mints::binders`]), and no stored term carries one.
     pub fn local(index: u64, hint: Option<&str>) -> Self {
-        Free::Local(Mint::new(index, hint))
+        Free(Mint::new(index, hint))
     }
 
     /// [`Free::local`] for a binder written in source, at `written` among its declaration's written binders. A local opened from its scope is no such binder: the place stays with the scope, for whoever opens it to read.
     pub fn local_written(index: u64, hint: Option<&str>, written: u32) -> Self {
-        Free::Local(Mint {
+        Free(Mint {
             written: Some(written),
             ..Mint::new(index, hint)
         })
@@ -316,66 +306,101 @@ impl Free {
 
     /// [`Free::local`] for a caller that already holds the hint as a symbol — a printer reopening a scope under the hint it remembers.
     pub(crate) fn local_hinted(index: u64, hint: Option<Symbol>) -> Self {
-        Free::Local(Mint {
+        Free(Mint {
             index,
             hint,
             written: None,
         })
     }
 
-    /// A definition at an authored path.
-    pub fn global(qualifier: Qualifier) -> Self {
-        Free::Global(Global::Authored(qualifier))
-    }
-
-    /// The top-level definition this names, if it names one.
-    pub fn as_global(&self) -> Option<&Global> {
-        match self {
-            Free::Global(global) => Some(global),
-            Free::Local(_) => None,
-        }
-    }
-
-    /// The raw counter behind a locally minted name, or `None` for a global.
+    /// The raw counter behind the binder's identity.
     ///
     /// What a checker minting binders of its own must stay clear of: the kernel raises its counter above every local it is handed (`Kernel::assume`), and refuses a module or entry mentioning one it was not.
-    pub fn local_index(&self) -> Option<u64> {
-        self.as_local().map(|mint| mint.index)
+    pub fn index(&self) -> u64 {
+        self.0.index
     }
 
-    pub(crate) fn as_local(&self) -> Option<&Mint> {
-        match self {
-            Free::Local(mint) => Some(mint),
-            Free::Global(_) => None,
-        }
-    }
-
-    /// Whether this is a binder some scope opened, as opposed to a top-level definition. The typed replacement for testing a spelling for a marker character — see [`Subterm::newest_local`](crate::Subterm).
-    pub fn is_local(&self) -> bool {
-        matches!(self, Free::Local(_))
-    }
-
-    /// Whether source can spell this identity: a global's path, or a local's written hint. A hintless local is compiler-minted — an anonymous or invented binder no written expression can reference — so a diagnostic spells it `_` rather than offering it as something to paste.
+    /// Whether source can spell this binder: whether it has a written hint. A hintless local is compiler-minted — an anonymous or invented binder no written expression can reference — so a diagnostic spells it `_` rather than offering it as something to paste.
     pub fn nameable(&self) -> bool {
-        match self {
-            Free::Global(_) => true,
-            Free::Local(mint) => mint.hint().is_some(),
-        }
+        self.0.hint().is_some()
     }
 
-    /// What a diagnostic should call this, if there is anything better than its rendered form: a local's minting hint, or nothing for a global, whose rendering the printer shortens against the module it appears in.
+    /// What a diagnostic should call this, if there is anything better than its rendered form: its minting hint.
     pub fn hint(&self) -> Option<&str> {
-        self.as_local().and_then(Mint::hint)
+        self.0.hint()
     }
 
     /// [`Free::hint`] as the interned symbol it is kept as.
     pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
-        self.as_local().and_then(Mint::hint_symbol)
+        self.0.hint_symbol()
     }
 
-    /// This name as the compiler holds it — see [`Global::faithful`]: a global in full, a local as its hint and index.
+    /// Where this binder sits among its declaration's written binders, when the lowering wrote it.
+    pub(crate) fn written(&self) -> Option<u32> {
+        self.0.written()
+    }
+
+    /// This binder as the compiler holds it — see [`Global::faithful`]: its hint and index.
     pub fn faithful(&self) -> Faithful<'_, Self> {
         Faithful(self)
+    }
+}
+
+/// A name a term mentions: a declaration it names, or a free variable.
+///
+/// Ordered declarations first, then the locals by mint, so a set of them reads its locals from the least without passing the declarations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
+pub enum Mention {
+    Declaration(Global),
+    Local(Free),
+}
+
+impl From<Free> for Mention {
+    fn from(local: Free) -> Self {
+        Mention::Local(local)
+    }
+}
+
+impl From<Global> for Mention {
+    fn from(declaration: Global) -> Self {
+        Mention::Declaration(declaration)
+    }
+}
+
+impl From<&Free> for Mention {
+    fn from(local: &Free) -> Self {
+        Mention::Local(*local)
+    }
+}
+
+impl From<&Global> for Mention {
+    fn from(declaration: &Global) -> Self {
+        Mention::Declaration(*declaration)
+    }
+}
+
+impl From<&Mention> for Mention {
+    fn from(mention: &Mention) -> Self {
+        *mention
+    }
+}
+
+impl Mention {
+    /// The declaration this names, if it names one.
+    pub fn as_declaration(&self) -> Option<&Global> {
+        match self {
+            Mention::Declaration(declaration) => Some(declaration),
+            Mention::Local(_) => None,
+        }
+    }
+
+    /// The free variable this is, if it is one.
+    pub fn as_local(&self) -> Option<&Free> {
+        match self {
+            Mention::Local(local) => Some(local),
+            Mention::Declaration(_) => None,
+        }
     }
 }
 
@@ -421,12 +446,6 @@ mod archived_mint {
     }
 }
 
-impl From<&Global> for Free {
-    fn from(global: &Global) -> Self {
-        Free::Global(*global)
-    }
-}
-
 impl fmt::Display for Mint {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.hint {
@@ -447,10 +466,7 @@ impl fmt::Display for Faithful<'_, Global> {
 
 impl fmt::Display for Faithful<'_, Free> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Free::Global(global) => write!(formatter, "{}", global.faithful()),
-            Free::Local(mint) => write!(formatter, "{mint}"),
-        }
+        write!(formatter, "{}", self.0.0)
     }
 }
 

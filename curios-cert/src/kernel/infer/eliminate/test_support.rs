@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
-        UniverseContext,
+        UniverseContext, Universes,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -200,7 +200,8 @@ pub(super) fn succ(tail: Term) -> Term {
 /// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
 ///
 /// [`opaque_family`] below can only witness the index half of a motive, and a catch-all refines no index — so nothing built from it can tell the scrutinee instances apart.
-pub(super) fn scrutinee_family(kernel: &mut Kernel, name: Free, family: &Global) -> Term {
+pub(super) fn scrutinee_family(kernel: &mut Kernel, name: &str, family: &Global) -> Term {
+    let name = Global::Authored(Qualifier::from([name]));
     let index = binder(92, "n");
     kernel
         .declare(
@@ -219,11 +220,12 @@ pub(super) fn scrutinee_family(kernel: &mut Kernel, name: Free, family: &Global)
         )
         .expect("a name is declared once");
 
-    Term::free_var(&name)
+    Term::instance(name, Universes::default())
 }
 
 /// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
-pub(super) fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
+pub(super) fn opaque_family(kernel: &mut Kernel, name: &str) -> Term {
+    let name = Global::Authored(Qualifier::from([name]));
     kernel
         .declare(
             &name,
@@ -232,5 +234,5 @@ pub(super) fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
         )
         .expect("a name is declared once");
 
-    Term::free_var(&name)
+    Term::instance(name, Universes::default())
 }

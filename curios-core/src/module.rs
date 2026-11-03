@@ -8,8 +8,8 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, Free, Frees, FuncType, Global, InductDecl, Items, Lexicon,
-        Many, Marks, Members, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup,
+        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
+        Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup,
         RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols,
         Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessKey,
         build_shorten,
@@ -1014,18 +1014,18 @@ impl Definition {
         }
     }
 
-    /// Every top-level name this definition mentions, by free variable.
+    /// Every declaration this definition references.
     pub fn mentions(&self) -> BTreeSet<Global> {
-        let (body, type_) = (self.body.free_vars(), self.type_.free_vars());
-        body.iter()
-            .chain(&type_)
-            .filter_map(|free| free.as_global().copied())
+        let (body, type_) = (self.body.mentions(), self.type_.mentions());
+        body.declarations()
+            .chain(type_.declarations())
+            .copied()
             .collect()
     }
 
-    /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than the variable graph, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
+    /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than in a reference, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
     ///
-    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Module::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the variable edges alone serve.
+    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Module::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the reference edges alone serve.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = self.mentions();
         names.extend(construction_heads(&self.type_));
@@ -1579,7 +1579,7 @@ impl fmt::Display for Program {
 }
 
 impl Term {
-    /// The top-level names this term reaches: its global free variables, and the nominal heads of its constructions and type-former normal forms, which live in the registry rather than the variable graph.
+    /// The top-level names this term reaches: the declarations it references, and the nominal heads of its constructions and type-former normal forms, which live in the registry rather than in a reference.
     pub fn reaches(&self) -> BTreeSet<Global> {
         term_reaches(self)
     }
@@ -1589,11 +1589,11 @@ impl Entrypoint {
     /// Every free local the entry's body or stated type mentions — what a walk judging the entry beside its module refuses, as [`free_locals_of`] is for the module.
     pub fn free_locals(&self) -> BTreeSet<Free> {
         let (body, type_) = (
-            self.body.free_vars(),
-            self.type_.as_ref().map(Term::free_vars),
+            self.body.mentions(),
+            self.type_.as_ref().map(Term::mentions),
         );
         body.locals()
-            .chain(type_.iter().flat_map(Frees::locals))
+            .chain(type_.iter().flat_map(Mentions::locals))
             .copied()
             .collect()
     }
@@ -1651,12 +1651,12 @@ impl ConceptDecl {
     }
 }
 
-/// The names `term` reaches: its global free variables and its construction heads.
+/// The names `term` reaches: the declarations it references and its construction heads.
 fn term_reaches(term: &Term) -> BTreeSet<Global> {
     let mut names = term
-        .free_vars()
-        .iter()
-        .filter_map(|free| free.as_global().copied())
+        .mentions()
+        .declarations()
+        .copied()
         .collect::<BTreeSet<_>>();
     names.extend(construction_heads(term));
 
@@ -1774,14 +1774,14 @@ impl<B: Bound + Terms> Terms for Telescope<B> {
 ///
 /// A [`Bound`] behind a trait object rather than a generic parameter, so [`item_positions`] can offer one list of positions to more than one collector. Three reads: the two identities findable by looking at a term, which are the local binder indices it mentions and whether a metavariable node survives in it, and the terms themselves, for a read that asks where each was written.
 trait Carried {
-    fn free_vars(&self) -> Frees;
+    fn mentions(&self) -> Mentions;
     fn has_metavar(&self) -> bool;
     fn terms(&self, visit: &mut dyn FnMut(&Term));
 }
 
 impl<B: Bound + Terms> Carried for B {
-    fn free_vars(&self) -> Frees {
-        Bound::free_vars(self)
+    fn mentions(&self) -> Mentions {
+        Bound::mentions(self)
     }
 
     fn has_metavar(&self) -> bool {
@@ -1909,11 +1909,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
             return;
         }
 
-        if let Some(index) = carried
-            .free_vars()
-            .locals()
-            .find_map(|free| free.local_index())
-        {
+        if let Some(index) = carried.mentions().locals().next().map(Free::index) {
             found = Some(Positional::FreeLocal {
                 owner: owner.cloned(),
                 index,
@@ -1953,7 +1949,7 @@ pub fn free_locals_of<'a>(
     let mut visit = |owner: Option<&Global>, carried: &dyn Carried| {
         found.extend(
             carried
-                .free_vars()
+                .mentions()
                 .locals()
                 .map(|local| (owner.copied(), *local)),
         );

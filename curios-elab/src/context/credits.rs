@@ -30,8 +30,8 @@ impl Credits {
     /// Credit every written binder `proof` reads: a proof the elaborator wrote, which the author did not, reads it where no written name reaches it.
     pub fn credit(&mut self, proof: &Term) {
         let read = proof
-            .free_vars()
-            .iter()
+            .mentions()
+            .locals()
             .filter_map(|local| self.opened.get(local).copied())
             .collect::<Vec<_>>();
         self.credited.extend(read);

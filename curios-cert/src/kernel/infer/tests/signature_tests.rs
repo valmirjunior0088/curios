@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Atom, Declaration, Free, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity,
-        Reducer, Subterm, Telescope, Term, UniverseContext, Universes, Var, Visit,
+        Atom, Declaration, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity, Reducer,
+        Subterm, Telescope, Term, UniverseContext, Universes, Var, Visit,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_utilities::{Qualifier, SyntaxName},
@@ -60,7 +60,7 @@ fn kernel_with_bounds() -> Kernel<'static> {
     let decision = binder(0, "b");
     kernel
         .define(
-            &Free::global(SYNTAX.proof.holds.qualifier()),
+            &Global::Authored(SYNTAX.proof.holds.qualifier()),
             &Term::func_type([(binder(1, "b"), bool_type())], Term::prop()),
             &Term::func(
                 [(decision, bool_type())],

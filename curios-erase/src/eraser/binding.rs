@@ -37,8 +37,7 @@ impl Eraser<'_> {
                 curios_anf::Atom::Value(value)
             }
         };
-        self.environment
-            .bind(&curios_core::Free::from(&definition.name), atom);
+        self.environment.bind(definition.name, atom);
 
         Ok(())
     }

@@ -124,7 +124,7 @@ fn deep_terms_are_captured_without_native_recursion() {
     let captured = term.capture(&[&name]);
 
     assert!(
-        !captured.free_vars().contains(&name),
+        !captured.mentions().contains(name),
         "every occurrence was bound"
     );
 }
@@ -283,12 +283,12 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             term.structural_hash() == doubled(base.clone(), 60).structural_hash(),
         ),
         ("ranking", term.rank() == doubled(base.clone(), 60).rank()),
-        ("free variables", term.free_vars().contains(&x)),
+        ("free variables", term.mentions().contains(x)),
         (
             "a telescope's free variables",
             Telescope::build([(Free::local(2, Some("t")), term.clone())], term.clone())
-                .free_vars()
-                .contains(&x),
+                .mentions()
+                .contains(x),
         ),
         ("universe metavariables", term.universe_metas().len() == 1),
         ("a needle sought", term.mentions_term(&base)),

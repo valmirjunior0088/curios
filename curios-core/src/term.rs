@@ -7,9 +7,9 @@ mod tests;
 mod scalars;
 use scalars::*;
 
-mod frees;
-use frees::*;
-pub use frees::{Frees, FreesIter, Names};
+mod mentions;
+use mentions::*;
+pub use mentions::{Mentions, MentionsIter, Names};
 
 mod rank;
 
@@ -32,8 +32,8 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Quality, QualityMetaId, Scope, Spelled, Spelling, Telescope, Three, Two,
-        UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, oldest_local, print_term,
+        MaskedLevels, Mention, Quality, QualityMetaId, Scope, Spelled, Spelling, Telescope, Three,
+        Two, UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, print_term,
         project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
@@ -52,14 +52,14 @@ use {
     },
 };
 
-/// The head identity a scrutinee-refinement key gates on: a named free-variable head, or the tag standing in for a comparison intrinsic whose normal form has no named head. Produced only by [`Term::head_key`], which documents the mechanism.
+/// The head identity a scrutinee-refinement key gates on: a named head, a declaration or a free variable, or the tag standing in for a comparison intrinsic whose normal form has no named head. Produced only by [`Term::head_key`], which documents the mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadTag {
-    Name(Free),
+    Name(Mention),
     Intrinsic(&'static str),
 }
 
-/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, position-independent derivations (a structural hash, `reach`, the free-variable set, the newest local, and the containment bits such as `has_metavar`) — with an optional per-occurrence extent: where it was written, in the text of the declaration that wrote it ([`Extent`]). Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The extent is identity-irrelevant: hash and equality look only at the node, so placing a term anew never splits a cache.
+/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, position-independent derivations (a structural hash, `reach`, the set of names it mentions, the newest local, and the containment bits such as `has_metavar`) — with an optional per-occurrence extent: where it was written, in the text of the declaration that wrote it ([`Extent`]). Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The extent is identity-irrelevant: hash and equality look only at the node, so placing a term anew never splits a cache.
 ///
 /// The caches are derivations, never identity: hash and equality answer the same before and after a fill, so a map keyed on `Term` is sound. The workspace `clippy.toml` states exactly that to `mutable_key_type`, which is why no `Term`-keyed map carries an `#[allow]` for it.
 #[derive(Debug, Clone)]
@@ -70,15 +70,15 @@ pub struct Term {
     inner: Rc<Node>,
 }
 
-/// A [`Subterm`] together with its memoized, position-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
+/// A [`Subterm`] together with its memoized, position-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_mentions`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
 #[curios_archive::archived]
 struct Node {
     /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
     #[archived_with(curios_archive::Skip)]
     scalars: ScalarCache,
-    /// The one derivation left lazy. A free-variable set per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
+    /// The one derivation left lazy. A set of mentions per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[archived_with(curios_archive::Skip)]
-    frees: FreeCache,
+    mentions: MentionCache,
     /// The node's universe-erased projection, filled on first demand and only for a node that carries universe data — a node that carries none projects to itself and stores nothing. What the elaborator's reduction cache keys on beside the exact term, so that two spellings of one term differing in nothing but their levels — the one checking wrote with metavariables and the one totality reads with them solved — reach one entry.
     #[archived_with(curios_archive::Skip)]
     erased: std::cell::OnceCell<Term>,
@@ -92,7 +92,7 @@ impl Node {
     fn new(subterm: Subterm) -> Self {
         Node {
             scalars: ScalarCache::default(),
-            frees: FreeCache::default(),
+            mentions: MentionCache::default(),
             erased: std::cell::OnceCell::new(),
             ranked: std::cell::OnceCell::new(),
             subterm,
@@ -162,7 +162,7 @@ impl Term {
         Rank::Tied(ranked.shape(), ranked)
     }
 
-    /// Fill the memoized summary bottom-up on a post-order [`Term::walk`], as [`Term::warm_frees`] fills the free-variable set: each node's is its children's joined with its own identities, a node holding none is its structural hash, and a metavariable's is its spine's, which the spine keeps as it is built, so its entries go unvisited.
+    /// Fill the memoized summary bottom-up on a post-order [`Term::walk`], as [`Term::warm_mentions`] fills the mentions: each node's is its children's joined with its own identities, a node holding none is its structural hash, and a metavariable's is its spine's, which the spine keeps as it is built, so its entries go unvisited.
     fn warm_ranked(&self) {
         if self.inner.ranked.get().is_some() {
             return;
@@ -212,7 +212,7 @@ impl Term {
             .expect("warm_ranked fills the summary")
     }
 
-    /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
+    /// Whether any *free* variable — a binder some scope opened — occurs in this term, read off the newest one the node keeps (`Term::newest_local`). Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
         self.scalars().newest_local.is_some()
     }
@@ -459,13 +459,13 @@ impl Term {
         }
     }
 
-    /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. What a scrutinee refinement's probe is gated on, through [`Term::head_key`], before a key is built.
-    pub fn head_name(&self) -> Option<Free> {
+    /// The name at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`, the declaration it references or the free variable it is. A bare name reports itself; anything else is `None`. What a scrutinee refinement's probe is gated on, through [`Term::head_key`], before a key is built.
+    pub fn head_name(&self) -> Option<Mention> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
             Subterm::Instance(Instance { name, .. })
-            | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
-            Subterm::Var(var) => var.as_free().copied(),
+            | Subterm::Transient(Transient::Name(name)) => Some(Mention::Declaration(*name)),
+            Subterm::Var(var) => var.as_free().copied().map(Mention::Local),
             _ => None,
         }
     }
@@ -677,8 +677,13 @@ impl Term {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::Instance(Instance { name, .. })
-            | Subterm::Transient(Transient::Name(name)) => Some(HeadTag::Name(Free::Global(*name))),
-            Subterm::Var(var) => var.as_free().copied().map(HeadTag::Name),
+            | Subterm::Transient(Transient::Name(name)) => {
+                Some(HeadTag::Name(Mention::Declaration(*name)))
+            }
+            Subterm::Var(var) => var
+                .as_free()
+                .copied()
+                .map(|local| HeadTag::Name(Mention::Local(local))),
             // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key could be registered but never looked up, and an operator-spelled scrutinee would lose its arm refinement where the equivalent `Nat/le(a, b)` keeps it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
                 Intrinsic::BoolAnd(..) => Some(HeadTag::Intrinsic("intrinsic:BoolAnd")),
@@ -1342,21 +1347,19 @@ impl Term {
         for (place, binder) in binders.iter().enumerate() {
             places.entry(**binder).or_insert(place);
         }
-        let closed = |term: &Term, count: usize, oldest: Option<u64>| {
+        let closed = |term: &Term, count: usize, oldest: u64| {
             capture_placed(term, count, oldest, |name| {
                 places.get(name).copied().filter(|&place| place < count)
             })
         };
-        let mut oldest = Some(u64::MAX);
+        let mut oldest = u64::MAX;
         let mut bindings = Vec::with_capacity(items.len());
         for (index, (binder, type_, value)) in items.iter().enumerate() {
             bindings.push(match index {
                 0 => LetBinding::new(type_.clone(), value.clone()),
                 _ => LetBinding::new(closed(type_, index, oldest), closed(value, index, oldest)),
             });
-            oldest = oldest_local(&[binder])
-                .zip(oldest)
-                .map(|(this, before)| this.min(before));
+            oldest = oldest.min(binder.index());
         }
 
         // The tail keeps where it was written, as in [`Term::let_`].
@@ -2452,8 +2455,8 @@ impl Bound for Term {
     }
 
     /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — fills its set once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.
-    fn free_vars(&self) -> Frees {
-        Term::free_vars(self)
+    fn mentions(&self) -> Mentions {
+        Term::mentions(self)
     }
 }
 
@@ -2516,7 +2519,7 @@ impl Term {
     ///
     /// The one place a traversal or a reduction turns a payload back into a `Term`, so the sharing rule is stated once rather than at each reconstruction, and so is the β-step that makes a former's η-form ([`former_eta`]) applied over its whole parameter list the node it applies. A reduction that leaves a node as it was — a type former over an argument that reduced to itself — hands back the allocation it was given, so a value reduced again is that allocation, and a table keyed by it meets the allocation it holds rather than an equal one compared node by node. Every child is compared by [`Term::eq`], whose first act is `Rc::ptr_eq`, so an untouched child settles in one pointer comparison and an untouched subtree of any size settles at its root: the check cascades, because unchanged leaves are what make a parent unchanged.
     ///
-    /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
+    /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `mentions` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
     /// No caller can tell the difference, because two of them already receive the original node: `Visit::universes_only` and `Visit::passes_over` both short-circuit to `self.clone()`. An extent lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here (`Term::consed`): the node handed back holds the children it had, where consing is the replacing of them.
     pub fn rebuilt(&self, subterm: Subterm) -> Self {
@@ -2654,53 +2657,71 @@ impl Term {
 }
 
 impl Term {
-    /// Fill the memoized free-variable set bottom-up on a post-order [`Term::walk`]: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. The filled bit is the walk's memo, exactly as in [`Term::warm_scalars`].
+    /// Fill the memoized mentions bottom-up on a post-order [`Term::walk`]: each node's set is its children's sets unioned with its own name (if it is a free `Var` or a reference), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. The filled bit is the walk's memo, exactly as in [`Term::warm_scalars`].
     ///
     /// A filled set is read as it stands, as [`Term::scalars`] reads its cache before it walks: every read of a set comes through here, and a walk allocates its frame stack before its first hook finds the root filled.
-    fn warm_frees(&self) {
-        if self.inner.frees.is_filled() {
+    fn warm_mentions(&self) {
+        if self.inner.mentions.is_filled() {
             return;
         }
         self.walk(
             &mut (),
             |_, term| {
-                if term.inner.frees.is_filled() {
+                if term.inner.mentions.is_filled() {
                     return Enter::Skip(());
                 }
                 // A metavariable's set is its spine's, which the spine keeps as it is built: filled here, its entries unvisited, where descending would take every binder in scope.
                 if let Subterm::Metavar(_) = term.look() {
-                    term.inner.frees.fill(term.look().free_vars_from_children());
+                    term.inner
+                        .mentions
+                        .fill(term.look().mentions_from_children());
                     return Enter::Skip(());
                 }
                 Enter::Descend
             },
-            |_, term, _| term.inner.frees.fill(term.look().free_vars_from_children()),
+            |_, term, _| {
+                term.inner
+                    .mentions
+                    .fill(term.look().mentions_from_children())
+            },
         );
     }
 
-    fn get_or_init_free_vars(&self) -> &Frees {
-        self.warm_frees();
+    fn get_or_init_mentions(&self) -> &Mentions {
+        self.warm_mentions();
         self.inner
-            .frees
+            .mentions
             .get()
-            .expect("warm_frees fills the free-variable cache")
+            .expect("warm_mentions fills the mention cache")
     }
 
-    /// Whether `name` occurs free in this term. A local is answered by the newest local the node keeps where that decides — none newer than it, or it the newest — and any other name by the memoized set [`Bound::free_vars`] fills, as a membership probe instead of a set clone (`FreeCache::contains`): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
+    /// Whether `name` occurs free in this term. It is answered by the newest local the node keeps where that decides — none newer than it, or it the newest — and otherwise by the memoized set [`Bound::mentions`] fills, as a membership probe instead of a set clone (`MentionCache::contains`): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
     pub fn mentions_free(&self, name: &Free) -> bool {
-        if let Some(index) = name.local_index() {
-            match self.newest_local() {
-                None => return false,
-                Some(newest) if newest < index => return false,
-                Some(newest) if newest == index => return true,
-                Some(_) => {}
-            }
+        match self.newest_local() {
+            None => return false,
+            Some(newest) if newest < name.index() => return false,
+            Some(newest) if newest == name.index() => return true,
+            Some(_) => {}
         }
-        self.warm_frees();
-        self.inner.frees.contains(name)
+        self.warm_mentions();
+        self.inner.mentions.contains(&Mention::Local(*name))
     }
 
-    /// Whether any of `names` occurs free in this term: none does where every name is a local newer than the newest local the node keeps, and otherwise the smaller of the two sets probes the other.
+    /// Whether this term references the declaration `name`, by the memoized set [`Bound::mentions`] fills.
+    pub fn mentions_declaration(&self, name: &Global) -> bool {
+        self.warm_mentions();
+        self.inner.mentions.contains(&Mention::Declaration(*name))
+    }
+
+    /// Whether this term mentions `name`, a free variable as [`Term::mentions_free`] answers and a declaration as [`Term::mentions_declaration`] does.
+    pub fn mentions_name(&self, name: &Mention) -> bool {
+        match name {
+            Mention::Local(local) => self.mentions_free(local),
+            Mention::Declaration(declaration) => self.mentions_declaration(declaration),
+        }
+    }
+
+    /// Whether this term mentions any of `names`: none where every name is a local newer than the newest local the node keeps, and otherwise the smaller of the two sets probes the other.
     pub fn mentions_any(&self, names: &Names) -> bool {
         if names.is_empty() {
             return false;
@@ -2711,9 +2732,9 @@ impl Term {
             return false;
         }
         if let Some(only) = names.only() {
-            return self.mentions_free(only);
+            return self.mentions_name(only);
         }
-        self.get_or_init_free_vars().holds_any(names)
+        self.get_or_init_mentions().holds_any(names)
     }
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
@@ -2751,13 +2772,13 @@ impl Term {
         .is_break()
     }
 
-    /// The first free name `picked` chooses, in the order the term holds its names, which is the order they are written in. A refusal that blames one name of several names this one, so the name it blames moves with the program and never with how names spell.
+    /// The first declaration `picked` chooses, in the order the term references them, which is the order they are written in. A refusal that blames one name of several names this one, so the name it blames moves with the program and never with how names spell.
     ///
-    /// `picked` is asked of each name the term holds free, in the set's order, so a caller that records what it asked records the same questions whatever is found. Where it chooses one name, that name is the answer and no node is walked; otherwise a walk in written order meets each node once and passes over a subterm that holds none of the chosen names.
-    pub fn first_free(&self, mut picked: impl FnMut(&Free) -> bool) -> Option<Free> {
+    /// `picked` is asked of each declaration the term references, in the set's order, so a caller that records what it asked records the same questions whatever is found. Where it chooses one name, that name is the answer and no node is walked; otherwise a walk in written order meets each node once and passes over a subterm that references none of the chosen names.
+    pub fn first_declaration(&self, mut picked: impl FnMut(&Global) -> bool) -> Option<Global> {
         let chosen = self
-            .get_or_init_free_vars()
-            .iter()
+            .get_or_init_mentions()
+            .declarations()
             .filter(|name| picked(name))
             .copied()
             .collect::<Vec<_>>();
@@ -2773,18 +2794,13 @@ impl Term {
                 if !seen.insert(Rc::as_ptr(&term.inner)) {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
-                let named = match &**term {
-                    Subterm::Var(var) => var.as_free().copied(),
-                    Subterm::Instance(Instance { name, .. })
-                    | Subterm::Transient(Transient::Name(name)) => Some(Free::Global(*name)),
-                    _ => None,
-                };
-                if let Some(name) = named
-                    && chosen.contains(&name)
+                if let Subterm::Instance(Instance { name, .. })
+                | Subterm::Transient(Transient::Name(name)) = &**term
+                    && chosen.contains(name)
                 {
-                    return ControlFlow::Break(name);
+                    return ControlFlow::Break(*name);
                 }
-                match chosen.iter().any(|name| term.mentions_free(name)) {
+                match chosen.iter().any(|name| term.mentions_declaration(name)) {
                     true => ControlFlow::Continue(Enter::Descend),
                     false => ControlFlow::Continue(Enter::Skip(())),
                 }
@@ -2795,7 +2811,7 @@ impl Term {
         match found {
             ControlFlow::Break(name) => Some(name),
             ControlFlow::Continue(()) => {
-                unreachable!("a name the term holds free is met by a walk of it")
+                unreachable!("a declaration the term references is met by a walk of it")
             }
         }
     }
@@ -2859,9 +2875,9 @@ impl Term {
         self.traverse(&mut visit)
     }
 
-    /// The free-variable identities of this term: its node's memoized set, filled from its children's where first asked, and handed out as a pointer's clone. Inherent so a `term.free_vars()` call routes through the memoized set (this and the [`Bound`] impl agree) rather than deref-ing to [`Subterm::free_vars`], which builds a node's set afresh, when the `Bound` trait is out of scope.
-    pub fn free_vars(&self) -> Frees {
-        self.get_or_init_free_vars().clone()
+    /// What this term mentions, the declarations it references and the free variables it holds: its node's memoized set, filled from its children's where first asked, and handed out as a pointer's clone. Inherent so a `term.mentions()` call routes through the memoized set (this and the [`Bound`] impl agree) rather than deref-ing to [`Subterm::mentions`], which builds a node's set afresh, when the `Bound` trait is out of scope.
+    pub fn mentions(&self) -> Mentions {
+        self.get_or_init_mentions().clone()
     }
 
     /// The ids of every metavariable in this term. Inherent, and gated on the memoized `has_metavar`: a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.

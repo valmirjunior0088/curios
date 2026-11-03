@@ -570,7 +570,7 @@ impl UniverseContext {
         }
     }
 
-    /// How many universe parameters of either kind the declaration binds, which is how much an instance of it states: nothing, for a declaration a bare occurrence denotes.
+    /// How many universe parameters of either kind the declaration binds, which is how much an instance of it states: nothing, for a monomorphic declaration.
     pub fn width(&self) -> usize {
         self.parameter_count + self.quality_count
     }

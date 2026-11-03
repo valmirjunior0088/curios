@@ -209,7 +209,7 @@ fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
 
     elaborate_and_zonk_module(&mut context, &module, &Rc::default()).expect_err("refused");
 
-    assert!(context.assumption(&Free::from(&nominal("a"))).is_none());
+    assert!(context.declared_type(&nominal("a")).is_none());
     assert_eq!(context.parked_len(), 0);
     assert!(context.take_needs().is_empty());
     assert_eq!(context.universes().constraint_count(), 0);
@@ -246,14 +246,10 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
         .collect::<Vec<_>>();
     assert_eq!(marked, [nominal("same")]);
 
-    let (same, two) = (Free::from(&nominal("same")), Free::from(&nominal("two")));
-    assert!(context.definition_body(&same).is_none());
-    assert!(
-        context
-            .var_reduct_at(&same, &Universes::default())
-            .is_none()
-    );
-    assert!(context.definition_body(&two).is_some());
+    let (same, two) = (nominal("same"), nominal("two"));
+    assert!(context.declaration_body(&same).is_none());
+    assert!(context.value_at(&same, &Universes::default()).is_none());
+    assert!(context.declaration_body(&two).is_some());
 
     let scope = Established::over(&[&elaborated]);
     let unfolds = |path| {

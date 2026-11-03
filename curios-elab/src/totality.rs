@@ -14,7 +14,7 @@ use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position},
     curios_analysis::{Erased, group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Entrypoint, Extent, Free, Global, Item, Module, Rec, RecGroup, RecItem,
+        Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
         Sharing, Subterm, Term, Totality,
     },
     std::{
@@ -55,7 +55,6 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
         &mut HashSet::new(),
         |seen: &mut HashSet<Term>, term| {
             let named = match &**term {
-                Subterm::Var(var) => var.as_free().and_then(Free::as_global).copied(),
                 Subterm::Instance(instance) => Some(instance.name),
                 _ => None,
             };
@@ -74,16 +73,13 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
     }
 }
 
-/// The first global `term` names by spelling whose recorded totality is not total, first as written ([`Term::first_free`]) — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
+/// The first declaration `term` references whose recorded totality is not total, first as written ([`Term::first_declaration`]) — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
 fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
-    term.first_free(|free| {
-        free.as_global().is_some_and(|name| {
-            context
-                .definition_totality(name)
-                .is_some_and(|totality| !totality.is_total())
-        })
+    term.first_declaration(|name| {
+        context
+            .definition_totality(name)
+            .is_some_and(|totality| !totality.is_total())
     })
-    .and_then(|free| free.as_global().copied())
 }
 
 /// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate would otherwise spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
@@ -228,7 +224,7 @@ fn faults(
     for name in named {
         let position = positions
             .iter()
-            .find(|position| position.term.mentions_free(&Free::Global(name)))
+            .find(|position| position.term.mentions_declaration(&name))
             .expect("a seed is a name some position writes");
         faults.push((
             ErasedSite::clone(&position.site),

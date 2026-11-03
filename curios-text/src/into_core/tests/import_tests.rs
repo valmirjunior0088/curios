@@ -216,25 +216,23 @@ fn brace_group_imports_all_labels() {
 #[test]
 fn glob_imports_all_public_bindings() {
     assert_eq!(
-        run(r#"
+        lowered(
+            r#"
             pub mod Foo
                 pub let x : Type = Type;
                 pub let y : Type = Type;
             end
             use /Foo/*;
             x
-        "#),
-        curios_core::Term::let_(
-            &global("/Foo/x"),
-            written_type(0),
-            written_type(1),
+        "#
+        ),
+        (
             // A declaration's levels count from zero, whatever is written before it.
-            curios_core::Term::let_(
-                &global("/Foo/y"),
-                written_type(0),
-                written_type(1),
-                curios_core::Term::written(global_name("/Foo/x"))
-            )
+            vec![
+                (global_name("/Foo/x"), written_type(0), written_type(1)),
+                (global_name("/Foo/y"), written_type(0), written_type(1)),
+            ],
+            curios_core::Term::written(global_name("/Foo/x")),
         ),
     );
 }
