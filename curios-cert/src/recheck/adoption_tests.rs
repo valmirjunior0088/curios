@@ -1339,6 +1339,470 @@ fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_i
     assert_eq!(over.verdicts, whole.verdicts);
 }
 
+/// A binder no fixture here spells, minted far above the small indices the suites use.
+fn minting() -> impl Fn(&'static str) -> Free {
+    let counter = std::cell::Cell::new(2000);
+
+    move |hint: &'static str| {
+        counter.set(counter.get() + 1);
+        Free::local(counter.get(), Some(hint))
+    }
+}
+
+/// Hurkens' paradox with `star` its sort, over the four products a record hands back, as `xboard`'s formation ticket for a group read under its reader's constraints spells one: `bottom`, `(A: star) -> A`; `small_universe`, its `U`; `over`, the product of a family over `℘S`; and `pi`, the product of a family over `S`. A term of `bottom`, its binders minted by `fresh`.
+fn hurkens(
+    fresh: &impl Fn(&'static str) -> Free,
+    star: &Term,
+    bottom: &Term,
+    small_universe: &Term,
+    over: &Term,
+    pi: &Term,
+) -> Term {
+    let star = star.clone();
+    let var = Term::free_var;
+    let not = |phi: Term| Term::func_type([(fresh("h"), phi)], bottom.clone());
+    let power = |set: Term| Term::func_type([(fresh("s"), set)], star.clone());
+    let universe = {
+        let (x, f) = (fresh("X"), fresh("f"));
+        let ppx = power(power(var(&x)));
+
+        Term::func_type(
+            [
+                (x, star.clone()),
+                (f, Term::func_type([(fresh("t"), ppx.clone())], var(&x))),
+            ],
+            ppx,
+        )
+    };
+    let pu = power(universe.clone());
+    let ppu = power(pu.clone());
+    // over(U, (p) => body(p)), the product over ℘U at `star`.
+    let forall = |body: &dyn Fn(&Free) -> Term| {
+        let p = fresh("p");
+
+        Term::apply(
+            over.clone(),
+            [universe.clone(), Term::func([(p, pu.clone())], body(&p))],
+        )
+    };
+    // pi(U, (x) => body(x)), the product over U at `star`.
+    let every = |body: &dyn Fn(&Free) -> Term| {
+        let x = fresh("x");
+
+        Term::apply(
+            pi.clone(),
+            [
+                universe.clone(),
+                Term::func([(x, universe.clone())], body(&x)),
+            ],
+        )
+    };
+
+    // τ t = (X, f) => (p) => t((x) => p(f(x(X, f)))).
+    let tau = {
+        let (t, x, f, p, y) = (fresh("t"), fresh("X"), fresh("f"), fresh("p"), fresh("x"));
+        let ppx = power(power(var(&x)));
+
+        Term::func(
+            [(t, ppu.clone())],
+            Term::func(
+                [
+                    (x, star.clone()),
+                    (f, Term::func_type([(fresh("t"), ppx)], var(&x))),
+                ],
+                Term::func(
+                    [(p, power(var(&x)))],
+                    Term::apply(
+                        var(&t),
+                        [Term::func(
+                            [(y, universe.clone())],
+                            Term::apply(
+                                var(&p),
+                                [Term::apply(
+                                    var(&f),
+                                    [Term::apply(var(&y), [var(&x), var(&f)])],
+                                )],
+                            ),
+                        )],
+                    ),
+                ),
+            ),
+        )
+    };
+    let tau_at = |t: Term| Term::apply(tau.clone(), [t]);
+
+    // σ s = s(U, (t) => τ t).
+    let sigma = {
+        let (s, t) = (fresh("s"), fresh("t"));
+
+        Term::func(
+            [(s, universe.clone())],
+            Term::apply(
+                var(&s),
+                [
+                    small_universe.clone(),
+                    Term::func([(t, ppu.clone())], tau_at(var(&t))),
+                ],
+            ),
+        )
+    };
+    let sigma_at = |s: Term| Term::apply(sigma.clone(), [s]);
+    let holds = |s: Term, p: Term| Term::apply(sigma_at(s), [p]);
+    let round = |s: Term| tau_at(sigma_at(s));
+
+    let shifted = |p: &Free| {
+        let y = fresh("y");
+
+        Term::func(
+            [(y, universe.clone())],
+            Term::apply(var(p), [round(var(&y))]),
+        )
+    };
+    let claim = |s: &Term| {
+        forall(&|p| {
+            Term::func_type(
+                [(fresh("h"), holds(s.clone(), var(p)))],
+                Term::apply(var(p), [round(s.clone())]),
+            )
+        })
+    };
+
+    // Δ = (y) => ¬claim(y).
+    let delta = {
+        let y = fresh("y");
+
+        Term::func([(y, universe.clone())], not(claim(&var(&y))))
+    };
+
+    // Ω = τ((p) => (x : U) -> (h: σ x p) -> p x).
+    let omega = {
+        let p = fresh("p");
+
+        tau_at(Term::func(
+            [(p, pu.clone())],
+            every(&|x| {
+                Term::func_type(
+                    [(fresh("h"), holds(var(x), var(&p)))],
+                    Term::apply(var(&p), [var(x)]),
+                )
+            }),
+        ))
+    };
+
+    // lem1 = (p, h1) => h1(Ω)((x) => (h2) => h1(τ(σ x))(h2)).
+    let lem1 = {
+        let (p, h1, x, h2, x1) = (fresh("p"), fresh("h1"), fresh("x"), fresh("h2"), fresh("x"));
+        let premise = Term::func_type(
+            [(x1, universe.clone())],
+            Term::func_type(
+                [(fresh("h"), holds(var(&x1), var(&p)))],
+                Term::apply(var(&p), [var(&x1)]),
+            ),
+        );
+
+        Term::func(
+            [(p, pu.clone()), (h1, premise)],
+            Term::apply(
+                Term::apply(var(&h1), [omega.clone()]),
+                [Term::func(
+                    [(x, universe.clone())],
+                    Term::func(
+                        [(h2, holds(var(&x), shifted(&p)))],
+                        Term::apply(Term::apply(var(&h1), [round(var(&x))]), [var(&h2)]),
+                    ),
+                )],
+            ),
+        )
+    };
+
+    // lem2 = lem1(Δ, (x) => (h2) => (h3) => h3(Δ)(h2)((p) => (h4) => h3((y) => p(τ(σ y)))(h4))).
+    let lem2 = {
+        let (x, h2, h3, p, h4) = (
+            fresh("x"),
+            fresh("h2"),
+            fresh("h3"),
+            fresh("p"),
+            fresh("h4"),
+        );
+
+        Term::apply(
+            lem1.clone(),
+            [
+                delta.clone(),
+                Term::func(
+                    [(x, universe.clone())],
+                    Term::func(
+                        [(h2, holds(var(&x), delta.clone()))],
+                        Term::func(
+                            [(h3, claim(&var(&x)))],
+                            Term::apply(
+                                Term::apply(Term::apply(var(&h3), [delta.clone()]), [var(&h2)]),
+                                [Term::func(
+                                    [(p, pu.clone())],
+                                    Term::func(
+                                        [(h4, holds(round(var(&x)), var(&p)))],
+                                        Term::apply(
+                                            Term::apply(var(&h3), [shifted(&p)]),
+                                            [var(&h4)],
+                                        ),
+                                    ),
+                                )],
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        )
+    };
+
+    // lem3 = (p) => (h) => lem1((y) => p(τ(σ y)), h).
+    let lem3 = {
+        let (p, h) = (fresh("p"), fresh("h"));
+
+        Term::func(
+            [(p, pu.clone())],
+            Term::func(
+                [(h, holds(omega.clone(), var(&p)))],
+                Term::apply(lem1.clone(), [shifted(&p), var(&h)]),
+            ),
+        )
+    };
+
+    Term::apply(lem2, [lem3])
+}
+
+/// `u + 1 <= w`, `v <= w`, `v + 1 <= x`, `w + 1 <= x`: the cumulativity the carrier's four products need, as `xboard`'s formation ticket states them.
+fn carrier_context() -> curios_core::UniverseContext {
+    use curios_core::{
+        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+    };
+
+    let param = |index: usize| Level::param(UniverseParam(index));
+    let raised = |index: usize| {
+        param(index)
+            .checked_add(1)
+            .expect("level admits the offset")
+    };
+    let bounded = |lower: Level, upper: Level| UniverseConstraint {
+        lower,
+        upper,
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+
+    UniverseContext {
+        parameter_count: 4,
+        quality_count: 0,
+        constraints: vec![
+            bounded(raised(0), param(2)),
+            bounded(param(1), param(2)),
+            bounded(raised(1), param(3)),
+            bounded(raised(2), param(3)),
+        ],
+    }
+}
+
+/// The same four parameters with none of the cumulativity declared: the context the filed unit carries.
+fn open_carrier_context() -> curios_core::UniverseContext {
+    use curios_core::UniverseContext;
+
+    UniverseContext {
+        parameter_count: 4,
+        quality_count: 0,
+        constraints: Vec::new(),
+    }
+}
+
+/// `carrier.{u, v, w, x} : <the record a one-member group computes> = <the four products>`, as a one-member top-level group under `universe_context`.
+///
+/// The declaration is `xboard`'s formation ticket's `carrier`, a `let` there and a group here: a group's context is what [`Baseline::holds`] does not read, and a `let`'s is.
+fn carrier_group(universe_context: curios_core::UniverseContext) -> Item {
+    use curios_core::{DefinitionKind, RecGroup, RecItem};
+
+    let param = |index: usize| Level::param(UniverseParam(index));
+    let fresh = minting();
+    let var = Term::free_var;
+    let small = Term::type_at(param(0));
+    let sized = Term::type_at(param(1));
+    let large = Term::type_at(param(2));
+    let power = |set: Term, sort: &Term| Term::func_type([(fresh("s"), set)], sort.clone());
+
+    // { bottom: Type w, universe: Type w,
+    //   over: (S: Type v, F: (℘S) -> Type u) -> Type w,
+    //   pi:   (S: Type v, F: (S) -> Type u) -> Type w }
+    let family =
+        |set: &Free| Term::func_type([(fresh("p"), power(var(set), &small))], small.clone());
+    let fibre = |set: &Free| Term::func_type([(fresh("x"), var(set))], small.clone());
+    let set = fresh("S");
+    let over_type = Term::func_type(
+        [(set, sized.clone()), (fresh("F"), family(&set))],
+        large.clone(),
+    );
+    let set = fresh("S");
+    let pi_type = Term::func_type(
+        [(set, sized.clone()), (fresh("F"), fibre(&set))],
+        large.clone(),
+    );
+    let products_type = Term::tuple_type([
+        (fresh("bottom"), large.clone()),
+        (fresh("universe"), large.clone()),
+        (fresh("over"), over_type),
+        (fresh("pi"), pi_type),
+    ]);
+
+    let products = RecGroup::closing(vec![(
+        fresh("products"),
+        Term::type_at(param(3)),
+        products_type,
+    )]);
+    let carrier_type = Term::rec_proj(products, 0);
+
+    // The four products themselves, checked against the record's field types under the declaration's constraints.
+    let a = fresh("A");
+    let bottom_body = Term::func_type([(a, small.clone())], var(&a));
+    let (big_x, f) = (fresh("X"), fresh("f"));
+    let ppx = power(power(var(&big_x), &small), &small);
+    let universe_body = Term::func_type(
+        [
+            (big_x, small.clone()),
+            (f, Term::func_type([(fresh("t"), ppx.clone())], var(&big_x))),
+        ],
+        ppx,
+    );
+    let (set, big_f, p) = (fresh("S"), fresh("F"), fresh("p"));
+    let over_body = Term::func(
+        [(set, sized.clone()), (big_f, family(&set))],
+        Term::func_type(
+            [(p, power(var(&set), &small))],
+            Term::apply(var(&big_f), [var(&p)]),
+        ),
+    );
+    let (set, big_f, big_y) = (fresh("S"), fresh("F"), fresh("x"));
+    let pi_body = Term::func(
+        [(set, sized.clone()), (big_f, fibre(&set))],
+        Term::func_type(
+            [(big_y, var(&set))],
+            Term::apply(var(&big_f), [var(&big_y)]),
+        ),
+    );
+    let carrier_body = Term::tuple([bottom_body, universe_body, over_body, pi_body]);
+
+    let definition = Definition {
+        name: global("carrier"),
+        kind: DefinitionKind::Authored,
+        universe_context,
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_: carrier_type,
+        body: carrier_body,
+    };
+
+    Item::Rec(RecItem::new(vec![(fresh("carrier"), definition)]))
+}
+
+/// `paradox : False = <Hurkens' paradox over the carrier read at `{0, 0, 0, 1}`, boxed>`, closing on it: the unit a reader of the filed group compiles.
+///
+/// The instance sets `u`, `v` and `w` to zero, where the declaration's own constraints say `u + 1 <= w`: the four products then quantify over `Type 0` and stand at `Type 0`, which are the impredicative products the paradox needs.
+fn paradox_module() -> Program {
+    use curios_core::{
+        StructDecl, StructType, Subterm, Telescope, UniverseContext, test_support::*,
+    };
+
+    let fresh = minting();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let read = Term::instance(
+        global("carrier"),
+        vec![
+            Level::zero(),
+            one.clone(),
+            Level::zero(),
+            one.clone().succ().expect("a level has a successor"),
+        ],
+    );
+    let product = |index: usize| Term::proj(read.clone(), index);
+
+    let false_name = global("False");
+    let false_type = || Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let boxed_name = global("Boxed");
+    // `struct Boxed : Type 0 { proof : False }`, the carrier the paradox is instantiated at: `False` is a proposition and the products quantify over `Type 0`.
+    let boxed_decl = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build([(fresh("proof"), false_type())], ())),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let boxed_type: Term = Subterm::StructType(StructType {
+        name: boxed_name,
+        universes: Universes::default(),
+        params: Vec::new(),
+    })
+    .into();
+
+    let looped = hurkens(
+        &fresh,
+        &Term::type_ground(),
+        &product(0),
+        &product(1),
+        &product(2),
+        &product(3),
+    );
+    let paradox = authored(
+        &global("paradox"),
+        false_type(),
+        Term::proj_struct(Term::apply(looped, [boxed_type]), boxed_name, 0),
+    );
+
+    Program {
+        module: declaring(
+            Module {
+                items: vec![paradox].into(),
+                ..Module::default()
+            },
+            BTreeMap::from([(false_name, proposition(Vec::new()))]),
+            BTreeMap::from([(boxed_name, boxed_decl)]),
+            [],
+        ),
+        entry: Entrypoint {
+            body: Term::instance(global("paradox"), Universes::default()),
+            type_: Some(false_type()),
+        },
+    }
+}
+
+/// Hurkens' paradox through a group whose cumulativity a recompile dropped, the route `Baseline::holds` once opened: the walk over the baseline refuses the group as a walk over every declaration refuses it, so no unit is filed carrying a context no walk assumed, and the paradox read through the carrier the baseline's walk judged is refused by the instance that cumulativity does not discharge.
+#[test]
+fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
+    let baseline = versioned(Module {
+        items: vec![carrier_group(carrier_context())].into(),
+        ..Module::default()
+    });
+    let certification = walked(&baseline).certification;
+    let offered = replaced(&baseline, "carrier", carrier_group(open_carrier_context()));
+
+    let over = walked_over(&offered, &baseline, &certification);
+    assert!(
+        !over.verdicts.is_empty(),
+        "the walk adopted a group its context no longer licenses",
+    );
+    assert_eq!(over.verdicts, walked_whole(&offered).verdicts);
+
+    let judged = AlreadyJudged::with(&baseline, &certification);
+    let refused = fixture_verdicts(&paradox_module(), BUDGET, &judged.globals(), SYNTAX);
+    assert!(
+        refused
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::UniverseInstance { .. })),
+        "the paradox's instance does not discharge the carrier's constraints, and was not refused for it: {refused:?}",
+    );
+}
+
 /// A module that declares a name twice reaches no walk over a baseline: `three` respelled as a second `identity`, a name the baseline holds at a place the edit leaves alone and no unit in scope declares, so the clause that would answer is [`declares_a_held_name`]'s reading of the baseline's places.
 ///
 /// It never gets there. A walk over a baseline is handed where the module holds each name, and `Places::of` asserts a name is declared once, so the duplicate refuses the compilation ahead of the walk's own `Error::Redeclared` — a panic where it refuses, as the soundness board's fourth boundary allows. The whole-module walk, handed no places, is the one `redeclarations` guards, and `xboard`'s admission ticket is its witness.
