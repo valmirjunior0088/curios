@@ -140,7 +140,7 @@ impl<'g> Totals<'g> {
             let encloses = match (typed, item) {
                 (true, Item::Rec(rec)) => kernel.member_encloses_partial(&rec.group, index),
                 (true, Item::Let(_)) => kernel.definition_encloses_partial(&definition.name),
-                // A group stands in a term as a `Rec` node or as the member a universe instance is taken of, and `Term::has_group` is where that relation is stated: either is a group with no verdict here, and so one that does not descend.
+                // A group stands in a term as a `Rec` node, and `Term::has_group` is where that relation is stated: it is a group with no verdict here, and so one that does not descend.
                 (false, _) => definition.body.has_group() || definition.type_.has_group(),
             };
             if rejected

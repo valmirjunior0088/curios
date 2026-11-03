@@ -98,7 +98,7 @@ pub enum Counted {
     MotiveBinders,
     /// An arm's binders, against the constructor's signature.
     ArmBinders,
-    /// A recursive member's scope binders, or the member an instance of one selects, against the members its group holds.
+    /// A recursive member's scope binders, against the members its group holds.
     GroupBinders,
 }
 

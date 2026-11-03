@@ -426,7 +426,7 @@ impl Subterm {
         }
     }
 
-    /// Whether a recursive group occurs in this subterm, as a `Rec` node or as the member a universe instance is taken of — the uncached spelling of [`Term::has_group`], which supplies the per-node memoization.
+    /// Whether a recursive group occurs in this subterm, as a `Rec` node — the uncached spelling of [`Term::has_group`], which supplies the per-node memoization.
     pub(crate) fn has_group(&self) -> bool {
         match self {
             Subterm::Rec(_) => true,

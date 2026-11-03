@@ -222,7 +222,7 @@ impl Term {
         self.scalars().newest_local
     }
 
-    /// Whether a recursive group occurs in this term — a `Rec` node, or the member a universe instance is taken of. Cached per node like `has_local_free`: a walk looking for a group's calls asks it at every node it meets, and passes over the ones that hold none.
+    /// Whether a recursive group occurs in this term — a `Rec` node. Cached per node like `has_local_free`: a walk looking for a group's calls asks it at every node it meets, and passes over the ones that hold none.
     pub fn has_group(&self) -> bool {
         self.scalars().has_group
     }
