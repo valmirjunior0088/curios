@@ -734,6 +734,20 @@ const CONTROLS: &[Row] = &[
         "Int",
         "match +0 <= b | true => a / b | false => +0 end",
     ),
+    // What the adjunction `a - b <= c` iff `a <= b + c` does not reach past: a strict bound across a side that may be zero, where at `a < b` the difference is zero too (`a = 0, b = 1, c = 0`); the half that would raise a difference back to its minuend, which is a `max` (`a = 0, b = 1`); an equation read from a difference against a side that may be zero (`a = 0, b = 1, c = 0`); and, at `Int`, a difference across a side that may be negative, where the naturals' comparison is not the integers' (`x = 0, y = 1, i = -1`).
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a <= b + c)",
+        "Holds(a - b < c)",
+    ),
+    claim("a: Nat, b: Nat", "Holds(b + (a - b) <= a)"),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a - b == c)",
+        "Holds(a == b + c)",
+    ),
+    claim(
+        "x: Nat, y: Nat, i: Int, h: Holds(Nat/to_int(x) <= Nat/to_int(y) + i)",
+        "Holds(Nat/to_int(x - y) <= i)",
+    ),
 ];
 
 /// The programs stating what `ask` asks under `binders`: a claim at insertion and at retry, a body once.

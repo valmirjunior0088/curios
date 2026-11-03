@@ -163,6 +163,128 @@ fn a_reader_reports_the_carrier_and_spells_each_atom() {
     assert_eq!(carrier, curios_algebra::Carrier::Integer);
 }
 
+// Two truth values conversion holds one atom agree at every value their symbols take, which is what makes the reading a definitional equation rather than a guess: over a grid of comparisons a truncated difference stands in — bare on either side, floored, against a literal, against a bounded remainder, and at `Int` across a side that may be negative — every pair `same_atom` holds one is held to the carriers' values, and so is every verdict the view decides by its constant alone. The move across the comparison is what puts two spellings in one class, and an inexact one is a false equation congruence carries to `False`. Mutation checks: dropping the `positive` guard from `LinearViews::moved`'s `(AtMost, false)` arm fails this at `x <= y` against `0 <= y - x`, which part at `x = 1, y = 0`; and dropping its `natural_valued` test fails it at `x <= y` against `-1 < Nat/to_int(y - x)`, which part at `x = 1, y = 0`.
+#[test]
+fn two_truth_values_conversion_holds_one_agree_at_every_valuation() {
+    let (x, y, i) = (sym(0, "x"), sym(1, "y"), sym(2, "i"));
+    let sub =
+        |minuend: Term, subtrahend: Term| Term::intrinsic(Intrinsic::nat_sub(minuend, subtrahend));
+    let remainder = Term::intrinsic(Intrinsic::NatRem {
+        dividend: x.clone(),
+        divisor: nat(4),
+        non_zero: sym(9, "qed"),
+    });
+    let natural = [
+        ("x", x.clone()),
+        ("y", y.clone()),
+        ("0", nat(0)),
+        ("2", nat(2)),
+        ("x + 1", add(x.clone(), nat(1))),
+        ("x + y", add(x.clone(), y.clone())),
+        ("x - y", sub(x.clone(), y.clone())),
+        ("y - x", sub(y.clone(), x.clone())),
+        ("x - 2", sub(x.clone(), nat(2))),
+        ("(x - y) + 1", add(sub(x.clone(), y.clone()), nat(1))),
+        ("x % 4", remainder.clone()),
+        ("x % 4 - y", sub(remainder, y.clone())),
+    ];
+    let integer = [
+        ("Nat/to_int(x)", image(&x)),
+        ("Nat/to_int(y)", image(&y)),
+        ("i", i.clone()),
+        ("+0", int(0)),
+        ("+2", int(2)),
+        ("-1", int(-1)),
+        ("Nat/to_int(y) + i", int_sum(&image(&y), &i)),
+        ("Nat/to_int(y) + +2", int_sum(&image(&y), &int(2))),
+        ("Nat/to_int(x - y)", image(&sub(x.clone(), y.clone()))),
+        ("Nat/to_int(y - x)", image(&sub(y.clone(), x.clone()))),
+        (
+            "Nat/to_int(x - y) + +1",
+            int_sum(&image(&sub(x.clone(), y.clone())), &int(1)),
+        ),
+    ];
+    let nat_relations: [(&str, fn(Term, Term) -> Intrinsic); 4] = [
+        ("<=", |left, right| Intrinsic::NatLe(left, right)),
+        ("<", |left, right| Intrinsic::nat_lt(left, right)),
+        ("==", |left, right| Intrinsic::nat_eql(left, right)),
+        ("!=", |left, right| Intrinsic::nat_neq(left, right)),
+    ];
+    let int_relations: [(&str, fn(Term, Term) -> Intrinsic); 4] = [
+        ("<=", |left, right| Intrinsic::IntLe(left, right)),
+        ("<", |left, right| Intrinsic::IntLt(left, right)),
+        ("==", |left, right| Intrinsic::IntEql(left, right)),
+        ("!=", |left, right| Intrinsic::IntNeq(left, right)),
+    ];
+    let symbols = [(0, "x"), (1, "y"), (2, "i")];
+    let valuations = (0..5u32)
+        .flat_map(|a| (0..5u32).flat_map(move |b| (-2..3i32).map(move |c| (a, b, c))))
+        .collect::<Vec<_>>();
+    let mut grid = Vec::new();
+    let mut spelled = |sides: &[(&str, Term)],
+                       relations: &[(&str, fn(Term, Term) -> Intrinsic)]| {
+        for (left_name, left) in sides {
+            for (right_name, right) in sides {
+                for (symbol, spell) in relations {
+                    let comparison = spell(left.clone(), right.clone());
+                    let table = valuations
+                        .iter()
+                        .map(|(a, b, c)| {
+                            value_at(&comparison, &symbols, &[nat(*a), nat(*b), int(*c)])
+                        })
+                        .collect::<Vec<_>>();
+                    grid.push((
+                        format!("{left_name} {symbol} {right_name}"),
+                        comparison,
+                        table,
+                    ));
+                }
+            }
+        }
+    };
+    spelled(&natural, &nat_relations);
+    spelled(&integer, &int_relations);
+
+    let mut held = 0;
+    for (at, (this_name, this, here)) in grid.iter().enumerate() {
+        if let Some(decided) = LinearView::of(this).and_then(|view| view.decided()) {
+            let refuted = here
+                .iter()
+                .zip(&valuations)
+                .find(|(value, _)| **value != decided);
+            assert!(
+                refuted.is_none(),
+                "the view decided `{this_name}` is {decided}, which fails at {:?}",
+                refuted.map(|(_, values)| values)
+            );
+        }
+        for (that_name, that, there) in &grid[at + 1..] {
+            if !same_atom(
+                curios_algebra::Carrier::Boolean,
+                &Term::intrinsic(this.clone()),
+                &Term::intrinsic(that.clone()),
+            ) {
+                continue;
+            }
+            held += 1;
+            let apart = here
+                .iter()
+                .zip(there)
+                .zip(&valuations)
+                .find(|((here, there), _)| here != there);
+            assert!(
+                apart.is_none(),
+                "conversion holds `{this_name}` and `{that_name}` one truth value, and they part at {:?}",
+                apart.map(|(_, values)| values)
+            );
+        }
+    }
+    assert!(
+        held > 100,
+        "a grid that held almost nothing one would hold vacuously: {held} pairs"
+    );
+}
+
 // A bare truncated difference as one whole side is read across by the adjunction where that is exact, so the comparison and the one the adjunction gives it are one view and agree at every sampled valuation: at most another side, below as the greater side, against the literal zero as the order of its operands, and at any relation across a side at least one. The controls keep the difference an atom — at least, below or equal to a side that may be zero, and a floored difference — so each pair there is two views; and a fact about the atom is read atomic, where the moved reading of `x - y <= x` would hold no atom at all.
 #[test]
 fn a_bare_difference_is_read_across_its_comparison_where_the_adjunction_is_exact() {
