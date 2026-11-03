@@ -11,9 +11,9 @@ mod list_layout_tests;
 use {
     super::{
         Apply, Argument, BytesPattern, BytesSegment, Choose, ChooseArm, ChooseTest, ConceptField,
-        Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
-        Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match,
-        MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
+        Decorated, Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
+        Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
+        Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
         PatternField, Proj, ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm,
         Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
         TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
@@ -754,7 +754,8 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
 /// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
 fn print_suffix_head(term: Term, suffix: Printer) -> Printer {
     match term.as_subterm() {
-        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => flat([
+        // A decorator at the head of a call states the head's fields, which bare would read as the call's.
+        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) | Subterm::Decorated(_) => flat([
             pure("("),
             print_term(term),
             indent(ends()),
@@ -829,6 +830,24 @@ fn print_term_inner(term: Term, suffix: Printer) -> Printer {
         Subterm::Apply(Apply { head, arguments }) => return riding_call(head, arguments, suffix),
         Subterm::TupleType(TupleType { fields }) => {
             listed("{", fields.into_iter().map(print_field).collect(), "}")
+        }
+        // The operand is an applied atom, so a larger term, or a second decorator, is parenthesized.
+        Subterm::Decorated(Decorated { fields, term }) => {
+            let fields = fields
+                .into_iter()
+                .map(|field| {
+                    flat([
+                        pure(field.label.to_string()),
+                        pure(" = "),
+                        print_term(field.value),
+                    ])
+                })
+                .collect();
+            let operand = match term.as_subterm() {
+                Subterm::Decorated(_) => flat([pure("("), print_term(term), pure(")")]),
+                _ => print_operand(term, u8::MAX),
+            };
+            flat([listed("#{", fields, "}"), pure(" "), operand])
         }
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {

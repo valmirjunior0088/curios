@@ -79,6 +79,8 @@ pub enum Error {
         /// The name the arm binds, which its author may have meant as a constructor.
         binder: String,
     },
+    /// A decorator, `#{…}`, written in a program: Core text states with one what a node holds beside its spelling, and a program states none of it.
+    Decorator,
     /// A recursive local binding — one that names itself, or a member of a `let … and …;` group — whose binder is a pattern. A pattern binds projections, none of which its own value could name.
     RecursivePatternBinding,
     /// A recursive local binding with no type annotation. A body that mentions the binding cannot be the source of its type.
@@ -283,6 +285,9 @@ impl fmt::Display for Error {
                     "a named final arm cannot be a catch-all: write `| _ =>` for a default, or the constructor with its payload list, `| {binder}() =>`"
                 )
             }
+            Error::Decorator => f.write_str(
+                "a decorator `#{…}` is written in Core text alone; a program leaves what one states to the elaborator",
+            ),
             Error::RecursivePatternBinding => {
                 write!(
                     f,

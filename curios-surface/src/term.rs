@@ -586,6 +586,22 @@ pub enum Subterm {
     Infix(Infix),
     /// A polymorphic numeric literal (see [`NumLit`]).
     NumLit(NumLit),
+    /// A decorator and the operand it attaches to (see [`Decorated`]): Core text's, and refused in a program by its lowering.
+    Decorated(Decorated),
+}
+
+/// `#{field = value, …} operand`: what a Core node holds beside what its surface spelling says — a level, a definition's stamps, a match's stated type, a node other than the one the spelling suggests. It attaches to the operand an infix operator takes, a primary with its call chain, so `#{…} f(x)` states fields of the call and `(#{…} f)(x)` of its head, and a larger term is parenthesized. Core text's reader reads it; a program states nothing a decorator says, so its lowering refuses one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decorated {
+    pub fields: Vec<DecoratorField>,
+    pub term: Term,
+}
+
+/// One field a decorator states: the name of the Core field, and its value written as a term.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecoratorField {
+    pub label: Label,
+    pub value: Term,
 }
 
 /// The literals the lowerer desugars to a proof-carrying construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.

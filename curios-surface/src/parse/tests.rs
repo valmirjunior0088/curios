@@ -4,6 +4,7 @@ mod application;
 mod bang;
 mod blank;
 mod concept;
+mod decorator;
 mod documentation;
 mod foreign;
 mod grammar;
