@@ -2,10 +2,10 @@
 
 use {
     crate::{Overlaid, overlaid},
+    curios_common::Qualifier,
     curios_document::Documentation,
     curios_pipeline::{Cache, CompileError, Fold, prelude_documentation},
     curios_text::{Overlay, RootSource},
-    curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
 };
 

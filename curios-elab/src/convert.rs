@@ -38,6 +38,7 @@ use {
         metavar_spines, named_members, read_outside_spines, zonk_solved_term_metas,
     },
     curios_analysis::{Classes, foreign_congruence},
+    curios_common::{Keyed, Plicity, recurse},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
         Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level, Lockstep,
@@ -46,7 +47,6 @@ use {
         Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseError, Universes, Variance, Variant,
     },
-    curios_utilities::{Keyed, Plicity, recurse},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,

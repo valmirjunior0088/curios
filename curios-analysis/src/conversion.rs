@@ -22,13 +22,13 @@
 use {
     crate::{Classes, atoms_of, classable, classed},
     curios_algebra::{Carrier, Conclusion},
+    curios_common::SyntaxRegistry,
     curios_core::{
         Aligned, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm, Term,
         Universes, Var, Visit, align_comparisons, decide_bool, foreign_operands,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
         peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
-    curios_utilities::SyntaxRegistry,
 };
 
 /// What a checker supplies to [`convert_intrinsics`] beyond its reduction.

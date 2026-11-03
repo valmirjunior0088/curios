@@ -9,8 +9,8 @@ use {
         Carrier, Divided, FloorSplit, Half, Modular, Observed, Operation, cofactor, euclid_split,
         floor_law, power_of_two,
     },
+    curios_common::recurse,
     curios_num::{Integer, Natural},
-    curios_utilities::recurse,
     std::{collections::HashMap, iter},
 };
 

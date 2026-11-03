@@ -15,8 +15,8 @@ use {
         Cancelled, Carrier, Combination, Deduction, Progress, Recombination, Summand, Wanted,
         distribute, signed_cofactor,
     },
+    curios_common::recurse,
     curios_num::Integer,
-    curios_utilities::recurse,
     std::collections::HashMap,
 };
 

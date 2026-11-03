@@ -5,7 +5,7 @@ use {
         Bound, Field, Free, Global, Label, Mentions, MetavarId, One, Proj, Scope, Subterm, Term,
         Var, Visit, capture_placed,
     },
-    curios_utilities::Plicity,
+    curios_common::Plicity,
     std::{
         collections::{BTreeSet, HashMap},
         fmt,

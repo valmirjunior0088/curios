@@ -6,9 +6,9 @@
 
 use {
     super::*,
+    curios_common::{RootKind, fill, test_support::*},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold},
     curios_text::{Entrypoint, Module},
-    curios_utilities::{RootKind, fill, test_support::*},
     curios_wasm::to_bytes,
     std::path::PathBuf,
 };

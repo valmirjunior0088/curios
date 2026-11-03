@@ -19,8 +19,8 @@ mod tests;
 
 use {
     curios_archive::Bytes,
+    curios_common::{Candidates, Digest, Facet, Object, candidate_prefix},
     curios_unit::{Pack, pack_name, pack_names, packed, repacked},
-    curios_utilities::{Candidates, Digest, Facet, Object, candidate_prefix},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -341,7 +341,7 @@ impl Packs {
     }
 }
 
-/// The candidates of an address are the objects its packs hold under their names ([`curios_utilities::candidate_name`]).
+/// The candidates of an address are the objects its packs hold under their names ([`curios_common::candidate_name`]).
 impl Candidates for Packs {
     fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
         self.prefixed(&candidate_prefix(facet, input))

@@ -8,7 +8,7 @@ use {
         reduced,
     },
     curios_cert::Reader,
-    curios_utilities::grown,
+    curios_common::grown,
     std::{
         borrow::Cow,
         cell::RefCell,

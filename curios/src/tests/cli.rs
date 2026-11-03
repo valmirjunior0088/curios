@@ -2,8 +2,8 @@
 
 use {
     super::*,
+    curios_common::fill,
     curios_native::{Compiled, ForeignBindings, MockHost},
-    curios_utilities::fill,
 };
 
 /// The declaration every refusal below is written against, beside the line `body` declares after it.

@@ -11,8 +11,8 @@
 //! **Nothing is charged at a recorded price**, because no memo outlives the declaration that filled it — [`Memos`](super::Memos) states why — and `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` carries the rule for both checkers.
 
 use {
+    curios_common::Entropy,
     curios_core::{Consumption, Cost, Free, ReduceError},
-    curios_utilities::Entropy,
 };
 
 pub(super) struct Spend {

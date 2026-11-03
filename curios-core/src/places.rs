@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{Global, Item, Items, Module, RecGroup, RecItem, Term},
-    curios_utilities::{Keyed, Persistent},
+    curios_common::{Keyed, Persistent},
     std::{cell::OnceCell, collections::HashMap, rc::Rc},
 };
 

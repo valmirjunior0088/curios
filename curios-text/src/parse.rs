@@ -27,12 +27,12 @@ mod tests;
 
 use {
     super::{Doc, Label, Name, Term},
+    curios_common::{Qualifier, Span, is_identifier_char, is_keyword},
     curios_parse::{
         Parsed, Parser, ParserState, ahead, commit, fail, fail_from, is_blank, look_ahead, many0,
         mark, not_ahead, obtained, pure, spanned, tagging, take_eof, take_exact, take_n,
         take_while,
     },
-    curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
 

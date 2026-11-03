@@ -39,12 +39,12 @@ mod tests;
 
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
+    curios_common::{Plicity, recurse},
     curios_core::{
         Ascribed, Extent, Func, FuncType, Global, Subterm, Term, Transient, Universes,
         foreign_operands, foreign_produced, former_spelling, instantiate_universes,
         intrinsic_former,
     },
-    curios_utilities::{Plicity, recurse},
     std::sync::Arc,
 };
 

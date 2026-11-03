@@ -13,7 +13,7 @@
 use {
     crate::{Atoms, Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{Formula, Node},
-    curios_utilities::recurse,
+    curios_common::recurse,
     std::collections::HashMap,
 };
 

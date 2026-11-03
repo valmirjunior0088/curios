@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     curios_analysis::{Invert, another_case, invert_indices, solve_indices},
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Level, Nat, Term},
-    curios_utilities::Qualifier,
     std::slice,
 };
 

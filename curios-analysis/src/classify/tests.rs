@@ -3,10 +3,10 @@
 use {
     super::{test_support::*, *},
     curios_algebra::Operation,
+    curios_common::Qualifier,
     curios_core::{
         Free, Global, Intrinsic, Level, Nat, Reducer, Subterm, Term, int_same, reduce_intrinsic,
     },
-    curios_utilities::Qualifier,
     std::convert::Infallible,
 };
 

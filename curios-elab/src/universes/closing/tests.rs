@@ -2,8 +2,8 @@
 
 use {
     super::*,
+    curios_common::Qualifier,
     curios_core::{Intrinsic, Level, UniverseParam},
-    curios_utilities::Qualifier,
 };
 
 fn nominal(path: &str) -> Global {

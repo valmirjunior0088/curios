@@ -10,11 +10,11 @@ use {
         MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
         parse_term, parse_whitespace,
     },
+    curios_common::{Plicity, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, mark, memoize,
         not_ahead, preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
     },
-    curios_utilities::{Plicity, recurse},
     std::iter,
 };
 

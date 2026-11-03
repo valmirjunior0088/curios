@@ -1,12 +1,12 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
+    curios_common::Qualifier,
     curios_core::{
         Definition, DefinitionKind, Free, Global, Item, Level, Module, Nominal, RecGroup,
         StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
         Universes,
     },
-    curios_utilities::Qualifier,
     std::cell::Cell,
 };
 

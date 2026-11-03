@@ -11,8 +11,8 @@ use {
         convert_intrinsics, foreign_congruence,
     },
     curios_analysis::{Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass},
+    curios_common::SyntaxRegistry,
     curios_core::{Intrinsic, Term},
-    curios_utilities::SyntaxRegistry,
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.

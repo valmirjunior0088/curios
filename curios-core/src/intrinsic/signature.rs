@@ -21,8 +21,8 @@
 use {
     super::Intrinsic,
     crate::{Global, Nat, Subterm, Term, Universes},
+    curios_common::{SyntaxName, SyntaxRegistry},
     curios_num::{Floating, Integer},
-    curios_utilities::{SyntaxName, SyntaxRegistry},
 };
 
 /// What one operand must be, in [`Intrinsic::traverse`] order.

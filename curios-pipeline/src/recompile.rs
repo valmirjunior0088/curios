@@ -10,6 +10,7 @@ use {
         with_broken,
     },
     curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_module_over},
+    curios_common::{Candidates, SyntaxRegistry},
     curios_core::{Entrypoint, Module, Places, Zonked},
     curios_elab::{
         Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
@@ -18,7 +19,6 @@ use {
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Unit},
-    curios_utilities::{Candidates, SyntaxRegistry},
     std::collections::BTreeSet,
 };
 

@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_utilities::{Qualifier, Span},
+    curios_common::{Qualifier, Span},
 };
 
 #[test]

@@ -73,10 +73,10 @@ mod wasm_conformance;
 
 use {
     crate::*,
+    curios_common::Qualifier,
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::Qualifier,
 };
 
 /// Compile an already-parsed entrypoint under `loader` and run it.

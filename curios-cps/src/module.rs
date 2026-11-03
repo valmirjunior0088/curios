@@ -8,8 +8,8 @@ use {
         Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueId, atoms, nodes_from,
         visit_atoms_mut,
     },
+    curios_common::{Arena, ArenaId},
     curios_num::{Floating, Natural},
-    curios_utilities::{Arena, ArenaId},
     std::collections::{BTreeMap, BTreeSet},
 };
 

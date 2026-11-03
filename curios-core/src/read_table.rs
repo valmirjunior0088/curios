@@ -7,7 +7,7 @@ mod tests;
 
 use {
     crate::{Concluded, Global, Polarity, Reads, Totality, Variance},
-    curios_utilities::Digest,
+    curios_common::Digest,
     std::collections::HashMap,
 };
 
@@ -71,7 +71,7 @@ impl TabledReads {
 }
 
 impl ReadTable {
-    /// The kind a pack's entry names for a member of a run of reads ([`curios_utilities::Member`]).
+    /// The kind a pack's entry names for a member of a run of reads ([`curios_common::Member`]).
     pub const KIND: u8 = 3;
 
     /// The bytes of a run of `entries`, each a definition's name, what judging it read and what a filing completed that with, in their order.

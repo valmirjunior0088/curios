@@ -1,5 +1,5 @@
 use {
-    curios_utilities::{Qualifier, Source, Span},
+    curios_common::{Qualifier, Source, Span},
     std::{
         fmt,
         hash::{Hash, Hasher},

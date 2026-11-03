@@ -1,6 +1,6 @@
 use {
     super::{IntoParser, Parser, ParserError, ParserState},
-    curios_utilities::{Source, grown},
+    curios_common::{Source, grown},
     std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc},
 };
 

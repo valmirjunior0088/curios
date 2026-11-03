@@ -15,12 +15,12 @@ mod test_support;
 mod tests;
 
 use {
+    curios_common::recurse,
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
-    curios_utilities::recurse,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, VecDeque},

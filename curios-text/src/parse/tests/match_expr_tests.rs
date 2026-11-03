@@ -3,8 +3,8 @@
 use {
     crate::parse::test_support::*,
     crate::*,
+    curios_common::{Plicity, Sign},
     curios_num::Natural,
-    curios_utilities::{Plicity, Sign},
 };
 
 #[test]

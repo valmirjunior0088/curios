@@ -4,11 +4,11 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Carrier, Cases, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term, Two,
         UniverseContext, Universes, test_support::*,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// `F : (Nat) -> Type` with `a : F(0)` and `b(m : Nat) : F(m + 1)`.

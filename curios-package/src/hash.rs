@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    curios_utilities::{Fingerprint, digest},
+    curios_common::{Fingerprint, digest},
     std::{ffi::OsStr, fmt, fs, path::Path},
 };
 

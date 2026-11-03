@@ -4,8 +4,8 @@ use {
     crate::kernel::convert::test_support::*,
     crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Term},
-    curios_utilities::Qualifier,
     std::sync::Arc,
 };
 

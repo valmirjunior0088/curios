@@ -21,8 +21,8 @@ use {
         Statement, StatementId, SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
+    curios_common::{grown, recurse},
     curios_num::Rounding,
-    curios_utilities::{grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

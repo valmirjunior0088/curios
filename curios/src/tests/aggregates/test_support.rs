@@ -1,6 +1,6 @@
 //! The programs the three carriers' read tests share: a run built in each shape a node's children take, every element of it read from the first to the last and back, against the same run settled into one flat payload; and runs flattened over one another, extending a payload in place or copying it, every element read against the leaf they repeat.
 
-use curios_utilities::fill;
+use curios_common::fill;
 
 /// The chunk of standard input the program reads its leaf from: forty bytes, past an immediate's envelope and long enough for a window of twenty.
 pub(super) const ARRIVAL: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCD";

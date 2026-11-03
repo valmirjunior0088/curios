@@ -5,7 +5,7 @@ use {
     super::*,
     crate::*,
     curios_abi::{errno, event},
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     rustix::fs::OFlags,
     std::{path::Path, thread, time::Duration},
 };

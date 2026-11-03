@@ -1,6 +1,6 @@
 //! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies.
 
-use curios_utilities::{
+use curios_common::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
     EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
     OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,

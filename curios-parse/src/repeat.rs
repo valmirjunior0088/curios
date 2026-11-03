@@ -1,6 +1,6 @@
 use {
     super::{Built, Parser, ParserError, ParserState, Ready},
-    curios_utilities::Span,
+    curios_common::Span,
 };
 
 /// What a repetition takes: something that hands it a parser for each iteration, a [`Parser`] being single-use. A function that builds one, called once an iteration, or a parser that is `Copy` — a nonterminal, which is a function of the input and so is one. `M` says which, and is never written.

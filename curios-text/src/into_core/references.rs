@@ -4,8 +4,8 @@
 
 use {
     super::{FlatItem, FlatLet},
+    curios_common::{Span, SyntaxRegistry},
     curios_core::Bound,
-    curios_utilities::{Span, SyntaxRegistry},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 

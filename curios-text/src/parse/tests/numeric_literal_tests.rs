@@ -1,6 +1,6 @@
 //! Numeric literals: polymorphic numerals, signs and the non-finite values, radixes and padded widths, and a float that overflows.
 
-use {crate::parse::test_support::*, crate::*, curios_num::Floating, curios_utilities::Sign};
+use {crate::parse::test_support::*, crate::*, curios_common::Sign, curios_num::Floating};
 
 #[test]
 fn integer_literals_are_polymorphic_num_lits() {

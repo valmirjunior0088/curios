@@ -4,8 +4,8 @@
 
 use {
     crate::{Atom, Mention, Term},
+    curios_common::Plicity,
     curios_num::Natural,
-    curios_utilities::Plicity,
 };
 
 /// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A `choose` bind arm is the two rows `pattern => body | _ => rest`, the rest of its ladder being what a value the pattern does not match takes. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.

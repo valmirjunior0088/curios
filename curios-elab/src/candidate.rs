@@ -1,6 +1,6 @@
 //! A declaration's elaboration as a store keeps it to be found by what the declaration was lowered to: its trace, completed where it is filed with what the declaration was made from, the digest of every part it read and what it made ([`Candidating`], [`Made`]).
 //!
-//! **Found by what it was made from.** A completed record is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_utilities::candidate_name`]), so a store holds every record filed for one lowering together, whichever unit filed each ([`found`]).
+//! **Found by what it was made from.** A completed record is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_common::candidate_name`]), so a store holds every record filed for one lowering together, whichever unit filed each ([`found`]).
 //!
 //! **Taken where every part it read digests as it did.** A declaration is [a function of what it reads](../../documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md), so one lowered to the items a record was made from, every answer it was given standing and every part it read digesting as it did, elaborates to the record's items, and a walk over a baseline takes them in place of elaborating. A part of the unit's own is answered in a trace by the unit the trace is kept with, so a completed record holds a digest of each, which no later unit moves; a part of a fixed unit is the compiler's, which a store's address names, and is recorded nowhere.
 //!
@@ -12,8 +12,8 @@ use {
     crate::{
         Answered, HeldTrace, Made, Question, Read, TraceRecord, TraceTable, Traces, part_digest,
     },
+    curios_common::{Candidates, Digest, Facet, Object},
     curios_core::{Declarations, Global, Item, ItemRun, Module, Places},
-    curios_utilities::{Candidates, Digest, Facet, Object},
     std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
 

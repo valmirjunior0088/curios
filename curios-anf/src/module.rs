@@ -15,7 +15,7 @@ use {
         ValueId, VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
-    curios_utilities::Arena,
+    curios_common::Arena,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,

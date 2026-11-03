@@ -2,8 +2,8 @@
 
 use {
     crate::{Answer, Checker, Refusal, Witness, declared_in, raised, standing_at},
+    curios_common::Qualifier,
     curios_core::Global,
-    curios_utilities::Qualifier,
     std::fmt,
 };
 

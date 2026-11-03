@@ -2,8 +2,8 @@
 
 use {
     super::*,
+    curios_common::{Source, Span},
     curios_core::{Anchor, Anchored},
-    curios_utilities::{Source, Span},
 };
 
 fn refusal() -> Error {

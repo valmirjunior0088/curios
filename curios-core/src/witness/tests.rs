@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier},
 };
 
 /// A tuple type whose fields are all `Type` — the field types are not in the key, so any term does.

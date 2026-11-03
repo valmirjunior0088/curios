@@ -2,8 +2,8 @@
 
 use {
     crate::tests::run_text,
+    curios_common::fill,
     curios_native::{MockHost, MockIo},
-    curios_utilities::fill,
 };
 
 /// A scripted tree: two files under `data`, one of them a level down, so `data` and `data/sub` exist without being named.

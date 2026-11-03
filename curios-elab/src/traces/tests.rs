@@ -1,6 +1,6 @@
 //! Who asked what, read backwards off a unit's traces.
 
-use {super::*, curios_utilities::Qualifier};
+use {super::*, curios_common::Qualifier};
 
 fn named(segments: &[&str]) -> Global {
     Global::Authored(Qualifier::from(segments.iter().copied()))

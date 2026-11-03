@@ -10,8 +10,8 @@ use {
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
         TableType, TypeName, ValType,
     },
+    curios_common::recurse,
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
-    curios_utilities::recurse,
 };
 
 fn print_dollar_ident(name: &str) -> Printer {

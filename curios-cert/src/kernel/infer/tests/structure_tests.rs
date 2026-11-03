@@ -3,11 +3,11 @@
 use {
     crate::kernel::infer::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         Global, InductDecl, Intrinsic, MetavarId, Struct, StructType, Subterm, Telescope, Term,
         Transient, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.

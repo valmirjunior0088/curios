@@ -3,11 +3,11 @@
 use {
     crate::context::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         ConceptDecl, DefinitionKind, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
         UniverseContext, Universes, WitnessKey,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

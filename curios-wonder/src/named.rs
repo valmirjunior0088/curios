@@ -10,11 +10,11 @@
 
 use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
+    curios_common::{Source, Span},
     curios_core::{Anchors, Declared, Global},
     curios_pipeline::{Cache, Fold},
     curios_text::{Heading, Overlay, PreparedText, heading, identity},
     curios_unit::Unit,
-    curios_utilities::{Source, Span},
     curios_verdicts::Verdicts,
     std::{
         cell::RefCell,

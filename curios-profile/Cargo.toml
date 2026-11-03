@@ -23,4 +23,4 @@ libc = { version = "0.2.186", default-features = false, optional = true }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

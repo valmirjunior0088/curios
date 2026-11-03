@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 const TWO: &str = r#"

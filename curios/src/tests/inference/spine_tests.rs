@@ -4,7 +4,7 @@
 
 use {
     crate::tests::{error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 /// `body` over the declarations these programs share, its last line the text printed.

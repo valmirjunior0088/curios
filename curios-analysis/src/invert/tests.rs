@@ -1,6 +1,6 @@
 //! Which payload binders an index target set determines, and the position a value of the family carries each one at — the answer erasure reads a pinned payload back from once the constructor itself is gone.
 
-use {super::*, curios_core::Global, curios_utilities::Qualifier};
+use {super::*, curios_common::Qualifier, curios_core::Global};
 
 fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))

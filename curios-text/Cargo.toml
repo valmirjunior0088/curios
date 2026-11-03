@@ -17,7 +17,7 @@ curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 # The Unicode tables `/sys/unicode` bakes.
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }
 curios-core = { workspace = true }
@@ -29,4 +29,4 @@ curios-core = { workspace = true, features = ["test-support"] }
 # The elaborator the lowering suites run their output through: `into_core/test_support.rs` checks what a lowering produced. A dev-dependency, because the lowering itself builds terms with `curios-core`'s constructors and never names the elaborator.
 curios-elab = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

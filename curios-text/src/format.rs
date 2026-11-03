@@ -10,9 +10,9 @@
 
 use {
     super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
+    curios_common::{LINE_WIDTH, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
-    curios_utilities::{LINE_WIDTH, Source, Span},
     std::{cell::RefCell, fmt, path::Path, sync::Arc},
 };
 

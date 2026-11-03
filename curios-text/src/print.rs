@@ -20,13 +20,13 @@ use {
     },
     crate::{Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::{Plicity, recurse},
     curios_num::{Floating, Natural},
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
         named_at, pure, reached, sep_flat, soft_line,
     },
-    curios_utilities::{Plicity, recurse},
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {

@@ -1,6 +1,6 @@
 //! Rendering an [`Error`] under a [`Spelling`]: the per-arm prose every diagnostic carries, and the goal turnstile the elaborator's goal batches print.
 //!
-//! The rendering is separated from the error roster for size alone — [`Error`] and its inherent impl are already a long file — and the seam is exact: nothing here decides *what* went wrong, only how it reads. [`Displayed`] is the whole mechanism, and [`goal_text`] is the one piece the roster itself reaches for, when it turns a goal batch into per-goal [`Report`](curios_utilities::Report)s.
+//! The rendering is separated from the error roster for size alone — [`Error`] and its inherent impl are already a long file — and the seam is exact: nothing here decides *what* went wrong, only how it reads. [`Displayed`] is the whole mechanism, and [`goal_text`] is the one piece the roster itself reaches for, when it turns a goal batch into per-goal [`Report`](curios_common::Report)s.
 
 #[cfg(test)]
 mod tests;
@@ -12,11 +12,11 @@ use {
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
+    curios_common::{LINE_WIDTH, Plicity, Qualifier},
     curios_core::{
         Anchors, CalleeId, Global, Level, Mention, Quality, ReaderPosition, ReduceError, Spelling,
         Subterm, Term, UniverseMetaId, WitnessKey,
     },
-    curios_utilities::{LINE_WIDTH, Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
@@ -56,7 +56,7 @@ pub fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
     }
 }
 
-/// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_utilities::Report), and what the batch's `Display` writes before each snippet.
+/// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_common::Report), and what the batch's `Display` writes before each snippet.
 pub fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
     // A report's terms render within the width a line is written within — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
 

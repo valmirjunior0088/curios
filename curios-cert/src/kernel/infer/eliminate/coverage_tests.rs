@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Plicity,
     curios_core::{Free, Intrinsic, Many, Scope, Term},
-    curios_utilities::Plicity,
 };
 
 /// An absent arm whose targets clash with the scrutinee's indices is legitimately absent: no value of that constructor can carry them. `s(p)` aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm may be omitted.

@@ -1,10 +1,10 @@
 use {
     super::*,
+    curios_common::Qualifier,
     curios_core::{
         Definition, DefinitionKind, Global, Intrinsic, Item, Level, Minted, Module, Subterm, Term,
         Totality, UniverseContext, UniverseMetaId, UniverseParam, test_support::*,
     },
-    curios_utilities::Qualifier,
 };
 
 fn nat() -> Term {

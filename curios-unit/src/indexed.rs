@@ -3,11 +3,11 @@
 use {
     crate::rerun,
     curios_archive::{Bytes, parted},
+    curios_common::{Digest, Facet, Member, Object, Recorded},
     curios_core::{Anchors, Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, HeldAsked},
     curios_text::PreparedText,
-    curios_utilities::{Digest, Facet, Member, Object, Recorded},
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
 };
 

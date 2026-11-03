@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{compile, run_text},
+    curios_common::fill,
     curios_native::{ForeignBindings, MockHost},
-    curios_utilities::fill,
 };
 
 /// Two lines, the bytes before a comma, two bytes, a line, what is left, and a line of a stream that has ended, read in that order through one reader and joined by bars, and then `tail`.

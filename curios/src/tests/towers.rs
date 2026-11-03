@@ -6,9 +6,9 @@
 
 use {
     super::*,
+    curios_common::fill,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::fill,
     std::fmt::Write,
 };
 

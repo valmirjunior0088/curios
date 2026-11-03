@@ -1,4 +1,4 @@
-use {super::*, crate::*, curios_utilities::test_support::*};
+use {super::*, crate::*, curios_common::test_support::*};
 
 /// A path nothing has created yet, inside a directory of its own that goes away with the test, whose last segment is `name`.
 ///

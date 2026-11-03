@@ -2,7 +2,7 @@
 //!
 //! It stands beside the resolver because it is the resolver's inverse. Every spelling [`spell`] gives is one the lowering resolves to that declaration from the reader's position, and no shorter one is: a differential over the library puts each to the lowering's own doors (`curios-pipeline`'s `spelling_tests`), so a door resolution gains or loses is one this file is held to.
 
-use curios_utilities::Qualifier;
+use curios_common::Qualifier;
 
 /// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; a path through a module in scope there, from the label it was imported under down; or an absolute path whose audience includes the reader — a module an export shows carrying its public members to the export's path, as resolution walks into them. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
 pub fn spell(

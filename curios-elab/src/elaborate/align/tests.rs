@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_utilities::Plicity::{self, Explicit as P, Implicit as A, Witness as U},
+    curios_common::Plicity::{self, Explicit as P, Implicit as A, Witness as U},
 };
 
 /// `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`.

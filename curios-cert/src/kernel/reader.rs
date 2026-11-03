@@ -14,11 +14,11 @@ use {
     super::{Kernel, enter_arm, enter_case},
     crate::{Error, erased_half, infer},
     curios_analysis::Erased,
+    curios_common::SyntaxRegistry,
     curios_core::{
         Atom, Cost, Free, Global, InductDecl, InductType, Reads, ReduceError, Reducer, StructDecl,
         Term, UniverseContext,
     },
-    curios_utilities::SyntaxRegistry,
 };
 
 /// The kernel, read through: what a reader of its certified terms may ask of it.

@@ -3,10 +3,10 @@
 use {
     crate::convert::{convert_under, test_support::*},
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, InductDecl, InductParam, Level, MetavarId, Telescope, Term, UniverseContext,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 // === Parked-constraint retries ==============================================

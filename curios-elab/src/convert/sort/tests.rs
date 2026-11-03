@@ -3,8 +3,8 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{DefinitionKind, Free, Global, Intrinsic, Level, Nat, Quality, Term, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.

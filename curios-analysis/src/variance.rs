@@ -12,12 +12,12 @@
 
 use {
     crate::{Declarations, Env, binders, forceable, labelled, rec_member},
+    curios_common::recurse,
     curios_core::{
         Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
         Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
         Variance, Variant, universe_metas, universe_params,
     },
-    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         hash::{Hash, Hasher},

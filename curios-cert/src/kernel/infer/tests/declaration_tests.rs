@@ -3,12 +3,12 @@
 use {
     crate::kernel::infer::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A constructor's type is its signature's terminal — the family at the parameters and index targets this case aims at.

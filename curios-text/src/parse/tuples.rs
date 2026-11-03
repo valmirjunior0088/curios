@@ -11,11 +11,11 @@ use {
         TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
+    curios_common::{Plicity, is_keyword},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, mark, not_ahead, pure,
         sep_by0_trailing, take_exact,
     },
-    curios_utilities::{Plicity, is_keyword},
     std::iter,
 };
 

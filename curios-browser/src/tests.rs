@@ -2,8 +2,8 @@
 
 use {
     curios_abi::{DEADLOCK, ENTRY, HostOp, PANIC},
+    curios_common::fill,
     curios_native::test_support::*,
-    curios_utilities::fill,
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
 

@@ -19,7 +19,7 @@ profile = ["curios-profile/enabled", "curios-pipeline/profile"]
 [dependencies]
 curios-profile = { workspace = true }
 curios-archive = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-core = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
@@ -32,4 +32,4 @@ curios-abi = { workspace = true }
 [dev-dependencies]
 curios-wasm = { workspace = true }
 # The directory of its own every suite here works in, removed however the test ends.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

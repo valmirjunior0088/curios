@@ -3,7 +3,7 @@
 //! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that `--std` documents the standard library the compiler embeds, and that a package without a library is refused by name.
 
 use {
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     std::{
         fs,
         path::Path,

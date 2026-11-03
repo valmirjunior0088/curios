@@ -13,8 +13,8 @@ use {
         EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail,
         EmissionValue, EmissionValueName,
     },
+    curios_common::Entropy,
     curios_num::Natural,
-    curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
 

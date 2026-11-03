@@ -3,12 +3,12 @@
 use {
     crate::convert::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many,
         Match, MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term,
         UniverseContext, Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The kernel's twin of this proposition shares the name.

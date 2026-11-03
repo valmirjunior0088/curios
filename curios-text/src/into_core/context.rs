@@ -4,7 +4,7 @@ use {
         unresolved, visible_binding, visible_child,
     },
     crate::{Error, Label, Lint, Name, OrderedMap},
-    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
+    curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

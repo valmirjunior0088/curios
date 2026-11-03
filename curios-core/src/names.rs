@@ -11,7 +11,7 @@ mod tests;
 
 use {
     crate::{UniverseConstraintOrigin, UniverseSeed, Unresolved, WitnessId, WitnessKey},
-    curios_utilities::{
+    curios_common::{
         Digest, Filed, InKeyOrder, InfixOp, Object, Qualifier, Records, Sorted, Symbol, name,
     },
     std::{

@@ -2,10 +2,10 @@
 
 use {
     crate::tests::run,
+    curios_common::fill,
     curios_core::Zonked,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::fill,
 };
 
 // The List witness: bind is concat-map.

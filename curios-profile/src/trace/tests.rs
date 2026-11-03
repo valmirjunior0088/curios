@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     std::{
         io::Read,
         sync::{Arc, Mutex},

@@ -5,12 +5,12 @@
 use {
     super::test_support::*,
     crate::{compile::test_support::*, *},
+    curios_common::fill,
     curios_core::Zonked,
     curios_erase::{Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
-    curios_utilities::fill,
     std::fmt::Write,
 };
 

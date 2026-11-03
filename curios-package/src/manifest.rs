@@ -16,7 +16,7 @@ mod package_tests;
 
 use {
     crate::{CompilerVersion, FileHash, STORE, Store, Subject, TreeHash},
-    curios_utilities::{is_identifier, is_keyword},
+    curios_common::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
         collections::BTreeMap,

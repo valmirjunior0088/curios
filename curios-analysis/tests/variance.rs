@@ -5,11 +5,11 @@
 use {
     curios_analysis::{Declarations, held_levels, test_support::*, variance_vectors},
     curios_cert::Kernel,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,
         Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
-    curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeMap,
 };
 

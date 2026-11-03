@@ -3,8 +3,8 @@
 use {
     super::{Intrinsic, Repr},
     curios_abi::ForeignFunction,
+    curios_common::id,
     curios_num::{Binary, Floating, Integer, Natural},
-    curios_utilities::id,
     std::{collections::BTreeMap, fmt, sync::Arc},
 };
 

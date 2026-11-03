@@ -2,7 +2,7 @@ use {
     super::*,
     crate::*,
     curios_archive::Bytes,
-    curios_utilities::{Member, Object, Qualifier},
+    curios_common::{Member, Object, Qualifier},
 };
 
 /// A definition `name` of the ground type, whose body is `body`.

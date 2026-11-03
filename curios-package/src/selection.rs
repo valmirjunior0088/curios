@@ -16,8 +16,8 @@ use {
         EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package, Store,
         Target, module_below, module_of, nearest_manifest, order, reachable,
     },
+    curios_common::{Qualifier, RootKind},
     curios_text::{Entrypoint, Form, Overlay, RootSource, identity},
-    curios_utilities::{Qualifier, RootKind},
     std::path::{Path, PathBuf},
 };
 

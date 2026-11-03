@@ -3,8 +3,8 @@
 use {
     crate::kernel::infer::{subsumes, test_support::*},
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{Free, Global, Term, UniverseContext, Universes},
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// The subsumption fork, which the soundness board records as having no fixture in either direction.

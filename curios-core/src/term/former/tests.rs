@@ -1,6 +1,6 @@
 //! Which lambdas are a type former's η-form, what each is read back as, and the node an application of one is made as.
 
-use {super::*, crate::*, curios_utilities::Qualifier};
+use {super::*, crate::*, curios_common::Qualifier};
 
 fn global(name: &str) -> Global {
     Global::Authored(Qualifier::from([name]))

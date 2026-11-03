@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     std::{collections::BTreeMap, os::unix},
 };
 

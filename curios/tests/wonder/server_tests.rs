@@ -2,8 +2,8 @@
 
 use {
     super::test_support::*,
+    curios_common::fill,
     curios_prelude::std_module::*,
-    curios_utilities::fill,
     curios_wonder::SETTLE,
     std::{
         fs,

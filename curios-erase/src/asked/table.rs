@@ -4,7 +4,7 @@
 
 use {
     super::{Asked, Made, Part, Read},
-    curios_utilities::Digest,
+    curios_common::Digest,
     std::collections::HashMap,
 };
 
@@ -55,7 +55,7 @@ impl TabledAsked {
 }
 
 impl AskedTable {
-    /// The kind a pack's entry names for a member of a run of erasures' records ([`curios_utilities::Member`]).
+    /// The kind a pack's entry names for a member of a run of erasures' records ([`curios_common::Member`]).
     pub const KIND: u8 = 4;
 
     /// The bytes of a run of `entries`, each the name an item declares first, what erasing it read and what a filing completed that with, in their order.

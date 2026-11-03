@@ -13,11 +13,11 @@ use {
         recheck_measured, typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
+    curios_common::Qualifier,
     curios_document::Documentation,
     curios_prelude::with_prelude,
     curios_text::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_unit::{Predecessors, Unit},
-    curios_utilities::Qualifier,
 };
 
 /// Compile `entrypoint` against the fixed prelude — the two units every product path puts in scope, `/sys` then `/std`.

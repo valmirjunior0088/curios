@@ -31,13 +31,13 @@ use {
         reduce_intrinsic, refold, weak_head_value,
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
+    curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe,
         Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var,
         Variant, Visit,
     },
-    curios_utilities::recurse,
 };
 
 /// The kernel's side of the closed-machine seam: the same delta `step_instance` performs, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.

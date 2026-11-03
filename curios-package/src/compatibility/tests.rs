@@ -3,8 +3,8 @@
 use {
     super::*,
     crate::*,
+    curios_common::{fill, test_support::*},
     curios_text::Overlay,
-    curios_utilities::{fill, test_support::*},
     std::fs,
 };
 

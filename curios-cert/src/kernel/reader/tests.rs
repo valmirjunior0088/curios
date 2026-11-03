@@ -3,11 +3,11 @@
 use {
     crate::*,
     curios_analysis::{Erased, test_support::*},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Telescope,
         Term, UniverseContext, Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 fn kernel() -> Kernel<'static> {

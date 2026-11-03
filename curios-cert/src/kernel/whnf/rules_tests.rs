@@ -2,11 +2,11 @@
 
 use {
     super::{test_support::*, *},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Apply, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Rec, RecGroup, Reducer,
         Scope, Subterm, Term, UniverseParam,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 #[test]

@@ -8,6 +8,7 @@ use {
         positivity_vectors, test_support::*, variance_vectors,
     },
     curios_cert::Kernel,
+    curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
         Apply, Argument, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType, Infix,
         Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
@@ -16,7 +17,6 @@ use {
         Universes, Variant,
     },
     curios_num::Natural,
-    curios_utilities::{InfixOp, Plicity, Qualifier},
     std::{collections::BTreeMap, slice, sync::Arc},
 };
 

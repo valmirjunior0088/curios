@@ -7,11 +7,11 @@ mod test_support;
 
 use {
     crate::{Occurrence, UniverseSolver, UniverseStateToken},
+    curios_common::Entropy,
     curios_core::{
         Extent, Level, Quality, Term, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseError, UniverseRole, Universes,
     },
-    curios_utilities::Entropy,
 };
 
 /// The universe solver borrowed for one judgment's writes.

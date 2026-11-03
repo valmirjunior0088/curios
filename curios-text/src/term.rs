@@ -3,10 +3,10 @@ use {
         Intrinsic, Label, Literal, Name, NatLiteral, Radix, parse_term, parse_whitespace,
         print_term,
     },
+    curios_common::{InfixOp, Plicity, Sign, Source, Span},
     curios_num::Natural,
     curios_parse::{Parser, ParserError, run_parser, take_eof},
     curios_print::run_printer,
-    curios_utilities::{InfixOp, Plicity, Sign, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 

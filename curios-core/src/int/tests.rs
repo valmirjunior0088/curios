@@ -1,6 +1,6 @@
 //! The signed sum normal form: what folds to one term, what cancels, and what stays where it was written.
 
-use {super::*, curios_utilities::Qualifier};
+use {super::*, curios_common::Qualifier};
 
 fn sym(index: u32, hint: &'static str) -> Term {
     Term::free_var(&crate::Free::local(u64::from(index), Some(hint)))

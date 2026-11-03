@@ -6,7 +6,7 @@
 
 use {
     crate::*,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,

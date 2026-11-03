@@ -20,7 +20,7 @@
 mod tests;
 
 use {
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
     curios_wonder::STDIN_LABEL,
     std::{
         env, fmt,

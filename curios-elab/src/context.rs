@@ -79,11 +79,11 @@ mod tests;
 use {
     super::{Error, UniverseMark},
     crate::{Published, ZonkPass, zonk},
+    curios_common::SyntaxRegistry,
     curios_core::{
         Declarations, DefinitionKind, Extent, Global, Imports, Item, MetavarSpine, Mints, Subterm,
         Term,
     },
-    curios_utilities::SyntaxRegistry,
     std::{
         collections::{BTreeSet, HashMap},
         mem,

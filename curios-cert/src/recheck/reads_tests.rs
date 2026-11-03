@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Module, Nat, Reads, Term, Universes},
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

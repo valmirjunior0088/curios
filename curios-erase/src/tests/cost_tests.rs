@@ -5,8 +5,8 @@ use {
     crate::test_support::*,
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
+    curios_common::{Plicity, grown},
     curios_elab::DEFAULT_BUDGET,
-    curios_utilities::{Plicity, grown},
 };
 
 /// What erasing a function over a chain of `depth` eliminations spends, in budget units, read off the reader its erasure ran through. `step` wraps the type one level deeper and `eliminate` the term.

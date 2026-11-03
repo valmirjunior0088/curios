@@ -7,8 +7,8 @@ use {
         Term, func_sugar_params, func_sugar_type_params,
     },
     curios_abi::ForeignFunction,
+    curios_common::{Plicity, Span, recurse},
     curios_num::Binary,
-    curios_utilities::{Plicity, Span, recurse},
     std::{
         cell::{Cell, RefCell},
         collections::{HashMap, HashSet},

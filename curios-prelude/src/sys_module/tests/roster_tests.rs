@@ -4,8 +4,8 @@
 
 use {
     crate::sys_module::*,
+    curios_common::Plicity,
     curios_text::{FuncSugarParam, LetSignature, Name, Pattern, SYNTAX, Subterm},
-    curios_utilities::Plicity,
 };
 
 // A description with nothing to bind is a value, and `LetSignature::Func` with an empty telescope would lower to a binderless lambda instead.

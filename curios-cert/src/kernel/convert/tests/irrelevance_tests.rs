@@ -3,11 +3,11 @@
 use {
     crate::kernel::convert::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Cases, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Match,
         MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext, Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.

@@ -14,7 +14,7 @@ use {
         Bound, Free, Mention, Mentions, Names, Term,
         rank::{Ranked, SpineRanked},
     },
-    curios_utilities::{Ordered, Sorted, Summary},
+    curios_common::{Ordered, Sorted, Summary},
     std::{
         borrow::Borrow,
         fmt,

@@ -20,6 +20,6 @@ The Unicode Character Database the toolchain pins, read once. The build script d
 
 ### The pieces are neutral
 
-**Decision.** The crate answers what the database and UAX #29 say: each property of a scalar, and the boundaries of extended grapheme clusters. How many columns a cluster takes on a terminal is a choice over those properties, and each consumer makes its own: `curios-utilities`' caret, and `/std/Tui`.
+**Decision.** The crate answers what the database and UAX #29 say: each property of a scalar, and the boundaries of extended grapheme clusters. How many columns a cluster takes on a terminal is a choice over those properties, and each consumer makes its own: `curios-common`' caret, and `/std/Tui`.
 
 **Rationale.** Terminals disagree on widths, so a width is a policy, and a shared crate offering one would make every consumer's choice its own.

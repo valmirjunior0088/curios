@@ -21,8 +21,8 @@
 use {
     super::{Prefix, Sort},
     curios_analysis::{Classification, Erased},
+    curios_common::Keyed,
     curios_core::{Bound, ClosedMemo, Sharing, Term},
-    curios_utilities::Keyed,
     std::{collections::HashMap, hash::Hash, mem, rc::Rc},
 };
 

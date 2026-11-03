@@ -1,10 +1,10 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Module, Nominal, Telescope, Term,
         UniverseContext,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 pub(super) const TICKET: Ticket = Ticket {

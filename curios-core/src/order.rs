@@ -13,7 +13,7 @@ mod tests;
 
 use {
     crate::{Arranged, Global, Item, Items, Module, Places},
-    curios_utilities::{Persistent, Sorted},
+    curios_common::{Persistent, Sorted},
     std::{
         borrow::Borrow,
         cell::OnceCell,

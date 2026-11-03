@@ -22,11 +22,11 @@ use {
         context::{Footing, SharedSpine, Window},
         locals_outside_spines, read_outside_spines,
     },
+    curios_common::Keyed,
     curios_core::{
         Free, Global, HeadTag, Mention, RecGroup, Term, UniverseContext, Universes,
         project_erased_universes,
     },
-    curios_utilities::Keyed,
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap},

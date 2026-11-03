@@ -1,7 +1,7 @@
 use {
     super::{Consulted, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
-    curios_utilities::{Mount, Persistent, Qualifier, RootKind, nearest},
+    curios_common::{Mount, Persistent, Qualifier, RootKind, nearest},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,

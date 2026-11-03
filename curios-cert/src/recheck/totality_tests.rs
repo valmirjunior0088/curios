@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{Erased, test_support::*},
+    curios_common::Qualifier,
     curios_core::{Certification, Certified, Global, Totality},
-    curios_utilities::Qualifier,
 };
 
 /// A totality stamp asserts the *closure* — elaboration's classification closes over mentions as the kernel's does — so the cross-check compares it against the closed verdict, not the local half.

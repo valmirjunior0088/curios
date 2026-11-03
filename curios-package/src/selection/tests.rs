@@ -1,6 +1,6 @@
 //! What an argument selects: how it is spelled, the program a name or no argument means, and the unit that declares a file.
 
-use {super::*, curios_utilities::test_support::*, std::fs};
+use {super::*, curios_common::test_support::*, std::fs};
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
 fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {

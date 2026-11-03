@@ -3,11 +3,11 @@
 use {
     crate::convert::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin, ReduceError, StructDecl, Telescope,
         Term, UniverseContext, UniverseParam, Variance,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

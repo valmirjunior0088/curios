@@ -2,8 +2,8 @@
 
 use {
     crate::tests::run,
+    curios_common::fill,
     curios_num::{Floating, Integer, Natural, Rounding},
-    curios_utilities::fill,
 };
 
 /// The operand grid: both zeros and both infinities, the subnormal ends, the normal ends and the top power of two, odd and even significands and a value a step below one, halfway integers for the ties, a thirds and a tenth whose products and quotients are inexact, extremes whose products overflow and underflow, and two quiet NaNs with payloads of either sign.

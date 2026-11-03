@@ -23,8 +23,8 @@ use {
         entries_alike, found, inducts_alike, item_part_digest, items_of, lowered_digest,
         part_digest, structs_alike,
     },
+    curios_common::{Candidates, Facet, recurse},
     curios_core::{Declarations, Global, Item, Module, Nominal, Place, Places, Trace},
-    curios_utilities::{Candidates, Facet, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},

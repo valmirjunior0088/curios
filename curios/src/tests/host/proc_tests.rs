@@ -3,10 +3,10 @@
 use {
     crate::tests::{run, run_text, typecheck},
     curios_abi::ChildExit,
+    curios_common::fill,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::compile_with_prelude,
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::fill,
     std::num::NonZeroU32,
 };
 

@@ -2,7 +2,7 @@
 
 use {
     super::{Asked, AskedItems, Part},
-    curios_utilities::Persistent,
+    curios_common::Persistent,
     std::collections::BTreeMap,
 };
 

@@ -2,11 +2,11 @@
 
 use {
     super::test_support::*,
+    curios_common::{Qualifier, fill},
     curios_core::{Global, Module},
     curios_prelude::with_prelude,
     curios_text::{PreparedText, RootSource, spell},
     curios_unit::Unit,
-    curios_utilities::{Qualifier, fill},
     std::rc::Rc,
 };
 

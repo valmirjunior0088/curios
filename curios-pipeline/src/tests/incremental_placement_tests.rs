@@ -2,11 +2,11 @@
 
 use {
     super::test_support::*,
+    curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
-    curios_utilities::fill,
 };
 
 /// A declaration new to the unit is stored where the order puts it, the baseline's order kept around it: `alpha` and `delta` reach nothing of the unit and stand among the declarations of depth zero by name, around `beta`, and `gamma` reaches `zeta` and stands after it, one deeper.

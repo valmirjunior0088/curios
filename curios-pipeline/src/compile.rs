@@ -8,6 +8,7 @@ use {
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
     curios_cert::{Globals, Kernel, Verdict, certify_module, certify_program},
+    curios_common::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     curios_core::{
         Anchors, Consumption, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec,
         Row, Subterm, Term, Transient, Zonked,
@@ -24,7 +25,6 @@ use {
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_unit::{Predecessors, Unit},
-    curios_utilities::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
 

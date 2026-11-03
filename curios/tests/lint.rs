@@ -1,7 +1,7 @@
 //! What `curios lint` does at the command line: the report on stdout, the exit code it turns on, and the one lint decided over a package rather than a unit.
 
 use {
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     std::{
         fs,
         io::Write,

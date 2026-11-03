@@ -3,11 +3,11 @@
 use {
     crate::convert::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         Cases, DefinitionKind, Exhaustion, Free, Global, InductDecl, Intrinsic, Match, MatchResult,
         MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 #[test]

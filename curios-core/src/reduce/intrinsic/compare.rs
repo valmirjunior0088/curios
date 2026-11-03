@@ -11,8 +11,8 @@ use {
     },
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{Carrier, Comparison, Side},
+    curios_common::Keyed,
     curios_num::Natural,
-    curios_utilities::Keyed,
     std::collections::HashMap,
 };
 

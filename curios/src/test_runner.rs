@@ -12,10 +12,10 @@ use {
     },
     curios::{Named, TestSubject, Tested, test_subjects},
     curios_browser::Posted,
+    curios_common::Qualifier,
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
     curios_pipeline::{CompileError, TestRecord},
-    curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
     std::{
         cmp::Reverse,

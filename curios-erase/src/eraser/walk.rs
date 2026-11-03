@@ -8,8 +8,8 @@ use {
         AtSorts, Binding, Environment, ErasedItem, Error, Export, Sorts, emitted, register_shape,
     },
     curios_cert::Reader,
+    curios_common::recurse,
     curios_core::Bound,
-    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,

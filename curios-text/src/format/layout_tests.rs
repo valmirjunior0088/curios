@@ -1,6 +1,6 @@
 //! Structural layouts keep their surrounding expressions breakable and use structural indentation.
 
-use {super::test_support::*, curios_utilities::LINE_WIDTH};
+use {super::test_support::*, curios_common::LINE_WIDTH};
 
 fn canonical_within_width(source: &str) -> String {
     let output = formatted(source);

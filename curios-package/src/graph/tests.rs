@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::{fill, test_support::*},
+    curios_common::{fill, test_support::*},
     std::fs,
 };
 

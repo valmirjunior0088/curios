@@ -2,12 +2,12 @@
 
 use {
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         Anchor, Anchored, Definition, DefinitionKind, Extent, Global, Intrinsic, Item, Level, Nat,
         Place, Sharing, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam,
     },
-    curios_utilities::Qualifier,
 };
 
 fn name() -> Global {

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::tests::{error, run, typecheck},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 // One definition serves a number and a proof: each use states the sort it stands at, and the proof handed to it weighs nothing the number's use reads.

@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::{Qualifier, test_support::*},
+    curios_common::{Qualifier, test_support::*},
     std::fs,
 };
 

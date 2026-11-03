@@ -3,8 +3,8 @@
 //! **Persistent, and shared with the scope.** The binders stand at dense ranks in a persistent vector, which the frames extend a binder at a time beside the identity spine over them ([`Frame`](super::Frame)): every metavariable born under one scope shares the scope's telescope, and a birth costs nothing more than the one before it.
 
 use {
+    curios_common::Ordered,
     curios_core::{Free, Term},
-    curios_utilities::Ordered,
     std::fmt,
 };
 

@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    curios_utilities::Source,
+    curios_common::Source,
     std::path::{Path, PathBuf},
 };
 

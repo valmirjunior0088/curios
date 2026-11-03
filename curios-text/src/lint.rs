@@ -4,7 +4,7 @@
 
 use {
     super::Label,
-    curios_utilities::{Report, Span},
+    curios_common::{Report, Span},
     std::collections::BTreeSet,
 };
 

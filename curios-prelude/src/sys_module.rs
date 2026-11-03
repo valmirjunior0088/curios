@@ -31,13 +31,13 @@ mod tests;
 
 use {
     curios_abi::{CodeCarrier, Failure, code_sets, stdio},
+    curios_common::{RootKind, SyntaxRegistry},
     curios_num::{Natural, Rounding},
     curios_text::{
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, RootSource, SYNTAX, Subterm,
         TopCase, TopInduct, TopItem,
     },
     curios_unicode::{PACKED_RUN, class_codes, packed_tables},
-    curios_utilities::{RootKind, SyntaxRegistry},
 };
 
 // Ordinary declarations use the parser's source identities: every repeated lowering of a written `Type` must share its universe seed, including the family and constructor signatures synthesized from it.

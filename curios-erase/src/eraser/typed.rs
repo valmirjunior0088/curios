@@ -10,8 +10,8 @@ use {
     super::Eraser,
     crate::{Error, advance_assumed, inferred, reduced},
     curios_cert::Reader,
+    curios_common::recurse,
     curios_core::Bound,
-    curios_utilities::recurse,
 };
 
 impl Eraser<'_> {

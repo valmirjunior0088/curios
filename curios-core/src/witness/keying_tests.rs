@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier},
     std::collections::BTreeMap,
 };
 

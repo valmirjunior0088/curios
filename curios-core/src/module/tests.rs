@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{test_support::*, *},
-    curios_utilities::{RootKind, Sign},
+    curios_common::{RootKind, Sign},
 };
 
 fn definition(name: &str, universe_context: UniverseContext) -> Definition {

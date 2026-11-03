@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Plicity,
     curios_core::{Free, Subterm},
-    curios_utilities::Plicity,
 };
 
 /// A constructor's marks are read by one kernel rule, the arm's, which holds each binder an arm writes to the payload it binds ([`an_arm_binds_under_its_payloads_marks`]). No other rule reads them, and a constructor's *value* carries none: the same declaration under its honest mark and under a lying one, with a value of it and no match over it, must produce the same verdicts. That each binder has a mark is no one's to check: a mark is its telescope entry's own, so a signature a mark short of its binders cannot be written, and the same holds of the marks a declaration's parameters stand under in its arity.

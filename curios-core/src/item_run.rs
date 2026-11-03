@@ -10,7 +10,7 @@ mod tests;
 use {
     crate::{Item, Sharing},
     curios_archive::Pooled,
-    curios_utilities::Digest,
+    curios_common::Digest,
 };
 
 /// Elaborated items consed in one table, as a pack keeps them: each a member of the run, by its place in it.
@@ -21,7 +21,7 @@ pub struct ItemRun {
 }
 
 impl ItemRun {
-    /// The kind a pack's entry names for a member of a run of items ([`curios_utilities::Member`]).
+    /// The kind a pack's entry names for a member of a run of items ([`curios_common::Member`]).
     pub const KIND: u8 = 1;
 
     /// The bytes of a run of `items`, in their order, consed in one table: one node for each structure as it is spelled, under no position ([`Item::shared`]).

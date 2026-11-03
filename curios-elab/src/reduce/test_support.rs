@@ -5,8 +5,8 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Nat, Term},
-    curios_utilities::Qualifier,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.

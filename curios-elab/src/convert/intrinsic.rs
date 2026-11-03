@@ -12,9 +12,9 @@ use {
         Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
         connectives_agree_classed, convert_classed, convert_intrinsics,
     },
+    curios_common::SyntaxRegistry,
     curios_core::{Cost, Free, Intrinsic, Produced, ReduceError, Reducer, Subterm, Term},
     curios_num::Binary,
-    curios_utilities::SyntaxRegistry,
 };
 
 impl Convert {

@@ -13,7 +13,7 @@ use {
         Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
         UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
-    curios_utilities::{
+    curios_common::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
         Records, Sorted, candidate_name,
     },

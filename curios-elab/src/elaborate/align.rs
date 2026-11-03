@@ -6,7 +6,7 @@
 //!
 //! What a slot left out is filled with is its site's to say: a call infers or resolves it, a lambda inserts the binder, an arm binds the payload, a literal resolves the edge or, after a spread, copies it from the base. A written `_` after a mark holds a slot's place and is filled as one left out is, which is how a later member of a run is written alone.
 
-use curios_utilities::Plicity;
+use curios_common::Plicity;
 
 #[cfg(test)]
 mod tests;

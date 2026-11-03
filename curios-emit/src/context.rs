@@ -8,7 +8,7 @@ use {
         concrete_val, get, set,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireReference, WireShape, WireType},
-    curios_utilities::Entropy,
+    curios_common::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
         iter,

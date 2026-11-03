@@ -1,4 +1,4 @@
-use {super::*, crate::*, curios_algebra::Carrier, curios_utilities::Qualifier};
+use {super::*, crate::*, curios_algebra::Carrier, curios_common::Qualifier};
 
 /// One call of a universe-polymorphic name at two instances, and the call at another argument.
 fn calls() -> (Term, Term, Term) {

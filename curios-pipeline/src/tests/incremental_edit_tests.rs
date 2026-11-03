@@ -2,7 +2,7 @@
 //!
 //! Reuse is observed by allocation identity: a reused item carries the very terms the baseline holds, which no elaboration could produce twice.
 
-use {super::test_support::*, curios_core::Variance, curios_utilities::fill};
+use {super::test_support::*, curios_common::fill, curios_core::Variance};
 
 #[test]
 fn an_unchanged_text_reuses_every_item() {

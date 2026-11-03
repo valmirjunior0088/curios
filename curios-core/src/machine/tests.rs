@@ -551,7 +551,7 @@ fn a_body_that_reads_a_proof_binder_demands_it() {
 fn a_let_and_an_arm_bind_a_proof_as_written() {
     let x = binder(0, "x");
     let block = Term::let_(&x, nat_type(), unaffordable(), nat(5));
-    let name = crate::Global::Authored(curios_utilities::Qualifier::from(["Box"]));
+    let name = crate::Global::Authored(curios_common::Qualifier::from(["Box"]));
     let matched = Term::induct_match(
         Term::variant(name, Vec::<Term>::new(), "box", [unaffordable()]),
         None,

@@ -4,11 +4,11 @@ use {
     crate::kernel::convert::test_support::*,
     crate::*,
     curios_analysis::held_levels,
+    curios_common::Qualifier,
     curios_core::{
         Global, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam,
         Variance,
     },
-    curios_utilities::Qualifier,
 };
 
 /// Whether `name` at two instances apart in its one level is one term at `type_`: as written, and reduced first, which leaves a projected former as two projections of one group.

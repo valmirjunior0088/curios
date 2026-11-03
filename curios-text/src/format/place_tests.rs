@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_utilities::Source,
+    curios_common::Source,
     std::path::Path,
 };
 

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::tests::{compile, error},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 #[test]

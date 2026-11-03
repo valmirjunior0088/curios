@@ -16,8 +16,8 @@ pub use frames::*;
 use {
     super::{BirthTelescope, Footing, Window},
     crate::DeadArm,
+    curios_common::{Keyed, Ordered, Persistent},
     curios_core::{DefinitionKind, Free, MetavarSpine, Term},
-    curios_utilities::{Keyed, Ordered, Persistent},
     std::{cell::RefCell, collections::HashMap, fmt, hash::Hash, ptr, rc::Rc},
 };
 

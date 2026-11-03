@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::{Qualifier, RootKind, digest},
+    curios_common::{Qualifier, RootKind, digest},
 };
 
 /// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.

@@ -2,8 +2,8 @@
 
 use {
     crate::{Answered, Context, Question},
+    curios_common::Qualifier,
     curios_core::{Consumption, Cost, Global, Minted, ReduceError, Trace},
-    curios_utilities::Qualifier,
     std::rc::Rc,
 };
 

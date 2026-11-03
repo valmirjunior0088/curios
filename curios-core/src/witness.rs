@@ -17,7 +17,7 @@ use {
         Declared, Func, Global, Intrinsic, Mention, Spelling, Subterm, Telescope, Term, Transient,
         TupleType,
     },
-    curios_utilities::{Plicity, Qualifier, Table, intern},
+    curios_common::{Plicity, Qualifier, Table, intern},
     std::{
         cmp::Ordering,
         collections::HashMap,
@@ -39,7 +39,7 @@ pub struct WitnessKey {
     heads: &'static Vec<HeadKey>,
 }
 
-/// Every key this process has named. See `curios_utilities`' interner for why nothing is freed.
+/// Every key this process has named. See `curios_common`' interner for why nothing is freed.
 static KEYS: LazyLock<Table<[HeadKey], Vec<HeadKey>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 

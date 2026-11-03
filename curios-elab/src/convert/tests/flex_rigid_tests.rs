@@ -3,11 +3,11 @@
 use {
     crate::convert::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         CalleeId, DefinitionKind, Global, Intrinsic, Level, Mention, MetavarId, MetavarOrigin,
         Subterm, Term, Universes, WitnessOrigin,
     },
-    curios_utilities::Qualifier,
 };
 
 // === Metavariables / unification ===========================================

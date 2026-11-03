@@ -572,6 +572,7 @@ dependencies = [
  "curios-binaryen",
  "curios-browser",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-cps",
  "curios-cranelift",
@@ -585,7 +586,6 @@ dependencies = [
  "curios-prelude",
  "curios-profile",
  "curios-text",
- "curios-utilities",
  "curios-verdicts",
  "curios-wasm",
  "curios-wonder",
@@ -615,10 +615,10 @@ dependencies = [
  "curios-algebra",
  "curios-analysis",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-num",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -627,10 +627,10 @@ version = "0.16.17"
 dependencies = [
  "curios-abi",
  "curios-archive",
+ "curios-common",
  "curios-cps",
  "curios-num",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -663,10 +663,10 @@ dependencies = [
  "askama",
  "base64 0.23.1",
  "curios-abi",
+ "curios-common",
  "curios-cranelift",
  "curios-emit",
  "curios-native",
- "curios-utilities",
  "curios-wasm",
  "js-sys",
  "serde",
@@ -682,10 +682,20 @@ dependencies = [
  "curios-algebra",
  "curios-analysis",
  "curios-archive",
+ "curios-common",
  "curios-core",
  "curios-num",
  "curios-profile",
- "curios-utilities",
+]
+
+[[package]]
+name = "curios-common"
+version = "0.16.17"
+dependencies = [
+ "curios-archive",
+ "curios-unicode",
+ "sha2 0.11.1",
+ "stacker",
 ]
 
 [[package]]
@@ -695,10 +705,10 @@ dependencies = [
  "curios-abi",
  "curios-algebra",
  "curios-archive",
+ "curios-common",
  "curios-num",
  "curios-print",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -706,9 +716,9 @@ name = "curios-cps"
 version = "0.16.17"
 dependencies = [
  "curios-abi",
+ "curios-common",
  "curios-num",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -725,7 +735,7 @@ version = "0.16.17"
 dependencies = [
  "askama",
  "curios-archive",
- "curios-utilities",
+ "curios-common",
 ]
 
 [[package]]
@@ -737,10 +747,10 @@ dependencies = [
  "curios-analysis",
  "curios-archive",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-num",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -748,10 +758,10 @@ name = "curios-emit"
 version = "0.16.17"
 dependencies = [
  "curios-abi",
+ "curios-common",
  "curios-cps",
  "curios-num",
  "curios-profile",
- "curios-utilities",
  "curios-wasm",
 ]
 
@@ -764,11 +774,11 @@ dependencies = [
  "curios-anf",
  "curios-archive",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-elab",
  "curios-num",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -789,7 +799,7 @@ version = "0.16.17"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-utilities",
+ "curios-common",
  "getrandom 0.4.3",
  "log",
  "rustix",
@@ -814,8 +824,8 @@ dependencies = [
 name = "curios-package"
 version = "0.16.17"
 dependencies = [
+ "curios-common",
  "curios-text",
- "curios-utilities",
  "semver",
  "serde",
  "toml",
@@ -826,9 +836,9 @@ dependencies = [
 name = "curios-parse"
 version = "0.16.17"
 dependencies = [
+ "curios-common",
  "curios-profile",
  "curios-unicode",
- "curios-utilities",
 ]
 
 [[package]]
@@ -839,6 +849,7 @@ dependencies = [
  "curios-anf",
  "curios-archive",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-cps",
  "curios-document",
@@ -849,7 +860,6 @@ dependencies = [
  "curios-profile",
  "curios-text",
  "curios-unit",
- "curios-utilities",
  "curios-wasm",
 ]
 
@@ -861,6 +871,7 @@ dependencies = [
  "curios-abi",
  "curios-archive",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-document",
  "curios-elab",
@@ -874,7 +885,6 @@ dependencies = [
  "curios-text",
  "curios-unicode",
  "curios-unit",
- "curios-utilities",
  "curios-verdicts",
 ]
 
@@ -886,7 +896,7 @@ version = "0.16.17"
 name = "curios-profile"
 version = "0.16.17"
 dependencies = [
- "curios-utilities",
+ "curios-common",
  "libc",
  "tracing",
 ]
@@ -897,6 +907,7 @@ version = "0.16.17"
 dependencies = [
  "curios-abi",
  "curios-archive",
+ "curios-common",
  "curios-core",
  "curios-document",
  "curios-elab",
@@ -904,7 +915,6 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-profile",
- "curios-utilities",
 ]
 
 [[package]]
@@ -922,21 +932,11 @@ dependencies = [
  "curios-abi",
  "curios-anf",
  "curios-archive",
+ "curios-common",
  "curios-core",
  "curios-elab",
  "curios-erase",
  "curios-text",
- "curios-utilities",
-]
-
-[[package]]
-name = "curios-utilities"
-version = "0.16.17"
-dependencies = [
- "curios-archive",
- "curios-unicode",
- "sha2 0.11.1",
- "stacker",
 ]
 
 [[package]]
@@ -945,13 +945,13 @@ version = "0.16.17"
 dependencies = [
  "curios-abi",
  "curios-archive",
+ "curios-common",
  "curios-core",
  "curios-package",
  "curios-pipeline",
  "curios-profile",
  "curios-text",
  "curios-unit",
- "curios-utilities",
  "curios-wasm",
 ]
 
@@ -959,15 +959,16 @@ dependencies = [
 name = "curios-wasm"
 version = "0.16.17"
 dependencies = [
+ "curios-common",
  "curios-parse",
  "curios-print",
- "curios-utilities",
 ]
 
 [[package]]
 name = "curios-wonder"
 version = "0.16.17"
 dependencies = [
+ "curios-common",
  "curios-core",
  "curios-cps",
  "curios-document",
@@ -975,7 +976,6 @@ dependencies = [
  "curios-pipeline",
  "curios-text",
  "curios-unit",
- "curios-utilities",
  "curios-verdicts",
  "curios-wasm",
  "lsp-server",
@@ -2635,11 +2635,11 @@ version = "0.16.17"
 dependencies = [
  "clap",
  "curios-cert",
+ "curios-common",
  "curios-core",
  "curios-elab",
  "curios-pipeline",
  "curios-text",
- "curios-utilities",
 ]
 
 [[package]]

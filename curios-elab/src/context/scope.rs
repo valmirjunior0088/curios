@@ -8,11 +8,11 @@ use {
         key_spelling, shallow_scrutinee, zonk_solved_term_metas,
     },
     curios_analysis::{reads_solved, records_case_equation},
+    curios_common::Plicity,
     curios_core::{
         Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
         Universes, project_erased_universes,
     },
-    curios_utilities::Plicity,
     std::rc::Rc,
 };
 

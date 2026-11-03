@@ -10,7 +10,7 @@ mod tests;
 use {
     super::{HeldRecord, Key, LoweredDeclaration, PreparedText, Records},
     curios_abi::ForeignStore,
-    curios_utilities::{Ordered, Persistent, Qualifier, Sorted},
+    curios_common::{Ordered, Persistent, Qualifier, Sorted},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,

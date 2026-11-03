@@ -5,8 +5,8 @@
 //! None of this exists where nothing is being elaborated: a context that only reads finished terms declares no witness, and every one it can be asked about is in the table.
 
 use {
+    curios_common::Qualifier,
     curios_core::{Global, WitnessKey},
-    curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
 

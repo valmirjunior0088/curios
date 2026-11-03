@@ -2,8 +2,8 @@
 
 use {
     super::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Nat, Term, Universes},
-    curios_utilities::Qualifier,
 };
 
 fn nat(n: usize) -> Term {

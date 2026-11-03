@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
+    curios_common::{Qualifier, RootKind, is_identifier},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{Qualifier, RootKind, is_identifier},
     std::{
         collections::BTreeMap,
         iter,

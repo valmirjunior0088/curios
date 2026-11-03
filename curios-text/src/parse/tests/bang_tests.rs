@@ -1,6 +1,6 @@
 //! The postfix `!`: where it may stand, how tightly it binds, and that it reads back.
 
-use {crate::parse::test_support::*, crate::*, curios_utilities::Plicity};
+use {crate::parse::test_support::*, crate::*, curios_common::Plicity};
 
 #[test]
 fn let_bang_is_no_longer_grammar() {

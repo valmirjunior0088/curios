@@ -41,7 +41,7 @@ curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 # For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `std_module` too.
 curios-cert = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
@@ -62,7 +62,7 @@ curios-erase = { workspace = true }
 curios-package = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 
 # The library's claims compile through the whole pipeline and run under the mock host, so its suite depends on the compiler the library is a part of. Cargo admits the cycle because it runs through a dev-dependency, and the build script, which reads its build-dependencies alone, never sees it.
 [dev-dependencies]
@@ -80,4 +80,4 @@ curios-verdicts = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }
 # `fill!`, for the program the conformance cases are written into.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

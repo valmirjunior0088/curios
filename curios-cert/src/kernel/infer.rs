@@ -29,13 +29,13 @@ use {
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
     crate::{foreign_signature, hold_proof, spine},
+    curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
         LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer, Scope,
         Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
     },
     curios_num::{Binary, Natural},
-    curios_utilities::recurse,
     std::convert::Infallible,
 };
 

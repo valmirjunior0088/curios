@@ -5,8 +5,8 @@
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
 use {
+    curios_common::test_support::*,
     curios_package::Target,
-    curios_utilities::test_support::*,
     std::{
         fs,
         path::Path,

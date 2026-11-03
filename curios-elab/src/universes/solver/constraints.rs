@@ -14,8 +14,8 @@
 mod test_support;
 
 use {
+    curios_common::Entropy,
     curios_core::{Level, LevelHead, UniverseConstraint, UniverseError},
-    curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
 

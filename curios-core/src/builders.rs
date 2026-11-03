@@ -7,8 +7,8 @@ use {
         Apply, Ascribed, Bang, Func, FuncType, Global, Infix, Intrinsic, Level, Many, Matrix,
         NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
     },
+    curios_common::{InfixOp, Sign, StringSyntax, SyntaxName},
     curios_num::{Binary, Natural, Rounding},
-    curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
 };
 
 /// A registered function or constructor, written and applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names, whose instance elaboration chooses.

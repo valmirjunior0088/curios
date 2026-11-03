@@ -11,9 +11,9 @@ use {
         UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
+    curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
     curios_print::run_printer,
-    curios_utilities::SyntaxRegistry,
     std::{collections::BTreeSet, fmt, rc::Rc, sync::Arc},
 };
 

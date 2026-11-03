@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Term},
-    curios_utilities::Qualifier,
 };
 
 /// A forged ABI row cannot hand the guest an inhabitant of a proposition, because a wire signature cannot name one.

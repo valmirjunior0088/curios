@@ -66,11 +66,11 @@ use {
     },
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
-    curios_document::Documentation,
-    curios_utilities::{
+    curios_common::{
         Digest, Filed, Mount, Object, Persistent, Plicity, Qualifier, Recorded, Report, RootKind,
         Source, Span, SyntaxRegistry, grown,
     },
+    curios_document::Documentation,
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -589,9 +589,9 @@ pub struct PreparedText {
     compiled: Compiled,
     /// The `foreign` rows this unit declares. Collected by the same walk that lowers its items, and carried here rather than dropped: a unit that declares one has to reach the link, and the prelude declaring none is a fact about the prelude, not about the shape.
     foreigns: ForeignStore,
-    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    #[archived_with(curios_common::InSharedKeyOrder)]
     table: Table<ModuleInfo>,
-    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    #[archived_with(curios_common::InSharedKeyOrder)]
     public: Table<PublicInterface>,
     /// Who can see each declaration of this unit: decided where it was lowered, or the first time something asks of a restored one, and kept. Never stored, being read off `table` and `public`.
     #[archived_with(curios_archive::Skip)]

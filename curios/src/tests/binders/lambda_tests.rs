@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 // === Plicity: insertion of omitted hidden binders, and exact checking of written ones. ====

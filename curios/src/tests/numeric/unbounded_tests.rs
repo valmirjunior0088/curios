@@ -5,9 +5,9 @@
 use {
     super::test_support::*,
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
+    curios_common::fill,
     curios_native::MockHost,
     curios_pipeline::DEFAULT_BUDGET,
-    curios_utilities::fill,
 };
 
 #[test]

@@ -39,7 +39,7 @@ use {
         Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term,
         Universes, eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
-    curios_utilities::Plicity,
+    curios_common::Plicity,
     std::{collections::HashMap, mem},
 };
 

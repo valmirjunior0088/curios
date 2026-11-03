@@ -5,11 +5,11 @@
 use {
     super::InScope,
     crate::{Error, Witness},
+    curios_common::{Mount, Qualifier},
     curios_core::{
         ConceptDecl, Definition, FuncType, Global, HeadKey, InductDecl, ParameterField, StructDecl,
         Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
     },
-    curios_utilities::{Mount, Qualifier},
     std::collections::BTreeMap,
 };
 

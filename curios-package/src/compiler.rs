@@ -17,7 +17,7 @@ mod tests;
 
 use {
     crate::Store,
-    curios_utilities::Fingerprint,
+    curios_common::Fingerprint,
     std::{
         fs::{self, File},
         hash::Hasher,

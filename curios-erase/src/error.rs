@@ -6,8 +6,8 @@
 
 use {
     crate::ErasedNames,
+    curios_common::{Note, Report},
     curios_num::Natural,
-    curios_utilities::{Note, Report},
     std::{collections::BTreeMap, rc::Rc},
 };
 

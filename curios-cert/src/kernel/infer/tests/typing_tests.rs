@@ -4,8 +4,8 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Plicity,
     curios_core::{Intrinsic, Nat, Subterm, Term},
-    curios_utilities::Plicity,
 };
 
 #[test]

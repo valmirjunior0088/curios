@@ -1,9 +1,9 @@
 //! What the roster's suites lower against: the real `/sys`, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry.
 
 use {
+    curios_common::{Qualifier, RootKind},
     curios_core::test_support::*,
     curios_text::{Entrypoint, RootSource, SYNTAX},
-    curios_utilities::{Qualifier, RootKind},
 };
 
 /// The `/std` of [`prelude_fixture`].

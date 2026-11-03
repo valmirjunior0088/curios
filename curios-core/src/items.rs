@@ -15,7 +15,7 @@
 use {
     crate::{ArchivedItemRun, Declared, Global, Item, ItemRun, Module},
     curios_archive::{Bytes, Pooled, Proxy, Via},
-    curios_utilities::{Mount, Object, Ordered},
+    curios_common::{Mount, Object, Ordered},
     std::{
         borrow::Borrow,
         cell::{OnceCell, RefCell},

@@ -3,12 +3,12 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         Free, InductDecl, Intrinsic, Level, Telescope, Term, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
-    curios_utilities::Qualifier,
 };
 
 /// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the kernel's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `kernel::convert::variance_tests` holds the answers under this name.

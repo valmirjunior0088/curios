@@ -1,10 +1,10 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         DefinitionKind, Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term, Universes,
     },
-    curios_utilities::Qualifier,
     std::rc::Rc,
 };
 

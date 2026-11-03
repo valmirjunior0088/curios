@@ -14,12 +14,12 @@ use {
         reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::{Plicity, Qualifier, is_keyword},
     curios_parse::{
         Boxed, Mark, Parsed, Parser, ParserError, ParserState, commit, fail, fail_from, look_ahead,
         many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned,
         tagging, take_exact,
     },
-    curios_utilities::{Plicity, Qualifier, is_keyword},
     std::iter,
 };
 

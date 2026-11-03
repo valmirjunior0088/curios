@@ -14,7 +14,7 @@ use {
         Bound, Free, Func, FuncType, Let, LetBinding, One, Scope, Subterm, Telescope, Term,
         TupleType, Visit,
     },
-    curios_utilities::recurse,
+    curios_common::recurse,
     std::{
         cell::RefCell,
         collections::{HashMap, VecDeque},

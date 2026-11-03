@@ -7,8 +7,8 @@ use {
         Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, MetavarSpine, Scope,
         Subterm, Telescope, Term, Three, Two, Universes, Var, Visit, project_erased_universes,
     },
+    curios_common::{InfixOp, Mint, Plicity, Sign},
     curios_num::Natural,
-    curios_utilities::{InfixOp, Mint, Plicity, Sign},
     std::{
         fmt,
         hash::{Hash, Hasher},

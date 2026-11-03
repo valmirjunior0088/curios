@@ -15,4 +15,4 @@ profile = ["curios-profile/enabled"]
 curios-profile = { workspace = true }
 # The characters the database calls default-ignorable, which `unseen` reads as printing as nothing.
 curios-unicode = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }

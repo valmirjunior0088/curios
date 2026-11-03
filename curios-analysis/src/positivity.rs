@@ -23,11 +23,11 @@ mod tests;
 
 use {
     crate::{Env, forceable},
+    curios_common::recurse,
     curios_core::{
         Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Mention,
         Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
-    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         hash::{Hash, Hasher},

@@ -7,7 +7,7 @@
 use {
     super::{FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped, named, owner_of},
     crate::Lint,
-    curios_utilities::{Mount, Qualifier, Span},
+    curios_common::{Mount, Qualifier, Span},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 

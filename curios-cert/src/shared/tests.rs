@@ -1,7 +1,7 @@
 //! The roster's one rule: no other module of this crate imports a shared function for itself.
 
 use {
-    curios_utilities::fill,
+    curios_common::fill,
     std::{
         fs,
         path::{Path, PathBuf},

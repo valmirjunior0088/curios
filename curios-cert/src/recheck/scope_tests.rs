@@ -4,11 +4,11 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Certification, Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item,
         Level, Nat, Places, Telescope, Term, Totality, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

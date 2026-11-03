@@ -7,8 +7,8 @@ use {
     },
     crate::{test_support::*, *},
     curios_algebra::Deduction,
+    curios_common::Qualifier,
     curios_num::Natural,
-    curios_utilities::Qualifier,
 };
 
 // Soundness gate: `nat_bound` must never under-report, because the division split and the comparison body both turn a bound into a definitional equation — an under-report there is a false equation, not merely a wrong value. Every closed instantiation of each bounded shape must land at or below the bound the oracle states for the shape itself.

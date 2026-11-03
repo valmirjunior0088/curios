@@ -8,7 +8,7 @@
 
 use {
     super::{Error, Form, LoadError, Module, TopItem},
-    curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
+    curios_common::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap},

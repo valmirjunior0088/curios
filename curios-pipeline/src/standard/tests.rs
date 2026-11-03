@@ -4,6 +4,7 @@ use {
     super::*,
     crate::{tests::test_support::*, *},
     curios_anf::FieldShape,
+    curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
         Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
         ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
@@ -19,7 +20,6 @@ use {
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
-    curios_utilities::{Qualifier, RootKind, digest, test_support::*},
     std::{
         cell::RefCell,
         cmp::Reverse,

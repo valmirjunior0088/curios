@@ -4,12 +4,12 @@
 
 use {
     super::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Global, Item, ReaderPosition, build_rename, display_names},
     curios_elab::{Established, Reading, test_support::*},
     curios_prelude::with_prelude,
     curios_text::{SYNTAX, Translation},
     curios_unit::Predecessors,
-    curios_utilities::Qualifier,
     std::rc::Rc,
 };
 

@@ -3,10 +3,10 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::test_support::*,
     curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
     curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::test_support::*,
     curios_verdicts::{Session, Verdicts},
     std::{
         cell::{Cell, RefCell},

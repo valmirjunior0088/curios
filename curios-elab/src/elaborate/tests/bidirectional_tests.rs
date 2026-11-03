@@ -4,12 +4,12 @@ use {
     crate::elaborate::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Sign,
     curios_core::{
         Exhaustion, Intrinsic, MetavarId, MetavarOrigin, Minted, Mints, StructType, Subterm, Term,
         Universes,
     },
     curios_num::{Floating, Natural},
-    curios_utilities::Sign,
     std::rc::Rc,
 };
 

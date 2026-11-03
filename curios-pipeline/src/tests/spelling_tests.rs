@@ -4,6 +4,7 @@
 
 use {
     super::test_support::*,
+    curios_common::{Qualifier, fill},
     curios_core::{
         Enter, Global, IntrinsicForm, Item, Subterm, Term, Transient, intrinsic_form,
         intrinsic_global,
@@ -11,7 +12,6 @@ use {
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, into_core_with_prelude, spell},
     curios_unit::Predecessors,
-    curios_utilities::{Qualifier, fill},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt::Write,

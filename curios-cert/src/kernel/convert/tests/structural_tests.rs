@@ -3,11 +3,11 @@
 use {
     crate::kernel::convert::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Free, FuncType, Global, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext,
         Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 #[test]

@@ -6,7 +6,7 @@
 //!
 //! The crate owns neither representation it works between, so every name from `curios_cps` and `curios_wasm` is written with its crate.
 
-use {curios_abi::ForeignStore, curios_utilities::grown, std::collections::HashMap};
+use {curios_abi::ForeignStore, curios_common::grown, std::collections::HashMap};
 
 mod machine;
 use machine::*;

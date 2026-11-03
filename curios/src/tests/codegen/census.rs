@@ -6,13 +6,13 @@
 //! A region whose constructions disagree about width is reported as a *variant* beside its roster and class-merged width, and return components are surveyed apart from the regions — a variant-width return need contain no construction at all, an immediate family's bare constructor returning its payload, so a walk seeded at tuple sites would report its absence as its absence.
 
 use {
+    curios_common::ArenaId,
     curios_cps::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
         ValueExpr, ValueId,
     },
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::ArenaId,
     std::collections::{BTreeMap, BTreeSet},
 };
 

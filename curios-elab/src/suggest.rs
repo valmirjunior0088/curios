@@ -18,10 +18,10 @@ use {
         reduce_with, subsume_outcome, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
+    curios_common::Plicity,
     curios_core::{
         Apply, Entrypoint, Free, Global, InductType, Item, StructEntry, StructType, Subterm, Term,
     },
-    curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
 };
 

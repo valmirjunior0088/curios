@@ -11,12 +11,12 @@ use {
         LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
         parse_whitespace,
     },
+    curios_common::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, many1,
         mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
         take_eof, take_exact, take_n, take_while, unseen,
     },
-    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
     std::iter,
 };
 

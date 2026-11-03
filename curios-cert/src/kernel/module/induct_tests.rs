@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseContext,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// `induct Bad : Type 0 | mk(x : Type 0)` contains the universe it lives in. This is the fixture no surface program can spell — levels have no syntax — and the clause the item walk cannot check, because it computes each signature's sort and compares it to nothing.

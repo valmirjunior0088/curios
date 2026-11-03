@@ -1,4 +1,4 @@
-use {curios_utilities::Source, std::sync::Arc};
+use {curios_common::Source, std::sync::Arc};
 
 /// Where a parse stands in its input: what a parser is a function of. Opaque to a grammar, which hands it on.
 #[derive(Debug, Clone, Copy)]

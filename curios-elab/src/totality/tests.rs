@@ -1,8 +1,8 @@
 use {
     super::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{DefinitionKind, Intrinsic, UniverseContext, Universes},
-    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Enter, Global, Instance, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
     curios_text::RootSource,
     curios_unit::Unit,
-    curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 

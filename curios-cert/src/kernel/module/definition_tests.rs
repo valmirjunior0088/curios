@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// A definition marked a proof is checked as any other and brought into scope with nothing to unfold to: its body is its own check's to read, and no judgment's after it. Left unmarked, the same definition unfolds.

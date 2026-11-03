@@ -1,6 +1,6 @@
 //! List and binary literals and the spread and atom segments inside them.
 
-use {crate::parse::test_support::*, crate::*, curios_utilities::Sign};
+use {crate::parse::test_support::*, crate::*, curios_common::Sign};
 
 #[test]
 fn spread_entries_are_struct_literal_only() {

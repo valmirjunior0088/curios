@@ -4,10 +4,10 @@ use {
     super::{Binders, Opened, Sort, instantiate_bound_at},
     crate::{Context, reduce_forced},
     curios_analysis::struct_reaches_itself,
+    curios_common::recurse,
     curios_core::{
         Cost, FuncType, Global, ReduceError, StructType, Subterm, Telescope, Term, TupleType,
     },
-    curios_utilities::recurse,
 };
 
 /// Whether `type_` has one inhabitant by its shape: a proposition, the empty Σ, a Σ or a nominal struct whose every field's type has one, or a function type whose codomain has one.

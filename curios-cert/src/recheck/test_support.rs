@@ -7,6 +7,7 @@
 use {
     crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::{Plicity, Qualifier, SyntaxRegistry},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
         InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
@@ -14,7 +15,6 @@ use {
         Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
-    curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,

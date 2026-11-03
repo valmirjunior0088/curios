@@ -4,12 +4,12 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
         Universes,
     },
     curios_num::Integer,
-    curios_utilities::Qualifier,
 };
 
 #[test]

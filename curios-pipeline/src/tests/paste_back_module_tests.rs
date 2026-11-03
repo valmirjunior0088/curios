@@ -1,7 +1,7 @@
 //! A type a goal reports reads back in the module it stands in: spelled by what that module imports, by a root declaration's absolute path, and for every public standard declaration.
 
 use {
-    super::test_support::*, crate::*, curios_core::Global, curios_utilities::Qualifier,
+    super::test_support::*, crate::*, curios_common::Qualifier, curios_core::Global,
     std::fmt::Write,
 };
 

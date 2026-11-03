@@ -1,6 +1,6 @@
 //! A type a goal reports reads back under a witness: a local or a table one, reached past a binder or a superclass, the edge resolution finds, and an answer declined where none reads back.
 
-use {super::test_support::*, curios_utilities::fill};
+use {super::test_support::*, curios_common::fill};
 
 // The programs below hold a dictionary in a structure declared under a premise, `Box`, whose dictionary conversion compares: a report that left out a witness resolution would not put back is a paste that is refused.
 

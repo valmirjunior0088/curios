@@ -10,12 +10,12 @@ use {
         Subject, Uncosted, Written, checked, cost, declared_tests, diagnosed, stage, unit_stage,
         written,
     },
+    curios_common::Span,
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
-    curios_utilities::Span,
     curios_verdicts::{Session, Verdicts},
     std::{
         collections::BTreeSet,

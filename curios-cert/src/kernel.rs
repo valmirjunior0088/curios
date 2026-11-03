@@ -61,13 +61,13 @@ use {
         retyped,
     },
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
+    curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
         LevelHead, Lexicon, Module, Names, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
         Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes,
         Variance,
     },
-    curios_utilities::{Plicity, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 

@@ -104,7 +104,7 @@ impl Cost {
 
     /// One level of guarded reducer recursion, priced at the native frame it pushes.
     ///
-    /// This is the row that brings *depth* inside the contract. `curios_utilities::recurse` grows the native stack rather than aborting, and nothing else bounds total depth, so a data-shaped walk takes real memory the transition counter never observed — one unit per level is already spent, and what this adds is a price commensurate with the stack that level takes.
+    /// This is the row that brings *depth* inside the contract. `curios_common::recurse` grows the native stack rather than aborting, and nothing else bounds total depth, so a data-shaped walk takes real memory the transition counter never observed — one unit per level is already spent, and what this adds is a price commensurate with the stack that level takes.
     ///
     /// See `FRAME_UNITS` for the measurement and for which of the two figures it is.
     pub const FRAME: Self = Self::of(FRAME_UNITS, Category::Depth);

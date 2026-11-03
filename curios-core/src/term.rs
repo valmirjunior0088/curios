@@ -38,9 +38,9 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
+    curios_common::{Plicity, recurse},
     curios_num::Natural,
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{Plicity, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt,

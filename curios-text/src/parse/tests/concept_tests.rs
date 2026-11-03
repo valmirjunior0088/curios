@@ -1,6 +1,6 @@
 //! Concept and witness declarations, their parameter forms, and the separator syntax a parameterized witness prints.
 
-use {crate::*, curios_utilities::Plicity};
+use {crate::*, curios_common::Plicity};
 
 #[test]
 fn parse_concept_item() {

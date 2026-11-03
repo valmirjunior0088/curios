@@ -7,12 +7,12 @@ use {
         holds_no_type, one_up_to_instances, read_scrutinee, test_support::*,
     },
     curios_cert::Kernel,
+    curios_common::Qualifier,
     curios_core::{
         Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Rec, Reducer, Subterm, Term,
         Totality,
     },
     curios_num::{Integer, Natural, Rounding},
-    curios_utilities::Qualifier,
 };
 
 /// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Partial`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.

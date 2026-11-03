@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     curios_cert::{Error, Verdict},
+    curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
     curios_num::Binary,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::Qualifier,
     std::hash::{DefaultHasher, Hash, Hasher},
 };
 

@@ -1,4 +1,4 @@
-use {super::*, curios_utilities::test_support::*};
+use {super::*, curios_common::test_support::*};
 
 /// One object of its own bytes.
 fn object(text: &str) -> Object {
@@ -64,7 +64,7 @@ fn candidates_of_an_input_are_found_across_packs() {
     let packs = Packs::at(directory.to_path_buf(), now());
     let (input, other) = (Digest::of(b"input"), Digest::of(b"other"));
     let made = |input: &Digest, text: &str| Object {
-        digest: curios_utilities::candidate_name(Facet::Elaboration, input, text.as_bytes()),
+        digest: curios_common::candidate_name(Facet::Elaboration, input, text.as_bytes()),
         bytes: text.as_bytes().to_vec().into(),
         member: None,
     };
@@ -94,10 +94,7 @@ fn candidates_of_an_input_are_found_across_packs() {
         first
             .digest
             .as_bytes()
-            .starts_with(&curios_utilities::candidate_prefix(
-                Facet::Elaboration,
-                &input
-            ))
+            .starts_with(&curios_common::candidate_prefix(Facet::Elaboration, &input))
     );
 }
 

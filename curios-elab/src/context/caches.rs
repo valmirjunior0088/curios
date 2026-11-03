@@ -19,12 +19,12 @@ use {
     super::{SolutionPrefix, Solutions},
     crate::{EveryPosition, Sort, UniverseSolver, UniverseStateToken},
     curios_analysis::Classification,
+    curios_common::{Entropy, Keyed},
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Free, Global, Level, LevelHead, Mention, Quality,
         QualityMetaId, RecGroup, Sharing, Term, UniverseMetaId, lasting,
         rewrite_universe_qualities, substitute_universe_metas,
     },
-    curios_utilities::{Entropy, Keyed},
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},

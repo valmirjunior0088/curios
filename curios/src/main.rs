@@ -30,13 +30,13 @@ use test_runner::*;
 
 use {
     curios::{bindings_of, optimize},
+    curios_common::Source,
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
     curios_package::{Entry, Pinning, Repoint, Spelling, Store, Target, curate, pin, scaffold},
     curios_pipeline::CompileError,
     curios_text::Formatted,
-    curios_utilities::Source,
     curios_wonder::{
         Linted, STDIN_LABEL, Staged, lint, serve, std_documentation, wonder_at, wonder_cost,
         wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,

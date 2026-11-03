@@ -9,7 +9,7 @@ use {
         laws::{Binder, orders},
         *,
     },
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 const IMPORTS: &str =

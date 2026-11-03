@@ -18,12 +18,12 @@ use {
         declared, pending, reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
+    curios_common::{Mount, Plicity, Qualifier, SyntaxName},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
         ImplicitOrigin, Instance, Mention, Metavar, MetavarId, StructType, Subterm, Term,
         Transient, UniverseContext, Universes, WitnessKey, WitnessOrigin,
     },
-    curios_utilities::{Mount, Plicity, Qualifier, SyntaxName},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -39,7 +39,7 @@ pub enum Resolution {
     NoMatch,
 }
 
-/// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_utilities::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
+/// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_common::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
 pub fn callee(context: &Context, func: &CalleeId) -> Callee {
     match func {
         CalleeId::Operator(op) => {

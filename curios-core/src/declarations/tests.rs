@@ -1,4 +1,4 @@
-use {super::*, crate::*, curios_utilities::Qualifier};
+use {super::*, crate::*, curios_common::Qualifier};
 
 fn name(path: &[&str]) -> Global {
     Global::Authored(Qualifier::from(path.iter().copied()))

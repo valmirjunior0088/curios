@@ -2,16 +2,16 @@
 //!
 //! Compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it.
 
-use {super::*, curios_core::Consumption, curios_utilities::SyntaxRegistry};
+use {super::*, curios_common::SyntaxRegistry, curios_core::Consumption};
 
 #[cfg(test)]
 use {
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Declarations, Definition, DefinitionKind, Global, HeadKey, Intrinsic, Item, Module, Term,
         Totality, UniverseContext, WitnessKey,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

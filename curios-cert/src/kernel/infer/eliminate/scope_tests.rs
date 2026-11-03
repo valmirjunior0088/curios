@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{Free, Global, Intrinsic, Level, Many, Scope, Term, UniverseContext, Universes},
-    curios_utilities::{Plicity, Qualifier},
 };
 
 fn bool_type() -> Term {

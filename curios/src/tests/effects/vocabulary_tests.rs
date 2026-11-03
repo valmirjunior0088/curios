@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{run, typecheck},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 // === The `Io` vocabulary: constructing, sequencing, and forcing descriptions. ====

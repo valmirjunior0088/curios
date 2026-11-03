@@ -29,13 +29,13 @@ use {
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
+    curios_common::{OrderSyntax, Plicity, SyntaxName},
     curios_core::{
         Aligned, Apply, Cases, Extremum, Free, Global, InductType, Instance, Intrinsic,
         LinearViews, Match, Nat, Probe, StructType, Subterm, Term, TupleType,
         instantiate_universes,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{OrderSyntax, Plicity, SyntaxName},
 };
 
 /// Where a fact came from, for the report.

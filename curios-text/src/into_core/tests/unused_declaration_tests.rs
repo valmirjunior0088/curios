@@ -1,6 +1,6 @@
 //! `unused-declaration`: a private definition or module nothing reaches, the roots that reach one, and what a kept declaration reads.
 
-use {crate::into_core::test_support::*, curios_utilities::fill};
+use {crate::into_core::test_support::*, curios_common::fill};
 
 #[test]
 fn a_private_definition_nothing_reaches_is_reported_at_its_name() {

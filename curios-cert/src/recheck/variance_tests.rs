@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Level, Module, Term, UniverseParam, Variance},
-    curios_utilities::Qualifier,
 };
 
 fn level_one() -> Level {

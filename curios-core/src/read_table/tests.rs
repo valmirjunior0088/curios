@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::{Facet, Qualifier, candidate_prefix},
+    curios_common::{Facet, Qualifier, candidate_prefix},
 };
 
 /// The name `name`.

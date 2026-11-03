@@ -1,6 +1,6 @@
 //! What an arm learns of a let-bound scrutinee, through its definition and a chain of them, and a guard meeting itself through a definition.
 
-use {crate::tests::run, curios_utilities::fill};
+use {crate::tests::run, curios_common::fill};
 
 // === A scrutinee bound by `let` ===============================================
 //

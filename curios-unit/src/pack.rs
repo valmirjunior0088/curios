@@ -11,10 +11,10 @@ mod tests;
 
 use {
     curios_archive::Bytes,
+    curios_common::{Digest, Member, Object},
     curios_core::{ItemRun, ReadEntry, ReadTable},
     curios_elab::{TraceTable, TracedEntry},
     curios_erase::{AskedEntry, AskedTable},
-    curios_utilities::{Digest, Member, Object},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         io::{Read, Seek, SeekFrom},

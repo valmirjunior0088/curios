@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_utilities::Plicity,
+    curios_common::Plicity,
     std::{collections::hash_map::RandomState, hash::BuildHasher, rc::Rc},
 };
 

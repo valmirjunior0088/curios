@@ -4,11 +4,11 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Entrypoint, Free, Global, InductDecl, InductParam, Module, Program, Telescope, Term,
         UniverseContext, Universes, test_support::*,
     },
-    curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeMap,
 };
 

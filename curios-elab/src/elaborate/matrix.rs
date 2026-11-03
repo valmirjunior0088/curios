@@ -18,12 +18,12 @@ use {
     crate::{
         Context, Error, HeldFrames, check, expect, pending, reduce_with, resolved_for_display,
     },
+    curios_common::{Plicity, recurse},
     curios_core::{
         Atom, Bind, Free, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, StructType,
         Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
-    curios_utilities::{Plicity, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,

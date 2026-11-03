@@ -2,12 +2,12 @@
 
 use {
     super::{test_support::*, *},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Reducer, Scope,
         Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_num::Binary,
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. A machine that evaluates every beta argument and substitutes its value would inline a function-valued global's definition once per occurrence — and a web of definitions each naming the one before it twice would come back as a graph whose tree is `2^n`. The strategy substitutes the argument as written, so the two reducts would differ here, and this fixture is the one that sees it.

@@ -5,7 +5,7 @@ use {
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
         Node, NodeId, RowId, ValueExpr, ValueId, atoms,
     },
-    curios_utilities::Sorted,
+    curios_common::Sorted,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

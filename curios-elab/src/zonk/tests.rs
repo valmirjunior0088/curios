@@ -1,11 +1,11 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Anchor, Anchored, Cost, Definition, DefinitionKind, Extent, Free, Global, Intrinsic, Item,
         MetavarId, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext, test_support::*,
     },
-    curios_utilities::Qualifier,
 };
 
 fn context() -> Context<'static> {

@@ -7,8 +7,8 @@ use {
         Cancelled, Carrier, Combination, Deduction, Monomial, Operation, Progress, Recombination,
         Summand, Wanted, distribute,
     },
+    curios_common::recurse,
     curios_num::Natural,
-    curios_utilities::recurse,
     std::collections::HashMap,
 };
 

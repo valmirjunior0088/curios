@@ -6,7 +6,7 @@
 
 use {
     crate::tests::{core_elab, error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 // A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.

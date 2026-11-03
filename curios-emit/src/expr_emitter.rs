@@ -4,8 +4,8 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
         LocalData, region_layout, slot_zero_instrs,
     },
+    curios_common::recurse,
     curios_num::Natural,
-    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, HashMap, HashSet},
         mem,

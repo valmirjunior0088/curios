@@ -1,6 +1,6 @@
 use {
     super::{ParserState, obtained, shown, unseen},
-    curios_utilities::{Report, Source, Span},
+    curios_common::{Report, Source, Span},
     std::{borrow::Cow, sync::Arc},
 };
 

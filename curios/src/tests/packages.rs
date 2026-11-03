@@ -4,11 +4,11 @@
 
 use {
     crate::*,
+    curios_common::{Qualifier, digest, test_support::*},
     curios_native::{ForeignBindings, MockHost},
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
     curios_text::{Entrypoint, Overlay, RootSource},
-    curios_utilities::{Qualifier, digest, test_support::*},
     curios_verdicts::Verdicts,
     std::{
         fs,

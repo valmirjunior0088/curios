@@ -3,10 +3,10 @@
 use {
     crate::*,
     curios_abi::ForeignStore,
+    curios_common::fill,
     curios_native::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::fill,
 };
 
 /// A program compiled, ready to run.
@@ -164,7 +164,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
 // The real host sleeps in the kernel until the timer's instant; the program reads the clock on both sides of the wait and reports through a file, since the real host's standard output cannot be captured.
 #[test]
 fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
-    let root = curios_utilities::test_support::Temporary::new("host", "suspension-timer");
+    let root = curios_common::test_support::Temporary::new("host", "suspension-timer");
     std::fs::create_dir_all(&root).expect("a directory of its own");
     let report = root.join("report");
     let path = report.to_str().expect("a UTF-8 temporary path");
@@ -192,7 +192,7 @@ fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
 // A FIFO opened by path waits on no writer: one branch reads it while the other writes a marker file, which the writer outside the program waits for before it opens the FIFO, so the read can end only where the other branch ran while it waited.
 #[test]
 fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
-    let root = curios_utilities::test_support::Temporary::new("host", "suspension-fifo");
+    let root = curios_common::test_support::Temporary::new("host", "suspension-fifo");
     std::fs::create_dir_all(&root).expect("a directory of its own");
     let (fifo, marker, report) = (root.join("fifo"), root.join("marker"), root.join("report"));
     let made = std::process::Command::new("mkfifo")
@@ -330,7 +330,7 @@ fn a_branch_ticks_while_an_embedder_s_row_is_answered_later() {
 // The real host files a row answered later as it files a timer: one branch waits on an embedder's row while the other writes a marker file, which the work behind the row waits for, so the row can answer only where the other branch ran while it waited.
 #[test]
 fn the_real_host_runs_a_branch_while_another_waits_on_a_row_answered_later() {
-    let root = curios_utilities::test_support::Temporary::new("host", "suspension-later");
+    let root = curios_common::test_support::Temporary::new("host", "suspension-later");
     std::fs::create_dir_all(&root).expect("a directory of its own");
     let (marker, report) = (root.join("marker"), root.join("report"));
 

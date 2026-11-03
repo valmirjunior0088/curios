@@ -2,11 +2,11 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_cert::{Kernel, carries_information},
+    curios_common::Qualifier,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope, Term,
         UniverseContext,
     },
-    curios_utilities::Qualifier,
 };
 
 #[test]

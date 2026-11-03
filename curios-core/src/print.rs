@@ -7,9 +7,9 @@ use {
         Two, Universes, Var, Variant, former_eta,
     },
     curios_abi::stdio,
+    curios_common::{InfixOp, Persistent, Plicity, Qualifier, Symbol, recurse},
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
-    curios_utilities::{InfixOp, Persistent, Plicity, Qualifier, Symbol, recurse},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
@@ -276,7 +276,7 @@ impl Spelling {
         Some(names.spell(&self.reader, global, &**printer))
     }
 
-    /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_utilities::SyntaxRegistry)'s, since this crate may not spell it.
+    /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_common::SyntaxRegistry)'s, since this crate may not spell it.
     pub fn with_string_literals(mut self, name: Global) -> Self {
         self.string_literal = Some(name);
         self

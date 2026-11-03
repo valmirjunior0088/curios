@@ -8,8 +8,8 @@ use {
         PublicInterface, Scoped, globals,
     },
     crate::Error,
+    curios_common::{Qualifier, Span},
     curios_core::Bound,
-    curios_utilities::{Qualifier, Span},
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 

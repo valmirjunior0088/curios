@@ -4,15 +4,15 @@
 
 use {
     crate::{compile::test_support::*, *},
+    curios_common::{
+        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::*,
+    },
     curios_core::{Enter, Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
-    curios_utilities::{
-        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::*,
-    },
     std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
 };
 

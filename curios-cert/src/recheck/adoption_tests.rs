@@ -4,12 +4,12 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     curios_core::{
         Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
         Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
         Universes, Variance,
     },
-    curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -1220,8 +1220,8 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
 
 /// `induct Levelled.{u} : Type.{u + 1} | mk(x: Type.{u}) end`, whose entry carries `variances`: a payload's type mentions the level, so the walk computes it invariant.
 fn varied_family(variances: Vec<Variance>) -> Module {
+    use curios_common::Plicity;
     use curios_core::{Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::*};
-    use curios_utilities::Plicity;
 
     let family = global("Levelled");
     let level = Level::param(UniverseParam(0));

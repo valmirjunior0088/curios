@@ -4,6 +4,7 @@ use {
     super::*,
     crate::std_module::std_directory,
     curios_cert::{Error, Globals, certify_module, infer, recheck_module_verdicts_uncached},
+    curios_common::{Qualifier, digest},
     curios_core::{
         Bound, Cases, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Match, Nat,
         Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked, instantiate_qualities,
@@ -12,7 +13,6 @@ use {
     curios_erase::{Erasures, erase_unit},
     curios_text::{SYNTAX, TopItem},
     curios_unit::{Record, Unit, segments},
-    curios_utilities::{Qualifier, digest},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

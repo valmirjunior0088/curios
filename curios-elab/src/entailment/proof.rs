@@ -25,9 +25,9 @@ use {
     },
     crate::Context,
     curios_algebra::{Carrier, Operation},
+    curios_common::Plicity,
     curios_core::Term,
     curios_num::{Integer, Natural},
-    curios_utilities::Plicity,
 };
 
 /// What writing a certificate came to.

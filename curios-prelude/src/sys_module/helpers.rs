@@ -3,11 +3,11 @@
 //! One rung below `constructors.rs`, which builds declarations out of what this builds. Nothing here knows what is in the roster, and nothing here names a declaration: everything is a term.
 
 use {
+    curios_common::Plicity,
     curios_num::{Binary, Natural},
     curios_text::{
         Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Name, Subterm, Term, TupleType,
     },
-    curios_utilities::Plicity,
 };
 
 pub(super) fn name(label: &str) -> Term {

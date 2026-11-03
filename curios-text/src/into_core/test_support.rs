@@ -4,14 +4,14 @@
 
 use {
     crate::*,
-    curios_core::test_support::*,
-    curios_utilities::{
+    curios_common::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
         Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
         SyntaxRegistry, TestSyntax, test_support::*,
     },
+    curios_core::test_support::*,
     std::{collections::BTreeSet, fs, path::Path},
 };
 

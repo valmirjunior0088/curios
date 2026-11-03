@@ -1,6 +1,6 @@
 //! A structure read a facet at a time answers what it answers read whole.
 
-use {crate::*, curios_utilities::Qualifier};
+use {crate::*, curios_common::Qualifier};
 
 /// `struct Dep(A: Type, B: Type) { x: A, y: B, z: A(x, y), w: B(z, A) }`: each field names parameters and fields before it, so reading one opens the parameters and the projections of the fields before it.
 fn dependent() -> (StructDecl, Global) {

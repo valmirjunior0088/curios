@@ -4,7 +4,7 @@
 
 use {
     crate::*,
-    curios_utilities::{Sign, Source},
+    curios_common::{Sign, Source},
 };
 
 // The radix carries the written width, so a fixture numeral takes the width its own decimal spelling has — which is what the parser reads back for it.

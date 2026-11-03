@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Cost, Exhaustion, Global, Intrinsic, Reducer, Term, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// A case equation lives exactly as long as its arm.

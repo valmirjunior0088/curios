@@ -5,7 +5,7 @@
 use {
     super::{Gone, LoweredItem, PublicInterface, Records, Table, kept, named},
     crate::Lint,
-    curios_utilities::{Mount, Persistent, Qualifier, Sorted, Span},
+    curios_common::{Mount, Persistent, Qualifier, Sorted, Span},
     std::{
         collections::{BTreeSet, HashMap, HashSet},
         rc::Rc,

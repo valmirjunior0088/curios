@@ -3,8 +3,8 @@
 use {
     crate::elaborate::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Atom, Free, Term},
-    curios_utilities::Qualifier,
 };
 
 // Only the witness lowering mints a `Derive`, always in checked position against a concept application; met in inference, or checked against anything else, the transient has nothing to derive from and refuses rather than passing through.

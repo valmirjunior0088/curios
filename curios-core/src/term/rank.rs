@@ -15,7 +15,7 @@ use {
     super::{Subterm, Term},
     crate::{Bound, Free, LevelHead, MaskedLevels, Metavar, Quality, Visit},
     curios_algebra::Tie,
-    curios_utilities::Sorted,
+    curios_common::Sorted,
     std::{
         any::Any,
         cmp::Ordering,

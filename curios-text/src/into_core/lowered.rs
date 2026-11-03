@@ -14,7 +14,7 @@ use {
         TESTED_ONLY, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
+    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -391,7 +391,7 @@ pub(super) fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Re
 
 /// A unit's baseline half: what a later lowering of the same sources reads of it, and nothing compiled after the unit does.
 ///
-/// **Each record and each scan an object of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_utilities::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
+/// **Each record and each scan an object of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_common::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub(crate) struct BaselineHalf {
@@ -402,13 +402,13 @@ pub(crate) struct BaselineHalf {
     #[archived_with(curios_archive::Skip)]
     pub(crate) scans: Scans,
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
-    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    #[archived_with(curios_common::InSharedKeyOrder)]
     pub(crate) uses: Table<Vec<Consulted>>,
     /// Every lint each module body's declarations and `use` declarations were found to leave, by the body, before elaboration credits a binder: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
-    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    #[archived_with(curios_common::InSharedKeyOrder)]
     pub(crate) lints: Table<Vec<Lint>>,
     /// Every name each witness's key read, by the witness: what its name can move with.
-    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    #[archived_with(curios_common::InSharedKeyOrder)]
     pub(crate) keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
 }
 
@@ -483,7 +483,7 @@ impl Entry<'_> {
 }
 
 /// A baseline half restored out of what a unit stores of it: the rest, archived with the unit, and each record and scan an object of its own, restored beside the digest it was found by.
-impl curios_utilities::Records for BaselineHalf {
+impl curios_common::Records for BaselineHalf {
     fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
         let mut half = curios_archive::from_bytes::<BaselineHalf>(table)?;
         let mut records = Vec::new();

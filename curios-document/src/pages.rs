@@ -15,7 +15,7 @@ use prose::*;
 use {
     crate::Documentation,
     askama::Template,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
     std::{collections::BTreeMap, fs, io, path::Path},
 };
 

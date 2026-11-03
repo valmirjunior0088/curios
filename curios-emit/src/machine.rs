@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_utilities::{Entropy, id},
+    curios_common::{Entropy, id},
     std::{
         collections::{BTreeMap, BTreeSet, VecDeque},
         fmt,

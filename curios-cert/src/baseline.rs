@@ -12,12 +12,12 @@
 
 use {
     super::{Globals, Held, held, induct_alike, struct_alike},
+    curios_common::{Digest, Qualifier, digest},
     curios_core::{
         Certification, Concluded, Definition, Global, InductDecl, Item, ItemRun, Module, Nominal,
         Places, Polarity, Reads, RecDefinition, RecItem, Sharing, StructDecl, Totality,
         UniverseContext, Variance,
     },
-    curios_utilities::{Digest, Qualifier, digest},
     std::collections::{BTreeMap, HashMap},
 };
 

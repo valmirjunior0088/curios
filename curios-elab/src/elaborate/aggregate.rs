@@ -4,11 +4,11 @@ use {
         Context, Error, Mode, Occurrence, Sort, check, check_is_sort, elaborate, expect, pending,
         reduce_with, resolved_for_display, stuck_on_metavar,
     },
+    curios_common::Plicity,
     curios_core::{
         Bound, Extent, Field, InductType, Level, Proj, Quality, StructType, Subterm, Telescope,
         Term, Tuple, TupleType, Variant, instantiate_universes, stamp_declaration_instance,
     },
-    curios_utilities::Plicity,
     std::collections::BTreeSet,
 };
 

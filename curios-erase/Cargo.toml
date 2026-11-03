@@ -23,7 +23,7 @@ curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
 curios-profile = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 
 [dev-dependencies]
 # The budget the compiler judges each declaration on (`DEFAULT_BUDGET`), which the suite certifies its fixtures on before erasing them: tests only, so erasure does not reach the elaborator.

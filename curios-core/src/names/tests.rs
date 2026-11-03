@@ -1,4 +1,4 @@
-use {super::*, curios_utilities::Qualifier, std::collections::HashSet};
+use {super::*, curios_common::Qualifier, std::collections::HashSet};
 
 fn authored(segments: [&str; 2]) -> Global {
     Global::Authored(Qualifier::from(segments))

@@ -4,12 +4,12 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, ReduceError,
         Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseRole,
     },
     curios_num::{Binary, Integer},
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// The value fast path's sound population, pinned together with the license that makes it sound.

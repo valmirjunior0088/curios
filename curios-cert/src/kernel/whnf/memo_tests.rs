@@ -4,10 +4,10 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Global, Intrinsic, Level, Reducer, Term, UniverseContext, UniverseParam, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 /// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.

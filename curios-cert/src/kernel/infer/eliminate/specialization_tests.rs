@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Reducer, Term, UniverseContext, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// The arm rule specializes the *context*, not just the motive. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.

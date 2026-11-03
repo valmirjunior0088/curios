@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
+    curios_common::Qualifier,
     curios_elab::DEFAULT_BUDGET,
-    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

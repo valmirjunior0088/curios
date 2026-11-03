@@ -12,6 +12,6 @@ workspace = true
 profile = ["curios-parse/profile"]
 
 [dependencies]
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }

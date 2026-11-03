@@ -6,11 +6,11 @@ use {
         elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
         stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
+    curios_common::Plicity,
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, One,
         Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
     },
-    curios_utilities::Plicity,
     std::collections::BTreeSet,
 };
 

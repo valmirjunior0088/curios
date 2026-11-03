@@ -3,7 +3,7 @@
 use {
     super::super::{test_support::*, *},
     crate::*,
-    curios_utilities::{RootKind, test_support::*},
+    curios_common::{RootKind, test_support::*},
     std::{fs, path::Path},
 };
 

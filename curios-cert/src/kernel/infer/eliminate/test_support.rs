@@ -5,11 +5,11 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
         UniverseContext, Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 pub(super) fn kernel() -> Kernel<'static> {

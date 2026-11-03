@@ -10,11 +10,11 @@ use {
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
         TableType, TypeName, ValType,
     },
+    curios_common::Source,
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, fail, many0, many1, pure, run_parser, take_eof,
         take_exact, take_while,
     },
-    curios_utilities::Source,
     std::str::FromStr,
 };
 

@@ -4,7 +4,7 @@
 
 use {
     crate::tests::typecheck,
-    curios_utilities::fill,
+    curios_common::fill,
     std::{fmt::Write, time::Instant},
 };
 

@@ -17,11 +17,11 @@ use {
         print_let_head, print_struct_field_head, print_struct_head, print_test_head,
         print_witness_head,
     },
+    curios_common::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, each_named, render_annotated},
-    curios_utilities::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     std::{
         collections::{HashMap, HashSet},
         path::PathBuf,

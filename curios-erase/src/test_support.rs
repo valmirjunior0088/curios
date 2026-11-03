@@ -10,9 +10,9 @@ use crate::*;
 use {
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module, certify_program},
+    curios_common::Qualifier,
     curios_core::Zonkable,
     curios_elab::DEFAULT_BUDGET,
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

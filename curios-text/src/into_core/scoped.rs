@@ -7,7 +7,7 @@
 //! There is one base per unit in scope rather than one merged map, which is what keeps this a borrow: merging would copy every predecessor's table into every compilation, and copying the prelude per compilation is what the environment types avoid.
 
 use {
-    curios_utilities::{Qualifier, Sorted},
+    curios_common::{Qualifier, Sorted},
     std::rc::Rc,
 };
 

@@ -25,6 +25,7 @@ use {
         zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
+    curios_common::{Candidates, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, Entrypoint, Free, FuncType, Global,
         InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Names, Nominal,
@@ -32,7 +33,6 @@ use {
         UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
         stamp_declaration_instance,
     },
-    curios_utilities::{Candidates, Plicity, Qualifier, grown},
     std::{collections::BTreeSet, rc::Rc},
 };
 

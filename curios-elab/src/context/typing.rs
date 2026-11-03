@@ -4,7 +4,7 @@
 
 use {
     super::{Asking, Caches, Frames, Program, Spend, Traced},
-    curios_utilities::{Entropy, SyntaxRegistry},
+    curios_common::{Entropy, SyntaxRegistry},
 };
 
 /// The half of a context every judgment reads.

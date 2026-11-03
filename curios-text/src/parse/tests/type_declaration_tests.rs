@@ -1,6 +1,6 @@
 //! Inductives and structs: their variants and `and` chains, their visibility and representation spellings, and the function sugar of a field.
 
-use {crate::*, curios_utilities::Plicity};
+use {crate::*, curios_common::Plicity};
 
 #[test]
 fn top_inductive_single_variant() {

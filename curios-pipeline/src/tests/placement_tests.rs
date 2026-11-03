@@ -1,6 +1,6 @@
 //! Where a refusal lands: on the term it is about, and on the name of its declaration where it is about the declaration as a whole; and the second place it notes where it is about two.
 
-use {super::test_support::*, crate::*, curios_text::RootSource, curios_utilities::Report};
+use {super::test_support::*, crate::*, curios_common::Report, curios_text::RootSource};
 
 /// What `source` is refused with, as a compilation reports it.
 fn refusal(source: &str) -> Vec<Report> {

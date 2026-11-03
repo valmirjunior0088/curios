@@ -4,7 +4,7 @@ use {
     super::{test_support::*, *},
     crate::*,
     curios_abi::errno,
-    curios_utilities::test_support::*,
+    curios_common::test_support::*,
     rustix::{
         fs::OFlags,
         termios::{ControlModes, InputModes, LocalModes},

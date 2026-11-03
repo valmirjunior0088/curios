@@ -6,8 +6,8 @@ use {
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_module},
+    curios_common::{Plicity, Qualifier},
     curios_elab::DEFAULT_BUDGET,
-    curios_utilities::{Plicity, Qualifier},
     std::sync::Arc,
 };
 

@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Plicity,
     curios_core::{Intrinsic, Level, Many, Reducer, Scope, Term},
-    curios_utilities::Plicity,
 };
 
 /// A motive whose sort its index binder decides is no motive. `Side : (Bool) -> Prop | left : (true) | right : (false)` is eliminated at `(i, s) => match i : (c) => (match c : (_) => Type 1 | false => Type | true => Prop end) | false => Nat | true => Unit end`: at `left`'s case the result is the proposition `Unit`, and at `right`'s it is `Nat`, the data a proposition of two constructors is not taken into. Typed under its binder `i` it lands in no sort, so the match is refused before the guard or either arm is asked. `curios`'s `tests::board::large_elimination_tests` puts the same motive to the elaborator under this name.

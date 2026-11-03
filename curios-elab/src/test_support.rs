@@ -4,8 +4,8 @@
 
 use {
     crate::*,
+    curios_common::SyntaxRegistry,
     curios_core::{Free, Term},
-    curios_utilities::SyntaxRegistry,
 };
 
 /// `term`, read over the units `established` holds, as a report spells it for a reader standing at the top of the declaration it belongs to: each witness resolution would put back there left as an open slot, each method projected off one called as a program calls it (`written`). What a report settles where it is made, a test that prints a finished declaration settles here.

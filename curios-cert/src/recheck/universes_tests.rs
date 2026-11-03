@@ -4,6 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Definition, DefinitionKind, Entrypoint, Free, Global, InductDecl, Intrinsic, Item, Level,
         Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem, ReduceError,
@@ -11,7 +12,6 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
         Universes, test_support::*,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

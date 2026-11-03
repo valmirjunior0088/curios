@@ -4,12 +4,12 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
         Item, Module, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
         UniverseContext, Universes, test_support::*,
     },
-    curios_utilities::{Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         panic::{AssertUnwindSafe, catch_unwind},

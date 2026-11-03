@@ -2,7 +2,7 @@
 //!
 //! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names its home; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
-use curios_utilities::Qualifier;
+use curios_common::Qualifier;
 
 /// A unit's interface, for its consumers.
 #[derive(Debug, Clone, PartialEq, Eq)]

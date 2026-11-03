@@ -4,13 +4,13 @@
 
 use {
     crate::{Free, Global, Mention},
-    curios_utilities::{InOrder, Sorted},
+    curios_common::{InOrder, Sorted},
     std::{cell::OnceCell, fmt, rc::Rc},
 };
 
 /// What a term mentions — the declarations it names and its free variables — handed out as a pointer's clone. Read in [`Mention`]'s order, ascending: the declarations first, then the locals by mint.
 ///
-/// **A node pays for what it adds.** The set is `curios-utilities`' persistent treap ([`Sorted`]), whose shape is a function of the names it holds, and a node's is its largest carrying child's with the others' names put into it, the smaller into the larger ([`Sorted::union_with`]): it shares every node of the larger and copies the paths to the names it adds, so a chain whose every level names one more local holds a set per level at a path apiece, and a node whose children add nothing to the largest holds the largest itself.
+/// **A node pays for what it adds.** The set is `curios-common`' persistent treap ([`Sorted`]), whose shape is a function of the names it holds, and a node's is its largest carrying child's with the others' names put into it, the smaller into the larger ([`Sorted::union_with`]): it shares every node of the larger and copies the paths to the names it adds, so a chain whose every level names one more local holds a set per level at a path apiece, and a node whose children add nothing to the largest holds the largest itself.
 #[derive(Clone)]
 pub struct Mentions(Rc<Sorted<Mention, ()>>);
 

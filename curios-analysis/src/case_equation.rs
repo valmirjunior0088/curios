@@ -9,11 +9,11 @@ use {
         intrinsics_agree, invert_indices,
     },
     curios_algebra::{Carrier, Operation},
+    curios_common::SyntaxRegistry,
     curios_core::{
         Cases, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
         bool_value, is_bool_connective,
     },
-    curios_utilities::SyntaxRegistry,
     std::{mem, slice},
 };
 

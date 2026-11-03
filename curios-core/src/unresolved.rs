@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests;
 
-use {curios_utilities::Qualifier, std::fmt};
+use {curios_common::Qualifier, std::fmt};
 
 /// What a step of a name was looked up as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,7 +45,7 @@ pub struct Unresolved {
     /// The module the walk had reached where the step failed. `None` where the step was looked up in the scope the name was written in: a bare name, or the head of a relative path.
     pub within: Option<Qualifier>,
     pub missing: Missing,
-    /// The name in scope there that the reader most likely meant, by `curios_utilities::nearest`.
+    /// The name in scope there that the reader most likely meant, by `curios_common::nearest`.
     pub nearest: Option<String>,
     /// The shortest absolute paths the unit may write that carry the name the reader reached for, each a way to what may have been meant: the failed step itself where the scope it was written in holds nothing of that name, and the step after it where the failed step is a root the unit may not name. Found by the name alone, in the namespace it was sought in: a module and a declaration of one name are two things, and nothing here pairs a path with another that happens to export the same declaration.
     pub elsewhere: Vec<Qualifier>,

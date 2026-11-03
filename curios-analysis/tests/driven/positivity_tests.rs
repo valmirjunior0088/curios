@@ -6,11 +6,11 @@ use {
         Declarations, PositivityRefusal, positivity_vectors, struct_reaches_itself, test_support::*,
     },
     curios_cert::Kernel,
+    curios_common::Qualifier,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Nat, Polarity, StructDecl, StructType, Subterm,
         Telescope, Term, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

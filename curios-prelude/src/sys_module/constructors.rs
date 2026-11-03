@@ -4,11 +4,11 @@
 
 use {
     super::{Projection, intrinsic, name, projection},
+    curios_common::{Plicity, SyntaxRegistry},
     curios_text::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
         TopItem, TopLet, TopMod, TopUse, UseGroup,
     },
-    curios_utilities::{Plicity, SyntaxRegistry},
 };
 
 /// One `/sys` binding, before it is a [`TopItem`].

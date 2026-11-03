@@ -10,14 +10,14 @@
 //!
 //! **An extent of a text that has since changed resolves to the declaration.** A term may outlive the text it was written in: a declaration a recompile keeps, a signature another declaration's term was instantiated from. Its extent then carries the stamp of the earlier text, which no text of its anchor answers to, and it resolves to where the declaration now stands rather than to offsets that no longer lie on what they were taken from — where the anchor has one text, which a named declaration's does. Otherwise it resolves to nothing, as an anchor no table holds does, and its report goes unplaced.
 //!
-//! **An anchor is a copyable identity**, interned once per process as a path is ([`curios_utilities::Qualifier`]) and for its reason: every occurrence of every term a lowering builds holds one. The table is bounded by the declarations and the modules a process names.
+//! **An anchor is a copyable identity**, interned once per process as a path is ([`curios_common::Qualifier`]) and for its reason: every occurrence of every term a lowering builds holds one. The table is bounded by the declarations and the modules a process names.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::Global,
-    curios_utilities::{
+    curios_common::{
         Digest, InKeyOrder, Object, Qualifier, Records, Sorted, Source, Span, Table, intern,
     },
     std::{
@@ -54,7 +54,7 @@ pub struct Anchor {
     anchored: &'static Arc<Anchored>,
 }
 
-/// Every anchor this process has named. See `curios_utilities`' interner for why nothing is freed.
+/// Every anchor this process has named. See `curios_common`' interner for why nothing is freed.
 static ANCHORS: LazyLock<Table<Anchored, Arc<Anchored>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 

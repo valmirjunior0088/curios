@@ -7,6 +7,7 @@ mod tests;
 use {
     super::{Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
+    curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
         Free, Global, Islands, Item, Level, Lexicon, Mention, Module, Places, Polarity,
@@ -14,7 +15,6 @@ use {
         UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, build_rename,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 

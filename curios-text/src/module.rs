@@ -6,12 +6,12 @@ use {
         parse_top_item, parsed, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
+    curios_common::{Plicity, Report, Source, Span},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
     },
     curios_print::{flat, pure, run_printer},
-    curios_utilities::{Plicity, Report, Source, Span},
     std::{fmt, path::Path, str::FromStr, sync::Arc},
 };
 

@@ -3,8 +3,8 @@
 use {
     crate::universes::solver::test_support::*,
     crate::universes::solver::*,
+    curios_common::Qualifier,
     curios_core::{Anchor, Anchored, Extent, Global},
-    curios_utilities::Qualifier,
 };
 
 /// A scheme stating one constraint, raised in a declaration of another unit.

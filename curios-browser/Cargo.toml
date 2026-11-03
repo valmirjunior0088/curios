@@ -13,7 +13,7 @@ curios-abi = { workspace = true }
 curios-wasm = { workspace = true }
 curios-emit = { workspace = true }
 # The SHA-256 a page states each file's integrity by.
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 serde = { workspace = true }
@@ -28,4 +28,4 @@ curios-native = { workspace = true, features = ["test-support"] }
 # What compiles the bridge module the suite drives by hand.
 curios-cranelift = { workspace = true }
 # `fill!`, by which a fixture splices a value into text whose own braces stay single.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

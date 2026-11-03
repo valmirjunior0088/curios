@@ -14,7 +14,7 @@ mod tests;
 use {
     super::{Head, Headed},
     crate::PreparedText,
-    curios_utilities::{Qualifier, Source, Span},
+    curios_common::{Qualifier, Source, Span},
     std::collections::{BTreeSet, HashSet},
 };
 

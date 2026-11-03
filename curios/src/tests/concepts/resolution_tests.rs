@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 // The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to the `Show(Nat)` witness.

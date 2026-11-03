@@ -6,13 +6,13 @@ mod tests;
 use {
     crate::Proof,
     curios_cert::Verdict,
+    curios_common::{Qualifier, Report},
     curios_core::{
         Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Universes, Zonked,
         ZonkedRefusal,
     },
     curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
-    curios_utilities::{Qualifier, Report},
     std::fmt,
 };
 

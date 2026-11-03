@@ -7,11 +7,11 @@
 //! **A trait, because two readers want two forms of one scope.** Elaboration reads the units as they were elaborated (`Established`), and erasure reads each declaration out of its universes, made the first time it is asked for.
 
 use {
+    curios_common::Qualifier,
     curios_core::{
         ConceptDecl, FuncType, Global, InductDecl, ParameterField, RecGroup, StructDecl, Subterm,
         Term, Totality, UniverseContext, Variance, WitnessKey,
     },
-    curios_utilities::Qualifier,
     std::fmt::Debug,
 };
 

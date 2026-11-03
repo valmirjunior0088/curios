@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_algebra::Rank,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
     std::{cmp::Ordering, collections::BTreeMap},
 };
 

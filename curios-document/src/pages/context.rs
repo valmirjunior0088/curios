@@ -4,7 +4,7 @@ use {
     super::{Bundle, Paragraph, Span, paragraphs, spans},
     crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
     askama::Template,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
     std::collections::BTreeMap,
 };
 

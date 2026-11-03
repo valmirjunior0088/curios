@@ -2,8 +2,8 @@
 
 use {
     crate::tests::run_text,
+    curios_common::{fill, test_support::*},
     curios_native::OsHost,
-    curios_utilities::{fill, test_support::*},
 };
 
 // A child's piped outputs are drained side by side, and its input written beside them: the pipe answers would-block until the child writes, the reader suspends on a watch, the host's wait wakes it, and everything joins before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` writes back what it was fed and exits at the end of its input, which only finishing the input gives it.

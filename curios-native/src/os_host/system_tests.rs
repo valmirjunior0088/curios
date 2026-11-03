@@ -1,6 +1,6 @@
 //! What the system answers: randomness, an environment variable, the clock, and a file's modification time.
 
-use {super::*, curios_utilities::test_support::*};
+use {super::*, curios_common::test_support::*};
 
 /// Randomness answers exactly the bytes asked for, and a request no memory can hold refuses the call rather than abort the process.
 #[test]

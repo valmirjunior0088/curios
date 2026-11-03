@@ -13,8 +13,8 @@ use {
     super::{Error, Kernel},
     crate::{decide, grade, member_arities, nonzero_by, refined_by_arm},
     curios_analysis::{Call, SizeContext},
+    curios_common::Keyed,
     curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
-    curios_utilities::Keyed,
     std::collections::{HashMap, HashSet},
 };
 

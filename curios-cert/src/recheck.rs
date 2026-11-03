@@ -62,13 +62,13 @@ use {
         universe_verdict, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
+    curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
         Abroad, Bound, Certification, Certified, Changes, Concluded, Entrypoint, Global, HeldReads,
         InductDecl, Item, ItemRun, Level, Lexicon, MetavarId, Module, Places, Polarity, Program,
         ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext, Variance,
         Zonked,
     },
-    curios_utilities::{Candidates, Facet, SyntaxRegistry, grown},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

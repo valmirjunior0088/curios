@@ -1,6 +1,6 @@
 //! What the traversal modes cost over shared structure.
 
-use {super::*, crate::*, curios_utilities::Qualifier};
+use {super::*, crate::*, curios_common::Qualifier};
 
 /// **The universe-erased projection visits a shared subterm once**, which is the detector for a projection walking a DAG as the tree it expands to.
 ///

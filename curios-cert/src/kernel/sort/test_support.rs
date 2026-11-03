@@ -3,8 +3,8 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, InductDecl, Telescope, Term, UniverseContext},
-    curios_utilities::Qualifier,
 };
 
 pub fn kernel() -> Kernel<'static> {

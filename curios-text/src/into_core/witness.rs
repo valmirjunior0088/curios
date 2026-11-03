@@ -11,7 +11,7 @@
 use {
     super::{FlatItem, FlatLet},
     crate::{Lint, PreparedText},
-    curios_utilities::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},

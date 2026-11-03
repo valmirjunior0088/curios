@@ -19,7 +19,7 @@ use {
         declared_digest, erased_digest,
     },
     curios_archive::{Bytes, Deferred},
-    curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
+    curios_common::{Digest, Object, Ordered, Persistent, Recorded, digest},
     std::{
         borrow::Borrow,
         cell::OnceCell,

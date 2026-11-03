@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run, typecheck},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 /// An action whose head is not a monad at all is called out as such — suggesting an edge that could never be declared would be a trap.

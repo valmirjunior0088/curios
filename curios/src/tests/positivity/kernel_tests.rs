@@ -2,6 +2,7 @@
 
 use {
     curios_cert::{Error, Verdict},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Definition, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Item, Many,
         Module, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm, Telescope,
@@ -9,7 +10,6 @@ use {
     },
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude},
     curios_text::SYNTAX,
-    curios_utilities::{Plicity, Qualifier},
 };
 
 fn bad() -> Global {

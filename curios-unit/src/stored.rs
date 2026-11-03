@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_archive::{Bytes, parted},
-    curios_utilities::{Digest, Object, Source, digest},
+    curios_common::{Digest, Object, Source, digest},
     std::{
         path::{Path, PathBuf},
         sync::Arc,

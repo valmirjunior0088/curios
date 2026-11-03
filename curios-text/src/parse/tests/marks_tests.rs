@@ -1,6 +1,6 @@
 //! What a mark is followed by at each kind of site, and the rule each refused form is reported by.
 
-use {crate::*, curios_utilities::Plicity};
+use {crate::*, curios_common::Plicity};
 
 /// Every form a signature takes — a function type, a definition telescope, a payload, a type parameter — parses and prints back as written: a plain or `@` member named, or as its type alone where nothing after it reads the name, and a `use` premise as its type.
 #[test]

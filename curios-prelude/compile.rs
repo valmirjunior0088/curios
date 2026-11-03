@@ -5,6 +5,7 @@
 use {
     crate::{std_source, sys_source},
     curios_cert::{Globals, Rechecked, certify_module},
+    curios_common::{Qualifier, Report, Source, digest},
     curios_core::{
         Anchors, Certification, Global, Item, Module, Sharing, Zonked, validate_stored_identities,
     },
@@ -18,7 +19,6 @@ use {
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
     },
     curios_unit::{Indexed, Record, Unit, framed, packed},
-    curios_utilities::{Qualifier, Report, Source, digest},
     std::{
         collections::BTreeSet,
         fs,

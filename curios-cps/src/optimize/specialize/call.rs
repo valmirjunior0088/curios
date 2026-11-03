@@ -7,8 +7,8 @@ use {
         FunctionId, Intrinsic, Literal, Module, Node, NodeId, ValueExpr, ValueId, copy_bodies,
         function_nodes, visit_atoms_mut,
     },
+    curios_common::ArenaId,
     curios_num::Natural,
-    curios_utilities::ArenaId,
     std::collections::{BTreeMap, BTreeSet},
 };
 

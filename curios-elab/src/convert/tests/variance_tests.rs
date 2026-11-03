@@ -4,12 +4,12 @@ use {
     crate::convert::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, InductDecl, InductParam, Level, Telescope, Term,
         Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, UniverseParam, UniverseRole, Variance,
     },
-    curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
 };
 

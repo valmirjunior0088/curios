@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::*,
-    curios_utilities::{Qualifier, RootKind, Source, test_support::*},
+    curios_common::{Qualifier, RootKind, Source, test_support::*},
     std::{fs, path::Path, sync::Arc},
 };
 

@@ -19,7 +19,7 @@ profile = [
 [dependencies]
 curios-abi = { workspace = true }
 curios-archive = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-erase = { workspace = true }

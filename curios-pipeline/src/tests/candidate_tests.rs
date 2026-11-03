@@ -3,12 +3,12 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::{Candidates, Digest, Facet, Qualifier},
     curios_core::{Global, ItemRun},
     curios_elab::{declaration_input, lowered_digest},
     curios_prelude::with_prelude,
     curios_text::{SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
-    curios_utilities::{Candidates, Digest, Facet, Qualifier},
 };
 
 /// `source` compiled as the unit `/lib` over `baseline`, against the prelude, taking what it can from `store`.

@@ -8,7 +8,7 @@
 
 use {
     super::{Extent, Global},
-    curios_utilities::Mint,
+    curios_common::Mint,
     std::{
         collections::BTreeMap,
         fmt,

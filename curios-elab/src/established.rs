@@ -11,11 +11,11 @@
 use {
     super::{Defined, Error, InScope, Question, part_digest},
     crate::DefinedGroup,
+    curios_common::Qualifier,
     curios_core::{
         ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
         StructDecl, WitnessKey,
     },
-    curios_utilities::Qualifier,
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},

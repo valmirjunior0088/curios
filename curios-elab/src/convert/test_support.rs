@@ -5,11 +5,11 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Nat, ReduceError, Telescope, Term,
         UniverseContext,
     },
-    curios_utilities::Qualifier,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.

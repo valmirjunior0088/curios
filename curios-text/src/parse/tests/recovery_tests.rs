@@ -1,6 +1,6 @@
 //! Resynchronization past a broken item: what is skipped, where parsing resumes, what a broken item says it declared, and which reading refuses instead.
 
-use {crate::*, curios_utilities::Source};
+use {crate::*, curios_common::Source};
 
 fn items(text: &str) -> Vec<TopItem> {
     Module::parse(&Source::inline(text)).unwrap().items

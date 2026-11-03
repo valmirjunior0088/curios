@@ -3,11 +3,11 @@
 use {
     crate::elaborate::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Cases, Free, InductArm, InductDecl, InductParam, Many, Match, MatchResult, Scope,
         Subterm, Telescope, Term, UniverseContext,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 #[test]

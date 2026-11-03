@@ -4,7 +4,7 @@
 
 use {
     super::{Global, Sharing, Telescope, UniverseContext},
-    curios_utilities::Plicity,
+    curios_common::Plicity,
 };
 
 /// One concept declaration's registry entry.

@@ -9,7 +9,7 @@ use {
         Atom, CallAnalysis, Callee, CopyBudget, CopyPlan, CopyPriority, FunctionId, Literal,
         Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId, analyze_calls, copy_bodies,
     },
-    curios_utilities::ArenaId,
+    curios_common::ArenaId,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         hash::{Hash, Hasher},

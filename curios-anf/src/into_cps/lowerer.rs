@@ -12,8 +12,8 @@ use {
     },
     crate::{Allocation, CellOperation, ChannelOperation, Intrinsic, Summary, SuspensionOperation},
     curios_abi::ForeignFunction,
+    curios_common::recurse,
     curios_num::Natural,
-    curios_utilities::recurse,
     std::{collections::BTreeMap, sync::Arc},
 };
 

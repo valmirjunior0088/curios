@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Global, Term, UniverseContext, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted, Without this, `Eq/subst` is unstatable.

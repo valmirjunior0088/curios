@@ -11,10 +11,10 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_cert::Kernel,
+    curios_common::Qualifier,
     curios_core::{
         DefinitionKind, Free, Global, Intrinsic, Reducer, Term, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 /// The kernel these fixtures are put to.

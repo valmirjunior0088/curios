@@ -4,7 +4,7 @@
 //!
 //! **A part is digested by whoever reads it.** A signature and a body by the certifier's own digest ([`curios_cert::part_digest`]), so what a recompile compares of a declaration is what the kernel compares of it; a kind, a binding and forms whole by erasure's ([`declared_digest`], [`erased_digest`]).
 //!
-//! **Completed where it is filed, and found by the item it erased.** A store's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_utilities::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the store where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the store beside it.
+//! **Completed where it is filed, and found by the item it erased.** A store's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_common::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the store where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the store beside it.
 
 mod table;
 pub use table::{AskedEntry, AskedTable};
@@ -14,9 +14,7 @@ pub use by::AskedBy;
 
 use {
     crate::{ErasedUnit, declared},
-    curios_utilities::{
-        Digest, Facet, InKeyOrder, Object, Records, Sorted, candidate_name, digest,
-    },
+    curios_common::{Digest, Facet, InKeyOrder, Object, Records, Sorted, candidate_name, digest},
     std::{
         cell::OnceCell,
         collections::{BTreeSet, HashMap},

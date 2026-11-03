@@ -15,11 +15,11 @@ mod tests;
 
 use {
     crate::{Packs, opened, replace},
+    curios_common::{Candidates, Qualifier, digest},
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier, complete_records},
     curios_text::{Compiled, Overlay, UnitSource},
     curios_unit::{Indexed, Record, Unit, digested, read_within},
-    curios_utilities::{Candidates, Qualifier, digest},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet},

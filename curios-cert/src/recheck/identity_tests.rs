@@ -4,11 +4,11 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Module, Nat, Program,
         Scope, Subterm, Term, UniverseContext, UniverseParam, Var,
     },
-    curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
 

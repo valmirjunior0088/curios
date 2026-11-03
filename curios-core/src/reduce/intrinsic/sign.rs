@@ -8,7 +8,7 @@ use {
     super::super::{ReduceError, Reducer},
     crate::{Cost, Intrinsic, Subterm, Term},
     curios_algebra::{SignBit, SignForm, SignMagnitude},
-    curios_utilities::recurse,
+    curios_common::recurse,
 };
 
 /// `folded` in its sign reading's one form where it is a stuck sign operation, and `folded` otherwise. Each node of the form is charged before it is built.

@@ -4,11 +4,11 @@ use {
         Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with,
         stuck_on_metavar,
     },
+    curios_common::Plicity,
     curios_core::{
         CalleeId, Free, Global, Mention, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term,
         Transient,
     },
-    curios_utilities::Plicity,
 };
 
 pub fn elaborate_metavar(

@@ -4,7 +4,7 @@ use {
         Variance, instantiate_qualities, instantiate_universes,
     },
     crate::Sharing,
-    curios_utilities::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, ops::Deref, sync::OnceLock},
 };
 

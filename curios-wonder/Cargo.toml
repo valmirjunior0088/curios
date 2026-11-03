@@ -13,7 +13,7 @@ workspace = true
 # the one rung the driver cannot render, `wasm-optm`, is handed back for the product that owns
 # Binaryen to finish. The language server's protocol crates have this crate as their one owner.
 [dependencies]
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-document = { workspace = true }
 # For what a name is declared as and where its declaration's name is written, which `at` and `declarations` answer in the lowering's own terms.
 curios-core = { workspace = true }
@@ -31,4 +31,4 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
-curios-utilities = { workspace = true, features = ["test-support"] }
+curios-common = { workspace = true, features = ["test-support"] }

@@ -1,11 +1,11 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, Nominal, Scope,
         Telescope, Term, UniverseContext, Universes,
     },
     curios_text::SYNTAX,
-    curios_utilities::{Plicity, Qualifier},
 };
 
 pub(super) const TICKET: Ticket = Ticket {

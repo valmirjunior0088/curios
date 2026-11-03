@@ -9,7 +9,7 @@ mod tests;
 
 use {
     super::{Global, Items, Module},
-    curios_utilities::{Persistent, Sorted},
+    curios_common::{Persistent, Sorted},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,

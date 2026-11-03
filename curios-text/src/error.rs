@@ -1,13 +1,13 @@
 use {
+    curios_common::{Report, Span},
     curios_parse::ParserError,
-    curios_utilities::{Report, Span},
     std::{fmt, io, path::PathBuf},
 };
 
 /// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `into_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
 #[derive(Debug)]
 pub enum Error {
-    /// A name that did not resolve: the one refusal of a step of a path, a `use` selector or a relative head that finds nothing it may use — see `curios_core::Unresolved`, which says what failed and renders it. A step into a root the unit may not name is one of these: a root only the compiler supplies (`sys`), whose roster is the compiler's own vocabulary with no compatibility promise (`curios_utilities::RootKind::Internal` says why), and a prefix the compilation mounts and the unit never declared a dependency on. Raised for a `use`, which refuses its unit; a name written in a declaration hands the same value to elaboration instead (`Error::into_unresolved`). `leaf` is whether the step that failed is the last segment of the name it was written in, which is what a report of a `use m/{a}` is placed by.
+    /// A name that did not resolve: the one refusal of a step of a path, a `use` selector or a relative head that finds nothing it may use — see `curios_core::Unresolved`, which says what failed and renders it. A step into a root the unit may not name is one of these: a root only the compiler supplies (`sys`), whose roster is the compiler's own vocabulary with no compatibility promise (`curios_common::RootKind::Internal` says why), and a prefix the compilation mounts and the unit never declared a dependency on. Raised for a `use`, which refuses its unit; a name written in a declaration hands the same value to elaboration instead (`Error::into_unresolved`). `leaf` is whether the step that failed is the last segment of the name it was written in, which is what a report of a `use m/{a}` is placed by.
     Unresolved {
         failure: Box<curios_core::Unresolved>,
         leaf: bool,

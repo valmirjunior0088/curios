@@ -31,12 +31,12 @@ use {
         Operation, ProductId, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
-    curios_utilities::grown,
+    curios_common::grown,
 };
 
 /// Lower a verified arena [`Module`] into a CPS [`curios_cps::Module`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
 ///
-/// The walk recurses once per statement and once per block nesting, inside [`recurse`](curios_utilities::recurse), and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which would overflow the default test-thread stack at about 1 900 levels.
+/// The walk recurses once per statement and once per block nesting, inside [`recurse`](curios_common::recurse), and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which would overflow the default test-thread stack at about 1 900 levels.
 pub fn lower_to_cps(source: &Module) -> curios_cps::Module {
     curios_profile::profile!("lower_to_cps");
     grown(|| lower_to_cps_within(source))

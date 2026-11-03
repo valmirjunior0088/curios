@@ -2,11 +2,11 @@
 
 use {
     crate::{Answered, Context, Declared, Error, Question, Witness},
+    curios_common::{Mount, Qualifier},
     curios_core::{
         ConceptDecl, Definition, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term,
         Totality, UniverseContext, Variance, WitnessKey,
     },
-    curios_utilities::{Mount, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         mem,

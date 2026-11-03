@@ -9,7 +9,7 @@ use {
         AskedRecord, AskedTable, ErasedOver, ErasedUnit, HeldAsked, Made, Part, Read, bytes_of,
         declared_digest, erased_digest,
     },
-    curios_utilities::{Candidates, Digest, Facet},
+    curios_common::{Candidates, Digest, Facet},
     std::{collections::HashMap, rc::Rc},
 };
 

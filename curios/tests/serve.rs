@@ -1,7 +1,7 @@
 //! `run --target browser` and `test --target browser` end to end: the compiler started on a port of loopback's own, the port read off its `Serving` line, and its page or its run asked for over loopback as a browser asks — the runner's part played here with canned reports, since no engine runs a page in this suite, which the page suite under Node does.
 
 use {
-    curios_utilities::{digest, test_support::*},
+    curios_common::{digest, test_support::*},
     std::{
         fs,
         io::{BufRead, BufReader, Read, Write},

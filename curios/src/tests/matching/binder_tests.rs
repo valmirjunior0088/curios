@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run},
-    curios_utilities::fill,
+    curios_common::fill,
 };
 
 /// `function` put to `calls` over `z`, a `Nat` that is zero: the answers as one numeral, the first call's in the units, the second's in the tens. Once with `z` written `0`, which leaves every call for the compiler to fold, and once with a zero no fold reads, which leaves each to run.

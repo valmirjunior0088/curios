@@ -10,7 +10,7 @@ use {
         int_split_by_sign, int_terms,
     },
     curios_algebra::{Carrier, Comparison, Modular},
-    curios_utilities::recurse,
+    curios_common::recurse,
     std::collections::HashMap,
 };
 

@@ -6,7 +6,7 @@
 
 use {
     crate::{Label, Module, TopItem, TopUse},
-    curios_utilities::{Report, Source, Span},
+    curios_common::{Report, Source, Span},
     std::{rc::Rc, sync::Arc},
 };
 

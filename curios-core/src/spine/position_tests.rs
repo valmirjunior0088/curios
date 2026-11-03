@@ -3,7 +3,7 @@
 use {
     super::{test_support::*, *},
     crate::*,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
 };
 
 fn list_window(base: Term, start: Term, count: Term) -> Term {

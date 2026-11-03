@@ -17,6 +17,6 @@ test-support = []
 curios-archive = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
-curios-utilities = { workspace = true }
+curios-common = { workspace = true }
 curios-cps = { workspace = true }
 curios-num = { workspace = true }

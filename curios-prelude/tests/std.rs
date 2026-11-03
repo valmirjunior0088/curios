@@ -4,6 +4,7 @@
 
 use {
     curios::{TestSubject, run_wasm, test_subjects},
+    curios_common::{Qualifier, fill},
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_package::{Selection, Spelling, Target},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
@@ -13,7 +14,6 @@ use {
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
         is_extended_pictographic, test_support::*,
     },
-    curios_utilities::{Qualifier, fill},
     curios_verdicts::Verdicts,
     std::{
         fs,

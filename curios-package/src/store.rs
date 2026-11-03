@@ -30,8 +30,8 @@ mod tests;
 
 use {
     crate::{FileHash, Target, TreeHash},
+    curios_common::{Fingerprint, Mount, Qualifier},
     curios_text::Compiled,
-    curios_utilities::{Fingerprint, Mount, Qualifier},
     std::path::PathBuf,
 };
 

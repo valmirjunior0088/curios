@@ -2,7 +2,7 @@
 //!
 //! Two facts about *where* elaboration stands, each set for an extent and put back when the extent ends: the module whose item is being elaborated, which the representation-privacy checks judge a use site from, and whether the prover that discharges a bound from the facts in scope is running. Neither is a fact about a term: a context that elaborates nothing — one that only reads finished terms — is in no stance at all, and the privacy checks, which are a property of *surface* elaboration, are structurally off there.
 
-use curios_utilities::Qualifier;
+use curios_common::Qualifier;
 
 /// Where surface elaboration stands.
 #[derive(Debug)]

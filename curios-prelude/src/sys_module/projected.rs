@@ -8,9 +8,9 @@
 
 use {
     super::{applied, fn_over, intrinsic, name, sort, type_, unit},
+    curios_common::{Plicity, Qualifier, SyntaxRegistry},
     curios_core::{Operand, Produced},
     curios_text::{Intrinsic, Name, Subterm, Term},
-    curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
 };
 
 /// What the table says of one node: each parameter's plicity and type, in the parameters' order, and the result.

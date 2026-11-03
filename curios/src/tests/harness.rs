@@ -5,10 +5,10 @@ mod sequence_tests;
 
 use {
     super::*,
+    curios_common::{Qualifier, RootKind},
     curios_native::MockHost,
     curios_pipeline::{DEFAULT_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{Qualifier, RootKind},
 };
 
 #[test]

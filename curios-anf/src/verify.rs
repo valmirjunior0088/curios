@@ -25,7 +25,7 @@ use {
         spell_function, spell_value,
     },
     curios_abi::Namespace,
-    curios_utilities::{grown, recurse},
+    curios_common::{grown, recurse},
     std::collections::HashSet,
 };
 

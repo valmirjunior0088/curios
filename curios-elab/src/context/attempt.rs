@@ -5,8 +5,8 @@
 use {
     super::Solutions,
     crate::UniverseSolver,
+    curios_common::Entropy,
     curios_core::{Extent, MetavarId, Mints, Term},
-    curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
 

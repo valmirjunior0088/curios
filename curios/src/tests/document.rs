@@ -1,11 +1,11 @@
 //! A package's documentation record, made from the unit its compilation builds: what `curios document` renders, checked over the standard library — the largest interface in the tree, read off the image it ships in — and over a fixture package whose every rule of the record is written out.
 
 use {
+    curios_common::{Qualifier, test_support::*},
     curios_document::Kind,
     curios_package::{Governing, order},
     curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
-    curios_utilities::{Qualifier, test_support::*},
     curios_wonder::{documentation, std_documentation},
     std::fs,
 };

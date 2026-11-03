@@ -4,8 +4,8 @@
 
 use {
     super::*,
+    curios_common::Qualifier,
     curios_core::{Free, Global, Intrinsic, Polarity, Term},
-    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

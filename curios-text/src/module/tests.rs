@@ -1,4 +1,4 @@
-use {super::*, crate::*, curios_utilities::Qualifier, std::path::Path};
+use {super::*, crate::*, curios_common::Qualifier, std::path::Path};
 
 /// A text's form is read off the text: items alone are a module, a final term after them makes a program, and a text that does not parse is a program, whose own reading reports what is wrong with it.
 #[test]

@@ -10,13 +10,13 @@ use {
         resolved_for_display, same_uncommitted, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
+    curios_common::Plicity,
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType,
         Intrinsic, IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope,
         Subterm, Telescope, Term, Three, Two, Universes,
     },
     curios_num::{Binary, Natural},
-    curios_utilities::Plicity,
     std::collections::{HashMap, HashSet},
 };
 

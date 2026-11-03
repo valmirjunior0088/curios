@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{run, run_text, typecheck},
+    curios_common::fill,
     curios_native::MockHost,
-    curios_utilities::fill,
 };
 
 #[test]

@@ -3,12 +3,12 @@
 use {
     crate::context::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         CalleeId, DefinitionKind, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
         Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseMetaId, UniverseRole,
         Universes, WitnessOrigin,
     },
-    curios_utilities::Qualifier,
     std::{collections::BTreeSet, rc::Rc},
 };
 

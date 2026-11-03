@@ -17,10 +17,10 @@ use {
         StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, print_term,
         spell,
     },
+    curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
     curios_num::{Floating, Integer, Natural},
     curios_print::Printer,
-    curios_utilities::{InfixOp, Plicity, Qualifier, Sign, recurse},
     std::{cell::Cell, rc::Rc},
 };
 

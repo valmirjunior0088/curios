@@ -1,6 +1,6 @@
 //! A partial definition's place: usable in a program and refused in a type, and the type-level loops diagnosed rather than aborted.
 
-use {super::test_support::*, crate::tests::run, curios_utilities::fill};
+use {super::test_support::*, crate::tests::run, curios_common::fill};
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`.
 #[test]

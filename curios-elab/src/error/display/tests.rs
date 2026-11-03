@@ -5,8 +5,8 @@
 use {
     super::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{Cost, Free, Global, Intrinsic, Level, Term},
-    curios_utilities::Qualifier,
 };
 
 fn family(name: &str, universes: Vec<Level>) -> Term {

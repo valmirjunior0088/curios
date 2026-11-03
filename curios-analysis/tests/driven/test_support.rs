@@ -3,8 +3,8 @@
 use {
     curios_analysis::test_support::*,
     curios_cert::Kernel,
+    curios_common::{Plicity, Qualifier},
     curios_core::{Atom, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext},
-    curios_utilities::{Plicity, Qualifier},
 };
 
 pub fn kernel() -> Kernel<'static> {

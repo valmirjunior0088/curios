@@ -7,11 +7,11 @@ use {
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
+    curios_common::{Digest, Mount, Object, Recorded},
     curios_core::{Certification, ItemRun, Lexicon, Module, Places},
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_text::PreparedText,
-    curios_utilities::{Digest, Mount, Object, Recorded},
     std::{cell::OnceCell, rc::Rc},
 };
 

@@ -35,13 +35,13 @@ mod tests;
 
 use {
     crate::Env,
+    curios_common::recurse,
     curios_core::{
         Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Intrinsic, Let,
         Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct, StructType,
         Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
-    curios_utilities::recurse,
     std::collections::{HashMap, hash_map::Entry},
 };
 

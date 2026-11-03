@@ -8,11 +8,11 @@ use {
     crate::{bindings_of, engine, linked_of, optimize, to_cwasm},
     curios_abi::ForeignStore,
     curios_browser::page,
+    curios_common::{Qualifier, Source},
     curios_native::{Compiled, HostOps, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, TestRecord},
     curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
-    curios_utilities::{Qualifier, Source},
     curios_verdicts::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
     std::{

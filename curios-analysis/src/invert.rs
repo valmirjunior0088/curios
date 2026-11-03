@@ -10,8 +10,8 @@ mod tests;
 use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
+    curios_common::recurse,
     curios_core::{Free, Names, Quality, Subterm, Telescope, Term, peel_intrinsic},
-    curios_utilities::recurse,
     std::collections::{BTreeSet, HashMap},
 };
 

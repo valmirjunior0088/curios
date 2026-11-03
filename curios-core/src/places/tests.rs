@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{test_support::*, *},
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
 };
 
 fn definition(name: &str) -> Definition {

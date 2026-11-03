@@ -1,6 +1,6 @@
 //! Positions in text: where a character may begin, and the text on either side of one — held to Rust's own reading of the same UTF-8.
 
-use {crate::tests::run, curios_utilities::fill};
+use {crate::tests::run, curios_common::fill};
 
 /// Texts covering every width of character, the empty text, and a text beginning and ending on multi-byte characters.
 const TEXTS: [&str; 5] = ["héllo", "日本語", "a𝄞b", "", "𝄞é"];

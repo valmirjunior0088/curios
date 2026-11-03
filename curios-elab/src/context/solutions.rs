@@ -7,11 +7,11 @@
 use {
     super::{BirthTelescope, HeldFrames},
     crate::{DeadArm, Problem, Refusal},
+    curios_common::Entropy,
     curios_core::{
         Bound, Extent, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
         Term, Transient, WitnessOrigin,
     },
-    curios_utilities::Entropy,
     std::{
         cmp::Reverse,
         collections::{BTreeMap, BTreeSet, HashMap},

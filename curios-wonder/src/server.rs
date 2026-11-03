@@ -22,10 +22,10 @@
 
 use {
     crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Written},
+    curios_common::{Report, Source, Span},
     curios_core::Declared,
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
-    curios_utilities::{Report, Source, Span},
     curios_verdicts::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{

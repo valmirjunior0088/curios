@@ -15,7 +15,7 @@ use {
         ErasedUnit, Erasures, Held, HeldAsked, Part, Read, bytes_of, declared_digest,
         erased_digest, found,
     },
-    curios_utilities::Candidates,
+    curios_common::Candidates,
     std::{
         collections::{BTreeSet, HashMap},
         rc::Rc,

@@ -3,9 +3,9 @@
 //! A module of the build script and the profiling program, which include it by path since a build script cannot name the library of its own package; and of the library for the suites alone, compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it there.
 
 use {
+    curios_common::Qualifier,
     curios_package::package_at,
     curios_text::RootSource,
-    curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
 };
 

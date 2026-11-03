@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
+    curios_common::Qualifier,
     curios_core::{Cost, Exhaustion, Free, Global, Intrinsic, Term, Universes},
-    curios_utilities::Qualifier,
 };
 
 /// A guard's equation is recorded on the guard's written spelling, and the false arm of `n < m` is the fact `m <= n` read the other way: the reducer asks the dual spelling with the literal negated, and the record stays as written.

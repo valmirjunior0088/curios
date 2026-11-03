@@ -30,6 +30,7 @@ use {
         one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
         read_scrutinee_classed, refold,
     },
+    curios_common::{SyntaxRegistry, recurse},
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
         Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
@@ -40,7 +41,6 @@ use {
         project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
         weak_head_value,
     },
-    curios_utilities::{SyntaxRegistry, recurse},
     std::{
         cell::OnceCell,
         collections::{BTreeSet, HashMap},

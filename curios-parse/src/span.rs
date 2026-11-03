@@ -1,6 +1,6 @@
 use {
     super::{IntoParser, Parser, ParserState},
-    curios_utilities::{Source, Span},
+    curios_common::{Source, Span},
     std::sync::Arc,
 };
 

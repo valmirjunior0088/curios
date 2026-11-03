@@ -7,11 +7,11 @@
 use {
     super::{parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
+    curios_common::Plicity,
     curios_parse::{
         Mark, Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, pure, raise,
         refusal,
     },
-    curios_utilities::Plicity,
 };
 
 /// What refuses a binder after `use` where the site declares.

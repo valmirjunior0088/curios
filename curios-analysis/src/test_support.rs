@@ -6,14 +6,14 @@
 
 use {
     crate::*,
-    curios_core::{Free, Global, InductDecl, Polarity, StructDecl, Term},
-    curios_utilities::{
+    curios_common::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
         OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
         ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
         TestSyntax,
     },
+    curios_core::{Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
 };
 

@@ -6,7 +6,7 @@ Everything documentation: the record of a unit's interface, made from the unit a
 
 ### The record and its renderer share a crate, and the lowering depends on it
 
-**Decision.** This crate owns the record's types and the renderer over them, and depends on `curios-utilities`, `curios-archive` and Askama alone. `curios-text` depends on it for the representation it constructs, `curios-prelude` and `curios-pipeline` for the records they hand on, `curios-wonder` for the record its query returns, and `curios` for the pages its subcommand writes.
+**Decision.** This crate owns the record's types and the renderer over them, and depends on `curios-common`, `curios-archive` and Askama alone. `curios-text` depends on it for the representation it constructs, `curios-prelude` and `curios-pipeline` for the records they hand on, `curios-wonder` for the record its query returns, and `curios` for the pages its subcommand writes.
 
 **Rationale.** A stage depends on the crate holding the representation it constructs, which is how every stage is laid out — `curios-text` depends on `curios-core` for the same reason — so the record could not stay in `curios-text` once anything other than that crate rendered it without every renderer depending on the whole lowering. The renderer lives beside the record because it is the record's one consumer and brings its own weight, a template engine and the brand's fonts, which the compiler crate that links Binaryen and Cranelift had no reason to carry. Producing a record from a compilation stays above this crate, in the fold `curios-wonder`'s engine and `curios`'s build both ask, because it is a reading of a compilation and this crate compiles nothing.
 

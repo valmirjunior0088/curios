@@ -4,12 +4,12 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::Qualifier,
     curios_core::{
         Apply, Atom, Bound, DefinitionKind, Exhaustion, Free, InductDecl, InductParam, Intrinsic,
         Level, MetavarId, MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext,
         UniverseParam, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 #[test]

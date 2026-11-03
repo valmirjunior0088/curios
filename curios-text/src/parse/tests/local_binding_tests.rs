@@ -1,6 +1,6 @@
 //! Local bindings: a `let` with or without its type and its `and` groups, and a function with or without its annotations.
 
-use {crate::parse::test_support::*, crate::*, curios_utilities::Plicity};
+use {crate::parse::test_support::*, crate::*, curios_common::Plicity};
 
 #[test]
 fn local_let_without_type() {

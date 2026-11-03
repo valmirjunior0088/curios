@@ -2,10 +2,10 @@
 
 use {
     crate::tests::{run, run_text},
+    curios_common::{fill, test_support::*},
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_pipeline::compile_with_prelude,
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{fill, test_support::*},
 };
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.

@@ -7,8 +7,8 @@ use {
         CopyPriority, Edge, Intrinsic, Literal, Module, Node, NodeId, ValueExpr,
         collect_control_targets, continuation_transfers, copy_bodies, nodes_from,
     },
+    curios_common::ArenaId,
     curios_num::Natural,
-    curios_utilities::ArenaId,
     std::collections::{BTreeMap, BTreeSet},
 };
 

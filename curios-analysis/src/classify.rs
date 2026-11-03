@@ -28,12 +28,12 @@ mod test_support;
 use {
     crate::{Outcome, Read, read},
     curios_algebra::{Carrier, Family, Operation, declares},
+    curios_common::{Ordered, Persistent, recurse},
     curios_core::{
         Apply, Cost, Declaration, Free, Intrinsic, Nat, Probe, ReduceError, Reducer, Subterm, Term,
         Var, Visit, int_normalize, int_stuck_product, reduce_intrinsic,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{Ordered, Persistent, recurse},
     std::{
         collections::HashMap,
         hash::{DefaultHasher, Hash, Hasher},

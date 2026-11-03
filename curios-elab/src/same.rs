@@ -11,12 +11,12 @@ mod tests;
 
 use {
     crate::{Parts, Question},
+    curios_common::digest,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, Module,
         Nominal, ParameterField, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
         UniverseContext, Variance,
     },
-    curios_utilities::digest,
 };
 
 /// Which parts of one name elaborated again came out as the baseline holds them: what a kept declaration's question about the name is answered by.

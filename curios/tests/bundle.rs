@@ -3,7 +3,7 @@
 //! Those that exec what they produced run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
 
 use {
-    curios_utilities::{digest, fill, test_support::*},
+    curios_common::{digest, fill, test_support::*},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, LocalName,
         MemName, MemType, Module, NumType, ResultType, SubType, TypeName, ValType, to_bytes,

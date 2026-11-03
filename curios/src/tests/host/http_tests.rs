@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{compile, typecheck},
+    curios_common::fill,
     curios_native::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
-    curios_utilities::fill,
 };
 
 /// A program that makes one message and performs nothing.

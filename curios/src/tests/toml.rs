@@ -8,8 +8,8 @@
 
 use {
     super::*,
+    curios_common::fill,
     curios_native::{Compiled, ForeignBindings, MockHost},
-    curios_utilities::fill,
     std::sync::OnceLock,
 };
 

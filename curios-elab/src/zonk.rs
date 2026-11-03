@@ -7,6 +7,7 @@ use {
         contract_redexes, refold_recs, settle_qualities, suggest_candidates,
         validate_entry_universes, written,
     },
+    curios_common::recurse,
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Entrypoint, Extent, Func,
         FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic, Item, Let,
@@ -14,7 +15,6 @@ use {
         Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
         Variant, Visit, project_erased_universes,
     },
-    curios_utilities::recurse,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -672,7 +672,7 @@ pub fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
     type Solution = (BirthTelescope, Term);
     /// The metavariables whose solutions this walk is inside right now.
     ///
-    /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation would die by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
+    /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_common::recurse` answers a deepening walk by asking the allocator for stack — so the compilation would die by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
     ///
     /// Leaving the re-entered occurrence unexpanded is this pass's own contract rather than a concession: it materializes what is committed and *keeps unresolved holes visible*, and a metavariable substitution cannot resolve is exactly such a hole. The strict walk, which owes a meta-free term, charges its depth instead and lets the budget refuse.
     type Active = Rc<RefCell<BTreeSet<MetavarId>>>;

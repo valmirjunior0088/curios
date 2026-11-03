@@ -6,8 +6,8 @@ use {
     super::{Eraser, Outcome},
     crate::{Error, Sorts, emitted},
     curios_cert::Reader,
+    curios_common::SyntaxName,
     curios_num::Natural,
-    curios_utilities::SyntaxName,
 };
 
 /// A natural-dispatch case key as `curios-anf`'s `NatCase` carries it, refusing one no branch table indexes.

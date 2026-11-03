@@ -9,7 +9,7 @@
 #[cfg(test)]
 mod tests;
 
-use {curios_utilities::recurse, std::collections::HashMap};
+use {curios_common::recurse, std::collections::HashMap};
 
 /// The engine's limits a module stays inside: the most fields a struct type declares, and the most parameters and results a function type does.
 #[derive(Debug, Clone, Copy)]

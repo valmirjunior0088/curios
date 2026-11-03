@@ -3,11 +3,11 @@
 use {
     crate::elaborate::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, UniverseContext,
         Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 // A structure of the fields `{ @n : Nat, x : Nat }` — a hidden field ahead of a plain one, the least telescope a written position is counted over. A concept's edge ahead of its first method is the same shape.

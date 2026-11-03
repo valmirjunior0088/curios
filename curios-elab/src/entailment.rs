@@ -41,8 +41,8 @@ use {
     },
     curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
+    curios_common::SyntaxName,
     curios_core::{Cases, Global, LinearViews, Match, Probe, Subterm, Term},
-    curios_utilities::SyntaxName,
 };
 
 /// What the procedure concluded about a bound.

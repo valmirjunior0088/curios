@@ -42,7 +42,7 @@ fn a_foreign_call_prints_as_a_call_of_its_declaration() {
     );
 }
 
-/// Building a document descends once per link, so this is what [`sub`]'s guard is for — and the depth a diagnostic's term can reach is the elaborator's, not the writer's. Deep enough that a regression is a stack overflow rather than a slow test. The other two walks over a document, running and freeing it, are fixtured in `curios-utilities` at the same depth.
+/// Building a document descends once per link, so this is what [`sub`]'s guard is for — and the depth a diagnostic's term can reach is the elaborator's, not the writer's. Deep enough that a regression is a stack overflow rather than a slow test. The other two walks over a document, running and freeing it, are fixtured in `curios-common` at the same depth.
 #[test]
 fn a_deep_term_is_printed_without_overflowing() {
     const DEEP: usize = 100_000;

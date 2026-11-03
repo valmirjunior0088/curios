@@ -16,7 +16,7 @@ use {
     askama::Template,
     base64::{Engine, engine::general_purpose::STANDARD},
     curios_abi::ForeignStore,
-    curios_utilities::Digest,
+    curios_common::Digest,
     serde::Serialize,
     std::collections::{BTreeMap, btree_map::Entry},
 };

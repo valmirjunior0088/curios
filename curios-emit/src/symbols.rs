@@ -1,4 +1,4 @@
-use curios_utilities::name;
+use curios_common::name;
 
 name!(EmissionValueName, "v");
 name!(EmissionBlockName, "b");

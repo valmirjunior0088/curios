@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
         Free, Global, Intrinsic, Level, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext, Universes,
     },
-    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A `Prop`-sorted structure carrying a `Nat`, which is the shape `Prop` non-informativeness exists to forbid.

@@ -3,11 +3,11 @@
 use {
     crate::kernel::convert::test_support::*,
     crate::*,
+    curios_common::Qualifier,
     curios_core::{
         Cases, Free, Global, Intrinsic, Match, MatchResult, StructDecl, StructType, Subterm,
         Telescope, Term, UniverseContext, Universes,
     },
-    curios_utilities::Qualifier,
 };
 
 /// Eta at a function type: `f` and `(x) => f(x)` are the same function, and neither side has to be written in the other's shape for conversion to see it.

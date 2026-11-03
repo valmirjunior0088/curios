@@ -8,8 +8,8 @@ use {
     super::{Bound, Free, Nat, Subterm, Term, Universes, Var, Visit},
     crate::Global,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireReturn, WireType},
+    curios_common::SyntaxRegistry,
     curios_num::{Binary, Floating, Integer, Rounding},
-    curios_utilities::SyntaxRegistry,
     std::collections::BTreeSet,
 };
 

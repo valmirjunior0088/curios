@@ -6,12 +6,12 @@ use {
         Context, Error, Mode, Occurrence, attempt_witness_goal, check, elaborate, expect, is_prop,
         reduce_with, resolve_witness_goal,
     },
+    curios_common::Plicity,
     curios_core::{
         CalleeId, Global, ImplicitOrigin, Mention, Probe, Struct, StructDecl, StructEntry,
         StructType, Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
         instantiate_universes,
     },
-    curios_utilities::Plicity,
 };
 
 fn instantiate_struct_decl(

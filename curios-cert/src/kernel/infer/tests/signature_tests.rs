@@ -4,12 +4,12 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
+    curios_common::{Qualifier, SyntaxName},
     curios_core::{
         Atom, Declaration, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity, Reducer,
         Subterm, Telescope, Term, UniverseContext, Universes, Var, Visit,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
-    curios_utilities::{Qualifier, SyntaxName},
 };
 
 /// A family over `parameters` types with no index, at `result_sort`.

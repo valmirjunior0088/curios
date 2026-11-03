@@ -6,17 +6,17 @@
 //!
 //! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 //!
-//! **Completed where it is filed, and found by what its declaration was made from.** A store's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a store holds for the same input ([`curios_utilities::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the store beside it.
+//! **Completed where it is filed, and found by what its declaration was made from.** A store's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a store holds for the same input ([`curios_common::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the store beside it.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{Answered, Question},
-    curios_core::{Global, Order, Trace, WitnessKey},
-    curios_utilities::{
+    curios_common::{
         Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
     },
+    curios_core::{Global, Order, Trace, WitnessKey},
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -661,7 +661,7 @@ fn placed<T: Copy>(table: &[T], place: u32, of: &str) -> Result<T, String> {
 }
 
 impl TraceTable {
-    /// The kind a pack's entry names for a member of a run of traces ([`curios_utilities::Member`]).
+    /// The kind a pack's entry names for a member of a run of traces ([`curios_common::Member`]).
     pub const KIND: u8 = 2;
 
     /// The bytes of a run of `entries`, each a declaration's name, its trace and what a filing completed it with, in their order.

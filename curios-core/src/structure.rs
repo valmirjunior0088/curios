@@ -7,7 +7,7 @@ use {
         Variance, instantiate_qualities, instantiate_universes, open_field,
     },
     crate::Sharing,
-    curios_utilities::Qualifier,
+    curios_common::Qualifier,
 };
 
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.

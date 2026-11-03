@@ -6,10 +6,10 @@
 
 use {
     super::*,
+    curios_common::{Qualifier, recurse},
     curios_core::{Bound, Carrier, Cases, Global, Item, Match, Subterm, Term, Universes, Visit},
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{Qualifier, recurse},
 };
 
 /// The former a hole sits directly under, in the term the elaborator builds.

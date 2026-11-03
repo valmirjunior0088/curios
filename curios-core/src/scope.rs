@@ -7,7 +7,7 @@ use {
         Extent, Free, Global, Level, LevelHead, Mentions, MetavarSpine, Quality, Subterm, Term,
         UniverseError, UniverseMetaId, UniverseParam, Universes,
     },
-    curios_utilities::{Keyed, Symbol},
+    curios_common::{Keyed, Symbol},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

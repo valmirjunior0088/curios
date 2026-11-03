@@ -4,9 +4,9 @@
 
 use {
     crate::{Asked, Diagnosed, Severity},
+    curios_common::{Qualifier, Report},
     curios_package::Selection,
     curios_text::Overlay,
-    curios_utilities::{Qualifier, Report},
     std::collections::BTreeSet,
 };
 

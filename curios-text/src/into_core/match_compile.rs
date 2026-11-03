@@ -4,7 +4,7 @@ use {
         BytesPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
-    curios_utilities::Span,
+    curios_common::Span,
     std::mem,
 };
 

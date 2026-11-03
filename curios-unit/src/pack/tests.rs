@@ -1,7 +1,7 @@
 use {
     super::*,
+    curios_common::Qualifier,
     curios_core::{Definition, DefinitionKind, Global, Item, Term, Totality, UniverseContext},
-    curios_utilities::Qualifier,
     std::io::Cursor,
 };
 

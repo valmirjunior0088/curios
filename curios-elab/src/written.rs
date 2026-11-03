@@ -12,6 +12,7 @@ use {
         entail, enter_induct_case, is_prop, reduce_with, reference, refine_head, resolve_witness,
         synth_neutral, trivially_inhabited, zonk_solved_term_metas,
     },
+    curios_common::{Plicity, recurse},
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
@@ -19,7 +20,6 @@ use {
         Three, Transient, TupleType, Visit, WitnessOrigin,
     },
     curios_num::Binary,
-    curios_utilities::{Plicity, recurse},
     std::{
         cell::RefCell,
         collections::{HashMap, VecDeque},

@@ -3,10 +3,10 @@
 use {
     super::*,
     crate::*,
+    curios_common::{Qualifier, RootKind},
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, TestProgram},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::{Qualifier, RootKind},
 };
 
 /// Run `source` as standard input is run — the reading that recovers past a broken item — expecting a refusal, and return its report.

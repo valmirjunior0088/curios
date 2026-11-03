@@ -4,12 +4,12 @@ use {
         BytesSegment, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
         Term, parse_term, parse_whitespace,
     },
+    curios_common::Sign,
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
         mark, not_ahead, pure, sep_by0_trailing, take_exact, take_n, take_while,
     },
-    curios_utilities::Sign,
 };
 
 pub(super) fn parse_type<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {

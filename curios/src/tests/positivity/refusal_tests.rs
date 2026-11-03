@@ -2,7 +2,7 @@
 //!
 //! Each row names the rule that must do the rejecting rather than asserting a bare failure, which would pass on a typo in the fixture — worth the words wherever a future relaxation of `occurrences` could plausibly start admitting the shape.
 
-use {super::test_support::*, crate::tests::typecheck_within, curios_utilities::fill};
+use {super::test_support::*, crate::tests::typecheck_within, curios_common::fill};
 
 // A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
 //

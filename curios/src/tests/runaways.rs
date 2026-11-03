@@ -6,7 +6,7 @@
 //!
 //! What a budget may never do is decide: the two fixtures at the end are a program refused at every budget, where a clash concluded from an unfinished computation would have excused an arm at an equation a lemma inhabits, and a pair of programs with one edge, where a memo crossing a declaration boundary would have let a neighbour pay for a fold. Both are stated at budgets rather than at sizes, so they read what exhaustion is allowed to conclude rather than what a unit buys.
 
-use {super::*, curios_utilities::fill};
+use {super::*, curios_common::fill};
 
 /// What a runaway's claim makes a checker do.
 #[derive(Clone, Copy)]
