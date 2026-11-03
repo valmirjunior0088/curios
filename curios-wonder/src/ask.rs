@@ -16,7 +16,7 @@ use {
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
-    curios_verdicts::{Session, Verdicts},
+    curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
         fmt::Display,

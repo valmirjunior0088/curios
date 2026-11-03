@@ -6,7 +6,7 @@ use {
     curios_document::Documentation,
     curios_pipeline::{Cache, CompileError, Fold, prelude_documentation},
     curios_text::{Overlay, RootSource},
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
 };
 
 /// The standard library's record, read off the image this compiler was built with — no sources, no store, nothing compiled and no unit restored.

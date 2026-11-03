@@ -12,7 +12,7 @@ workspace = true
 profile = [
     "curios-profile/enabled",
     "curios-pipeline/profile",
-    "curios-verdicts/profile",
+    "curios-verdict/profile",
     "curios-native/profile",
 ]
 
@@ -25,7 +25,7 @@ curios-text = { workspace = true }
 curios-common = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
-curios-verdicts = { workspace = true }
+curios-verdict = { workspace = true }
 curios-wonder = { workspace = true }
 curios-document = { workspace = true }
 curios-archive = { workspace = true }

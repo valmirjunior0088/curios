@@ -5,7 +5,7 @@ use {
     curios::{Named, linked_of},
     curios_browser::page,
     curios_package::{Program, Target},
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{collections::BTreeMap, fs, path::Path},
 };
 

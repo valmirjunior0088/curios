@@ -1,6 +1,6 @@
 //! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a store mechanism.
 //!
-//! The store's own behaviour is covered where it lives, in `curios-verdicts`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
+//! The store's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 

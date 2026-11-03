@@ -9,7 +9,7 @@ use {
     curios_cps::{Fate, descendants, fates},
     curios_pipeline::{Cache, Fold, Stage},
     curios_text::Overlay,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::collections::BTreeMap,
 };
 

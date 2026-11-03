@@ -1,5 +1,5 @@
 [package]
-name = "curios-verdicts"
+name = "curios-verdict"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

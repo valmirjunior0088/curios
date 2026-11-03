@@ -12,11 +12,11 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 ### The stored-unit format lives below the store
 
-**Decision.** What a stored unit is — the `Record` of what it was compiled from, the framing that puts it ahead of the unit's index in one file, the reading of the two apart, the two halves an index is, the objects it names and the pack they are kept in (`Pack`, `packed`, `repacked`) — is this crate's; what verifies a record, where a slot is addressed and where its packs are kept stay in `curios-verdicts` and `curios-package`.
+**Decision.** What a stored unit is — the `Record` of what it was compiled from, the framing that puts it ahead of the unit's index in one file, the reading of the two apart, the two halves an index is, the objects it names and the pack they are kept in (`Pack`, `packed`, `repacked`) — is this crate's; what verifies a record, where a slot is addressed and where its packs are kept stay in `curios-verdict` and `curios-package`.
 
 **Rationale.** Two producers write the format and neither may depend on the other: the store files a unit from above the pipeline, and the prelude's build script images `/sys` and `/std` from below every store. One statement below both lets the prelude image carry the record a slot does, framing a certified unit as a slot does, with one pack of its objects beside it where a slot has its address's packs.
 
-**Rejected.** A crate of its own for one struct and two functions; the prelude's crate depending on `curios-verdicts`, which pulls the package layer and the pipeline under the prelude's build script.
+**Rejected.** A crate of its own for one struct and two functions; the prelude's crate depending on `curios-verdict`, which pulls the package layer and the pipeline under the prelude's build script.
 
 ### A unit is certified by construction
 

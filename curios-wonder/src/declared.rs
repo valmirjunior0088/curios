@@ -4,7 +4,7 @@ use {
     crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
     curios_text::Overlay,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
 };
 
 /// Every test `subject` declares, in declaration order — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read, and filed into where a question may.

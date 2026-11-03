@@ -16,7 +16,7 @@ use {
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
     curios_pipeline::{CompileError, TestRecord},
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{
         cmp::Reverse,
         io::{self, Write},

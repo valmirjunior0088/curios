@@ -9,7 +9,7 @@ use {
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
     curios_text::{Entrypoint, Overlay, RootSource},
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{
         fs,
         path::{Path, PathBuf},

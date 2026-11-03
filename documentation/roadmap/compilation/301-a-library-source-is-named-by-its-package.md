@@ -7,7 +7,7 @@ Working specification for labelling a source of the package `std` by the package
 - **A source is a text and an optional path.** `Source` (`curios-common/src/span.rs`) is `path: Option<PathBuf>` and `text`, archived with the unit it was read for.
 - **The library's path is the checkout's.** `std_directory` (`curios-prelude/src/test_support.rs`) is `CARGO_MANIFEST_DIR` joined with `std`, `std_source` reads the package there as any package is read (`package_at`, `curios-package/src/layout.rs`), and `curios-prelude`'s build writes each file's `Source` into `std.rkyv`, the directory standing beside each file's text and again beside each file's digest.
 - **Four things read a source's path.** The header of a report or a note whose span lies in it (`Span::render_snippet`, `curios-common/src/span.rs`); the file a language server files such a diagnostic or a related place under (`adapt`, `curios-wonder/src/server.rs`, which falls back to the open document where a source has none); the key a thread's parse is remembered by (`tree_of`, `curios-text/src/root_source.rs`); and a profile span's label (`curios-parse/src/memo.rs`).
-- **A unit's record names each file it read by canonical path** with the digest of its text (`Record::reads`, `curios-unit/src/stored.rs`). A store believes a unit once every file reads the text recorded (`unchanged`, `curios-verdicts/src/verdicts.rs`) and lies under its source's directories (`read_within`, `curios-unit/src/stored.rs`), and `the_std_record_names_every_authored_source_and_no_other` (`curios-prelude/src/restore/tests.rs`) holds the library's record to its tree.
+- **A unit's record names each file it read by canonical path** with the digest of its text (`Record::reads`, `curios-unit/src/stored.rs`). A store believes a unit once every file reads the text recorded (`unchanged`, `curios-verdict/src/verdicts.rs`) and lies under its source's directories (`read_within`, `curios-unit/src/stored.rs`), and `the_std_record_names_every_authored_source_and_no_other` (`curios-prelude/src/restore/tests.rs`) holds the library's record to its tree.
 
 ## The gap
 
@@ -30,7 +30,7 @@ Working specification for labelling a source of the package `std` by the package
 ## Stages
 
 1. **A source states its label apart from where it was read.** Check: a report placed in the library reads a `/std/…` header, as a fixture; every other pinned report is the text it was.
-2. **The record and the store read by label.** Check: the store and recompile suites of `curios-verdicts` and `curios-pipeline` pass, and `the_std_record_names_every_authored_source_and_no_other` is restated over labels.
+2. **The record and the store read by label.** Check: the store and recompile suites of `curios-verdict` and `curios-pipeline` pass, and `the_std_record_names_every_authored_source_and_no_other` is restated over labels.
 3. **The server and the memo ask the unit's source.** Check: the transport test that asks about one of the library's files (`curios/tests/wonder/server_tests.rs`) answers from the checkout it is run in, and a library file edited in a second checkout is parsed as that checkout's.
 4. **The image is the bytes it is wherever it is built.** Check: `std.rkyv` built from one tree in two directories is the same bytes, and `strings` over the compiler finds no directory of its build.
 

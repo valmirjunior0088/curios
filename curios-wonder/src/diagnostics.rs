@@ -7,7 +7,7 @@ use {
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
     curios_text::{Entrypoint, Form, Overlay, PreparedText, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{
         cell::RefCell,
         collections::BTreeSet,

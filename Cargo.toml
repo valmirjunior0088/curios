@@ -24,7 +24,7 @@ members = [
     "curios-prelude",
     "curios-pipeline",
     "curios-package",
-    "curios-verdicts",
+    "curios-verdict",
     "curios-wonder",
     "curios-document",
     "curios-profile",
@@ -82,7 +82,7 @@ curios-unit = { path = "curios-unit" }
 curios-prelude = { path = "curios-prelude" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
-curios-verdicts = { path = "curios-verdicts" }
+curios-verdict = { path = "curios-verdict" }
 curios-wonder = { path = "curios-wonder" }
 curios-document = { path = "curios-document" }
 curios-browser = { path = "curios-browser" }

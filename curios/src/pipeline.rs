@@ -11,7 +11,7 @@ use {
     curios_package::{Entry, Program, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress},
     curios_text::{Entrypoint, Form, RootSource, UnitSource},
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     curios_wasm::Module,
     std::{fs, io, path::Path, sync::Arc},
 };
@@ -71,7 +71,7 @@ pub(crate) fn payload_of(
         .map(|((cache, name), path)| {
             (
                 cache,
-                curios_verdicts::Program {
+                curios_verdict::Program {
                     package: &name.0,
                     executable: &name.1,
                     entry: path,

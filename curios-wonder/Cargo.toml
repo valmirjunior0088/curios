@@ -9,7 +9,7 @@ description = "What the compiler knows about a program, handed out as records: t
 workspace = true
 
 # Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
-# runs the compiler as far as it needs and reads the answer off the store through `curios-verdicts`;
+# runs the compiler as far as it needs and reads the answer off the store through `curios-verdict`;
 # the one rung the driver cannot render, `wasm-optm`, is handed back for the product that owns
 # Binaryen to finish. The language server's protocol crates have this crate as their one owner.
 [dependencies]
@@ -24,7 +24,7 @@ curios-wasm = { workspace = true }
 curios-cps = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
-curios-verdicts = { workspace = true }
+curios-verdict = { workspace = true }
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 serde_json = { workspace = true }

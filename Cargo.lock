@@ -586,7 +586,7 @@ dependencies = [
  "curios-prelude",
  "curios-profile",
  "curios-text",
- "curios-verdicts",
+ "curios-verdict",
  "curios-wasm",
  "curios-wonder",
  "getrandom 0.4.3",
@@ -885,7 +885,7 @@ dependencies = [
  "curios-text",
  "curios-unicode",
  "curios-unit",
- "curios-verdicts",
+ "curios-verdict",
 ]
 
 [[package]]
@@ -940,7 +940,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-verdicts"
+name = "curios-verdict"
 version = "0.16.17"
 dependencies = [
  "curios-abi",
@@ -976,7 +976,7 @@ dependencies = [
  "curios-pipeline",
  "curios-text",
  "curios-unit",
- "curios-verdicts",
+ "curios-verdict",
  "curios-wasm",
  "lsp-server",
  "lsp-types",

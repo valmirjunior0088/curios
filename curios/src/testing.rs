@@ -13,7 +13,7 @@ use {
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, TestRecord},
     curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
-    curios_verdicts::{Program, Verdicts},
+    curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
     std::{
         collections::BTreeMap,

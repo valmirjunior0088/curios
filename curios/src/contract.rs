@@ -12,7 +12,7 @@ use {
     curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
     curios_pipeline::Stage,
     curios_text::Overlay,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     curios_wonder::{Staged, file_subject},
     std::{
         env,

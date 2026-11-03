@@ -15,7 +15,7 @@ use {
     curios_pipeline::{Cache, Fold},
     curios_text::{Heading, Overlay, PreparedText, heading, identity},
     curios_unit::Unit,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap},

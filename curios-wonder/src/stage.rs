@@ -7,7 +7,7 @@ use {
     curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Module, Overlay, RootSource},
     curios_unit::Unit,
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::path::Path,
 };
 

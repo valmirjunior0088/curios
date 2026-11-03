@@ -14,7 +14,7 @@ use {
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
         is_extended_pictographic, test_support::*,
     },
-    curios_verdicts::Verdicts,
+    curios_verdict::Verdicts,
     std::{
         fs,
         path::{Path, PathBuf},

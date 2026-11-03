@@ -76,7 +76,7 @@ curios-pipeline = { workspace = true }
 # This crate on itself, only to turn `test-support` on for its own tests: `tests/std.rs` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
 curios-prelude = { path = ".", features = ["test-support"] }
 # The scratch store the claims file what they compiled into.
-curios-verdicts = { workspace = true }
+curios-verdict = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }
 # `fill!`, for the program the conformance cases are written into.

@@ -7,7 +7,7 @@ use {
     curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
     curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_verdicts::{Session, Verdicts},
+    curios_verdict::{Session, Verdicts},
     std::{
         cell::{Cell, RefCell},
         collections::BTreeMap,
