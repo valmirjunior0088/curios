@@ -411,20 +411,22 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         // A recursive group, checked by the one rule that holds it — asked here rather than restated, so a `rec` in a term and a `rec` at the top level cannot come to disagree about what makes a group legal.
         //
         // **A member is bound in the tail, as a `let` binds.** The group's bodies are checked over members that stand for nothing, which is what keeps a body from re-entering its own check; the tail is what the group is in scope of, and there a member is its folded selection, the term a `rec` reduces its tail over ([`unfold_rec`](super::unfold_rec)) and the one a top-level member is defined as. Held opaque there, a member computes nowhere in the function that declares it: `f(4)` is no number, and a term that spells the member by value — the elaborator defines it so, and a solution commits what it reduced — never converts with its name.
-        Subterm::Rec(Rec { group, tail }) => check_group(kernel, group, |kernel, names| {
-            let total = kernel.group_verdict(group) == Some(Totality::Total);
-            for (index, (name, member)) in names.iter().zip(group.members()).enumerate() {
-                let partial = !total || kernel.member_encloses_partial(group, index);
-                kernel.bind(name, &group.member_type(index), &member, partial);
-            }
-            let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
-            let refs = members.iter().collect::<Vec<_>>();
+        Subterm::Rec(Rec { group, tail }) => {
+            check_group(kernel, group, Some(tail), |kernel, names| {
+                let total = kernel.group_verdict(group) == Some(Totality::Total);
+                for (index, (name, member)) in names.iter().zip(group.members()).enumerate() {
+                    let partial = !total || kernel.member_encloses_partial(group, index);
+                    kernel.bind(name, &group.member_type(index), &member, partial);
+                }
+                let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
+                let refs = members.iter().collect::<Vec<_>>();
 
-            let type_ = infer(kernel, &tail.open(&refs))?;
+                let type_ = infer(kernel, &tail.open(&refs))?;
 
-            // The tail's type may name the members, whose binders retract with the group's scope: it is stated by value, as a `let`'s is, and the folded spelling a member stands for needs nothing in scope.
-            Ok(kernel.by_value(&type_))
-        }),
+                // The tail's type may name the members, whose binders retract with the group's scope: it is stated by value, as a `let`'s is, and the folded spelling a member stands for needs nothing in scope.
+                Ok(kernel.by_value(&type_))
+            })
+        }
 
         // A polymorphic declaration at a stated instance: its scheme, substituted. It is no call a group records, since a group's members are assumed under locals while its bodies are checked, and an instance names a declaration.
         Subterm::Instance(instance) => match synth_neutral(kernel, term)? {
@@ -894,6 +896,15 @@ fn under_bindings<T>(
     tail: &Scope<Many>,
     judge: impl FnOnce(&mut Kernel, &Term) -> Result<T, Error>,
 ) -> Result<T, Error> {
+    // The tail binds one binder per binding, a count that is a fact about a sibling field — the bindings the block holds — which nothing in the representation relates it to and no typing rule reads, as `check_group` reads a group's. This is the boundary that checks it, so a block a caller built otherwise is refused rather than asserted on where the tail is opened below.
+    if tail.arity() != bindings.len() {
+        return Err(Error::Arity {
+            counted: Counted::BlockBinders,
+            expected: bindings.len(),
+            actual: tail.arity(),
+        });
+    }
+
     kernel.naming(|kernel| {
         kernel.scoped(|kernel| {
             let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());

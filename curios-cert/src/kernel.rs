@@ -98,8 +98,10 @@ pub enum Counted {
     MotiveBinders,
     /// An arm's binders, against the constructor's signature.
     ArmBinders,
-    /// A recursive member's scope binders, against the members its group holds.
+    /// A recursive member's scope binders, or a `rec` tail's, against the members its group holds.
     GroupBinders,
+    /// A `let` tail's binders, against the bindings its block holds.
+    BlockBinders,
 }
 
 impl fmt::Display for Counted {
@@ -111,6 +113,7 @@ impl fmt::Display for Counted {
             Counted::Indices => "indices",
             Counted::GroupMembers => "recursive group members",
             Counted::GroupBinders => "recursive group member binders",
+            Counted::BlockBinders => "let block binders",
             Counted::Arguments => "arguments",
             Counted::Components => "components",
             Counted::Payload => "constructor payload",

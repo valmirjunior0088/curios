@@ -5,8 +5,9 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Entrypoint, Free, Global, Intrinsic, Item, Level, Many, Module, Nat, Program, RecGroup,
-        RecItem, RecMemberScopes, Scope, Term, Universes, test_support::*,
+        Entrypoint, Free, Global, Intrinsic, Item, Let, LetBinding, Level, Many, Module, Nat,
+        Program, Rec, RecGroup, RecItem, RecMemberScopes, Scope, Subterm, Term, Universes,
+        test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -160,6 +161,60 @@ fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
     assert!(
         !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the walk must refuse a group whose member scopes and members disagree in number",
+    );
+}
+
+/// A group's tail binds one binder per member, and a tail that binds more is refused rather than aborted on.
+///
+/// `Rec` holds its `group` and its `tail` side by side, and the tail's arity is a fact about a sibling field — the members the group holds — that nothing in the representation relates it to. `check_group` read the member scopes' arities against the member count and nothing of the tail, and `infer`'s `Rec` arm then opens the tail over one term per member, so `Scope::open`'s assert was the first thing to read the count and the process died where the board requires a refusal. Mutation-checked: without the tail's clause in `check_group` this walk aborts in `Scope::open` instead of returning a verdict.
+#[test]
+fn a_group_whose_tail_binds_more_than_its_members_is_refused() {
+    let (f, g) = (member(), Free::local(906, Some("g")));
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(Many(1), &[&f], Term::intrinsic(Intrinsic::NatType)),
+        body: Scope::close(Many(1), &[&f], Term::free_var(&f)),
+    }]);
+    let tail = Scope::close(Many(2), &[&f, &g], Term::free_var(&f));
+    let module = bad_module(Term::from(Subterm::Rec(Rec { group, tail })));
+
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            Error::Arity {
+                counted: Counted::GroupBinders,
+                expected: 1,
+                actual: 2,
+            }
+        )),
+        "the walk must refuse a group whose tail binds more binders than the group has members: {verdicts:?}",
+    );
+}
+
+/// A `let` block's tail binds one binder per binding, and a tail that binds more is refused rather than aborted on.
+///
+/// The same unrelated pair as the group's above, in the other block form: `Let` holds its `bindings` and its `tail` side by side, and `under_bindings` opens the tail over one binder per binding. The count is a block's rather than a group's, which is what `Counted::BlockBinders` names. Mutation-checked: without the clause in `under_bindings` this walk aborts in `Scope::open`.
+#[test]
+fn a_let_whose_tail_binds_more_than_its_bindings_is_refused() {
+    let (x, y) = (Free::local(907, Some("x")), Free::local(908, Some("y")));
+    let bindings = vec![LetBinding::new(
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    )];
+    let tail = Scope::close(Many(2), &[&x, &y], Term::free_var(&x));
+    let module = bad_module(Term::from(Subterm::Let(Let { bindings, tail })));
+
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            verdict.error,
+            Error::Arity {
+                counted: Counted::BlockBinders,
+                expected: 1,
+                actual: 2,
+            }
+        )),
+        "the walk must refuse a `let` whose tail binds more binders than the block has bindings: {verdicts:?}",
     );
 }
 

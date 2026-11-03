@@ -23,8 +23,8 @@ use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
     crate::{hold_proof, instantiate_qualities, yields_a_sort},
     curios_core::{
-        Bound, Free, Global, InductDecl, Quality, RecGroup, Reducer, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseContext,
+        Bound, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope, StructDecl,
+        Subterm, Telescope, Term, Totality, UniverseContext,
     },
 };
 
@@ -141,20 +141,23 @@ pub(crate) fn define_as_stated(
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
+    tail: Option<&Scope<Many>>,
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
     // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `recheck_module_verdicts` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
-    // Every member's scopes bind one assumption per member, which is what `member_type` and `member_body` open them over. No typing rule reads either count, so this is the boundary that checks them, and a term a caller built otherwise is refused here rather than asserted on where a scope is opened.
+    // Every scope a `rec` states binds one binder per member: a member's two, which `member_type` and `member_body` open over the group, and the tail, which `infer`'s `Rec` arm opens over the locals the members are assumed under. Each count is a fact about a sibling field — the members the group holds — that nothing in the representation relates it to, and no typing rule reads one, so this is the boundary that checks them all and a term a caller built otherwise is refused here rather than asserted on where a scope is opened. A `rec` item passes no tail: its members are the module's own declarations, and what follows them is the rest of the module.
     let members = group.length();
-    for member in group.iter() {
-        for binders in [member.type_.arity(), member.body.arity()] {
-            if binders != members {
-                return Err(Error::Arity {
-                    counted: Counted::GroupBinders,
-                    expected: members,
-                    actual: binders,
-                });
-            }
+    let stated = group
+        .iter()
+        .flat_map(|member| [member.type_.arity(), member.body.arity()])
+        .chain(tail.map(Scope::arity));
+    for binders in stated {
+        if binders != members {
+            return Err(Error::Arity {
+                counted: Counted::GroupBinders,
+                expected: members,
+                actual: binders,
+            });
         }
     }
 
@@ -250,7 +253,7 @@ pub(crate) fn check_rec_group(
             }
         };
 
-        check_group(kernel, group, |_, _| Ok(()))?;
+        check_group(kernel, group, None, |_, _| Ok(()))?;
 
         for (index, (_, proof)) in members.iter().enumerate() {
             hold_proof(kernel, *proof, &group.member_type(index))?;
