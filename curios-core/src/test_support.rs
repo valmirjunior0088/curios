@@ -13,6 +13,13 @@ use {
     },
 };
 
+/// A group assembled from scopes already closed, holding nothing between their arity and the member count — the shape [`RecGroup::closing`] exists so that no production caller can build.
+///
+/// For a fixture that forges what a restored archive could carry and puts it to the seam that reads it, or to the walk that refuses it. Nothing a compiler stage produces reaches here, which is why it is behind this gate rather than beside the constructor.
+pub fn rec_group_of_scopes(members: Vec<RecMemberScopes>) -> RecGroup {
+    RecGroup::from_scopes(members)
+}
+
 /// A match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`]. The elaborator builds one where it decides the result, so the node whole is a fixture's to ask for.
 pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases) -> Term {
     Term::from(Subterm::Match(Match {

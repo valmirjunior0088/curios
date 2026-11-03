@@ -1403,20 +1403,12 @@ impl Term {
             .collect::<Vec<_>>();
 
         let members = items.iter().map(|(name, _, _)| name).collect::<Vec<_>>();
-
-        let group = RecGroup::new(
-            items
-                .iter()
-                .map(|(_, type_, value)| RecMemberScopes {
-                    type_: Scope::close(Many(members.len()), &members, type_.clone()),
-                    body: Scope::close(Many(members.len()), &members, value.clone()),
-                })
-                .collect(),
-        );
+        let arity = Many(members.len());
+        let group = RecGroup::closing(items.clone());
 
         Self::from(Subterm::Rec(Rec {
             group,
-            tail: Scope::close(Many(members.len()), &members, tail.into()),
+            tail: Scope::close(arity, &members, tail.into()),
         }))
     }
 

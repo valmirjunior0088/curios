@@ -245,6 +245,67 @@ fn a_stored_unit_may_not_declare_a_witness_under_its_place() {
     assert_eq!(validate_stored_identities(&module), Ok(()));
 }
 
+/// A `rec` group whose member scopes bind other than one binder per member is refused at the store seam, which is the one door that can carry one.
+///
+/// No constructor builds it — `RecGroup::closing` derives the arity from the member list — so a unit carrying one was restored from bytes rather than made. Every reader of a member opens a scope over one term per member through `Scope::open`, and a reduction reaches that before `check_group` does, so the seam that writes a unit reads the count as the walk that judges one does.
+#[test]
+fn a_stored_unit_may_not_carry_a_group_whose_scopes_miscount_its_members() {
+    let binder = Free::local(13, Some("f"));
+    let second = Free::local(14, Some("g"));
+    let module = Module {
+        items: vec![Item::Rec(RecItem::new(vec![(
+            binder,
+            Definition {
+                name: Global::Authored(Qualifier::from(["spun"])),
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext::empty(),
+                island: Qualifier::default(),
+                totality: Totality::Total,
+                proof: false,
+                variances: Vec::new(),
+                field_variances: Vec::new(),
+                parameter_field: None,
+                value_sort: None,
+                type_: Term::intrinsic(crate::Intrinsic::NatType),
+                body: Term::intrinsic(crate::Intrinsic::NatType),
+            },
+        )]))]
+        .into(),
+        mounts: Vec::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+    let Item::Rec(item) = &mut module.items.to_vec()[0] else {
+        unreachable!("built as a rec item")
+    };
+    item.group = RecGroup::from_scopes(vec![RecMemberScopes {
+        type_: Scope::close(
+            Many(2),
+            &[&binder, &second],
+            Term::intrinsic(crate::Intrinsic::NatType),
+        ),
+        body: Scope::close(
+            Many(2),
+            &[&binder, &second],
+            Term::intrinsic(crate::Intrinsic::NatType),
+        ),
+    }]);
+    let module = Module {
+        items: vec![Item::Rec(item.clone())].into(),
+        mounts: Vec::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+
+    assert_eq!(
+        validate_stored_identities(&module),
+        Err(Positional::MiscountedGroup {
+            owner: Some(Global::Authored(Qualifier::from(["spun"]))),
+            stated: 1,
+        })
+    );
+}
+
 /// The control that keeps the refusal about *declaring*, not about mentioning.
 ///
 /// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Module::witnesses` and deliberately not through the position walk.

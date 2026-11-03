@@ -380,15 +380,15 @@ fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
 #[test]
 fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
     let meta = UniverseMetaId(0);
-    let member = |term: Term| Scope::constant(Many(1), term);
     let at = |outside: Level, inside: Level| {
         Term::tuple([
             Term::type_at(outside),
             Term::rec_proj(
-                RecGroup::new(vec![RecMemberScopes {
-                    type_: member(Term::type_at(inside.clone())),
-                    body: member(Term::type_at(inside)),
-                }]),
+                RecGroup::closing(vec![(
+                    Free::local(840, None),
+                    Term::type_at(inside.clone()),
+                    Term::type_at(inside),
+                )]),
                 0,
             ),
         ])
@@ -505,11 +505,11 @@ fn a_term_holds_a_group_where_a_rec_node_stands() {
 #[test]
 fn universe_params_are_read_at_their_own_index() {
     let level = |index| Level::param(UniverseParam(index));
-    let member = |term: Term| Scope::constant(Many(1), term);
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: member(Term::type_at(level(0))),
-        body: member(Term::type_at(level(2))),
-    }]);
+    let group = RecGroup::closing(vec![(
+        Free::local(841, None),
+        Term::type_at(level(0)),
+        Term::type_at(level(2)),
+    )]);
     let term = Term::tuple([Term::type_at(level(3)), Term::rec_proj(group, 0)]);
 
     assert_eq!(

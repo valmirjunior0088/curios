@@ -63,21 +63,14 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     let n = Free::local(901, Some("n"));
     let nat = Term::intrinsic(Intrinsic::NatType);
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(
-            Many(1),
-            &[&f],
-            Term::func_type([(n, nat.clone())], nat.clone()),
+    let group = RecGroup::closing(vec![(
+        f,
+        Term::func_type([(n, nat.clone())], nat.clone()),
+        Term::func(
+            [(n, nat.clone())],
+            Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
         ),
-        body: Scope::close(
-            Many(1),
-            &[&f],
-            Term::func(
-                [(n, nat.clone())],
-                Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
-            ),
-        ),
-    }]);
+    )]);
 
     let module = Module {
         mounts: Vec::new(),
@@ -152,7 +145,8 @@ fn bad_module(body: Term) -> Module {
 #[test]
 fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
     let (f, g) = (member(), Free::local(905, Some("g")));
-    let group = RecGroup::new(vec![RecMemberScopes {
+    // No constructor builds this, which is the point: `rec_group_of_scopes` is the fixture door for the shape a restored archive could carry.
+    let group = rec_group_of_scopes(vec![RecMemberScopes {
         type_: Scope::close(Many(2), &[&f, &g], Term::intrinsic(Intrinsic::NatType)),
         body: Scope::close(Many(2), &[&f, &g], Term::free_var(&f)),
     }]);
@@ -170,10 +164,11 @@ fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
 #[test]
 fn a_group_whose_tail_binds_more_than_its_members_is_refused() {
     let (f, g) = (member(), Free::local(906, Some("g")));
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&f], Term::intrinsic(Intrinsic::NatType)),
-        body: Scope::close(Many(1), &[&f], Term::free_var(&f)),
-    }]);
+    let group = RecGroup::closing(vec![(
+        f,
+        Term::intrinsic(Intrinsic::NatType),
+        Term::free_var(&f),
+    )]);
     let tail = Scope::close(Many(2), &[&f, &g], Term::free_var(&f));
     let module = bad_module(Term::from(Subterm::Rec(Rec { group, tail })));
 
@@ -244,16 +239,12 @@ fn surviving_projection_module() -> Module {
     let sort = Term::type_at(Level::zero().succ().expect("a level has a successor"));
     let opaque = Free::local(950, Some("y"));
     let member = Free::local(951, Some("m"));
-    let members = [&member];
     let group = Term::rec_proj(
-        RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, sort.clone()),
-            body: Scope::close(
-                Many(1),
-                &members,
-                Term::apply(Term::free_var(&opaque), [Term::free_var(&member)]),
-            ),
-        }]),
+        RecGroup::closing(vec![(
+            member,
+            sort.clone(),
+            Term::apply(Term::free_var(&opaque), [Term::free_var(&member)]),
+        )]),
         0,
     );
     let opaque_type = Term::func_type([(Free::local(952, Some("t")), sort.clone())], sort.clone());

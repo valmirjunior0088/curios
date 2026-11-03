@@ -706,10 +706,7 @@ fn spend_probe() {
 /// [`rules_tests::group_tailed`](../../../curios-cert/src/kernel/whnf/rules_tests.rs)'s twin: a one-member group whose tail binds `binders` of them.
 fn group_tailed(binders: usize) -> Term {
     let (f, g) = (binder(80, "f"), binder(81, "g"));
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&f], nat_type()),
-        body: Scope::close(Many(1), &[&f], nat(1)),
-    }]);
+    let group = RecGroup::closing(vec![(f, nat_type(), nat(1))]);
     let closed_over = [&f, &g][..binders].to_vec();
 
     Term::from(Subterm::Rec(Rec {

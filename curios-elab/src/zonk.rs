@@ -10,9 +10,9 @@ use {
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Entrypoint, Extent, Func,
         FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic, Item, Let,
-        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec,
-        RecGroup, RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, Universes, Var, Variant, Visit, project_erased_universes,
+        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec, RecItem,
+        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
+        Variant, Visit, project_erased_universes,
     },
     curios_utilities::recurse,
     std::{
@@ -544,17 +544,7 @@ impl<'a> Zonk<'a> {
             }),
 
             Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
-                group: RecGroup::new(
-                    group
-                        .iter()
-                        .map(|member| {
-                            Ok(RecMemberScopes {
-                                type_: member.type_.try_map_body(|t| self.zonk_term(t))?,
-                                body: member.body.try_map_body(|b| self.zonk_term(b))?,
-                            })
-                        })
-                        .collect::<Result<_, Error>>()?,
-                ),
+                group: group.try_map_members(|term| self.zonk_term(term))?,
                 tail: tail.try_map_body(|b| self.zonk_term(b))?,
             }),
 

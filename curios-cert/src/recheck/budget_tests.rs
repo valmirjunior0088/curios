@@ -5,9 +5,9 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
-        Module, Nat, Nominal, RecGroup, RecItem, RecMemberScopes, ReduceError, Scope, Telescope,
-        Term, UniverseContext, UniverseParam, Universes, Variance, test_support::*,
+        Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Module,
+        Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term, UniverseContext,
+        UniverseParam, Universes, Variance, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -27,10 +27,7 @@ fn spent_item_beside_an_aliased_payload() -> Module {
     let spin = Global::Authored(Qualifier::from(["Spin"]));
     let s = Free::local(930, Some("s"));
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&s], Term::type_ground()),
-        body: Scope::close(Many(1), &[&s], Term::free_var(&s)),
-    }]);
+    let group = RecGroup::closing(vec![(s, Term::type_ground(), Term::free_var(&s))]);
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),

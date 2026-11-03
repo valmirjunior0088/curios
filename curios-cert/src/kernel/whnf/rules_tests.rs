@@ -3,8 +3,8 @@
 use {
     super::{test_support::*, *},
     curios_core::{
-        Apply, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Rec, RecGroup,
-        RecMemberScopes, Reducer, Scope, Subterm, Term, UniverseParam,
+        Apply, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Rec, RecGroup, Reducer,
+        Scope, Subterm, Term, UniverseParam,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -516,10 +516,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
 /// A one-member group whose tail binds `binders` of them, which is malformed for every count but one.
 fn group_tailed(binders: usize) -> Term {
     let (f, g) = (binder(80, "f"), binder(81, "g"));
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&f], nat_type()),
-        body: Scope::close(Many(1), &[&f], nat(1)),
-    }]);
+    let group = RecGroup::closing(vec![(f, nat_type(), nat(1))]);
     let closed_over = [&f, &g][..binders].to_vec();
 
     Term::from(Subterm::Rec(Rec {

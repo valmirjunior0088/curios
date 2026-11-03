@@ -10,10 +10,9 @@ use {
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
         InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Nominal, Places,
-        Polarity, Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType,
-        Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
-        test_support::*,
+        Polarity, Program, RecGroup, RecItem, Scope, StructDecl, StructType, Subterm, Telescope,
+        Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -337,10 +336,7 @@ pub(super) fn selection_module(body: Term) -> Program {
     let absurd = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let f = member();
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &[&f], absurd.clone()),
-        body: Scope::close(Many(1), &[&f], body),
-    }]);
+    let group = RecGroup::closing(vec![(f, absurd.clone(), body)]);
 
     Program {
         module: declaring(
@@ -1904,21 +1900,14 @@ pub(super) fn diverging(name: &str) -> Item {
     let n = Free::local(921, Some("n"));
     let nat = Term::intrinsic(Intrinsic::NatType);
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(
-            Many(1),
-            &[&f],
-            Term::func_type([(n, nat.clone())], nat.clone()),
+    let group = RecGroup::closing(vec![(
+        f,
+        Term::func_type([(n, nat.clone())], nat.clone()),
+        Term::func(
+            [(n, nat.clone())],
+            Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
         ),
-        body: Scope::close(
-            Many(1),
-            &[&f],
-            Term::func(
-                [(n, nat.clone())],
-                Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
-            ),
-        ),
-    }]);
+    )]);
 
     authored_partial(
         &Global::Authored(Qualifier::from([name])),

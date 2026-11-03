@@ -9,10 +9,9 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup,
-        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols,
-        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessKey,
-        build_shorten,
+        Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, Scope,
+        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
+        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
     curios_utilities::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
@@ -833,14 +832,11 @@ impl RecItem {
         {
             return Err(UniverseError::MismatchedRecursiveContexts);
         }
-        let locals = members.iter().map(|(local, _)| local).collect::<Vec<_>>();
-        let arity = Many(locals.len());
-        let group = RecGroup::new(
+        let group = RecGroup::closing(
             members
                 .iter()
-                .map(|(_, definition)| RecMemberScopes {
-                    type_: Scope::close(arity, &locals, definition.type_.clone()),
-                    body: Scope::close(arity, &locals, definition.body.clone()),
+                .map(|(local, definition)| {
+                    (*local, definition.type_.clone(), definition.body.clone())
                 })
                 .collect(),
         );
@@ -1861,6 +1857,11 @@ pub enum Positional {
     FreeLocal { owner: Option<Global>, index: u64 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
+    /// A `rec` group whose member scopes do not bind one binder per member, or whose members and exported definitions disagree in number. `stated` is the number of members the group holds. No constructor can build one, so a unit carrying one was restored from bytes rather than made, and every reader of a member opens a scope over one term per member.
+    MiscountedGroup {
+        owner: Option<Global>,
+        stated: usize,
+    },
     /// A bound variable no scope in the position binds, `reach` binders out. Not an identity a counter assigned but an index with no binder, which [`Mentions`] answers nothing for and the free local above therefore misses: stored, it is read at whatever depth the term it is spliced under gives it, which is a different term with an error nowhere.
     LooseIndex { owner: Option<Global>, reach: usize },
     /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.
@@ -1874,6 +1875,10 @@ impl fmt::Display for Positional {
         let (owner, carried) = match self {
             Positional::FreeLocal { owner, index } => (owner, format!("free local binder {index}")),
             Positional::Metavar { owner } => (owner, "an unsolved metavariable".to_string()),
+            Positional::MiscountedGroup { owner, stated } => (
+                owner,
+                format!("a recursive group of {stated} whose scopes bind another number"),
+            ),
             Positional::LooseIndex { owner, reach } => (
                 owner,
                 format!("a bound variable no scope binds, reaching {reach} binders out"),
@@ -1913,6 +1918,19 @@ impl fmt::Display for Positional {
 ///
 /// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
+    // First, because the position walk below cannot run over a group whose counts disagree: it reads an item through `RecItem::definitions`, whose `opened` opens every member scope over one term per definition, so such a group aborts the walk that would have reported it. Every constructor makes the counts agree and a restored archive's fields do not, which is why the one door that can carry one reads it, as `check_group` reads it where a walk meets one.
+    if let Some((owner, stated)) = module.items.iter().find_map(|item| match item {
+        Item::Rec(rec) if !rec.group.counted() || rec.definitions.len() != rec.group.length() => {
+            Some((
+                rec.definitions.first().map(|definition| definition.name),
+                rec.group.length(),
+            ))
+        }
+        _ => None,
+    }) {
+        return Err(Positional::MiscountedGroup { owner, stated });
+    }
+
     let mut found: Option<Positional> = None;
 
     made_positions(module, |owner, carried| {

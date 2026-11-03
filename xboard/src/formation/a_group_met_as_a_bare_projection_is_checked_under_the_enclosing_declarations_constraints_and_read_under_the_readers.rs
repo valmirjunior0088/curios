@@ -1,10 +1,10 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Item, Level, Many, Module, Nominal, RecGroup,
-        RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope, Term, Totality,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam, Universes,
+        Definition, DefinitionKind, Free, Global, Item, Level, Module, Nominal, RecGroup,
+        StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseConstraint,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
+        Universes,
     },
     curios_utilities::Qualifier,
     std::cell::Cell,
@@ -71,11 +71,7 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Module, Term) {
     ]);
 
     let held = fresh("products");
-    let members = [&held];
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(Many(1), &members, Term::type_at(x.clone())),
-        body: Scope::close(Many(1), &members, products_type),
-    }]);
+    let group = RecGroup::closing(vec![(held, Term::type_at(x.clone()), products_type)]);
     let carrier_type = Term::rec_proj(group, 0);
 
     // The four products themselves, checked against the record's field types under the carrier's constraints.

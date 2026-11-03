@@ -670,26 +670,69 @@ pub struct RecGroup {
 }
 
 impl RecGroup {
-    pub fn new(items: Vec<RecMemberScopes>) -> Self {
+    /// A group of `members`, each a binder with its type and its body, every term closed over every binder in order.
+    ///
+    /// **The only door, and why there is one.** A member scope's arity is a fact about the members the group holds, and nothing in the representation relates the two. A constructor taking scopes already closed takes the two counts apart, and `member_type` and `member_body` then open a scope over one term per member through `Scope::open`'s `assert!` — the only reader of either count, and a reducer reaches it before `check_group` runs. Taking the binders here makes the arity *be* the member count rather than a second number to agree with, so the disagreement cannot be written. A restored archive reconstructs the fields directly and so passes no constructor at all, which is why `validate_stored_identities` reads the count at the seam a unit is stored.
+    pub fn closing(members: Vec<(Free, Term, Term)>) -> Self {
+        let binders = members
+            .iter()
+            .map(|(binder, _, _)| binder)
+            .collect::<Vec<_>>();
+        let arity = Many(binders.len());
+
+        Self {
+            members: Rc::new(
+                members
+                    .iter()
+                    .map(|(_, type_, body)| RecMemberScopes {
+                        type_: Scope::close(arity, &binders, type_.clone()),
+                        body: Scope::close(arity, &binders, body.clone()),
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    /// A group of scopes already closed, holding nothing between their arity and the member count — the door [`RecGroup::closing`] exists to remove.
+    ///
+    /// Reached by the traversals that rebuild a group in place, which preserve every arity because they reopen nothing, and by `curios-core`'s `test_support`, so a fixture can build the form a restored archive could carry and put it to the seam that reads it.
+    pub(crate) fn from_scopes(items: Vec<RecMemberScopes>) -> Self {
         Self {
             members: Rc::new(items),
         }
+    }
+
+    /// [`RecGroup::map_members`] where the rewrite can fail. Every arity is preserved for the same reason: each scope is rebuilt in place and none is reopened.
+    pub fn try_map_members<E>(
+        &self,
+        mut map: impl FnMut(&Term) -> Result<Term, E>,
+    ) -> Result<Self, E> {
+        Ok(Self {
+            members: Rc::new(
+                self.iter()
+                    .map(|member| {
+                        Ok(RecMemberScopes {
+                            type_: member.type_.try_map_body(&mut map)?,
+                            body: member.body.try_map_body(&mut map)?,
+                        })
+                    })
+                    .collect::<Result<_, E>>()?,
+            ),
+        })
     }
 
     /// This group with every member's closed scopes rewritten in place.
     ///
     /// The bodies stay closed throughout. Terms under a scope carry loose de Bruijn indices, and two structurally identical such terms — indices included — denote the same thing at the same depth, so canonicalizing them together is sound without opening.
     pub fn map_members(&self, mut map: impl FnMut(&Term) -> Term) -> Self {
-        Self {
-            members: Rc::new(
-                self.iter()
-                    .map(|member| RecMemberScopes {
-                        type_: member.type_.map_body(&mut map),
-                        body: member.body.map_body(&mut map),
-                    })
-                    .collect(),
-            ),
-        }
+        Self::from_scopes(
+            self.iter()
+                .map(|member| RecMemberScopes {
+                    type_: member.type_.map_body(&mut map),
+                    body: member.body.map_body(&mut map),
+                })
+                .collect(),
+        )
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
@@ -709,6 +752,15 @@ impl RecGroup {
 
     pub fn length(&self) -> usize {
         self.iter().len()
+    }
+
+    /// Whether every member scope binds one binder per member, which is what opening one over the group requires.
+    ///
+    /// True of every group [`RecGroup::closing`] builds and of every one a traversal rebuilds, so no construction in Rust can answer `false`. A restored archive reconstructs the fields directly and passes no constructor, which is the one way a group answering `false` enters a compilation — read at the seam a unit is stored (`validate_stored_identities`) and again where a walk meets one (`check_group`).
+    pub fn counted(&self) -> bool {
+        self.iter().all(|member| {
+            member.type_.arity() == self.length() && member.body.arity() == self.length()
+        })
     }
 
     /// One term per member, each denoting that member and needing nothing in scope to do it — what every scope in this group opens over.
@@ -735,7 +787,7 @@ impl RecGroup {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         // No universe scope is entered: a member's level and quality parameters are the enclosing declaration's, so a walk that substitutes the declaration's parameters substitutes a member's with them. Entering one here would shadow exactly what every positional reader of a member reads.
-        Self::new(
+        Self::from_scopes(
             self.iter()
                 .map(|member| RecMemberScopes {
                     type_: visit.visit_scope(&member.type_),

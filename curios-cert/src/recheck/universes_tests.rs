@@ -6,10 +6,10 @@ use {
     curios_analysis::test_support::*,
     curios_core::{
         Definition, DefinitionKind, Entrypoint, Free, Global, InductDecl, Intrinsic, Item, Level,
-        Many, Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
-        RecMemberScopes, ReduceError, Scope, StructDecl, Telescope, Term, Totality,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseParam, Universes, test_support::*,
+        Module, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem, ReduceError,
+        StructDecl, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
+        Universes, test_support::*,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -627,12 +627,8 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
     let carrier = Global::Authored(Qualifier::from(["carrier"]));
     let reads = Global::Authored(Qualifier::from(["reads"]));
     let m = Free::local(760, Some("m"));
-    let members = [&m];
     let projection = Term::rec_proj(
-        RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, Term::type_at(plus_two)),
-            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
-        }]),
+        RecGroup::closing(vec![(m, Term::type_at(plus_two), Term::type_at(plus_one))]),
         0,
     );
     let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
@@ -811,12 +807,12 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
     let carrier = Global::Authored(Qualifier::from(["carrier"]));
     let reads = Global::Authored(Qualifier::from(["reads"]));
     let m = Free::local(770, Some("m"));
-    let members = [&m];
     let projection = Term::rec_proj(
-        RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
-            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
-        }]),
+        RecGroup::closing(vec![(
+            m,
+            Term::type_at(plus_two.clone()),
+            Term::type_at(plus_one),
+        )]),
         0,
     );
     let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
@@ -915,12 +911,12 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
     let carrier = Global::Authored(Qualifier::from(["carrier"]));
     let published = Global::Authored(Qualifier::from(["published"]));
     let m = Free::local(780, Some("m"));
-    let members = [&m];
     let projection = Term::rec_proj(
-        RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
-            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
-        }]),
+        RecGroup::closing(vec![(
+            m,
+            Term::type_at(plus_two.clone()),
+            Term::type_at(plus_one),
+        )]),
         0,
     );
     // A `let` around the projection, so unfolding takes the general substitution rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
@@ -1025,12 +1021,12 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
     let record = Global::Authored(Qualifier::from(["R"]));
     let reads = Global::Authored(Qualifier::from(["reads"]));
     let m = Free::local(790, Some("m"));
-    let members = [&m];
     let projection = Term::rec_proj(
-        RecGroup::new(vec![RecMemberScopes {
-            type_: Scope::close(Many(1), &members, Term::type_at(plus_two.clone())),
-            body: Scope::close(Many(1), &members, Term::type_at(plus_one)),
-        }]),
+        RecGroup::closing(vec![(
+            m,
+            Term::type_at(plus_two.clone()),
+            Term::type_at(plus_one),
+        )]),
         0,
     );
     let declaration = StructDecl {

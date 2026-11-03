@@ -5,8 +5,7 @@ use {
     crate::*,
     curios_analysis::Erased,
     curios_core::{
-        Free, Intrinsic, Level, Many, Nat, RecGroup, RecMemberScopes, Scope, Term, UniverseContext,
-        UniverseParam, Universes,
+        Free, Intrinsic, Level, Nat, RecGroup, Term, UniverseContext, UniverseParam, Universes,
     },
 };
 
@@ -132,12 +131,8 @@ fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
     let data = declare(&mut kernel, "Data", Term::type_ground());
     let member = Free::local(900, Some("T"));
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        // The claim: this member is a proposition.
-        type_: Scope::close(Many(1), &[&member], Term::prop()),
-        // The body: a family the registry puts at `Type 0`.
-        body: Scope::close(Many(1), &[&member], data.clone()),
-    }]);
+    // The claim is that the member is a proposition; the body is a family the registry puts at `Type 0`.
+    let group = RecGroup::closing(vec![(member, Term::prop(), data.clone())]);
 
     assert_eq!(
         Sort::of(&mut kernel, &Term::rec_proj(group, 0)),
@@ -325,18 +320,11 @@ fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let member = Free::local(900, Some("F"));
 
-    let group = RecGroup::new(vec![RecMemberScopes {
-        type_: Scope::close(
-            Many(1),
-            &[&member],
-            Term::func_type([(binder(80, "n"), nat_type.clone())], Term::prop()),
-        ),
-        body: Scope::close(
-            Many(1),
-            &[&member],
-            Term::func([(binder(81, "n"), nat_type)], data),
-        ),
-    }]);
+    let group = RecGroup::closing(vec![(
+        member,
+        Term::func_type([(binder(80, "n"), nat_type.clone())], Term::prop()),
+        Term::func([(binder(81, "n"), nat_type)], data),
+    )]);
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
     assert_eq!(
