@@ -28,8 +28,11 @@ fn sources(directory: &Path, found: &mut Vec<PathBuf>) {
             .expect("a source is named in UTF-8")
             .to_string();
 
+        // A `tests` directory holds tests alone, each named by its subject and not by a suffix.
         if path.is_dir() {
-            sources(&path, found);
+            if name != "tests" {
+                sources(&path, found);
+            }
         } else if name.ends_with(".rs")
             && name != "tests.rs"
             && name != "test_support.rs"

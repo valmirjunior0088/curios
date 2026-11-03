@@ -423,7 +423,7 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
 
 #[test]
 fn a_hard_error_beside_a_goal_is_reported_with_it() {
-    // A goal already registered does not soften a later hard failure, and the failure does not hide the goal: elaboration recovers past the refused item, so the run reports both — the refusal first, then the goal batch — and classifies as the refusal's (`goal_tests::a_goal_beside_a_refusal_classifies_as_mixed`).
+    // A goal already registered does not soften a later hard failure, and the failure does not hide the goal: elaboration recovers past the refused item, so the run reports both — the refusal first, then the goal batch — and classifies as the refusal's (`goal::a_goal_beside_a_refusal_classifies_as_mixed`).
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;

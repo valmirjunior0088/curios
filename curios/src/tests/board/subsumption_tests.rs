@@ -2,7 +2,7 @@
 //!
 //! The rule is `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`. Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices and no Π being subsumed is formed; passing a *name* forms it, which is what these compile.
 //!
-//! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::sort_tests` puts the same two propositions to the kernel under these names. Rename both or neither.
+//! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::tests::sort` puts the same two propositions to the kernel under these names. Rename both or neither.
 
 use {
     super::test_support::*,
@@ -129,7 +129,7 @@ fn the_head_rules_still_decide_a_bare_sort() {
     );
 }
 
-// A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `kernel::infer::sort_tests` puts the same propositions to the kernel under this name.
+// A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `kernel::infer::tests::sort` puts the same propositions to the kernel under this name.
 #[test]
 fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() {
     let declarations = r#"
@@ -407,7 +407,7 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
     );
 }
 
-// The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `kernel::convert::irrelevance_tests` puts the two comparisons to the kernel under this name.
+// The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `kernel::convert::tests::irrelevance` puts the two comparisons to the kernel under this name.
 #[test]
 fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
     let one = r#"

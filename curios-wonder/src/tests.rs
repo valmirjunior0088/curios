@@ -4,8 +4,8 @@
 
 mod test_support;
 
-mod ask_tests;
-mod named_tests;
-mod record_tests;
-mod stage_tests;
-mod store_tests;
+mod ask;
+mod named;
+mod record;
+mod stage;
+mod store;

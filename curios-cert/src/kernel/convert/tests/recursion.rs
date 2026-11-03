@@ -472,7 +472,7 @@ fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an
 
 /// **Two calls of one recursive group differing only in a proof convert by their spines, the proof compared at the member's own type.** A `rec` projection carries its member type, so `spine_telescope` reads the telescope there as it does off a variable's declaration. `tests::board`'s `a_recursive_function_carrying_a_proof_converts_without_unfolding` is the program, reaching the group through a global it is the value of; `two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an_unfolding`, whose spines differ in an argument the fold discards, is the control that a mismatch still unfolds.
 ///
-/// Mutation-checked against the two halves of the rule, neither of which this goal holds alone: with no telescope read off a `rec` projection it still passes, the two proofs compared at `Type` and one by the proposition a lookup types both at (`by_their_own_type`), and removing the spine attempt before forcing leaves it passing — that half is `irrelevance_tests`'s `a_definition_applied_to_two_proofs_converts_before_unfolding`, which fails under it.
+/// Mutation-checked against the two halves of the rule, neither of which this goal holds alone: with no telescope read off a `rec` projection it still passes, the two proofs compared at `Type` and one by the proposition a lookup types both at (`by_their_own_type`), and removing the spine attempt before forcing leaves it passing — that half is `irrelevance`'s `a_definition_applied_to_two_proofs_converts_before_unfolding`, which fails under it.
 #[test]
 fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     let mut kernel = Kernel::new(10_000, SYNTAX);

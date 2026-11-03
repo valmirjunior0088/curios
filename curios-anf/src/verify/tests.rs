@@ -1,5 +1,5 @@
 //! The tests of `verify`, one file per subject.
 
-mod import_tests;
-mod knot_tests;
-mod shape_tests;
+mod import;
+mod knot;
+mod shape;

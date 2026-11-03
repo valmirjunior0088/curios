@@ -150,7 +150,7 @@ fn a_refinement_is_not_read_where_its_frame_is_set_aside() {
 
 /// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The kernel's `whnf::equation_scope_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
 ///
-/// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::retry_tests` holds an instance that names no local withheld.
+/// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::tests::retry` holds an instance that names no local withheld.
 #[test]
 fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
     let mut context = context();
