@@ -61,7 +61,7 @@ use {
         open_quality, positivity_vectors, read_digest, rewrite_universe_levels, universe_metas,
         universe_verdict, variance_vectors,
     },
-    curios_analysis::{Declarations, Erased, PositivityRefusal},
+    curios_analysis::{Declarations, PositivityRefusal},
     curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
         Abroad, Bound, Certification, Certified, Changes, Concluded, Definitions, Entrypoint,
@@ -712,7 +712,7 @@ fn verdicts_within<'s>(
                 stored(candidates, globals, kernel, &now, *place, item)
             }
         {
-            let refusals = take(kernel, item, &records);
+            let refusals = take(kernel, item);
             verdicts.extend(refusals);
             for (name, record) in records {
                 reads.insert(name, (**record).clone());
@@ -828,12 +828,7 @@ fn verdicts_within<'s>(
         }
 
         // The item's classification, then obligations (T) and (V) over the positions its check recorded. Every definition it mentions was judged before it and is classified already, so the set its positions are read against is closed where they are read.
-        for (name, error) in totals.classify(kernel, item) {
-            verdicts.push(Verdict {
-                name: Some(name),
-                error,
-            });
-        }
+        totals.classify(kernel, item);
 
         // A group is judged as one item, so each of its members read what the group did; and what the classification read of what it mentions is the item's too.
         let item_reads = kernel.take_reads();
@@ -1074,7 +1069,7 @@ struct Changed {
     items: BTreeSet<usize>,
     /// The names the baseline declared and the module does not.
     lost: Vec<Global>,
-    /// The places of the declarations the walk visits: the items above, every declaration an edit could reach, and every item held where the baseline held another.
+    /// The places of the declarations the walk visits: the items above, and every declaration an edit could reach.
     visited: BTreeSet<usize>,
     /// The names the visited declarations declare.
     visited_names: HashSet<Global>,
@@ -1176,15 +1171,6 @@ impl Changed {
                 }
             }
         }
-        // An item held where the baseline held another that is the baseline's, made again to what it was: visited, so its stamp is held to the verdict it adopts as a walk over every item holds it, and reaching no declaration that read it, its verdict being the baseline's.
-        for place in touched {
-            if changed.visited.insert(place) {
-                changed
-                    .visited_names
-                    .extend(definitions.items.names(place).into_iter().copied());
-            }
-        }
-
         changed
     }
 
@@ -1405,8 +1391,8 @@ fn stands(
             .all(|(read, recorded)| digest(read, true).is_some_and(|now| now == *recorded))
 }
 
-/// Take the verdict `records` hold of `item`, a record for each name it declares: each name stands at its type with its real body, as the walk leaves an item it does not judge, and what the walk refuses of it is handed back — a stamp that says `Total` where the verdict taken does not, as for an item judged.
-fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Vec<Verdict> {
+/// Take the verdict a store's records hold of `item`: each name stands at its type with its real body, as the walk leaves an item it does not judge, and what the walk refuses of it is handed back.
+fn take(kernel: &mut Kernel, item: &Item) -> Vec<Verdict> {
     let mut refusals = Vec::new();
     let mut defined = |name: &Global,
                        type_: &Term,
@@ -1423,18 +1409,15 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
             });
         }
     };
-    let stamps = match item {
-        Item::Let(definition) => {
-            defined(
-                &definition.name,
-                &definition.type_,
-                &definition.body,
-                definition.proof,
-                definition.value_sort.as_ref(),
-                &definition.universe_context,
-            );
-            vec![(definition.name, definition.totality)]
-        }
+    match item {
+        Item::Let(definition) => defined(
+            &definition.name,
+            &definition.type_,
+            &definition.body,
+            definition.proof,
+            definition.value_sort.as_ref(),
+            &definition.universe_context,
+        ),
         Item::Rec(rec) => {
             let universes = rec.universe_context.clone();
             for (member, definition) in rec.definitions.iter().enumerate() {
@@ -1447,25 +1430,6 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
                     &universes,
                 );
             }
-            rec.definitions
-                .iter()
-                .map(|definition| (definition.name, definition.totality))
-                .collect()
-        }
-    };
-    for (name, stamp) in stamps {
-        let taken = records
-            .iter()
-            .find(|(held, _)| *held == name)
-            .and_then(|(_, record)| record.made());
-        if stamp.is_total() && taken.is_some_and(|made| made.totality != Totality::Total) {
-            refusals.push(Verdict {
-                name: Some(name),
-                error: Error::NotTotal {
-                    erased: Erased::Proof,
-                    reached: None,
-                },
-            });
         }
     }
 
@@ -1481,7 +1445,7 @@ struct Adopted {
     variances: Vec<(Global, Vec<Variance>)>,
 }
 
-/// Take the baseline's verdict on `item`: each of its names stands as the walk leaves an item it does not judge, at its type with its real body, read where the baseline holds it; its registry entries' polarity vectors are filed in the environment; and what the baseline's record holds for it is handed back. A stamp that says `Total` where the adopted verdict does not is refused as it is for a judged item, the stamp being this text's and the verdict the baseline's.
+/// Take the baseline's verdict on `item`: each of its names stands as the walk leaves an item it does not judge, at its type with its real body, read where the baseline holds it; its registry entries' polarity vectors are filed in the environment; and what the baseline's record holds for it is handed back.
 ///
 /// `certified` is the baseline's record of each name `item` declares, in the order it declares them ([`Adopting::adopts`]).
 fn adopt(
@@ -1491,14 +1455,6 @@ fn adopt(
     certified: &[(Totality, &Reads)],
 ) -> Adopted {
     let names = item.declared_names();
-    let stamps = match item {
-        Item::Let(definition) => vec![definition.totality],
-        Item::Rec(rec) => rec
-            .definitions
-            .iter()
-            .map(|definition| definition.totality)
-            .collect(),
-    };
     let mut adopted = Adopted {
         refusals: names
             .iter()
@@ -1514,19 +1470,10 @@ fn adopt(
         variances: Vec::new(),
     };
 
-    for ((name, stamp), (totality, reads)) in names.into_iter().zip(stamps).zip(certified) {
+    for (name, (totality, reads)) in names.into_iter().zip(certified) {
         adopted.reads.push((*name, (*reads).clone()));
         if *totality != Totality::Total {
             adopted.partial.push(*name);
-            if stamp.is_total() {
-                adopted.refusals.push(Verdict {
-                    name: Some(*name),
-                    error: Error::NotTotal {
-                        erased: Erased::Proof,
-                        reached: None,
-                    },
-                });
-            }
         }
         if item.nominal(name).is_some() {
             let vector = baseline

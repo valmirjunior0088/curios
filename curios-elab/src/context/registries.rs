@@ -1,11 +1,11 @@
 //! The context's doors to the registries: the declarations, concepts and witnesses a unit registers, what is known of each definition, and what a walk needs of a declaration that has not finished.
 
 use {
-    crate::{Answered, Context, Declared, Error, Question, Witness},
+    crate::{Answered, Classified, Context, Declared, Error, Question, Vectors, Witness},
     curios_common::{Mount, Qualifier},
     curios_core::{
-        ConceptDecl, Definition, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term,
-        Totality, UniverseContext, Variance, WitnessKey,
+        ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
+        UniverseContext, Variance, WitnessKey,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -86,9 +86,25 @@ impl<'s> Context<'s> {
         self.typing.program.definition_totality(name)
     }
 
-    /// [`Program::record_variances`](crate::Program::record_variances).
-    pub(crate) fn record_definition_variances(&mut self, definition: &Definition) {
-        self.typing.program.record_variances(definition);
+    /// [`Program::record_vectors`](crate::Program::record_vectors).
+    pub(crate) fn record_vectors(&mut self, name: &Global, type_: &Term, vectors: &Vectors) {
+        self.typing.program.record_vectors(name, type_, vectors);
+    }
+
+    /// File what an earlier elaboration concluded of the definition `name` of type `type_`, a declaration taken from a record of it: its totality and its vectors, as its own publication filed them.
+    pub(crate) fn record_classified(
+        &mut self,
+        name: &Global,
+        type_: &Term,
+        classified: &Classified,
+    ) {
+        self.record_definition_totality(name, classified.totality);
+        self.record_vectors(name, type_, &classified.vectors);
+    }
+
+    /// [`Program::classified`](crate::Program::classified): read by the walk that files it, so no question is asked.
+    pub(crate) fn classified(&self, name: &Global) -> Classified {
+        self.typing.program.classified(name)
     }
 
     /// The sort `name`'s value inhabits, where it is a definition whose value is a type ([`curios_core::Definition::value_sort`]): a read of that part of the definition alone.

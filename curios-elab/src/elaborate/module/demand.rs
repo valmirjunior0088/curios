@@ -18,10 +18,10 @@ use {
         elaborate_module_item, withhold,
     },
     crate::{
-        Answered, Context, Error, Established, Foreign, GoalSite, HeldTrace, Made, Parts, Question,
-        Read, Readers, Same, TraceRecord, Traces, bytes_of, concepts_alike, declaration_input,
-        entries_alike, found, inducts_alike, item_part_digest, items_of, lowered_digest,
-        part_digest, structs_alike,
+        Answered, Classified, Context, Error, Established, Foreign, GoalSite, HeldTrace, Made,
+        Parts, Question, Read, Readers, Same, TraceRecord, Traces, bytes_of, concepts_alike,
+        declaration_input, entries_alike, found, inducts_alike, item_part_digest, items_of,
+        lowered_digest, part_digest, structs_alike,
     },
     curios_common::{Candidates, Facet, recurse},
     curios_core::{Declarations, Definitions, Global, Item, Nominal, Place, Places, Trace},
@@ -474,6 +474,7 @@ impl<'a> Demand<'a> {
                 readers.replace(*name, Some(trace), None);
             }
             self.traces.forget(name);
+            self.traces.unclassify(name);
         }
         // A key at which the unit declares other witnesses than the baseline did: a witness's name states its key, so a key moved where a witness was gained or dropped there. Every witness the unit declares there is attempted, so the one registered first is the one a whole compile registers.
         let moved = gained
@@ -1003,6 +1004,13 @@ impl<'a> Demand<'a> {
         self.traces.share(**first, record);
     }
 
+    /// File what elaboration concluded of each definition of `made`, an item that stands, in place of what the baseline filed of it.
+    fn classify(&mut self, context: &Context, made: &Item) {
+        for name in made.declared_names() {
+            self.traces.classify(*name, context.classified(name));
+        }
+    }
+
     /// Note which parts of `made`, an item elaborated again over a baseline, came out as the baseline holds them.
     fn compare(&mut self, context: &Context, made: &Item) {
         let Some(over) = self.over else {
@@ -1015,7 +1023,13 @@ impl<'a> Demand<'a> {
             let held = &over.baseline.items[place.item()];
             // The baseline's entry rides in the former that declares it.
             let entry = held.nominal(name);
-            let same = Same::of(made, held, member).keying(
+            let unclassified = Classified::default();
+            let same = Same::of(
+                (made, &context.classified(name)),
+                (held, over.traces.classified(name).unwrap_or(&unclassified)),
+                member,
+            )
+            .keying(
                 entries_alike(
                     context.induct_decl(name),
                     entry.and_then(Nominal::inductive),
@@ -1089,7 +1103,8 @@ impl<'a> Demand<'a> {
 
             curios_profile::sample!("demand::adopted", record.len());
             for (position, item) in positions.iter().zip(items) {
-                context.publish_adopted(&item);
+                context.publish_adopted(&item, &made.classified);
+                self.classify(context, &item);
                 self.compare(context, &item);
                 self.survivors.keep(ItemStamp(*position), item, Vec::new());
             }
@@ -1158,11 +1173,11 @@ impl<'a> Demand<'a> {
                     return None;
                 }
                 match self.held.get(&owner).is_none_or(|held| held.kept) {
-                    true => part_digest(over.baseline, over.places, question),
+                    true => part_digest(over.baseline, over.places, over.traces, question),
                     false => {
                         let item = carrying(context, self.survivors.item(subject)?.clone());
                         let place = place_in(&item, subject)?;
-                        item_part_digest(&item, place, question)
+                        item_part_digest(&item, place, &context.classified(subject), question)
                     }
                 }
             }
@@ -1277,6 +1292,7 @@ impl<'a> Demand<'a> {
                 for (position, outcome) in items.iter().zip(outcomes) {
                     match outcome {
                         Outcome::Kept(elaborated, obligations) => {
+                            self.classify(context, &elaborated);
                             self.compare(context, &elaborated);
                             self.survivors
                                 .keep(ItemStamp(*position), elaborated, obligations);

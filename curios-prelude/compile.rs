@@ -47,7 +47,7 @@ pub(crate) fn compile(out: &Path) -> Vec<PathBuf> {
         "std",
         std_text,
         // Every root before this one is the compiler's own, of which no read is recorded.
-        &Established::over(&[sys.core()]).fixed(&[true]),
+        &Established::placed(&[(sys.core(), sys.places(), sys.traces())]).fixed(&[true]),
         &[&sys],
     );
 

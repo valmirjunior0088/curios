@@ -4,8 +4,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Anchor, Anchored, Cost, Definition, DefinitionKind, Definitions, Extent, Free, Global,
-        Intrinsic, Item, MetavarId, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
-        test_support::*,
+        Intrinsic, Item, MetavarId, Nat, Subterm, Term, Tuple, UniverseContext, test_support::*,
     },
 };
 
@@ -31,11 +30,7 @@ fn lowered_definitions(body: Term) -> Definitions {
                 kind: DefinitionKind::Authored,
                 universe_context: UniverseContext::empty(),
                 island: Qualifier::empty(),
-                totality: Totality::default(),
                 proof: false,
-                variances: Vec::new(),
-                field_variances: Vec::new(),
-                parameter_field: None,
                 value_sort: None,
                 type_: nat(),
                 body,

@@ -20,12 +20,12 @@ fn shown(source: &str, name: &str) -> (String, String) {
 
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
-        let modules = predecessors
-            .cores()
+        let units = predecessors
+            .placed()
             .into_iter()
-            .chain([unit.core()])
+            .chain([(unit.core(), unit.places(), unit.traces())])
             .collect::<Vec<_>>();
-        let established = Established::over(&modules);
+        let established = Established::placed(&units);
         let lexicons = predecessors.lexicons();
         let spellings = Rc::new(unit.text().spellings(&predecessors.text()));
         let reading = Reading {

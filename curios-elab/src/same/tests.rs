@@ -21,20 +21,24 @@ fn stated(body: usize, proof: bool) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        totality: Totality::Total,
         proof,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(body))),
     }))
 }
 
-/// Whether what `made` unfolds to is what `held` does, and whether its signature is.
+/// What elaboration concludes of `stated`, which reaches nothing partial and has no universe parameter.
+fn total() -> Classified {
+    Classified {
+        totality: Totality::Total,
+        ..Classified::default()
+    }
+}
+
+/// Whether what `made` unfolds to is what `held` does, and whether its signature is, both concluded total.
 fn unfolds_alike(made: &Item, held: &Item) -> (bool, bool) {
-    let same = Same::of(made, held, 0);
+    let same = Same::of((made, &total()), (held, &total()), 0);
 
     (
         same.answers(&Question::Body(name())),
@@ -114,7 +118,7 @@ fn a_signature_digests_as_it_is_compared() {
         UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     );
     let digest = |item: &Item| {
-        item_part_digest(item, Place::Let(0), &Question::Signature(name()))
+        item_part_digest(item, Place::Let(0), &total(), &Question::Signature(name()))
             .expect("a signature digests")
     };
     let alike = |made: &Item, held: &Item| unfolds_alike(made, held).1;

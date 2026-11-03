@@ -1,7 +1,7 @@
 use {
     super::*,
     curios_common::Qualifier,
-    curios_core::{Definition, DefinitionKind, Global, Item, Term, Totality, UniverseContext},
+    curios_core::{Definition, DefinitionKind, Global, Item, Term, UniverseContext},
     std::io::Cursor,
 };
 
@@ -99,11 +99,7 @@ fn item(name: &str) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        totality: Totality::default(),
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_ground(),
         body: Term::type_ground(),

@@ -7,8 +7,8 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, InductDecl, InductParam, Level, Telescope, Term,
-        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseMetaId, UniverseParam, UniverseRole, Variance,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        UniverseParam, UniverseRole, Variance,
     },
     std::collections::BTreeSet,
 };
@@ -102,11 +102,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
             constraints: Vec::new(),
         },
         island: Qualifier::empty(),
-        totality: Totality::Total,
         proof: false,
-        variances: vec![variance],
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::func_type([(carrier, sort.clone())], nat_type()),
         body: Term::func([(carrier, sort)], nat(3)),
@@ -119,7 +115,14 @@ fn define_pick(context: &mut Context, variance: Variance) {
         &definition.kind,
     );
     context.set_universe_context(&definition.name, definition.universe_context.clone());
-    context.record_definition_variances(&definition);
+    context.record_vectors(
+        &definition.name,
+        &definition.type_,
+        &Vectors {
+            variances: vec![variance],
+            ..Vectors::default()
+        },
+    );
 }
 
 /// `pick.{level}`, passed bare.
@@ -453,17 +456,18 @@ fn define_records(context: &mut Context) {
     ];
 
     for (name, type_, body) in records {
+        let vectors = Vectors {
+            variances: definition_variances(context, &scheme, &type_, &body)
+                .expect("a record's value reads within the budget"),
+            field_variances: field_variances(&scheme, &type_, &body),
+            parameter_field: None,
+        };
         let definition = Definition {
             name: nominal(name),
             kind: DefinitionKind::Authored,
             universe_context: scheme.clone(),
             island: Qualifier::empty(),
-            totality: Totality::Total,
             proof: false,
-            variances: definition_variances(context, &scheme, &type_, &body)
-                .expect("a record's value reads within the budget"),
-            field_variances: field_variances(&scheme, &type_, &body),
-            parameter_field: None,
             value_sort: None,
             type_,
             body,
@@ -475,7 +479,7 @@ fn define_records(context: &mut Context) {
             &definition.kind,
         );
         context.set_universe_context(&definition.name, scheme.clone());
-        context.record_definition_variances(&definition);
+        context.record_vectors(&definition.name, &definition.type_, &vectors);
     }
 }
 

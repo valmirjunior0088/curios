@@ -255,7 +255,7 @@ impl<'s> Globals<'s> {
     ///
     /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.
     ///
-    /// It is read off [`Certification`], which only this crate's walk makes, and never off the totality elaboration stamps on a [`Definition`](curios_core::Definition): a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with and for no name beside it, and only where it covers that unit.
+    /// It is read off [`Certification`], which only this crate's walk makes, and never off anything elaboration concluded, which no [`Definition`](curios_core::Definition) carries: a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with and for no name beside it, and only where it covers that unit.
     pub(crate) fn partial(&self, name: &Global) -> bool {
         self.mounted.iter().any(|mounted| {
             mounted.covered

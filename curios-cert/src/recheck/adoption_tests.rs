@@ -368,16 +368,13 @@ fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
     );
 }
 
-/// `base : (Nat) -> Nat`, total as `(n) => n` or partial as [`diverging_sink`]'s body, then `middle : Nat = base(1)`, `top : Nat = middle` and `apart : Nat = 7`, the two readers stamped as `base` is: `top` reads `middle` and nothing of `base`.
+/// `base : (Nat) -> Nat`, total as `(n) => n` or partial as [`diverging_sink`]'s body, then `middle : Nat = base(1)`, `top : Nat = middle` and `apart : Nat = 7`: `top` reads `middle` and nothing of `base`.
 fn chained_definitions(partial: bool) -> Definitions {
     let n = Free::local(10, Some("n"));
-    let stamped = |name: &str, type_: Term, body: Term| match partial {
-        true => authored_partial(&global(name), type_, body),
-        false => authored(&global(name), type_, body),
-    };
+    let defined = |name: &str, type_: Term, body: Term| authored(&global(name), type_, body);
     let base = match (partial, diverging_sink()) {
-        (true, Item::Let(sink)) => stamped("base", sink.type_, sink.body),
-        _ => stamped(
+        (true, Item::Let(sink)) => defined("base", sink.type_, sink.body),
+        _ => defined(
             "base",
             Term::func_type([(n, nat())], nat()),
             Term::func([(n, nat())], Term::free_var(&n)),
@@ -388,7 +385,7 @@ fn chained_definitions(partial: bool) -> Definitions {
         mounts: Vec::new(),
         items: vec![
             base,
-            stamped(
+            defined(
                 "middle",
                 nat(),
                 Term::apply(
@@ -396,7 +393,7 @@ fn chained_definitions(partial: bool) -> Definitions {
                     [literal(1)],
                 ),
             ),
-            stamped(
+            defined(
                 "top",
                 nat(),
                 Term::instance(global("middle"), Universes::default()),
@@ -444,7 +441,7 @@ fn applied_nat() -> Term {
     )
 }
 
-/// A body read falls with the body: `three` unfolded `alias`, so an `alias` respelled as an application that reduces to `Nat` has `three` judged again. The baseline's record calls `three` partial, which an adopted `three` stamped total would be refused over; judged, it is total and the record says so.
+/// A body read falls with the body: `three` unfolded `alias`, so an `alias` respelled as an application that reduces to `Nat` has `three` judged again. The baseline's record calls `three` partial, which an adopted `three` would keep; judged, it is total and the record says so.
 #[test]
 fn a_body_read_falls_with_an_edit_to_the_body() {
     let baseline = written();
@@ -465,9 +462,9 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
     );
 }
 
-/// An adopted verdict is the baseline's, partiality included, and the stamp this text carries is held to it as a judged item's is: a record that calls `five` partial refuses a `five` stamped total, and files it partial.
+/// An adopted verdict is the baseline's, partiality included: a record that calls `five` partial files it partial, and refuses nothing for it.
 #[test]
-fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
+fn an_adopted_verdict_is_the_baselines_partiality_included() {
     let baseline = written();
     let certification = doctored(&walked(&baseline).certification, "five", |certified| {
         Certified {
@@ -478,11 +475,7 @@ fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
 
     let rechecked = walked_over(&baseline, &baseline, &certification);
 
-    assert!(matches!(
-        rechecked.verdicts.as_slice(),
-        [verdict] if verdict.name == Some(global("five"))
-            && matches!(verdict.error, Error::NotTotal { .. })
-    ));
+    assert_eq!(rechecked.verdicts, Vec::new());
     assert_eq!(
         rechecked.certification.totality(&global("five")),
         Some(Totality::Partial),
@@ -1321,11 +1314,7 @@ fn grouped_scheme(universe_context: curios_core::UniverseContext) -> Item {
         kind: DefinitionKind::Authored,
         universe_context,
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::type_at(Level::param(UniverseParam(0))),
@@ -1707,11 +1696,7 @@ fn carrier_group(universe_context: curios_core::UniverseContext) -> Item {
         kind: DefinitionKind::Authored,
         universe_context,
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: carrier_type,
         body: carrier_body,

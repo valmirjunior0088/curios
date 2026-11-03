@@ -10,11 +10,11 @@
 
 use {
     super::{Defined, Error, InScope, Question, part_digest},
-    crate::DefinedGroup,
+    crate::{DefinedGroup, Traces},
     curios_common::Qualifier,
     curios_core::{
         ConceptDecl, Definitions, Global, InductDecl, Item, Place, Places, RecGroup, RecItem,
-        StructDecl, WitnessKey,
+        StructDecl, Totality, WitnessKey,
     },
     std::{
         cell::RefCell,
@@ -34,6 +34,8 @@ enum Placed<'a> {
 struct Standing<'a> {
     definitions: &'a Definitions,
     places: Placed<'a>,
+    /// What its elaboration concluded of each of its definitions besides their terms ([`crate::Classified`]).
+    traces: &'a Traces,
     /// Which of its items this unit answers for, where it is a baseline ([`Answering`]). `None` for a unit in scope, which answers for every name it holds.
     answering: Option<RefCell<Answering>>,
     /// Whether this unit is other than the one the baseline was compiled after ([`Established::after`]).
@@ -101,6 +103,12 @@ impl<'a> Standing<'a> {
         }
 
         let place = self.places().place(name)?;
+        let classified = self.traces.classified(name);
+        let totality = classified.map_or(Totality::Partial, |classified| classified.totality);
+        let vectors = classified.map(|classified| &classified.vectors);
+        let variances = vectors.map_or(&[][..], |vectors| &vectors.variances);
+        let field_variances = vectors.map_or(&[][..], |vectors| &vectors.field_variances);
+        let parameter_field = vectors.and_then(|vectors| vectors.parameter_field);
         match place {
             Place::Let(_) => {
                 let Item::Let(definition) = &self.definitions.items[place.item()] else {
@@ -111,10 +119,10 @@ impl<'a> Standing<'a> {
                     type_: &definition.type_,
                     body: definition.published().0,
                     universe_context: &definition.universe_context,
-                    totality: definition.totality,
-                    variances: &definition.variances,
-                    field_variances: &definition.field_variances,
-                    parameter_field: definition.parameter_field,
+                    totality,
+                    variances,
+                    field_variances,
+                    parameter_field,
                     value_sort: definition.published().1,
                     island: definition.island,
                 })
@@ -128,11 +136,10 @@ impl<'a> Standing<'a> {
                     type_,
                     body: (!definition.proof).then_some(body),
                     universe_context: &rec.universe_context,
-                    totality: definition.totality,
-                    // A group's member files no vector where it is published, so it answers none here.
-                    variances: &[],
-                    field_variances: &[],
-                    parameter_field: None,
+                    totality,
+                    variances,
+                    field_variances,
+                    parameter_field,
                     value_sort: None,
                     island: definition.island,
                 })
@@ -230,38 +237,43 @@ impl<'a> Established<'a> {
         Self::default()
     }
 
-    /// Everything `modules` established, in dependency order, as scope: each read by places made here, for a module no unit holds.
-    pub fn over(modules: &[&'a Definitions]) -> Self {
+    /// Everything `modules` established, in dependency order, as scope, each beside the traces its elaboration filed: each read by places made here, for a module no unit holds.
+    pub fn over(modules: &[(&'a Definitions, &'a Traces)]) -> Self {
         Self {
             units: modules
                 .iter()
-                .map(|definitions| Standing {
+                .map(|(definitions, traces)| Standing {
                     definitions,
                     places: Placed::Made(Places::of(definitions)),
+                    traces,
                     answering: None,
                     moved: false,
                     fixed: false,
                 })
                 .collect(),
-            modules: modules.to_vec(),
+            modules: modules
+                .iter()
+                .map(|(definitions, _)| *definitions)
+                .collect(),
             moved: false,
         }
     }
 
-    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it.
-    pub fn placed(units: &[(&'a Definitions, &'a Places)]) -> Self {
+    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it, beside the traces its elaboration filed.
+    pub fn placed(units: &[(&'a Definitions, &'a Places, &'a Traces)]) -> Self {
         Self {
             units: units
                 .iter()
-                .map(|(definitions, places)| Standing {
+                .map(|(definitions, places, traces)| Standing {
                     definitions,
                     places: Placed::Kept(places),
+                    traces,
                     answering: None,
                     moved: false,
                     fixed: false,
                 })
                 .collect(),
-            modules: units.iter().map(|(definitions, _)| *definitions).collect(),
+            modules: units.iter().map(|(definitions, ..)| *definitions).collect(),
             moved: false,
         }
     }
@@ -299,11 +311,17 @@ impl<'a> Established<'a> {
         self
     }
 
-    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
-    pub fn keeping(mut self, baseline: &'a Definitions, places: &'a Places) -> Self {
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, with the places and traces its unit keeps, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    pub fn keeping(
+        mut self,
+        baseline: &'a Definitions,
+        places: &'a Places,
+        traces: &'a Traces,
+    ) -> Self {
         self.units.push(Standing {
             definitions: baseline,
             places: Placed::Kept(places),
+            traces,
             answering: Some(RefCell::new(Answering::Kept(HashSet::new()))),
             moved: false,
             fixed: false,
@@ -370,7 +388,7 @@ impl<'a> Established<'a> {
             return Ok(None);
         };
 
-        part_digest(unit.definitions, unit.places(), question)
+        part_digest(unit.definitions, unit.places(), unit.traces, question)
     }
 
     /// Refuse a scope two of whose units declare a witness at one concept and one key.

@@ -11,11 +11,7 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        totality: Totality::default(),
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_ground(),
         body: Term::tuple(

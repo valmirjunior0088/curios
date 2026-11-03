@@ -590,7 +590,7 @@ pub enum Subterm {
     Decorated(Decorated),
 }
 
-/// `#{field = value, …} operand`: what a Core node holds beside what its surface spelling says — a level, a definition's stamps, a match's stated type, a node other than the one the spelling suggests. It attaches to the operand an infix operator takes, a primary with its call chain, so `#{…} f(x)` states fields of the call and `(#{…} f)(x)` of its head, and a larger term is parenthesized. Core text's reader reads it; a program states nothing a decorator says, so its lowering refuses one.
+/// `#{field = value, …} operand`: what a Core node holds beside what its surface spelling says — a level, a definition's proof mark, a match's stated type, a node other than the one the spelling suggests. It attaches to the operand an infix operator takes, a primary with its call chain, so `#{…} f(x)` states fields of the call and `(#{…} f)(x)` of its head, and a larger term is parenthesized. Core text's reader reads it; a program states nothing a decorator says, so its lowering refuses one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decorated {
     pub fields: Vec<DecoratorField>,

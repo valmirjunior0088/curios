@@ -17,12 +17,12 @@ pub trait Families {
         None
     }
 
-    /// The vector of field `slot` of a definition whose value is a struct or tuple literal, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers ([`Definition::field_variances`](crate::Definition::field_variances)).
+    /// The vector of field `slot` of a definition whose value is a struct or tuple literal, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers.
     fn field(&self, _: &Global, _: usize) -> Option<(&[Variance], usize)> {
         None
     }
 
-    /// The field of one of its binders a definition's value is, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers ([`Definition::parameter_field`](crate::Definition::parameter_field)).
+    /// The field of one of its binders a definition's value is, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers.
     fn parameter_field(&self, _: &Global) -> Option<(ParameterField, usize)> {
         None
     }

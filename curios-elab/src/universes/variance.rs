@@ -290,7 +290,7 @@ pub fn field_variances(
         .collect()
 }
 
-/// Which of a definition's binders its value is a field of, read where its levels have closed: the value beneath the definition's own binders a projection, by slot, of one of them, and `None` for any other definition ([`curios_core::Definition::parameter_field`]).
+/// Which of a definition's binders its value is a field of, read where its levels have closed: the value beneath the definition's own binders a projection, by slot, of one of them, and `None` for any other definition ([`crate::Vectors::parameter_field`]).
 pub fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterField> {
     let Subterm::FuncType(FuncType {
         telescope: outer, ..

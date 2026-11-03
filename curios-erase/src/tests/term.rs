@@ -556,11 +556,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
             kind: curios_core::DefinitionKind::Authored,
             universe_context: curios_core::UniverseContext::empty(),
             island: Qualifier::empty(),
-            totality: curios_core::Totality::default(),
             proof: false,
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
             value_sort: None,
             type_: func_type.clone(),
             body: curios_core::Term::func(

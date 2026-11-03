@@ -205,7 +205,7 @@ impl Cache for Recorded<'_> {
     }
 }
 
-/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the store rather than from the stamps elaboration wrote, and the reads a recompile over it invalidates along.
+/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the store rather than from what elaboration concluded, and the reads a recompile over it invalidates along.
 #[test]
 fn a_reused_unit_brings_its_certification_back() {
     let root = project("certified");

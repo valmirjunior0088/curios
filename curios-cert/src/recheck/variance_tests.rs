@@ -110,9 +110,9 @@ fn a_carried_invariance_the_walk_would_grant_is_read_by_no_comparison() {
     assert_eq!(carried(level_one()), Vec::new());
 }
 
-/// `held.{u} : Type.{u + 1} = Type.{u}` carrying `variances`, and `coerce : (x : held.{1}) -> held.{0} = (x) => x`, which reads the higher instance back at the lower: what a definition's vector claims, against what the kernel compares two of its instances by.
-fn definition_coercion(variances: Vec<Variance>) -> Definitions {
-    use curios_core::{Definition, DefinitionKind, Free, Item, Totality, UniverseContext};
+/// `held.{u} : Type.{u + 1} = Type.{u}`, and `coerce : (x : held.{1}) -> held.{0} = (x) => x`, which reads the higher instance back at the lower.
+fn definition_coercion() -> Definitions {
+    use curios_core::{Definition, DefinitionKind, Free, Item, UniverseContext};
 
     let held = Global::Authored(Qualifier::from(["held"]));
     let parameter = Level::param(UniverseParam(0));
@@ -125,11 +125,7 @@ fn definition_coercion(variances: Vec<Variance>) -> Definitions {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances,
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(
             parameter
@@ -156,19 +152,14 @@ fn definition_coercion(variances: Vec<Variance>) -> Definitions {
     }
 }
 
-// A definition's own vector is read by no comparison either, and nothing holds it to what the kernel would grant: `Families` is implemented in `curios-elab` alone and `convert`'s level comparison passes `&()`, so the kernel sets no level of a definition apart and `held.{1}` read back at `held.{0}` is refused whatever the vector claims. The lie is the elaborator of a later unit's to be wrong by, and this is the second opinion that catches it.
-//
-// Where a family's carried vector is denied at its declaration (`a_carried_irrelevance_the_walk_denies_is_refused_and_read_by_no_comparison`), a definition's is denied nowhere: the kernel files no vector for a definition, so there is nothing to hold it to.
+// The kernel sets no level of a definition apart: `Families` is implemented in `curios-elab` alone and `convert`'s level comparison passes `&()`, so `held.{1}` read back at `held.{0}` is refused. What the elaborator concluded of a definition's vector is its own (`curios_elab::Vectors`), which Core holds nothing of, so a later unit's elaborator is wrong by it alone, and this is the second opinion that catches it.
 #[test]
-fn a_definitions_carried_irrelevance_is_read_by_no_comparison() {
-    let honest = refusals(&definition_coercion(vec![Variance::Invariant]));
+fn a_definitions_instances_are_compared_at_every_level() {
+    let refused = refusals(&definition_coercion());
     assert!(
-        coercion_refused(&honest),
-        "the higher instance is no type at the lower instance's sort: {honest:?}",
+        coercion_refused(&refused),
+        "the higher instance is no type at the lower instance's sort: {refused:?}",
     );
-
-    let believed = refusals(&definition_coercion(vec![Variance::Irrelevant]));
-    assert_eq!(believed, honest);
 }
 
 // `Box` holds its level only as the element of an intrinsic carrier: a list, a cell, a channel or a description of `Type u`. A carrier is compared by its element, so two instances apart in the level hold carriers of different universes, and granted irrelevant, `box([Type 0]) : Box.{1}` read back at `Box.{0}` would list `Type 0` among the types of `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.

@@ -286,7 +286,7 @@ impl Produced {
 #[curios_archive::archived]
 pub struct Unit {
     unit: Produced,
-    /// What the certifier concluded about the unit's definitions: each one's totality, closed over what it mentions, and what judging it read. A later walk reads this for the unit's verdicts rather than the stamps elaboration wrote.
+    /// What the certifier concluded about the unit's definitions: each one's totality, closed over what it mentions, and what judging it read. A later walk reads this for the unit's verdicts rather than what elaboration concluded, which the unit's traces hold for the elaborator alone.
     certification: Rc<Certification>,
 }
 

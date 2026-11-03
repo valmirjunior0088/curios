@@ -76,7 +76,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
 
     let definitions = Definitions {
         mounts: Vec::new(),
-        items: vec![authored_partial(
+        items: vec![authored(
             &Global::Authored(Qualifier::from(["ok"])),
             Term::func_type([(n, nat.clone())], nat),
             Term::rec_proj(group, 0),
@@ -131,7 +131,7 @@ fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
 /// `let bad : Nat = <body>`, the one item of a module built by hand.
 fn bad_definitions(body: Term) -> Definitions {
     Definitions {
-        items: vec![authored_partial(
+        items: vec![authored(
             &Global::Authored(Qualifier::from(["bad"])),
             Term::intrinsic(Intrinsic::NatType),
             body,

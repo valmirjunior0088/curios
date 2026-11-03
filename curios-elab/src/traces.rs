@@ -16,7 +16,7 @@ use {
     curios_common::{
         Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
     },
-    curios_core::{Global, Order, Trace, WitnessKey},
+    curios_core::{Global, Order, ParameterField, Totality, Trace, Variance, WitnessKey},
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -41,6 +41,8 @@ pub struct Made {
     pub outputs: Vec<Digest>,
     /// The written binders its proofs read, each by the name of its definition and its place among that definition's written binders.
     pub credited: Vec<(Global, u32)>,
+    /// What elaboration concluded of each definition it made, by the definition's name ([`Classified`]): what a compile that takes the declaration from this record files of it, its items holding none.
+    pub classified: Vec<(Global, Classified)>,
 }
 
 /// A declaration's trace as a unit holds it: what it asked, and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
@@ -141,6 +143,35 @@ pub struct Traces {
     before: Rc<BTreeSet<Global>>,
     /// The order the unit's items are stored in, with what each reaches of the unit and its depth: what a unit compiled over this one gives the order again from the items it made by ([`Order::revised`]).
     order: Order,
+    /// What elaboration concluded of each definition the unit holds as it published it, by the definition's name ([`Classified`]): what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
+    #[archived_with(InKeyOrder)]
+    classified: Sorted<Global, Classified>,
+}
+
+/// What elaboration concluded of one definition as it published it, beside its terms: what a declaration reads of the definition that Core holds nothing of.
+///
+/// **The elaborator's alone.** The kernel classifies each definition it judges for itself, and reads a unit in scope by its own record of it (`curios_core::Certification`), so nothing here is an input to a judgment of the kernel's: a conclusion wrong here costs a kernel refusal and admits nothing ([`curios-cert`'s README](../../curios-cert/README.md)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Classified {
+    /// Whether the definition terminates on every input, together with everything it reaches: `Partial` where something partial is in its closure, so a declaration that mentions it inherits the verdict rather than analysing what it reaches again. What the elaborator's gates read: a written type or a proof that reaches a partial definition is refused by name. `Partial` where nothing was concluded, so a definition no one classified fails closed.
+    pub totality: Totality,
+    /// Where the definition's universe parameters reach its value ([`Vectors`]).
+    pub vectors: Vectors,
+}
+
+/// Where a definition's universe parameters reach its value, as elaboration read it off the definition's final terms: what the elaborator's level alignment compares two instances of the definition by. A vector says something only where it holds an irrelevant level, so one that holds none is filed as none.
+///
+/// The level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it reads none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Vectors {
+    /// Which of the definition's universe parameters its value holds, one entry per parameter of its universe context: two instances apart in an irrelevant one alone are one term, unfolding either giving the same value. Read off its body as [`curios_core::InductDecl::variances`] is read off a family's telescopes; a position it does not reach is invariant. Empty for a recursive group's member, both checkers comparing two projections of one group at every level.
+    pub variances: Vec<Variance>,
+    /// Which universe parameters each field of its value holds, where that value, beneath the definition's own binders, is a struct or tuple literal: one vector per field in slot order, read off the field's value beneath its own binders as `variances` is read off a body that answers no type. A projection of the definition applied in full is the field's value, so its levels are compared where this field's vector says, not wherever the literal mentions them: a witness is polymorphic in a level its concept's sort-valued member stands at, and a method projected from it holds none of it.
+    pub field_variances: Vec<Vec<Variance>>,
+    /// Where its value, beneath its own binders, is a field of one of them: which binder and which slot. Applied in full, the definition is that field of the argument the binder takes, so its levels are compared where that field's are, as a projection's are by `field_variances`, and not wherever the argument's own value mentions them: a method named by its path holds of a witness what the operator that projects it holds, and so does any definition written the same way.
+    pub parameter_field: Option<ParameterField>,
 }
 
 /// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
@@ -268,6 +299,21 @@ impl Traces {
     /// Every declaration's trace, in the order of the names the declarations are written as.
     pub fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.iter().map(|(_, trace)| &***trace)
+    }
+
+    /// What elaboration concluded of the definition `name` as it published it, where the unit holds one.
+    pub fn classified(&self, name: &Global) -> Option<&Classified> {
+        self.classified.get(name)
+    }
+
+    /// File `classified` as what elaboration concluded of the definition `name`, in place of what was filed of it.
+    pub fn classify(&mut self, name: Global, classified: Classified) {
+        self.classified.insert(name, classified);
+    }
+
+    /// Take out what was filed of the definition `name`: a name the unit no longer defines.
+    pub fn unclassify(&mut self, name: &Global) {
+        self.classified.remove(name);
     }
 }
 
@@ -594,6 +640,7 @@ struct TabledMade {
     reads: Vec<Read>,
     outputs: Vec<[u8; 32]>,
     credited: Vec<(u32, u32)>,
+    classified: Vec<(u32, Classified)>,
 }
 
 impl TabledTrace {
@@ -618,6 +665,11 @@ impl TabledTrace {
                         .credited
                         .into_iter()
                         .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
+                        .collect::<Result<_, String>>()?,
+                    classified: made
+                        .classified
+                        .into_iter()
+                        .map(|(place, classified)| Ok((name(place)?, classified)))
                         .collect::<Result<_, String>>()?,
                 })
             })
@@ -753,6 +805,11 @@ impl TraceTable {
                         .credited
                         .iter()
                         .map(|(name, place)| (names.place(*name), *place))
+                        .collect(),
+                    classified: made
+                        .classified
+                        .iter()
+                        .map(|(name, classified)| (names.place(*name), classified.clone()))
                         .collect(),
                 });
 

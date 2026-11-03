@@ -72,7 +72,8 @@ pub use established::Established;
 
 mod traces;
 pub use traces::{
-    Foreign, HeldTrace, Made, Parts, Read, Readers, TraceRecord, TraceTable, TracedEntry, Traces,
+    Classified, Foreign, HeldTrace, Made, Parts, Read, Readers, TraceRecord, TraceTable,
+    TracedEntry, Traces, Vectors,
 };
 
 mod same;

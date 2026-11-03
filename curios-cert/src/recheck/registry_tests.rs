@@ -7,7 +7,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Definition, DefinitionKind, Definitions, Global, InductDecl, Intrinsic, Item, Level, Nat,
-        Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::*,
+        Telescope, Term, UniverseContext, UniverseParam, test_support::*,
     },
     curios_surface::Spelling,
     std::collections::{BTreeMap, BTreeSet},
@@ -163,11 +163,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::induct_type_at(

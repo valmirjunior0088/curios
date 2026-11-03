@@ -78,7 +78,7 @@ impl<'a> Baseline<'a> {
 
 /// Whether a `let` item is the baseline's: everything a judgment reads of a name in scope, the definition destructured whole so that what is left out is left out on purpose.
 ///
-/// What is read is what [`Held`] publishes — the type, the body, the stated value sort and the universe context — and the proof mark, which decides whether a body is published at all. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name; the island and the two variance vectors, which are elaboration's record where the ones an environment answers from are the certifier's own; and the classification, since a later walk reads the certifier's totality record and never the stamp the item carries.
+/// What is read is what [`Held`] publishes — the type, the body, the stated value sort and the universe context — and the proof mark, which decides whether a body is published at all. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name; and the island, which is elaboration's record.
 fn definition_alike(this: &Definition, that: &Definition) -> bool {
     let Definition {
         name,
@@ -89,10 +89,6 @@ fn definition_alike(this: &Definition, that: &Definition) -> bool {
         body,
         kind: _,
         island: _,
-        totality: _,
-        variances: _,
-        field_variances: _,
-        parameter_field: _,
     } = this;
 
     *name == that.name
@@ -129,7 +125,6 @@ fn member_alike(this: &RecDefinition, that: &RecDefinition) -> bool {
         proof,
         kind: _,
         island: _,
-        totality: _,
     } = this;
 
     *name == that.name && *proof == that.proof

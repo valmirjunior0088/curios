@@ -80,19 +80,15 @@ fn calls(erased: &curios_anf::Module) -> usize {
         .count()
 }
 
-/// `identity : (Nat) -> Nat`, stamped `stamp` by elaboration, and an entry applying it — erased through the path production takes, as the program it links to.
-fn identity_arena(stamp: curios_core::Totality) -> ErasedProgram {
+/// `identity : (Nat) -> Nat` and an entry applying it — erased through the path production takes, as the program it links to.
+fn identity_arena() -> ErasedProgram {
     let x = fresh(Some("x"));
     let nat = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
-    let mut items = vec![definition(
+    let items = vec![definition(
         "identity",
         curios_core::Term::func_type([(x, nat.clone())], nat.clone()),
         curios_core::Term::func([(x, nat.clone())], curios_core::Term::free_var(&x)),
     )];
-    let curios_core::Item::Let(declared) = &mut items[0] else {
-        unreachable!("the fixture declares a definition");
-    };
-    declared.totality = stamp;
     let body = curios_core::Term::apply(reference("identity"), [nat_lit(4)]);
 
     let program = zonked(&stating(&module(items, body), nat));
@@ -111,23 +107,18 @@ fn totals(erased: &curios_anf::Module) -> Vec<bool> {
         .collect()
 }
 
-/// Erasure marks nothing total, whatever elaboration stamped: the flag is the certifier's record's to set, where the sealed program meets it, and a stamp is read by nothing below Core.
+/// Erasure marks nothing total by itself: the flag is the certifier's record's to set, where the sealed program meets it.
 #[test]
-fn erasure_marks_no_function_total_whatever_its_stamp() {
-    for stamp in [curios_core::Totality::Total, curios_core::Totality::Partial] {
-        let erased = identity_arena(stamp).into_module();
-
-        assert_eq!(totals(&erased), [false], "stamped {stamp:?}");
-    }
+fn erasure_marks_no_function_total_by_itself() {
+    assert_eq!(totals(&identity_arena().into_module()), [false]);
 }
 
-/// A record marks exactly the functions its `Total` definitions erased to — found through the binding erasure made — and nothing it classifies otherwise or does not name, whatever the stamp says: a `Partial` stamp does not stop a `Total` record, and a `Total` stamp does not stand in for one.
+/// A record marks exactly the functions its `Total` definitions erased to — found through the binding erasure made — and nothing it classifies otherwise or does not name.
 #[test]
 fn a_record_marks_the_functions_its_total_definitions_erased_to() {
     let identity = nominal("identity");
     let cases = [
         (
-            curios_core::Totality::Partial,
             curios_core::Certification::of(
                 [(
                     identity,
@@ -143,7 +134,6 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
             true,
         ),
         (
-            curios_core::Totality::Total,
             curios_core::Certification::of(
                 [(
                     identity,
@@ -158,21 +148,17 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
             ),
             false,
         ),
-        (
-            curios_core::Totality::Total,
-            curios_core::Certification::default(),
-            false,
-        ),
+        (curios_core::Certification::default(), false),
     ];
 
-    for (stamp, record, marked) in cases {
-        let mut arena = identity_arena(stamp);
+    for (record, marked) in cases {
+        let mut arena = identity_arena();
         arena.mark_total(&record);
 
         assert_eq!(
             totals(&arena.into_module()),
             [marked],
-            "stamped {stamp:?}, recorded {record:?}"
+            "recorded {record:?}"
         );
     }
 }

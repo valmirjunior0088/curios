@@ -3,7 +3,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam, Item,
-        Nominal, Telescope, Term, Totality, UniverseContext, Universes,
+        Nominal, Telescope, Term, UniverseContext, Universes,
     },
 };
 
@@ -32,12 +32,8 @@ fn authored(name: &Global, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
         value_sort: None,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         type_,
         body,
     }))

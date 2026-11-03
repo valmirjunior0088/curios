@@ -2,8 +2,10 @@
 
 use {
     curios_core::{Item, Program, Variance},
-    curios_module::RootSource,
+    curios_elab::{Context, Established, Tail, elaborate_and_zonk_entry},
+    curios_module::{RootSource, SYNTAX, UnitSource, into_core_entry},
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
+    curios_prelude::with_prelude,
     curios_surface::{Entrypoint, Spellable},
     std::collections::BTreeMap,
 };
@@ -96,31 +98,59 @@ pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// Every non-recursive definition's variance vector as its unit carries it, keyed as [`universe_parameters`] keys it: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none.
+/// Every non-recursive definition's variance vector as its unit files it ([`curios_elab::Vectors`]), keyed as [`universe_parameters`] keys it: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none. A vector holding no irrelevant level is filed as none, and spelled as every level invariant.
+///
+/// The program's declarations are lowered and elaborated as the unit a compilation takes them as, over the prelude's roots, since the vectors are the unit's and no program carries them.
 pub(super) fn definition_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
-        .expect("the fixture type-checks")
-        .program;
 
-    program
-        .definitions
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Let(definition) => Some((item.describe(), definition)),
-            Item::Rec(_) => None,
-        })
-        .map(|(described, definition)| {
-            let spelled = definition
-                .variances
-                .iter()
-                .map(|variance| match variance {
-                    Variance::Irrelevant => '*',
-                    Variance::Invariant => '=',
-                })
-                .collect();
-            (described, spelled)
-        })
-        .collect()
+    with_prelude(|prelude| {
+        let texts = prelude.iter().map(|unit| unit.text()).collect::<Vec<_>>();
+        let (lowered, entry) = into_core_entry(
+            &UnitSource::entry(&entrypoint, &RootSource::none()),
+            &texts,
+            &SYNTAX,
+            None,
+        )
+        .expect("the fixture lowers");
+        let placed = prelude
+            .iter()
+            .map(|unit| (unit.core(), unit.places(), unit.traces()))
+            .collect::<Vec<_>>();
+        let established = Established::placed(&placed);
+        let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);
+        context.set_imports(lowered.imports().clone());
+        let (definitions, _, traces) = elaborate_and_zonk_entry(
+            &mut context,
+            &established,
+            lowered.core(),
+            lowered.minted(),
+            Tail::Entry(&entry),
+        )
+        .expect("the fixture elaborates");
+
+        definitions
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Let(definition) => Some((item.describe(), definition)),
+                Item::Rec(_) => None,
+            })
+            .map(|(described, definition)| {
+                let spelled = match traces.classified(&definition.name) {
+                    Some(classified) if !classified.vectors.variances.is_empty() => classified
+                        .vectors
+                        .variances
+                        .iter()
+                        .map(|variance| match variance {
+                            Variance::Irrelevant => '*',
+                            Variance::Invariant => '=',
+                        })
+                        .collect(),
+                    _ => "=".repeat(definition.universe_context.parameter_count),
+                };
+                (described, spelled)
+            })
+            .collect()
+    })
 }

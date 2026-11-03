@@ -319,18 +319,17 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
     lowered_prefix.items = lowered_prefix.items.iter().take(1).cloned().collect();
     lowered_prefix.witnesses.clear();
     lowered_prefix.tests.clear();
-    let prelude = curios_elab::elaborate_and_zonk_definitions(
+    let nothing = curios_elab::Established::nothing();
+    let (prelude, traces) = curios_elab::elaborate_and_zonk_unit(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
+        &nothing,
         &lowered_prefix,
         &minted,
     )
     .unwrap();
 
-    let full = elaborate_program(src, &curios_elab::Established::nothing());
-    let cached = elaborate_program(
-        src,
-        &curios_elab::Established::over(std::slice::from_ref(&&prelude)),
-    );
+    let full = elaborate_program(src, &nothing);
+    let cached = elaborate_program(src, &curios_elab::Established::over(&[(&prelude, &traces)]));
     (full, cached)
 }
 

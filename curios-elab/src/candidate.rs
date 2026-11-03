@@ -153,11 +153,17 @@ impl<'a> Candidating<'a> {
             return Ok(None);
         };
 
+        let classified = names
+            .iter()
+            .filter_map(|name| Some((*name, self.traces.classified(name)?.clone())))
+            .collect();
+
         Ok(Some(Made {
             input: declaration_input(inputs),
             reads,
             outputs,
             credited: credited(&names),
+            classified,
         }))
     }
 
@@ -174,7 +180,7 @@ impl<'a> Candidating<'a> {
         }
 
         let read = match self.places.place(subject) {
-            Some(_) => part_digest(self.definitions, self.places, question)
+            Some(_) => part_digest(self.definitions, self.places, self.traces, question)
                 .ok()
                 .map(|digest| digest.and_then(|digest| bytes_of(&digest))),
             // What a unit records of a read of another is every read but a fixed unit's.

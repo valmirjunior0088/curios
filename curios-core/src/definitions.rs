@@ -49,7 +49,7 @@ impl Totality {
 ///
 /// **A version of its baseline's where its walk was over one.** Its tables are persistent and read back in the order of their names, so a walk over the unit as a baseline starts from the record it adopts verdicts from and changes it at the declarations it judges or drops alone ([`Certification::revised`]).
 ///
-/// Only the certifier's walk makes one — `curios_cert::certify_definitions` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
+/// Only the certifier's walk makes one — `curios_cert::certify_definitions` — and a later walk reads it as the verdicts on the definitions it covers: no [`Definition`] carries elaboration's. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
@@ -742,22 +742,6 @@ pub struct Definition {
     pub universe_context: UniverseContext,
     /// This definition's declaring module — `name`'s qualifier prefix, precomputed once by `into_core` (before `name` was flattened) rather than re-derived from it later. Stamped into `Context::island` per item by `elaborate_definitions_suffix` for the representation-privacy checks, which test subtree containment against it rather than equality; the same value `InductDecl::module` and `StructDecl::module` carry for type declarations. Islands are surface-elaboration state: erasure re-derives types with privacy suppressed and never stamps them.
     pub island: Qualifier,
-    /// Whether this definition terminates on every input, together with everything it reaches. Written by `curios-elab` as the definition's item is published, once — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
-    ///
-    /// This is the cross-module summary elaboration's own gates read: a user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure". The certifier reads it only as a claim to contradict, and nothing below erasure reads it: an erased function's termination flag is marked from the certifier's record.
-    pub totality: Totality,
-    /// Which of this definition's universe parameters its value holds, one entry per parameter of `universe_context`: two instances apart in an irrelevant one alone are one term, unfolding either giving the same value. Written back by `curios-elab` where the definition's levels have closed, read off its body as [`InductDecl::variances`](super::InductDecl::variances) is read off a family's telescopes. Empty until then, for a definition that takes no universe parameter, and on a recursive member's opened view, both checkers comparing two projections of one group at every level; a position it does not reach is invariant.
-    ///
-    /// The elaborator's level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it holds none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
-    pub variances: Vec<Variance>,
-    /// Which of this definition's universe parameters each field of its value holds, where that value, beneath the definition's own binders, is a struct or tuple literal: one vector per field in slot order, each one entry per parameter of `universe_context`, read off the field's value beneath its own binders as `variances` is read off a body that answers no type. A projection of the definition applied in full is the field's value, so its levels are compared where this field's vector says, not wherever the literal mentions them: a witness is polymorphic in a level its concept's sort-valued member stands at, and a method projected from it holds none of it. Empty otherwise, as `variances` is.
-    ///
-    /// The elaborator's level alignment is its one reader, as it is of `variances`. The kernel forces a projection of a definition to its field before it compares heads, so a vector claiming an irrelevance the field denies costs a kernel refusal and admits nothing.
-    pub field_variances: Vec<Vec<Variance>>,
-    /// Where this definition's value, beneath its own binders, is a field of one of them: which binder and which slot. Applied in full, the definition is that field of the argument the binder takes, so its levels are compared where that field's are, as a projection's are by [`Self::field_variances`], and not wherever the argument's own value mentions them: a method named by its path holds of a witness what the operator that projects it holds, and so does any definition written the same way. Written back by `curios-elab` beside `field_variances`, and `None` for any other definition.
-    ///
-    /// The elaborator's level alignment is its one reader, as it is of `variances`. The kernel unfolds a definition where two instances of it are apart, so a claim the body denies costs a kernel refusal and admits nothing.
-    pub parameter_field: Option<ParameterField>,
     /// Whether this definition is a proof a declaration wrote: one introduced as [`DefinitionKind::Authored`] whose type is a proposition, or a function into one. Its body is then read by its own check and by nothing after it: a judgment that asks what the name unfolds to is answered with nothing, in both checkers, so the name stands for a constant of its type. No judgment reads a proof's value, which is what a binder's mark rests on too ([`Scope::binds_proof`](super::Scope::binds_proof)), so a body withheld refuses nothing a body unfolded would admit, and what a later declaration reads of this one is its type.
     ///
     /// Written by `curios-elab` as the definition's item is published, with its binders' marks, and `false` until then. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to. The certifier holds the mark one way, as it holds a binder's: a definition marked at a type it reads as no proposition is refused, and one left unmarked unfolds and is refused nowhere.
@@ -770,7 +754,7 @@ pub struct Definition {
     pub body: Term,
 }
 
-/// The field of one of its own binders a definition's value is ([`Definition::parameter_field`]).
+/// The field of one of its own binders a definition's value is: where its value, beneath its own binders, is a field of one of them, which binder and which slot, as the elaborator's level alignment reads it ([`Families::parameter_field`](crate::Families::parameter_field)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct ParameterField {
@@ -786,8 +770,6 @@ pub struct RecDefinition {
     pub name: Global,
     pub kind: DefinitionKind,
     pub island: Qualifier,
-    /// Per member, not per group. The group's *descent* is decided once for all of them, but the transitive closure is not: an accepted group can still have one member that reaches something partial while its sibling does not. See [`Definition::totality`].
-    pub totality: Totality,
     /// Per member, as [`Definition::proof`] is: a group may hold a lemma beside the function it is about, and the function still unfolds.
     pub proof: bool,
 }
@@ -846,7 +828,6 @@ impl RecItem {
                 name: definition.name,
                 kind: definition.kind,
                 island: definition.island,
-                totality: definition.totality,
                 proof: definition.proof,
             })
             .collect();
@@ -885,11 +866,7 @@ impl RecItem {
                 kind: definition.kind.clone(),
                 universe_context: self.universe_context.clone(),
                 island: definition.island,
-                totality: definition.totality,
                 proof: definition.proof,
-                variances: Vec::new(),
-                field_variances: Vec::new(),
-                parameter_field: None,
                 value_sort: None,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
@@ -999,10 +976,6 @@ impl Definition {
             universe_context: universe_context.clone(),
             kind: DefinitionKind::Nominal(Rc::new(nominal)),
             island,
-            totality: Totality::default(),
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
             value_sort: None,
             proof: false,
             type_,
@@ -1054,11 +1027,7 @@ impl Item {
                 kind: kind(&definition.kind),
                 universe_context: definition.universe_context.unplaced(),
                 island: definition.island,
-                totality: definition.totality,
                 proof: definition.proof,
-                variances: definition.variances.clone(),
-                field_variances: definition.field_variances.clone(),
-                parameter_field: definition.parameter_field,
                 value_sort: definition
                     .value_sort
                     .as_ref()
@@ -1074,7 +1043,6 @@ impl Item {
                         name: member.name,
                         kind: kind(&member.kind),
                         island: member.island,
-                        totality: member.totality,
                         proof: member.proof,
                     })
                     .collect(),

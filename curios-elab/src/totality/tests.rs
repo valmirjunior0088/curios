@@ -1,28 +1,10 @@
 use {
     super::*,
+    crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{DefinitionKind, Intrinsic, UniverseContext, Universes},
-    std::collections::BTreeMap,
 };
-
-/// The totality `stamp_totality` stamped onto every definition in `module`.
-fn recorded_totality(definitions: &Definitions) -> BTreeMap<Global, Totality> {
-    let mut recorded = BTreeMap::new();
-    for item in &definitions.items {
-        match item {
-            Item::Let(definition) => {
-                recorded.insert(definition.name, definition.totality);
-            }
-            Item::Rec(rec) => {
-                for member in &rec.definitions {
-                    recorded.insert(member.name, member.totality);
-                }
-            }
-        }
-    }
-    recorded
-}
 
 /// A qualified top-level name, from the path a test writes. Fixture-only.
 fn name(path: &str) -> Global {
@@ -36,11 +18,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        totality: Totality::default(),
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::instance(name(mentions), Universes::default()),
@@ -56,9 +34,9 @@ fn definitions(items: Vec<Item>) -> Definitions {
     }
 }
 
-/// The totality `item`'s one definition is stamped with.
-fn stamped(item: &Item) -> Totality {
-    item.definitions()[0].totality
+/// The totality `context` concluded of `item`'s one definition.
+fn classified(context: &Context, item: &Item) -> Totality {
+    context.classified(&item.definitions()[0].name).totality
 }
 
 #[test]
@@ -66,16 +44,16 @@ fn a_partial_name_from_another_unit_still_taints_what_mentions_it() {
     // The replay path: `caller` is user code and `prelude_partial` a partial prelude definition this unit does not contain, as a parser of `/std/Json/decode` is. Without the recorded verdict the classification sees a name with none and calls `caller` total, which is the hole that would let a user proof mention a divergent prelude function.
     let mut context = Context::with_default_budget(SYNTAX);
     context.record_definition_totality(&name("prelude_partial"), Totality::Partial);
-    let mut caller = mentioning("caller", "prelude_partial");
-    stamp_totality(&mut context, &mut caller).expect("classified");
-    assert_eq!(stamped(&caller), Totality::Partial);
+    let caller = mentioning("caller", "prelude_partial");
+    classify_totality(&mut context, &caller).expect("classified");
+    assert_eq!(classified(&context, &caller), Totality::Partial);
 
     // And the verdict is read, not assumed: the same item against a total prelude name is total.
     let mut context = Context::with_default_budget(SYNTAX);
     context.record_definition_totality(&name("prelude_partial"), Totality::Total);
-    let mut caller = mentioning("caller", "prelude_partial");
-    stamp_totality(&mut context, &mut caller).expect("classified");
-    assert_eq!(stamped(&caller), Totality::Total);
+    let caller = mentioning("caller", "prelude_partial");
+    classify_totality(&mut context, &caller).expect("classified");
+    assert_eq!(classified(&context, &caller), Totality::Total);
 }
 
 #[test]
@@ -83,30 +61,33 @@ fn partiality_crosses_a_chain_of_declarations_one_verdict_at_a_time() {
     // `first → second → outside`. Each declaration is classified as it is published, after what it reads, and a verdict is a closure: `second` records that it reaches something partial, and `first` reads that of `second` without walking into it.
     let mut context = Context::with_default_budget(SYNTAX);
     context.record_definition_totality(&name("outside"), Totality::Partial);
-    let mut second = mentioning("second", "outside");
-    let mut first = mentioning("first", "second");
+    let second = mentioning("second", "outside");
+    let first = mentioning("first", "second");
 
-    stamp_totality(&mut context, &mut second).expect("classified");
-    stamp_totality(&mut context, &mut first).expect("classified");
+    classify_totality(&mut context, &second).expect("classified");
+    classify_totality(&mut context, &first).expect("classified");
 
-    assert_eq!(stamped(&second), Totality::Partial);
-    assert_eq!(stamped(&first), Totality::Partial);
+    assert_eq!(classified(&context, &second), Totality::Partial);
+    assert_eq!(classified(&context, &first), Totality::Partial);
 }
 
 #[test]
-fn a_stamp_is_what_the_next_compilation_reads_back() {
-    // `stamp_totality` writes the flag and `recorded_totality` reads it: the round trip the archive relies on to hand a user program the prelude's verdicts without re-analyzing `/std`.
+fn a_filed_verdict_is_what_a_later_unit_reads_back() {
+    // `classify_totality` records the verdict and the unit's traces file it, and a unit in scope answers it from there: the round trip the archive relies on to hand a user program the prelude's verdicts without re-analyzing `/std`.
     let mut context = Context::with_default_budget(SYNTAX);
-    let mut caller = mentioning("caller", "prelude_total");
+    let caller = mentioning("caller", "prelude_total");
+    let module = definitions(vec![caller.clone()]);
+    let mut traces = Traces::default();
+    let read = |traces: &Traces| {
+        Established::over(&[(&module, traces)])
+            .definition(&name("caller"))
+            .expect("the unit declares it")
+            .totality
+    };
 
-    // Unstamped reads as partial, which is the fail-closed default rather than a verdict. Stamping against a clean prelude is what makes it total, so the flip is evidence the write landed.
-    assert_eq!(
-        recorded_totality(&definitions(vec![caller.clone()]))[&name("caller")],
-        Totality::Partial
-    );
-    stamp_totality(&mut context, &mut caller).expect("stamped");
-    assert_eq!(
-        recorded_totality(&definitions(vec![caller]))[&name("caller")],
-        Totality::Total
-    );
+    // Unfiled reads as partial, which is the fail-closed default rather than a verdict. Classifying against a clean prelude is what makes it total, so the flip is evidence the verdict was filed.
+    assert_eq!(read(&traces), Totality::Partial);
+    classify_totality(&mut context, &caller).expect("classified");
+    traces.classify(name("caller"), context.classified(&name("caller")));
+    assert_eq!(read(&traces), Totality::Total);
 }

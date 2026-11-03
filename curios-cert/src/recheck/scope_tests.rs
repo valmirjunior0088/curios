@@ -7,7 +7,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Certification, Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item,
-        Level, Nat, Places, Telescope, Term, Totality, UniverseContext, Universes,
+        Level, Nat, Places, Telescope, Term, UniverseContext, Universes,
     },
     std::collections::BTreeMap,
 };
@@ -411,12 +411,8 @@ fn alias_holding(alias: &Global, proof: bool, sort: Option<Term>) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof,
         value_sort: sort,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         type_: Term::type_ground(),
         body: Term::intrinsic(Intrinsic::NatType),
     }))

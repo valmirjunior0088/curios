@@ -30,7 +30,7 @@ Curios's fixed prelude: the `/std` package as it is authored, in `std/`, the `/s
 
 **Decision.** Each root's image is the unit as the store's own format holds a certified one (`Unit::imaged`), framed as a slot is: a record of what the root was compiled from ahead of the unit's index, and one pack beside it of the objects the index names. The certifier's record, and what judging each definition read, are the unit's own, stored apart as a store's unit stores them, and the library restores each by the same reading (`Unit::with_apart`), validated once per process and deserialized per thread.
 
-**Rationale.** A later walk reads the prelude's totality and its families' polarity vectors from the certifier's record rather than from elaboration's stamps, so the record travels with the units every compilation borrows. One build makes the unit and its record together, so nothing stands between them for a file of its own to carry, and the prelude is restored as any stored unit is.
+**Rationale.** A later walk reads the prelude's totality and its families' polarity vectors from the certifier's record rather than from what elaboration concluded, so the record travels with the units every compilation borrows. One build makes the unit and its record together, so nothing stands between them for a file of its own to carry, and the prelude is restored as any stored unit is.
 
 **Rejected.** The record beside the images, which spared serializing the prelude again on a certifier edit that now runs the whole build again; re-certifying on first use in each process, which re-answers a settled question at the cost of the whole walk; completing each stage's records as a store's filing does (`Unit::stored`), which no store reads of the compiler's own units.
 

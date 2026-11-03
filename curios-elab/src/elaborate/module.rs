@@ -14,13 +14,13 @@ use {
     super::{Mode, elaborate, elaborate_func_type_sized},
     crate::{
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
-        Readers, RecordKeyword, ScheduledTest, Traces, Zonked, body_levels, check,
+        Readers, RecordKeyword, ScheduledTest, Traces, Vectors, Zonked, body_levels, check,
         check_concept_registry, check_is_sort, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
-        definition_variances, field_variances, finalize_definition, goal_sites, hold_prop,
-        hold_variances, parameter_field, record_definition_totality, record_superclasses,
-        record_variances, reduce_with, register_witness, report_goals, result_sort_only_metas,
-        sort_family_levels, stamp_totality, state_proof_binders, superclass_targets,
+        check_type_totality, check_written_type_totality, classify_totality, compared_levels,
+        decide_polarities, definition_variances, field_variances, finalize_definition, goal_sites,
+        hold_prop, hold_variances, parameter_field, record_definition_totality,
+        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
+        result_sort_only_metas, sort_family_levels, state_proof_binders, superclass_targets,
         test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
         zonk_entry, zonk_published, zonk_solved_term_metas,
     },
@@ -479,7 +479,7 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 }
 
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
-fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item, Error> {
+fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item, Vectors), Error> {
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
@@ -566,12 +566,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
             kind: def.kind.clone(),
             universe_context: universe_context.clone(),
             island: def.island,
-            totality: def.totality,
             proof: def.proof,
-            // A member carries none.
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
             value_sort: None,
             type_: type_.clone(),
             body,
@@ -590,7 +585,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
             record_definition_totality(context, &definition, verdict)?;
         }
 
-        return Ok(Item::Rec(rec));
+        // A group's member files no vector.
+        return Ok((Item::Rec(rec), Vectors::default()));
     }
 
     context.redeclare(&name, &type_);
@@ -601,10 +597,12 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     }
     // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
     record_variances(context, &[def.name])?;
-    // After a struct's own vector, which its former's body is read by.
-    let variances = definition_variances(context, &universe_context, &type_, &body)?;
-    let field_variances = field_variances(&universe_context, &type_, &body);
-    let parameter_field = parameter_field(&type_, &body);
+    // After a struct's own vector, which its former's body is read by. Filed where the item is published, as the context's binding of the name is.
+    let vectors = Vectors {
+        variances: definition_variances(context, &universe_context, &type_, &body)?,
+        field_variances: field_variances(&universe_context, &type_, &body),
+        parameter_field: parameter_field(&type_, &body),
+    };
 
     context.restore_checked_site(outer_site);
 
@@ -613,11 +611,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         kind: def.kind.clone(),
         universe_context,
         island: def.island,
-        totality: def.totality,
         proof: def.proof,
-        variances,
-        field_variances,
-        parameter_field,
         // Stated where the item is published, over its final terms.
         value_sort: None,
         type_,
@@ -626,7 +620,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
 
     // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
     record_definition_totality(context, &definition, Totality::Total)?;
-    Ok(Item::Let(Box::new(definition)))
+    Ok((Item::Let(Box::new(definition)), vectors))
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
@@ -850,11 +844,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             kind: def.kind.clone(),
             universe_context: universe_context.clone(),
             island: def.island,
-            totality: def.totality,
             proof: def.proof,
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
             value_sort: None,
             type_,
             body,
@@ -1197,9 +1187,12 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     context.enter_item(owner.copied());
     let recorded = context.checked_mark();
 
-    let elaborated = match item {
+    let (elaborated, vectors) = match item {
         Item::Let(definition) => elaborate_module_let(context, definition),
-        Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
+        // A group's member files no vector.
+        Item::Rec(rec) => {
+            elaborate_module_rec(context, rec).map(|rec| (Item::Rec(rec), Vectors::default()))
+        }
     }
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
     .map_err(|error| error.in_declaration(declared.iter().copied()))?;
@@ -1238,6 +1231,9 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     state_proof_binders(context, &mut published)
         .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     context.publish(&published);
+    if let Item::Let(definition) = &published.item {
+        context.record_vectors(&definition.name, &definition.type_, &vectors);
+    }
     context
         .settle_checked(recorded)
         .map_err(|error| error.in_declaration(declared.iter().copied()))?;
@@ -1262,7 +1258,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     })
 }
 
-/// Decide what a published declaration's cells hold beyond its terms, and hand back the erasure obligations it breaks: the polarity vector of each entry it declares, written on the entry; that the variance vector each carries claims no irrelevance its final telescopes deny; each definition's totality, recorded and stamped on the item; and obligations (T) and (V) over the item's positions and the terms recorded since `recorded`, which are taken.
+/// Decide what a published declaration's cells hold beyond its terms, and hand back the erasure obligations it breaks: the polarity vector of each entry it declares, written on the entry; that the variance vector each carries claims no irrelevance its final telescopes deny; each definition's totality, recorded for the unit to file; and obligations (T) and (V) over the item's positions and the terms recorded since `recorded`, which are taken.
 ///
 /// **Here, and nowhere after.** Each of these is a cell of the declaration, written once, by it, before any other declaration reads it (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`): every declaration it reads has finished, so what the analyses meet outside it is final, and nothing that finishes later can mention it into a different answer. A pass over the unit would decide them a second time, on a budget every declaration of the unit shares.
 ///
@@ -1281,7 +1277,7 @@ fn settle_published(
         hold_variances(context, published)?;
     }
     context.restore_budget();
-    stamp_totality(context, &mut published.item)?;
+    classify_totality(context, &published.item)?;
 
     context.restore_budget();
     let alone = Definitions {

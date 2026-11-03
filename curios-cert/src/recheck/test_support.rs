@@ -12,9 +12,8 @@ use {
         Atom, Certification, Definition, DefinitionKind, Definitions, Entrypoint, Free, Func,
         FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat, Nominal,
         Places, Polarity, Program, RecGroup, RecItem, Scope, StructDecl, StructType, Subterm,
-        Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
-        test_support::*,
+        Telescope, Term, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -29,27 +28,11 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        // Non-recursive and free of diverging host calls, so the honest flag; `Totals::classify` recomputes it.
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_,
         body,
     }))
-}
-
-/// [`authored`] for a body that recurses without descending. `Totals::classify` recomputes the flag and reports a recorded `Total` it disagrees with, so a partial body must say so.
-pub(super) fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
-    match authored(name, type_, body) {
-        Item::Let(definition) => Item::Let(Box::new(Definition {
-            totality: Totality::Partial,
-            ..*definition
-        })),
-        item => item,
-    }
 }
 
 /// [`authored`] for a proof a declaration wrote, marked as elaboration marks one where its item is published.
@@ -417,11 +400,7 @@ pub(super) fn sorted_definition(sort: Term) -> Definitions {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: sort,
         body: Term::intrinsic(Intrinsic::NatType),
@@ -946,11 +925,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Defini
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
@@ -1025,11 +1000,7 @@ pub(super) fn instance_of_width(width: usize) -> Definitions {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new()),
@@ -1106,11 +1077,7 @@ pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(parameter.succ().expect("a parameter has a successor")),
         body: Term::type_at(parameter),
@@ -1156,11 +1123,7 @@ pub(super) fn foreign_held_at(
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: claimed.clone(),
         body: Term::foreign(
@@ -1212,11 +1175,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Definit
             constraints: Vec::new(),
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
@@ -1920,7 +1879,7 @@ pub(super) fn diverging(name: &str) -> Item {
         ),
     )]);
 
-    authored_partial(
+    authored(
         &Global::Authored(Qualifier::from([name])),
         Term::func_type([(Free::local(922, Some("n")), nat.clone())], nat),
         Term::rec_proj(group, 0),
@@ -1973,12 +1932,7 @@ pub(super) fn proof_at_an_argument_definitions(reaching: bool) -> Definitions {
     declaring(
         Definitions {
             mounts: Vec::new(),
-            items: vec![
-                diverging_sink(),
-                reaching_definition(Totality::Partial),
-                held,
-            ]
-            .into(),
+            items: vec![diverging_sink(), reaching_definition(), held].into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
@@ -2004,11 +1958,7 @@ pub(super) fn proof_typed_nullary_group() -> Definitions {
                     kind: DefinitionKind::Authored,
                     universe_context: UniverseContext::empty(),
                     island: Qualifier::default(),
-                    totality: Totality::Partial,
                     proof: false,
-                    variances: Vec::new(),
-                    field_variances: Vec::new(),
-                    parameter_field: None,
                     value_sort: None,
                     type_: Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
                     body: Term::free_var(&member),
@@ -2069,13 +2019,13 @@ pub(super) fn two_sinks_definitions(first: &str, second: &str) -> Definitions {
     )
 }
 
-/// `reaches : (Nat) -> Nat = (m) => sink(m)` at the caller's stamp: partial by closure and nothing else, so a `Total` stamp here is the lie only the transitive comparison sees.
-pub(super) fn reaching_definition(totality: Totality) -> Item {
+/// `reaches : (Nat) -> Nat = (m) => sink(m)`: partial by closure and nothing else.
+pub(super) fn reaching_definition() -> Item {
     let m = Free::local(923, Some("m"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let sink = Global::Authored(Qualifier::from(["sink"]));
 
-    let item = authored(
+    authored(
         &Global::Authored(Qualifier::from(["reaches"])),
         Term::func_type([(Free::local(924, Some("m")), nat.clone())], nat.clone()),
         Term::func(
@@ -2085,15 +2035,7 @@ pub(super) fn reaching_definition(totality: Totality) -> Item {
                 [Term::free_var(&m)],
             ),
         ),
-    );
-
-    match item {
-        Item::Let(definition) => Item::Let(Box::new(Definition {
-            totality,
-            ..*definition
-        })),
-        item => item,
-    }
+    )
 }
 
 /// `induct Vouched : Prop | qed(u : {})`, the proposition the proof below inhabits.
@@ -2123,7 +2065,7 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
     (name, declaration)
 }
 
-/// `held : Vouched = ((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` — a proof whose free variables name `reaches` and nothing else, so its verdict is exactly the stamp's.
+/// `held : Vouched = ((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` — a proof whose free variables name `reaches` and nothing else, so its verdict is exactly `reaches`'s.
 pub(super) fn held_proof() -> Item {
     let (vouched_name, _) = vouched_declaration();
     let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -2154,9 +2096,9 @@ pub(super) fn held_proof() -> Item {
     )
 }
 
-/// The library whose stamp is on trial — `sink` and `reaches` — with `held` and its proposition beside them when the fixture needs a proof reaching the lie.
-pub(super) fn stamp_trial_definitions(reaches: Totality, with_proof: bool) -> Definitions {
-    let mut items = vec![diverging_sink(), reaching_definition(reaches)];
+/// The library a proof reaches partiality through — `sink` and `reaches` — with `held` and its proposition beside them when the fixture needs the proof.
+pub(super) fn reaching_library(with_proof: bool) -> Definitions {
+    let mut items = vec![diverging_sink(), reaching_definition()];
     let mut induct_decls = BTreeMap::new();
 
     if with_proof {
@@ -2797,11 +2739,7 @@ pub(super) fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>)
         kind: DefinitionKind::Authored,
         universe_context: scheme_context(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::type_at(Level::param(UniverseParam(0))),
@@ -2814,11 +2752,7 @@ pub(super) fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>)
             kind: DefinitionKind::Authored,
             universe_context,
             island: Qualifier::default(),
-            totality: Totality::Total,
             proof: false,
-            variances: Vec::new(),
-            field_variances: Vec::new(),
-            parameter_field: None,
             value_sort: None,
             type_: Term::type_at(Level::param(UniverseParam(1))),
             body,
@@ -2931,11 +2865,7 @@ pub(super) fn universe_refinement_definitions(target: Level, route: Route) -> De
             constraints: vec![bounded],
         },
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::func_type(
             [(
@@ -3134,11 +3064,7 @@ fn constant(name: Global) -> Definition {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
@@ -3853,11 +3779,7 @@ pub(super) fn alias_definitions(variances: Vec<Variance>) -> (Global, Definition
         kind: DefinitionKind::Authored,
         universe_context: scheme.clone(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::func_type([(carrier, sort.clone())], sort.clone()),
         body: Term::func([(carrier, sort.clone())], Term::free_var(&carrier)),
@@ -3991,11 +3913,7 @@ pub(super) fn picked_module(
         kind: DefinitionKind::Authored,
         universe_context: scheme.clone(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: lifted.clone(),
         body: Term::induct_type_at(

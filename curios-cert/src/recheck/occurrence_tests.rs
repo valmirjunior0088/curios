@@ -7,7 +7,7 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Definitions, Free, Func, FuncType, Global, InductParam,
-        Intrinsic, Item, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
+        Intrinsic, Item, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext, Universes, test_support::*,
     },
     curios_surface::Spelling,
@@ -403,11 +403,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         }))),
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        totality: Totality::Total,
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_: Term::func_type_marked(
             [(Plicity::Implicit, parameter, Term::type_ground())],

@@ -78,7 +78,7 @@ mod tests;
 
 use {
     super::{Error, UniverseMark},
-    crate::{Published, ZonkPass, zonk},
+    crate::{Classified, Published, ZonkPass, zonk},
     curios_common::SyntaxRegistry,
     curios_core::{
         Declarations, DefinitionKind, Extent, Global, Imports, Item, MetavarSpine, Mints, Subterm,
@@ -389,7 +389,6 @@ impl<'s> Context<'s> {
                 self.redeclare(&name, &definition.type_);
                 self.define_published(&name, &definition.body, &definition.kind, definition.proof);
                 self.set_universe_context(&name, definition.universe_context.clone());
-                self.record_definition_variances(definition);
                 // The sort a value inhabits is published with the body, by the mark that withholds both (`curios_core::Definition::published`).
                 self.typing
                     .program
@@ -426,8 +425,8 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with the totality stamped on each of its definitions: what the declarations that read it read of it.
-    pub(crate) fn publish_adopted(&mut self, item: &Item) {
+    /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with what that elaboration concluded of each of its definitions, as `classified` holds it by name: what the declarations that read it read of it.
+    pub(crate) fn publish_adopted(&mut self, item: &Item, classified: &[(Global, Classified)]) {
         let mut published = Published {
             item: item.clone(),
             induct_decls: Vec::new(),
@@ -458,20 +457,18 @@ impl<'s> Context<'s> {
                 .map(|(index, definition)| (definition.name, rec.group.member_type(index)))
                 .collect(),
         };
-        for (name, type_) in types {
-            self.forget(&name);
-            self.declare(&name, &type_);
+        for (name, type_) in &types {
+            self.forget(name);
+            self.declare(name, type_);
         }
         self.publish(&published);
-        match item {
-            Item::Let(definition) => {
-                self.record_definition_totality(&definition.name, definition.totality);
-            }
-            Item::Rec(rec) => {
-                for definition in &rec.definitions {
-                    self.record_definition_totality(&definition.name, definition.totality);
-                }
-            }
+        for (name, type_) in &types {
+            let filed = classified
+                .iter()
+                .find(|(held, _)| held == name)
+                .map(|(_, classified)| classified.clone())
+                .unwrap_or_default();
+            self.record_classified(name, type_, &filed);
         }
     }
 

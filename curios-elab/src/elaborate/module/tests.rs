@@ -6,7 +6,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Definition, DefinitionKind, Definitions, Free, Global, InductDecl, Intrinsic, Item, Nat,
-        Telescope, Term, Totality, UniverseContext, Universes, test_support::*,
+        Telescope, Term, UniverseContext, Universes, test_support::*,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -41,11 +41,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
-        totality: Totality::default(),
         proof: false,
-        variances: Vec::new(),
-        field_variances: Vec::new(),
-        parameter_field: None,
         value_sort: None,
         type_,
         body,
@@ -252,7 +248,8 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
     assert!(context.value_at(&same, &Universes::default()).is_none());
     assert!(context.declaration_body(&two).is_some());
 
-    let scope = Established::over(&[&elaborated]);
+    let traces = Traces::default();
+    let scope = Established::over(&[(&elaborated, &traces)]);
     let unfolds = |path| {
         scope
             .definition(&nominal(path))

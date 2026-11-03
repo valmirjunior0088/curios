@@ -24,7 +24,7 @@ use {
     },
 };
 
-/// Classify one definition against the verdicts already recorded, and record it, by the rule `stamp_totality` states, while its declaration is still elaborating: what the rest of that declaration reads it by, so a written type or a bound that names it is refused by name before it is reduced. The verdict every other declaration reads is the one `stamp_totality` records as the item is published.
+/// Classify one definition against the verdicts already recorded, and record it, by the rule `classify_totality` states, while its declaration is still elaborating: what the rest of that declaration reads it by, so a written type or a bound that names it is refused by name before it is reduced. The verdict every other declaration reads is the one `classify_totality` records as the item is published.
 ///
 /// Everything a definition mentions outside its own group has finished, so it is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
 pub fn record_definition_totality(
@@ -122,15 +122,15 @@ pub fn check_written_type_totality(
     }
 }
 
-/// Classify a published item and stamp each of its definitions with the verdict: the one write of a definition's [`Definition::totality`].
+/// Classify a published item and record each of its definitions' verdict: the one every other declaration reads, and the one the unit files ([`crate::Classified::totality`]).
 ///
 /// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable summary across declarations and across units: "this definition is partial" means something partial is in its closure, so a proof mentioning it inherits the same.
 ///
 /// Runs as the item is published, where its terms are final and meta-free, so no metavariable can be solved to a partial term after the fact. Everything the item mentions outside itself has finished, a declaration elaborating after what it reads, so its verdict is recorded and is a closure already, and the walk stops there: at a predecessor unit's definition, which is why the standard library is not analyzed again on every compilation, and at an earlier declaration's of this unit alike. Among the members of one group the closure is iterated, since each may mention the others. A name with no verdict is treated as total: every `Global` a published item mentions is defined by a finished declaration or by the item itself, so that case is unreachable rather than an approximation.
-pub fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(), Error> {
+pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error> {
     curios_profile::profile!("record_totality");
     // A group that does not descend makes every member partial, whatever each body looks like on its own.
-    let rejected = match &*item {
+    let rejected = match item {
         Item::Let(_) => false,
         Item::Rec(rec) => group_totality(context, &rec.group)? == Totality::Partial,
     };
@@ -178,21 +178,13 @@ pub fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(), Erro
     for name in &own {
         context.record_definition_totality(name, of(name));
     }
-    match item {
-        Item::Let(definition) => definition.totality = of(&definition.name),
-        Item::Rec(rec) => {
-            for member in &mut rec.definitions {
-                member.totality = of(&member.name);
-            }
-        }
-    }
 
     Ok(())
 }
 
 /// Every way the given positions fail to be total, with the site of each and where it was written, for a position that kept one.
 ///
-/// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`stamp_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
+/// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`classify_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
 fn faults(
     context: &mut Context,
     positions: &[Position],
@@ -263,7 +255,7 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
-/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`stamp_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
+/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`classify_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
 pub fn check_type_totality(
     context: &mut Context,
     definitions: &Definitions,
@@ -334,7 +326,7 @@ pub fn check_proof_totality(
 ///
 /// Takes what [`Context::record_checked`] collected since `mark` and keeps the propositions. This is the whole of (V)'s seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
 ///
-/// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive stamped on its definitions instead ([`stamp_totality`]).
+/// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive in what its unit filed of them instead ([`classify_totality`]).
 ///
 /// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Once the declaration is published every solution is materialized, so [`proof_position`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 fn checked_proof_positions(

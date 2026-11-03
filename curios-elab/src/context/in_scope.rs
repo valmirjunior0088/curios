@@ -32,13 +32,13 @@ pub struct Defined<'a> {
     /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
     pub body: Option<&'a Term>,
     pub universe_context: &'a UniverseContext,
-    /// The stamp its publication carried ([`curios_core::Definition::totality`]), which is elaboration's own conclusion and the only answer this checker has. The kernel reads the certifier's record of the unit instead and consults a carried stamp nowhere, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
+    /// What its unit's elaboration concluded of it as it published it ([`crate::Classified::totality`]), `Partial` where it filed nothing: elaboration's own conclusion, and the only answer this checker has. The kernel reads the certifier's record of the unit instead, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
     pub totality: Totality,
-    /// The vector its publication filed, empty where it filed none.
+    /// The vector its publication filed, empty where it filed none ([`crate::Vectors::variances`]).
     pub variances: &'a [Variance],
-    /// The vector of each field of its value its publication filed, empty where it filed none ([`curios_core::Definition::field_variances`]).
+    /// The vector of each field of its value its publication filed, empty where it filed none ([`crate::Vectors::field_variances`]).
     pub field_variances: &'a [Vec<Variance>],
-    /// The field of one of its binders its value is, where it is one ([`curios_core::Definition::parameter_field`]).
+    /// The field of one of its binders its value is, where it is one ([`crate::Vectors::parameter_field`]).
     pub parameter_field: Option<ParameterField>,
     /// The sort its value inhabits, where its value is a type ([`curios_core::Definition::value_sort`]), and nothing where the definition is a proof — the mark withholds this with the body, and both are read through [`curios_core::Definition::published`].
     pub value_sort: Option<&'a Term>,
@@ -47,14 +47,14 @@ pub struct Defined<'a> {
 }
 
 impl<'a> Defined<'a> {
-    /// Its vector, with how many arguments one spine applies it in full by, where it is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
+    /// Its vector, with how many arguments one spine applies it in full by, where it is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_vectors`), read here off what its unit filed.
     pub fn irrelevance(&self) -> Option<(&'a [Variance], usize)> {
         self.variances
             .contains(&Variance::Irrelevant)
             .then_some((self.variances, self.arity()))
     }
 
-    /// The vector of field `slot` of its value, with its arity, where some field is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
+    /// The vector of field `slot` of its value, with its arity, where some field is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_vectors`), read here off what its unit filed.
     pub fn field_irrelevance(&self, slot: usize) -> Option<(&'a [Variance], usize)> {
         if !self
             .field_variances
@@ -68,7 +68,7 @@ impl<'a> Defined<'a> {
         Some((self.field_variances.get(slot)?.as_slice(), self.arity()))
     }
 
-    /// The field of one of its binders its value is, with its arity: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
+    /// The field of one of its binders its value is, with its arity: what a context files for a definition of its own unit (`Context::record_vectors`), read here off what its unit filed.
     pub fn parameter_field(&self) -> Option<(ParameterField, usize)> {
         Some((self.parameter_field?, self.arity()))
     }

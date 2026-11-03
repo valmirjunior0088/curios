@@ -1090,7 +1090,7 @@ fn family_variance_inventory() {
     });
 }
 
-/// Which universe parameters of the prelude's definitions their values hold, printed rather than asserted: one line per non-recursive definition that takes one, `*` for an irrelevant level and `=` for an invariant one, as the archive carries the vector `curios-elab`'s `definition_variances` read where the definition's levels closed. A recursive member carries none and is counted apart. Counted.
+/// Which universe parameters of the prelude's definitions their values hold, printed rather than asserted: one line per non-recursive definition that takes one, `*` for an irrelevant level and `=` for an invariant one, as its unit files the vector `curios-elab`'s `definition_variances` read where the definition's levels closed — a vector holding no irrelevant level filed as none, and spelled as every level invariant. A recursive member files none and is counted apart. Counted.
 #[test]
 #[ignore = "inventory: measures which universe parameters of the prelude's definitions their values hold rather than asserting it"]
 fn definition_variance_inventory() {
@@ -1100,7 +1100,10 @@ fn definition_variance_inventory() {
         let mut recursive = 0;
         let mut parameters = 0;
         let mut irrelevant = 0;
-        for item in items(prelude) {
+        let filed = prelude
+            .iter()
+            .flat_map(|root| root.core().items.iter().map(move |item| (root, item)));
+        for (root, item) in filed {
             let Item::Let(definition) = item else {
                 recursive += item
                     .definitions()
@@ -1110,25 +1113,25 @@ fn definition_variance_inventory() {
                 continue;
             };
             definitions += 1;
-            if definition.variances.is_empty() {
+            let count = definition.universe_context.parameter_count;
+            if count == 0 {
                 continue;
             }
             polymorphic += 1;
-            parameters += definition.variances.len();
-            irrelevant += definition
-                .variances
-                .iter()
-                .filter(|variance| **variance == Variance::Irrelevant)
-                .count();
-
-            let spelled = definition
-                .variances
-                .iter()
-                .map(|variance| match variance {
-                    Variance::Irrelevant => '*',
-                    Variance::Invariant => '=',
-                })
-                .collect::<String>();
+            parameters += count;
+            let spelled = match root.traces().classified(&definition.name) {
+                Some(classified) if !classified.vectors.variances.is_empty() => classified
+                    .vectors
+                    .variances
+                    .iter()
+                    .map(|variance| match variance {
+                        Variance::Irrelevant => '*',
+                        Variance::Invariant => '=',
+                    })
+                    .collect::<String>(),
+                _ => "=".repeat(count),
+            };
+            irrelevant += spelled.chars().filter(|level| *level == '*').count();
             println!("{}\t{spelled}", definition.name.faithful());
         }
 

@@ -124,7 +124,7 @@ pub(crate) fn compile_lowered_over(
     let established = Established::placed(&predecessors.placed())
         .fixed(&fixed)
         .after(moved)
-        .keeping(baseline.core(), baseline.places());
+        .keeping(baseline.core(), baseline.places(), baseline.traces());
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());

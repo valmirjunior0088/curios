@@ -10,7 +10,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Declarations, Definition, DefinitionKind, Definitions, Global, HeadKey, Intrinsic, Item,
-        Term, Totality, UniverseContext, WitnessKey,
+        Term, UniverseContext, WitnessKey,
     },
     std::collections::BTreeSet,
 };
@@ -51,11 +51,7 @@ pub fn declarations(names: &[Global]) -> Declarations {
                 kind: DefinitionKind::Authored,
                 universe_context: UniverseContext::empty(),
                 island: Qualifier::empty(),
-                totality: Totality::default(),
                 proof: false,
-                variances: Vec::new(),
-                field_variances: Vec::new(),
-                parameter_field: None,
                 value_sort: None,
                 type_: Term::type_ground(),
                 body: Term::type_ground(),

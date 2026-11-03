@@ -7,11 +7,11 @@ use {
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
         Certification, Definition, DefinitionKind, Definitions, Global, Item, Nominal, Places,
-        Sharing, Term, Totality, Zonked,
+        Sharing, Term, Zonked,
     },
     curios_elab::{
-        Context, Error, Established, Reading, Recompile, Recompiled, elaborate_and_zonk_unit_over,
-        test_support::*,
+        Context, Error, Established, Reading, Recompile, Recompiled, Traces,
+        elaborate_and_zonk_unit_over, test_support::*,
     },
     curios_erase::{ErasedUnit, test_support::*},
     curios_module::{
@@ -89,7 +89,8 @@ fn elaborated_over(
     lowered: &PreparedText,
     relowered: &BTreeSet<Global>,
 ) -> Result<Recompiled, Error> {
-    let established = Established::placed(&predecessors.placed()).keeping(std.core(), std.places());
+    let established =
+        Established::placed(&predecessors.placed()).keeping(std.core(), std.places(), std.traces());
     let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -843,10 +844,10 @@ fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
     declarations
 }
 
-/// What differs between the items of `whole` declaring `names` and `replayed`'s, each as the definition and the part that differs.
+/// What differs between the items of `whole` declaring `names` and `replayed`'s, each beside the traces its elaboration filed, each as the definition and the part that differs.
 fn differences(
-    whole: &Definitions,
-    replayed: &Definitions,
+    (whole, whole_traces): (&Definitions, &Traces),
+    (replayed, replayed_traces): (&Definitions, &Traces),
     names: &BTreeSet<Global>,
 ) -> Vec<String> {
     let first = |item: &Item| item.declared_names().first().map(|name| **name);
@@ -881,7 +882,12 @@ fn differences(
             if this.body != that.body {
                 parts.push("its body".to_string());
             }
-            if this.totality != that.totality {
+            let totality = |traces: &Traces| {
+                traces
+                    .classified(&this.name)
+                    .map(|classified| classified.totality)
+            };
+            if totality(whole_traces) != totality(replayed_traces) {
                 parts.push("its totality".to_string());
             }
             if !parts.is_empty() {
@@ -987,7 +993,11 @@ fn std_replay_census() {
                         );
                     }
                     Ok(replayed) => {
-                        let differences = differences(whole, &replayed.definitions, names);
+                        let differences = differences(
+                            (whole, std.traces()),
+                            (&replayed.definitions, &replayed.traces),
+                            names,
+                        );
                         differing += usize::from(!differences.is_empty());
                         for difference in differences {
                             println!("  beside {padding}: {difference}");
@@ -1016,7 +1026,7 @@ fn std_replay_census() {
     });
 }
 
-/// What a type former of the prelude holds that its entry does not spell: each former of `/sys` and `/std` spelled again from the entry it carries ([`Definition::former`]) and compared, part by part, with the one the archive holds. What elaboration stamps on a definition is compared with what the entry gives for it: a former calls nothing, so it is total, and a former that is no member of a group holds each level as its entry does, a member of one storing no vector. A former is a function of its entry exactly where this reports nothing, and what it reports is what deriving every former would have to account for. A measurement, so it reports rather than asserts; counted.
+/// What a type former of the prelude holds that its entry does not spell: each former of `/sys` and `/std` spelled again from the entry it carries ([`Definition::former`]) and compared, part by part, with the one the archive holds. A former is a function of its entry exactly where this reports nothing, and what it reports is what deriving every former would have to account for. A measurement, so it reports rather than asserts; counted.
 #[test]
 #[ignore = "measurement, counted: spells each type former of the prelude from the entry it carries and reports the parts that differ from the stored one"]
 fn std_former_derivation() {
@@ -1030,29 +1040,17 @@ fn std_former_derivation() {
         let mut tally: BTreeMap<(&str, &str), usize> = BTreeMap::new();
         let mut shown: BTreeMap<&str, usize> = BTreeMap::new();
         for root in prelude {
-            let definitions = root.core().items.iter().flat_map(|item| {
-                let grouped = matches!(item, Item::Rec(_));
-                item.definitions()
-                    .into_iter()
-                    .map(move |stored| (grouped, stored))
-            });
-            for (grouped, stored) in definitions {
+            let definitions = root.core().items.iter().flat_map(Item::definitions);
+            for stored in definitions {
                 let Some(nominal) = stored.kind.nominal() else {
                     continue;
                 };
-                let (kind, variances) = match nominal {
-                    Nominal::Inductive(declaration) => ("induct", &declaration.variances),
-                    Nominal::Struct(record) => ("struct", &record.variances),
-                    Nominal::Concept { record, .. } => ("concept", &record.variances),
+                let kind = match nominal {
+                    Nominal::Inductive(_) => "induct",
+                    Nominal::Struct(_) => "struct",
+                    Nominal::Concept { .. } => "concept",
                 };
-                let derived = Definition {
-                    totality: Totality::Total,
-                    variances: match grouped {
-                        true => Vec::new(),
-                        false => variances.clone(),
-                    },
-                    ..Definition::former(stored.name, stored.island, nominal.clone())
-                };
+                let derived = Definition::former(stored.name, stored.island, nominal.clone());
                 let parts = [
                     (
                         "universe context",
@@ -1060,12 +1058,6 @@ fn std_former_derivation() {
                     ),
                     ("type", stored.type_ != derived.type_),
                     ("body", stored.body != derived.body),
-                    ("totality", stored.totality != derived.totality),
-                    ("variances", stored.variances != derived.variances),
-                    (
-                        "field variances",
-                        stored.field_variances != derived.field_variances,
-                    ),
                     ("proof", stored.proof != derived.proof),
                 ]
                 .into_iter()
@@ -1095,14 +1087,6 @@ fn std_former_derivation() {
                     if stored.body != derived.body {
                         println!("  stored body   {}", cut(&stored.body));
                         println!("  derived body  {}", cut(&derived.body));
-                    }
-                    if stored.totality != derived.totality {
-                        println!("  stored totality   {:?}", stored.totality);
-                        println!("  derived totality  {:?}", derived.totality);
-                    }
-                    if stored.variances != derived.variances {
-                        println!("  stored variances   {:?}", stored.variances);
-                        println!("  derived variances  {:?}", derived.variances);
                     }
                 }
             }
@@ -1448,7 +1432,10 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 })
         };
         // A term as a report raised in `owner` prints it, settled where its reader stands and read back as the tree it parses to: `None` where the translation declines it.
-        let established = Established::over(&[sys.core(), std.core()]);
+        let established = Established::placed(&[
+            (sys.core(), sys.places(), sys.traces()),
+            (std.core(), std.places(), std.traces()),
+        ]);
         let written = |term: &Term, owner: Global| {
             let term = &written_for_reader(&established, SYNTAX, term);
             let spelling = unplaced.clone().for_reader(ReaderPosition {
@@ -1523,7 +1510,11 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             beside.insert(added, (name, is_proof));
                         }
                         // A type names only what is known to terminate, so no proposition states that a `let` which is not is its printed form: what is written for one is that it has the printed type.
-                        let (stated, by) = match definition.totality.is_total() {
+                        let total = std
+                            .traces()
+                            .classified(&name)
+                            .is_some_and(|classified| classified.totality.is_total());
+                        let (stated, by) = match total {
                             true => (
                                 parsed(&format!("/std/Eq/Eq()({label}, {printed})"), name),
                                 parsed("/std/Eq/Eq/refl()", name),

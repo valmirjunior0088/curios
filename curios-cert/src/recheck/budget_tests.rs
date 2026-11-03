@@ -61,7 +61,7 @@ fn spent_item_beside_an_aliased_payload() -> Definitions {
                 Term::type_ground(),
                 Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
             ),
-            authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
+            authored(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
             authored(
                 &spent(),
                 Term::instance(spin, Universes::default()),

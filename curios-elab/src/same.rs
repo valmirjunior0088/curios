@@ -10,12 +10,12 @@
 mod tests;
 
 use {
-    crate::{Parts, Question},
+    crate::{Classified, Parts, Question, Traces},
     curios_common::digest,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Definitions, InductDecl, Item,
-        MetaRenaming, Nominal, ParameterField, Place, Places, RecItem, Sharing, StructDecl,
-        Telescope, Term, UniverseContext, Variance,
+        MetaRenaming, Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
+        UniverseContext,
     },
 };
 
@@ -34,23 +34,30 @@ pub struct Same {
 }
 
 impl Same {
-    /// The parts of the definition at `member` of `made` that are those of `held`, the baseline's item under the same name. The registry entries the name keys are the caller's to compare ([`Same::keying`]).
-    pub fn of(made: &Item, held: &Item, member: usize) -> Self {
+    /// The parts of the definition at `member` of `made` that are those of `held`, the baseline's item under the same name, each beside what its elaboration concluded of the definition ([`Classified`]). The registry entries the name keys are the caller's to compare ([`Same::keying`]).
+    pub fn of(made: (&Item, &Classified), held: (&Item, &Classified), member: usize) -> Self {
+        let ((made, made_classified), (held, held_classified)) = (made, held);
+        let classified = Self {
+            totality: made_classified.totality == held_classified.totality,
+            // A field's vector, and the field of a binder the value is, are read as a question about the definition's vectors, so all three are this one part.
+            variances: made_classified.vectors == held_classified.vectors,
+            ..Self::default()
+        };
         match (made, held) {
-            (Item::Let(made), Item::Let(held)) => Self::of_definition(made, held),
-            (Item::Rec(made), Item::Rec(held)) => Self::of_member(made, held, member),
+            (Item::Let(made), Item::Let(held)) => Self::of_definition(made, held, classified),
+            (Item::Rec(made), Item::Rec(held)) => Self::of_member(made, held, member, classified),
             _ => Self::default(),
         }
     }
 
-    fn of_definition(made: &Definition, held: &Definition) -> Self {
+    fn of_definition(made: &Definition, held: &Definition, classified: Self) -> Self {
         let kind = made.name == held.name
             && kinds_alike(&made.kind, &held.kind)
             && made.island == held.island;
         let signature = kind
             && made.universe_context == held.universe_context
             && spelled_alike(&made.type_, &held.type_);
-        let totality = made.totality == held.totality;
+        let totality = classified.totality;
 
         Self {
             signature,
@@ -61,10 +68,7 @@ impl Same {
                 && (made.proof || spelled_alike(&made.body, &held.body)),
             kind,
             totality,
-            // A field's vector, and the field of a binder the value is, are read as a question about the definition's vectors, so all three are this one part.
-            variances: made.variances == held.variances
-                && made.field_variances == held.field_variances
-                && made.parameter_field == held.parameter_field,
+            variances: classified.variances,
             // Read through the mark, as the body part is: a proof publishes neither, so neither part may be compared off the field alone (`curios_core::Definition::published`).
             sort: match (made.published().1, held.published().1) {
                 (Some(made), Some(held)) => spelled_alike(made, held),
@@ -74,7 +78,7 @@ impl Same {
         }
     }
 
-    fn of_member(made: &RecItem, held: &RecItem, member: usize) -> Self {
+    fn of_member(made: &RecItem, held: &RecItem, member: usize, classified: Self) -> Self {
         let (Some(mine), Some(theirs)) =
             (made.definitions.get(member), held.definitions.get(member))
         else {
@@ -84,15 +88,15 @@ impl Same {
             && kinds_alike(&mine.kind, &theirs.kind)
             && mine.island == theirs.island;
         let group = kind && groups_alike(made, held);
-        let totality = mine.totality == theirs.totality;
+        let totality = classified.totality;
 
         Self {
             signature: group,
             body: group && totality && mine.proof == theirs.proof,
             kind,
             totality,
-            // A group's member files no vector, and no sort.
-            variances: true,
+            variances: classified.variances,
+            // A group's member files no sort.
             sort: true,
             ..Self::default()
         }
@@ -149,29 +153,41 @@ impl Same {
 pub fn part_digest(
     definitions: &Definitions,
     places: &Places,
+    traces: &Traces,
     question: &Question,
 ) -> Result<Option<String>, String> {
-    let Some(place) = question.subject().and_then(|name| places.place(name)) else {
+    let Some((name, place)) = question
+        .subject()
+        .and_then(|name| Some((name, places.place(name)?)))
+    else {
         return Ok(None);
     };
+    let unclassified = Classified::default();
+    let classified = traces.classified(name).unwrap_or(&unclassified);
 
-    item_part_digest(&definitions.items[place.item()], place, question)
+    item_part_digest(
+        &definitions.items[place.item()],
+        place,
+        classified,
+        question,
+    )
 }
 
-/// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`: what a walk asks of an item it holds in hand, before any module places it.
+/// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`, beside what its elaboration concluded of the definition `classified`: what a walk asks of an item it holds in hand, before any module places it.
 pub fn item_part_digest(
     item: &Item,
     place: Place,
+    classified: &Classified,
     question: &Question,
 ) -> Result<Option<String>, String> {
     let sharing = Sharing::new();
+    let totality = classified.totality;
     // A definition of its own, or a group's member with the group it is read through.
-    let (name, held, island, totality, proof, group, plain) = match (item, place) {
+    let (name, held, island, proof, group, plain) = match (item, place) {
         (Item::Let(definition), Place::Let(_)) => (
             definition.name,
             &definition.kind,
             definition.island,
-            definition.totality,
             definition.proof,
             None,
             Some(definition),
@@ -183,7 +199,6 @@ pub fn item_part_digest(
                 definition.name,
                 &definition.kind,
                 definition.island,
-                definition.totality,
                 definition.proof,
                 Some(rec),
                 None,
@@ -242,19 +257,7 @@ pub fn item_part_digest(
             sealed(curios_archive::to_bytes(&part)).map(Some)
         }
         Question::Totality(_) => sealed(curios_archive::to_bytes(&totality)).map(Some),
-        Question::Variances(_) => {
-            // A group's member files no vector, its own or its fields', and no binder's field.
-            let variances: (Vec<Variance>, Vec<Vec<Variance>>, Option<ParameterField>) = plain
-                .map_or_else(Default::default, |definition| {
-                    (
-                        definition.variances.clone(),
-                        definition.field_variances.clone(),
-                        definition.parameter_field,
-                    )
-                });
-
-            sealed(curios_archive::to_bytes(&variances)).map(Some)
-        }
+        Question::Variances(_) => sealed(curios_archive::to_bytes(&classified.vectors)).map(Some),
         Question::Sort(_) => {
             // A group's member files none.
             let sort = plain

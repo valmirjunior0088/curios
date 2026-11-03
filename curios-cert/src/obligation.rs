@@ -10,7 +10,7 @@
 //!
 //! # What is already in scope
 //!
-//! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
+//! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. No [`Definition`](curios_core::Definition) carries elaboration's totality, judged or carried, so every verdict here is this crate's own.
 
 use {
     super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
@@ -91,35 +91,13 @@ impl<'g> Totals<'g> {
         self.partial.insert(name);
     }
 
-    /// Classify a judged `item` into the set, and hand back each of its definitions whose stamp says `Total` where the walk says otherwise.
+    /// Classify a judged `item` into the set.
     ///
     /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment is in the set since it was seeded. So one pass over the item settles it, its members closed over one another where it is a group.
-    ///
-    /// The stamp comparison runs against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give. A partial mention is named where one exists; a definition partial in itself alone has nothing to blame.
-    pub(crate) fn classify(&mut self, kernel: &Kernel, item: &Item) -> Vec<(Global, Error)> {
+    pub(crate) fn classify(&mut self, kernel: &Kernel, item: &Item) {
         let mut mentions = BTreeMap::new();
         self.locally(kernel, item, true, &mut mentions);
         self.close(kernel, &mentions);
-
-        item.definitions()
-            .into_iter()
-            .filter(|definition| {
-                definition.totality.is_total() && self.partial(kernel, &definition.name)
-            })
-            .map(|definition| {
-                let reached = mentions
-                    .get(&definition.name)
-                    .and_then(|reached| reached.iter().find(|other| self.partial(kernel, other)))
-                    .cloned();
-                (
-                    definition.name,
-                    Error::NotTotal {
-                        erased: Erased::Proof,
-                        reached,
-                    },
-                )
-            })
-            .collect()
     }
 
     /// Put each definition of `item` that is partial on its own account into the set, and record what each mentions. `typed` says this walk checked `item`, so what its check enclosed was noted as it went; an item it did not check is read from its terms instead, every group in them one with no verdict here.

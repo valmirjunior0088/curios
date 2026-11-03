@@ -4,11 +4,11 @@
 
 use {
     super::InScope,
-    crate::{Error, Witness},
+    crate::{Classified, Error, Vectors, Witness},
     curios_common::{Mount, Qualifier},
     curios_core::{
-        ConceptDecl, Definition, FuncType, Global, HeadKey, InductDecl, ParameterField, StructDecl,
-        Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
+        ConceptDecl, FuncType, Global, HeadKey, InductDecl, ParameterField, StructDecl, Subterm,
+        Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     std::collections::BTreeMap,
 };
@@ -26,13 +26,13 @@ pub struct Program<'s> {
     concepts: BTreeMap<Global, ConceptDecl>,
     /// The program-wide witness table: one witness per (concept, parameter-head tuple) key — global coherence, checked at registration.
     witness_table: BTreeMap<(Global, WitnessKey), Witness>,
-    /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and its stamp carries. Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
+    /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and the unit files ([`Classified`]). Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
     /// Each finished definition's variance vector with how many arguments one spine applies it in full by, kept for a definition irrelevant in some level: any other is compared level by level, which is what a name with no entry answers.
     variances: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Each finished record-valued definition's field vectors with its arity, kept for a definition one of whose fields is irrelevant in some level: a projection of any other is read by the definition's own vector, which is what a name with no entry answers.
     field_variances: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
-    /// Each finished definition whose value is a field of one of its binders, with which and its arity ([`curios_core::Definition::parameter_field`]).
+    /// Each finished definition whose value is a field of one of its binders, with which and its arity ([`Vectors::parameter_field`]).
     parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
     /// Each finished definition whose value is a type, with the sort the value inhabits ([`curios_core::Definition::value_sort`]).
     value_sorts: BTreeMap<Global, Term>,
@@ -289,15 +289,35 @@ impl<'s> Program<'s> {
         self.totality.insert(*name, totality);
     }
 
-    /// File the vectors a finished definition carries, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
-    pub fn record_variances(&mut self, definition: &Definition) {
-        let arity = match &*definition.type_ {
+    /// File the vectors read off the finished definition `name` of type `type_`, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
+    pub fn record_vectors(&mut self, name: &Global, type_: &Term, vectors: &Vectors) {
+        let arity = match &**type_ {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
             _ => 0,
         };
-        self.record_definition_variances(&definition.name, &definition.variances, arity);
-        self.record_field_variances(&definition.name, &definition.field_variances, arity);
-        self.record_parameter_field(&definition.name, definition.parameter_field, arity);
+        self.record_definition_variances(name, &vectors.variances, arity);
+        self.record_field_variances(name, &vectors.field_variances, arity);
+        self.record_parameter_field(name, vectors.parameter_field, arity);
+    }
+
+    /// What this unit's elaboration concluded of its definition `name`: the totality recorded of it, `Partial` where none is, and each of its vectors that says something.
+    pub fn classified(&self, name: &Global) -> Classified {
+        Classified {
+            totality: self.totality.get(name).copied().unwrap_or_default(),
+            vectors: Vectors {
+                variances: self
+                    .variances
+                    .get(name)
+                    .map(|(variances, _)| variances.clone())
+                    .unwrap_or_default(),
+                field_variances: self
+                    .field_variances
+                    .get(name)
+                    .map(|(fields, _)| fields.clone())
+                    .unwrap_or_default(),
+                parameter_field: self.parameter_fields.get(name).map(|(field, _)| *field),
+            },
+        }
     }
 
     /// File a finished definition's vector, replacing what an earlier elaboration of the name left.
