@@ -5,10 +5,11 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Free, Global, Intrinsic, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, Term,
+        Entrypoint, Free, Global, Intrinsic, Item, Level, Many, Module, Nat, Program, RecGroup,
+        RecItem, RecMemberScopes, Scope, Term, Universes, test_support::*,
     },
     curios_utilities::Qualifier,
-    std::collections::BTreeSet,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// `rec f : Absurd = f` reached as a member selection, which must be refused by the same rule the block spelling is refused by.
@@ -229,4 +230,109 @@ fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
             .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
         "a group whose member names itself where erasure deletes it was admitted: {verdicts:?}",
     );
+}
+
+/// A member named at its instance inside its own group is refused as undeclared, never read as the declaration the walk is about to define.
+///
+/// A group's members are locals while its bodies are checked, and an instance names a declaration ([`curios_core::Instance::name`]) — the two are the one name's two meanings here, and the group's binder captures only the first. So the second must reach no scheme: read as the declaration, the occurrence would be no call the recorder sees, the group would close with no edge, and `rec loop : Absurd = loop` spelled at its instance would certify a closed inhabitant of an empty proposition. `Error::Undeclared` is the refusal that keeps that shut, and it is what makes the spelling unavailable rather than merely unused.
+///
+/// The control is the same group with its member spelled by the local the group binds, refused for the descent it owes.
+#[test]
+fn a_member_named_at_its_instance_inside_its_group_is_undeclared() {
+    let name = Global::Authored(Qualifier::from(["loop"]));
+    let local = Free::local(905, Some("loop"));
+    let instanced = Term::instance(name, Universes::default());
+    let at_its_instance = grouped_at_absurd(name, local, instanced);
+    let by_its_local = grouped_at_absurd(name, local, Term::free_var(&local));
+
+    let verdicts = fixture_verdicts(&at_its_instance, 1_000_000, &Globals::default(), SYNTAX);
+    let undeclared = |verdict: &Verdict| matches!(verdict.error, Error::Undeclared(undeclared) if undeclared == name);
+    assert!(
+        verdicts.iter().any(undeclared),
+        "a member named at its instance inside its own group was read as something: {verdicts:?}",
+    );
+
+    let control = fixture_verdicts(&by_its_local, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        control
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        "the control stopped refusing: a group of one at an empty proposition owes a descent: {control:?}",
+    );
+}
+
+/// `rec loop : Absurd = <body>` as a module's one group, closed with `loop`, with `Absurd` an empty proposition: the member is declared under `name` and bound to `local` inside.
+fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
+    let family = Global::Authored(Qualifier::from(["Absurd"]));
+    let absurd = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
+    let Item::Let(definition) = authored(&name, absurd, body) else {
+        unreachable!("`authored` builds a `let`");
+    };
+
+    Program {
+        module: declaring(
+            Module {
+                mounts: Vec::new(),
+                items: vec![Item::Rec(RecItem::new(vec![(local, *definition)]))].into(),
+                witnesses: BTreeSet::new(),
+                tests: Vec::new(),
+            },
+            BTreeMap::from([(family, proposition(Vec::new()))]),
+            [],
+            [],
+        ),
+        entry: Entrypoint {
+            body: Term::instance(name, Universes::default()),
+            type_: Some(Term::induct_type(
+                family,
+                Vec::<Term>::new(),
+                Vec::<Term>::new(),
+            )),
+        },
+    }
+}
+
+/// An indirection does not launder a recursive occurrence past the call recorder: `rec f : Absurd = let g : Absurd = f; g` and `rec f : Absurd = ((g : Absurd) => g)(f)` are refused as `rec f : Absurd = f` is.
+///
+/// A group's calls are the ones the kernel types, and [`Calls::record_call`](crate::Kernel) takes a head that *is* a member local. Neither spelling applies one: a `let` is bound and not substituted ([`under_bindings`](crate::infer)), so the tail's head is the alias, and a lambda applied on the spot is typed with its binder standing for the argument, so the body's head is that binder. A group whose calls were all spelled this way would close with no edge at all, and a group with no edges descends — which would certify `rec f : Absurd = f` under another spelling.
+///
+/// What catches both is the bare occurrence the indirection has to pass through — the `let`'s value, checked where the `let` binds it, and the redex's argument, checked against its domain. `infer`'s `Var` rule records a member named anywhere but at an application's head as a call with no arguments, which grades as unknown throughout, so the verdict is the same as the direct spelling's.
+///
+/// Mutation-checked: with that `record_call` removed, both modules certify a closed inhabitant of an empty proposition and this test fails — as the direct spellings' tests in this module do, which is the point: the indirection is held by the same rule and by no second one.
+#[test]
+fn an_indirection_does_not_launder_a_member_past_the_call_recorder() {
+    let absurd = || {
+        Term::induct_type(
+            Global::Authored(Qualifier::from(["Absurd"])),
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        )
+    };
+    let taken = Free::local(904, Some("g"));
+    let aliased = Term::let_(
+        &taken,
+        absurd(),
+        Term::free_var(&member()),
+        Term::free_var(&taken),
+    );
+    let passed = Term::apply(
+        Term::func([(taken, absurd())], Term::free_var(&taken)),
+        [Term::free_var(&member())],
+    );
+
+    for (label, body) in [("a `let`'s value", aliased), ("a redex's argument", passed)] {
+        let verdicts = fixture_verdicts(
+            &selection_module(body),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        );
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+            "{label}: a member reached through an indirection closed its group with no call, and the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
+        );
+    }
 }

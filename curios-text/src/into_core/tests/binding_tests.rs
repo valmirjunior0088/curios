@@ -173,6 +173,38 @@ fn a_recursive_local_action_binding_is_refused() {
     );
 }
 
+/// A nominal head that resolves to a local names no structure, and is filed under a binder of its own rather than under the root-level global its spelling would name.
+///
+/// Capture is what the binder is for: `Qualifier::from([head])` is exactly what an entry module's `struct Box` lowers to, so a head lowered to its spelling would read that declaration wherever a binder of the name shadows it — one name meaning the parameter to resolution and the structure to the pattern. The second source below declares the structure the capture would reach and is otherwise the first, so the two differ in nothing but whether the capture has a target.
+#[test]
+fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
+    let shadowing = r#"
+        let f(Box : Type, v : Box) -> Type =
+            let Box { it } = v;
+            Type;
+        f
+    "#;
+    let declared = r#"
+        struct Box(A : Type) : Type { it : A }
+
+        let f(Box : Type, v : Box) -> Type =
+            let Box { it } = v;
+            Type;
+        f
+    "#;
+
+    for (label, source) in [
+        ("with nothing declared under the name", shadowing),
+        ("with a structure declared under the name", declared),
+    ] {
+        let report = run_err(source);
+        assert!(
+            report.contains("`Box` names no structure in scope"),
+            "{label}: unexpected report: {report}"
+        );
+    }
+}
+
 #[test]
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
     // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.

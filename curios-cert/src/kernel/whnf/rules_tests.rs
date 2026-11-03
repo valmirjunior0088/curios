@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
+    curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term, UniverseParam},
     curios_utilities::{Plicity, Qualifier},
 };
 
@@ -284,6 +284,67 @@ fn eta_declines_when_the_head_mentions_the_binder() {
     );
 
     assert_eq!(whnf(&mut kernel, term.clone()), Ok(term));
+}
+
+/// Eta hands back the head as the occurrence spells it, and a reference to a declaration is its instance: `(x) => f@{3}(x)` contracts to `f@{3}`, which unfolds at level 3, where the bare `f` the contraction must not invent stays stuck.
+///
+/// Asked of an `Instance` head because that is the shape every reference to a declaration takes ([`curios_core::Instance`]): the node carries the levels and has no term child, so the probe's side condition that the head mentions none of the binders is vacuous on it, and the per-argument identity check is the whole of what decides. A contraction that handed back the declaration without its levels would hand every later reader a reference to no instance of the scheme — the term `delta_withholds_a_universe_polymorphic_definition` holds stuck — and one that read the levels off the wrong occurrence would be a false equation between two instances.
+///
+/// Across a mark it declines as it does for a local head: `(@x) => f@{3}(x)` is a function at `(@x : Nat) -> …` and `f@{3}` one at a type plicity holds apart.
+///
+/// Asked of both statements of the rule, which must agree: the forwarding whose domain names an assumed local is one the closed machine's gate declines, so `step_func` decides it, and the local-free one is the machine's own `curios_core::eta_head`.
+///
+/// Mutation-checked, in the open case: with `step_func` handing back `Term::instance(name, Universes::default())` for an `Instance` head, the open forwarding reduces to the stuck bare occurrence instead of to `Type 3`.
+#[test]
+fn eta_contracts_to_the_instance_the_occurrence_states() {
+    let mut kernel = kernel();
+    let (x, y) = (binder(0, "x"), binder(1, "y"));
+    kernel.assume(&y, &nat_type());
+    let f = Global::Authored(Qualifier::from(["f"]));
+    kernel
+        .define(
+            &f,
+            &nat_type(),
+            &Term::type_at(Level::param(UniverseParam(0))),
+            &polymorphic(),
+        )
+        .expect("a name is declared once");
+    let at = |level: u32| Term::instance(f, vec![Level::constant(level)]);
+    // The domain carries the assumed local in the open case, which is what the machine's gate reads, and plays no part in the probe.
+    let forwarding = |head: Term, domain: Term| {
+        Term::func([(x, domain)], Term::apply(head, [Term::free_var(&x)]))
+    };
+    let open = || Term::intrinsic(Intrinsic::nat_add(Term::free_var(&y), nat(1)));
+
+    for (label, domain) in [("open", open()), ("local-free", nat_type())] {
+        assert_eq!(
+            whnf(&mut kernel, forwarding(at(3), domain.clone())),
+            Ok(Term::type_at(Level::constant(3))),
+            "{label}: the contraction did not keep the instance's levels",
+        );
+        assert_eq!(
+            whnf(&mut kernel, forwarding(at(1), domain.clone())),
+            Ok(Term::type_at(Level::constant(1))),
+            "{label}: the contraction read another occurrence's levels",
+        );
+
+        let bare = Term::instance(f, Universes::default());
+        assert_eq!(
+            whnf(&mut kernel, forwarding(bare.clone(), domain.clone())),
+            Ok(bare),
+            "{label}: the contraction invented an instance the occurrence does not state",
+        );
+
+        let across = Term::func_marked(
+            [(Plicity::Implicit, x, domain)],
+            Term::apply(at(3), [Term::free_var(&x)]),
+        );
+        assert_eq!(
+            whnf(&mut kernel, across.clone()),
+            Ok(across),
+            "{label}: a forwarding across a mark contracted",
+        );
+    }
 }
 
 /// A recursive call keeps its folded spelling until an eliminator demands the value, which is what stops an occurrence from unfolding forever.

@@ -4,7 +4,9 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Global, Intrinsic, Reducer, Term, UniverseContext, Universes},
+    curios_core::{
+        Global, Intrinsic, Level, Reducer, Term, UniverseContext, UniverseParam, Universes,
+    },
     curios_utilities::Qualifier,
 };
 
@@ -36,6 +38,54 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
         .expect("reduces");
     assert_eq!(inside, outside);
     assert_eq!(outside, nat(2));
+}
+
+/// A remembered reduct is served only to the spelling it carries to, in either order: a polymorphic declaration's bare occurrence stays its own normal form after its instance has unfolded, and its instance unfolds after the bare occurrence has been remembered stuck.
+///
+/// Asked in *one* kernel, which is what makes it about the memo rather than about the two rules. Every reference to a declaration is an `Instance` node, so the bare occurrence and the instance differ in the node's universe vector alone, and nothing but exact keying tells them apart: a door that erased the levels would hand `f@{3}` the stuck `f` it had remembered, or hand `f` a reduct of an instance nobody stated. `curios-elab`'s `polymorphic_definition_unfolds_only_through_an_explicit_universe_instance` asks the same of the reducer that does have such a door.
+///
+/// Mutation-checked: with `Memos::whnf` and its store keyed through `curios_core::project_erased_universes`, the first instance's reduct answers the bare occurrence and the second assertion fails.
+#[test]
+fn a_remembered_reduct_is_served_only_to_the_spelling_it_carries_to() {
+    let polymorphic = UniverseContext {
+        parameter_count: 1,
+        ..Default::default()
+    };
+    let name = Global::Authored(Qualifier::from(["f"]));
+    let define = |kernel: &mut Kernel| {
+        kernel
+            .define(
+                &name,
+                &nat_type(),
+                &Term::type_at(Level::param(UniverseParam(0))),
+                &polymorphic,
+            )
+            .expect("a name is declared once");
+    };
+    let bare = || Term::instance(name, Universes::default());
+    let at = || Term::instance(name, vec![Level::constant(3)]);
+    let reduce = |kernel: &mut Kernel, term: Term| kernel.reduce_forced(term).expect("reduces");
+
+    let mut instance_first = kernel();
+    define(&mut instance_first);
+    assert_eq!(
+        reduce(&mut instance_first, at()),
+        Term::type_at(Level::constant(3))
+    );
+    assert_eq!(
+        reduce(&mut instance_first, bare()),
+        bare(),
+        "a bare occurrence was served the reduct of an instance it does not state",
+    );
+
+    let mut bare_first = kernel();
+    define(&mut bare_first);
+    assert_eq!(reduce(&mut bare_first, bare()), bare());
+    assert_eq!(
+        reduce(&mut bare_first, at()),
+        Term::type_at(Level::constant(3)),
+        "an instance was served the stuck form of the bare occurrence",
+    );
 }
 
 /// A name is written once: a second definition under it is refused and the first stands, so a remembered reduct is never about a definition the environment no longer holds.
