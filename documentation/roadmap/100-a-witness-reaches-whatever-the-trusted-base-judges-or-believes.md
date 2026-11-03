@@ -1,18 +1,18 @@
 # A witness reaches whatever the trusted base judges or believes
 
-[The soundness board](../design/soundness/the-soundness-board.md) states that a witness reaches the claim through whatever the trusted base judges or believes, and that every proof of `False` found is a ticket on the board. Neither holds: the board puts a source program, or a module built by hand in Rust, each over the archived prelude (`Proof`, `xboard/src/support/ticket.rs`), so a proof of `False` that passes through an object one walk filed and a later walk read has no form to be put in. This specification resettles the board along what it answers for rather than adding a form beside the two it has: a ticket is data, a witness is a history of walks the compiler's own path runs, a module is written as Core text, the tests that guard a rule sit together beside it, and a hunt needs no worktree. Core text needs one printer of Core where there are two, and the crates it passes through are renamed for what they hold. The bench's readings become data with the tickets, since both crates keep their records as code for the same reason.
+[The soundness board](../design/soundness/the-soundness-board.md) states that a witness reaches the claim through whatever the trusted base judges or believes, and that every proof of `False` found is a ticket on the board. Neither holds: the board puts a source program, or a module built by hand in Rust, each over the archived prelude (`Proof`, `xboard/src/support/ticket.rs`), so a proof of `False` that passes through an object one walk filed and a later walk read has no form to be put in. This specification resettles the board along what it answers for rather than adding a form beside the two it has: a ticket is data, a witness is a history of walks the compiler's own path runs, a module is written as Core text, the tests that guard a rule sit together beside it, and a hunt needs no worktree. Core text needs one printer of Core where there are two, and the crates it passes through are renamed for what they hold.
 
-**Ready.** Every decision below was settled on 2026-11-03. Stages 1 and 2 are independent of each other and of the rest; stages 3 to 10 land in order.
+**Ready.** Every decision below was settled on 2026-11-03. The stages land in order.
 
 ## What is wrong today
 
 - **A proof of `False` through a believed object has no form.** `Baseline::holds` (`curios-cert/src/baseline.rs`) compared a `rec` item by its group, its member count and each member's name and proof mark, and not by `RecItem::universe_context`, the context its members' levels positionally mean, which `globals::held` publishes to every reader of a member. So a walk over a baseline adopted a group under constraints no walk assumed, filed it, and a later walk reading that unit admitted Hurkens' paradox: the carrier of [a group met as a bare projection](../../xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs) as a one-member `rec`, accepted under `u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x`, re-offered with an empty constraint list and read at `carrier@{0, 1, 0, 2}`. It was fixed at `45e8eeb67`, by comparing each item form through a whole destructuring, and is on no ticket: its witness needed a unit one walk filed and a later one read, so it closed at a locally declared empty proposition and `cargo xboard report` never saw it. The route of 2026-11-02 — a unit a walk accepts, mounted with an empty record, so that `Totals::seeded` classified it from its own terms — was put through a third form, `Proof::Mounted` (`6ff9ad99c`), which one ticket constructed and which was removed once that ticket retired (`19e469e02`).
 - **A module built by hand is Rust over `curios-core`'s constructors.** Twelve of the board's twenty-four witnesses are `fn() -> (Module, Term)`. Four tickets were retired rather than fixed when a representation change left the construction they spelled unspellable (`c0a2f60a0`, `d5c4715c2`, noted on `xboard/src/formation.rs` and `xboard/src/totality.rs`). A helper fills what a witness never states — `declared` builds a former through `Definition::former`, which sets its totality, proof mark, type and body — so what the kernel is handed is not on the page. And a witness has to be built, so a hunter writes it in a worktree of its own (`.claude/agents/hunter.md`), whose `target/` grows as the main checkout's does.
 - **Core has two printers, and nothing reads either back.** A report's term is translated to the surface tree by `curios-text`'s `from_core` and printed by the printer that formats source, which declines a form no program spells. A dump, a kernel's refusal and a declined term are printed by `curios-core`'s own printer (`curios-core/src/print.rs`), in spellings no grammar reads — `Bool.match`, `Nat.fold`, `~`, `;;`. That printer writes a definition as a name, a type and a body (`Definition::print`, `curios-core/src/module.rs`), so a definition's kind — a nominal declaration's constructors, arity, result sort, `module`, `rep_public`, polarities and variances among it — its universe context, island, totality, variances, field variances, parameter field, proof mark and value sort are dropped, with a `rec` item's universe context and a module's mounts, witnesses and tests; a lambda that is a type former's η-form prints as the former; a foreign call prints as a call of its declaration without its row; and `print_var` unwraps a variable as free, so printing a term that holds a bound one aborts. Nothing parses Core.
-- **Names say less than the crates and types hold.** `curios_core::Module` holds every definition one compilation unit makes, while the language's `mod` declares a namespace and `curios-text`'s own `Module` is a parsed module body: one word for two things. `curios-text` holds the surface tree, its parser, printer and formatter beside the module system and the lowering. `curios-common` names no concern, and `curios-verdict` names its concern in the plural where every other crate's is singular.
-- **Tickets and readings are code that only Rust reads.** The paper's harness reads both with regular expressions (`capture/xboard.crs` and `capture/xbench.crs` in `curios-papers`). A reading is listed in `xbench/src/main.rs` by hand. The board is the exception to the workspace's flat namespace (`.claude/rules/rust.md`), and `every_ticket_is_filed_under_its_title` (`xboard/src/tests.rs`) holds a file's name to the title it restates. `Status::Open` carries the workspace's one `dead_code` allowance, since no ticket constructs it while every flaw is fixed. A reading's samples are `f64` (`xbench/src/support/reading.rs`).
+- **Names say less than the crates and types hold.** `curios_core::Module` holds every definition one compilation unit makes, while the language's `mod` declares a namespace and `curios-text`'s own `Module` is a parsed module body: one word for two things. `curios-text` holds the surface tree, its parser, printer and formatter beside the module system and the lowering.
+- **Tickets are code that only Rust reads.** The paper's harness reads them with regular expressions (`capture/xboard.crs` in `curios-papers`). The board is the exception to the workspace's flat namespace (`.claude/rules/rust.md`), and `every_ticket_is_filed_under_its_title` (`xboard/src/tests.rs`) holds a file's name to the title it restates. `Status::Open` carries the workspace's one `dead_code` allowance, since no ticket constructs it while every flaw is fixed.
 - **The tests that guard the rules that can admit a term are scattered, and assert text.** `curios/src/tests/board/` holds 213 of them under the board's name, while its own doc sends positivity, the totality obligations and witness coherence to `tests::positivity`, `tests::soundness` and `tests::concepts`. A refusal there asserts a fragment of the printed diagnostic — 139 do, through `rejected_by` — so a program refused for another reason, whose message happens to hold the fragment, passes. The kernel's own tests build their modules from Rust constructors and rot with the representation as the board's witnesses did.
-- **A hunt assumes worktrees.** `.claude/commands/hunt-findings.md`'s **Worktrees**, `.claude/commands/hunt-soundness.md`'s probing and filing, `.claude/agents/hunter.md`'s **What you touch**, and the hunter's three scripts — `guard.sh`, which admits cargo only inside a worktree, `write-guard.sh` and `worktree.sh` — all rest on one. Four worktrees, `.claude/worktrees/hunter-1` to `hunter-4`, stand at `7b63491ff` holding changes not all of which have landed.
+- **A hunt assumes worktrees.** `.claude/commands/hunt-findings.md`'s **Worktrees**, `.claude/commands/hunt-soundness.md`'s probing and filing, `.claude/agents/hunter.md`'s **What you touch**, and the hunter's three scripts — `guard.sh`, which admits cargo only inside a worktree, `write-guard.sh` and `worktree.sh` — all rest on one.
 
 ## What this builds on
 
@@ -22,7 +22,7 @@
 - **A record that does not cover its unit has a rule.** `Globals::partial` reads a classification only where the record covers its unit, and a unit mounted with any other record, an empty one among them, is classified from its own terms by `Totals::seeded`.
 - **A report's term already reaches the surface tree.** `from_core` (`curios-text/src/from_core.rs`) translates a Core term to the surface tree for a reader, printed by the printer that formats source, and `curios-core`'s `ReaderPrinter` is the hook through which a crate below the surface prints with it. The core printer's default spelling is faithful in its names: every binder is opened under a gensym and every global is its fully qualified path.
 - **The surface spells every argument.** `@value` supplies an implicit parameter and `use value` a witness ([`documentation/syntax.md`](../syntax.md)); `#` is no part of the language.
-- **Data the workspace already reads.** `toml` is a dependency of `curios-package` and `xtask`, and `/std/Toml` decodes a document, dates and arrays of tables among it.
+- **Data the workspace already reads.** `toml` is a row of the root manifest, taken by `curios-package` for its manifests and by `xbench` for its readings, and `/std/Toml` decodes a document, dates and arrays of tables among it.
 
 ## Prior art
 
@@ -41,7 +41,7 @@ Settled 2026-11-03.
 ### The board
 
 - **A ticket is data beside the code.** `xboard/tickets/<part>/<ticket>/` holds a `metadata.toml` and its witnesses' texts, a program as `.crs` and Core text as `.crsc`; the directory's name is its title's, which the loader holds, so no test restates it. The `metadata.toml` states the title, the day the flaw was found as a TOML date, the status as `open` or `fixed`, and each witness: what it puts, its steps, and what refuses it. A part's question is its directory's `metadata.toml`. TOML holds the board's tickets and the bench's readings, and nothing else in the workspace.
-- **`support` is undone in both crates.** `xboard/src/support/` and `xbench/src/support/` were nested when the parts and the readings came to the crates' roots (`bc29b6b03`); with the records out of `src/`, their modules are each crate's own, and the board stops being the exception to the flat namespace.
+- **`support` is undone.** `xboard/src/support/` was nested when the parts came to the crate's root (`bc29b6b03`); with the records out of `src/`, its modules are the crate's own, and the board stops being the exception to the flat namespace, as `xbench`'s did with its readings.
 - **A record's words are held to the code.** A witness names the checker that refuses it, the error by its variant, and where a conversion's refusal stands, as `refused!` does today. Each checker's crate states its errors' names in one exhaustive match under `test-support`, so a variant added or removed does not compile until it is named, and a name no variant has fails the board's run. The status's two words are the loader's, so `Status::Open` is constructed and its allowance goes; a day that does not exist fails the run where it used to fail the build.
 - **`xboard` embeds its tickets.** A build script reads `xboard/tickets/` and includes every file, so a binary carries the board of the commit it was built at and `report` reads no path. `probe` reads its candidate where it runs: a `.crs`, a `.crsc`, a ticket's directory, or standard input.
 - **A witness is a history.** Each step walks one unit, named by its mount: a program step is compiled as `curios` compiles one, and a Core-text step enters the same path with the module read from its text in place of its lowering and elaboration. The steps share one store, in a temporary directory; a unit's later step is compiled over its earlier one as a recompile is over its baseline, and each unit's latest step is in scope of every step after it. The last step closes with the term put at `/std/Bool/False`. Today's two forms are histories of one step over the prelude. The board says nothing of what stands: the kernel decides what it adopts, and the compiler's own path answers `Globals::standing`.
@@ -53,7 +53,7 @@ Settled 2026-11-03.
 - **`curios-surface` owns the language's written form.** The surface tree, its parser, its printer and its formatter leave `curios-text`, with `from_core`, its inverse `to_core`, the decorator, the defaults, and the naming policy of `curios-core/src/print.rs` — `Spelling` and its axes, `Shorten`, `Rename`, `Minting` and their kin. It sits above `curios-core` and below `curios-module`, `curios-elab` and `curios-erase`, which print through it.
 - **The kernel renders through a hook.** `curios-cert` keeps its dependency graph: `curios-core` keeps one minimal trait for writing a term, a level and a universe constraint, the generalised `ReaderPrinter`, and a kernel error renders its terms through the one its reporter hands it — `curios-surface`'s, from the pipeline, the board and the command line. `curios-cert`'s own tests take `curios-surface` as a dev-dependency.
 - **`curios-core`'s term printer retires.** Every `Display` below `curios-surface` that writes Core syntax goes; a dump, a kernel's refusal and a report's declined term print Core text. `Debug` stays, and an identifier — a digest, an id, a path — keeps its own display.
-- **Each name says what it holds.** `curios_core::Module` is `curios_core::Definitions`, everything one unit defines, since a module is the language's namespace, and [the compilation decision that names it](../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md) is retitled with it. `curios-text`, left with the module system — resolution, lints, the registry of compiler-known names, and lowering — is `curios-module`. `curios-verdict` is `curios-verdict`; the store itself stays `curios-package`'s. `curios-common` is `curios-common`, since the shared layer is the checkers' layer. `curios-unit` keeps its `Unit`.
+- **Each name says what it holds.** `curios_core::Module` is `curios_core::Definitions`, everything one unit defines, since a module is the language's namespace, and [the compilation decision that names it](../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md) is retitled with it. `curios-text`, left with the module system — resolution, lints, the registry of compiler-known names, and lowering — is `curios-module`. `curios-unit` keeps its `Unit`.
 
 ### Core text
 
@@ -78,10 +78,6 @@ Settled 2026-11-03.
 - **A hunt reads a snapshot and probes frozen binaries.** At the hunt's commit the gatherer makes `.claude/snapshots/<commit>/`, ignored as `.claude/worktrees` is: `tree/` holds `git archive <commit>` unpacked, and `bin/` the `curios` and `xboard` binaries built once in the main checkout at that commit. Every hunter of the run shares it, reads the code its binaries were built from while the main checkout moves on, and builds nothing.
 - **A hunter writes nothing.** Every unit carries its text: a candidate on `xboard probe`'s standard input, a module as Core text, a held attack as the test it would land as. The gatherer lands and runs the tests, and the mutation checks their comments claim, in the main checkout, in the sweep it already makes. `guard.sh` admits the snapshot's two binaries by path with the subcommands it admits today, and the readers; `write-guard.sh` and `worktree.sh` go, and the hunter takes neither `Write` nor `Edit`. `.claude/worktrees` stays, for a worktree the user asks for.
 
-### The bench
-
-- **A reading is data.** `xbench/readings/<NN>.toml` holds what `Reading` holds today, its samples as integer microseconds — exact, the three decimals a reading writes — and its ordered lists as arrays; `collect` prints the TOML, and the bench embeds every reading the directory holds, as the board embeds its tickets, so no list is kept by hand.
-
 ### The Hurkens route is verification, not a ticket
 
 - A ticket enters the board open ([`xboard`'s README](../../xboard/README.md)), and this route's fix landed before the board could put it, so the route is this specification's verification and files no ticket.
@@ -90,75 +86,64 @@ Settled 2026-11-03.
 
 Each stage lands under `cargo xtask workspace format` and `cargo xtask workspace lint` and the checks it names; the whole gate runs once at the end. Every reference to a path or a name a stage moves is updated in that stage.
 
-### 1. The worktrees
+### 1. Names
 
-- Each of `.claude/worktrees/hunter-1` to `hunter-4` is diffed against `main` and its tests put against `main`. Hunter-1 holds `curios-cert/src/recheck/probe_tests.rs` and a change to `recheck.rs`; hunter-2 tests in `whnf::rules_tests`, `whnf::closed_machine_tests`, `sort::classification_tests`, `convert::tests::structural_tests`, `recheck::recursion_tests`, `curios-core`'s machine tests and the board's totality tests; hunter-3 a totality test; hunter-4 the `Baseline::holds` work, which landed at `45e8eeb67`. What passes and guards something `main` does not lands in the crate it attacked; a test that fails because the finding it guards is still open is handed to that finding, its entry restated to name the test and quote the construction and assertion it rests on, so that the finding's fix lands it.
-- Then each worktree goes, with `git worktree remove`.
-- Check: the landed tests by name; `git worktree list` shows the main checkout alone.
+Two commits: `curios_core::Module` to `curios_core::Definitions`, with the fields, functions and locals named after it and the compilation decision retitled; `curios-text` to `curios-module`. Each moves its crate's directory, manifests, paths and the rules and documents that name it.
 
-### 2. The bench's readings
+- Check: the build of every target that the lint makes, and the workspace's tests once after the two.
 
-- `xbench/readings/00.toml` to `04.toml`, written from the five reading modules; `Reading` read from TOML, its samples integer microseconds; the readings embedded at build; `collect` printing TOML; `xbench/src/support/` undone into `xbench/src/`; `xbench/README.md` restated.
-- Check: `cargo xbench report`, whole and per reading, prints what it printed before the stage; `xbench`'s tests.
-
-### 3. Names
-
-Four commits: `curios-common` to `curios-common`; `curios-verdict` to `curios-verdict`; `curios_core::Module` to `curios_core::Definitions`, with the fields, functions and locals named after it and the compilation decision retitled; `curios-text` to `curios-module`. Each moves its crate's directory, manifests, paths and the rules and documents that name it.
-
-- Check: the build of every target that the lint makes, and the workspace's tests once after the four.
-
-### 4. `curios-surface`, one printer
+### 2. `curios-surface`, one printer
 
 Four commits.
 
 - The crate is made, and the surface tree, the parser, the printer, the formatter, `from_core` and the parse half of `curios-module`'s errors move into it; `curios-module` keeps lowering, resolution, lints, the registry, the root sources and loading.
-- The naming policy moves from `curios-core/src/print.rs` into it, with `curios-core`'s term printer as the fallback until stage 5 replaces it; `curios-elab` and `curios-erase` print through `curios-surface`.
+- The naming policy moves from `curios-core/src/print.rs` into it, with `curios-core`'s term printer as the fallback until stage 3 replaces it; `curios-elab` and `curios-erase` print through `curios-surface`.
 - The hook: `curios-core`'s trait for writing a term, a level and a constraint; `curios-cert`'s errors rendered through it, by `curios-surface`'s printer where the pipeline, the board and the command line report one.
 - Every `Display` below `curios-surface` that writes Core syntax goes, `Debug` staying; the printer's tests move to `curios-surface`.
 - Check: the diagnostics the tests pin unchanged, since a report still prints through `from_core`; the workspace's tests.
 
-### 5. Core text
+### 3. Core text
 
 Four commits.
 
 - The decorator: one node of the tree, its printing, and the parser's Core mode.
-- The defaults, and `from_core`'s Core-text mode, total over Core; a dump, a kernel's refusal and a declined term print Core text, and the fallback printer from stage 4 is deleted.
+- The defaults, and `from_core`'s Core-text mode, total over Core; a dump, a kernel's refusal and a declined term print Core text, and the fallback printer from stage 2 is deleted.
 - `to_core`, refusing by name each form Core text refuses.
 - The round-trip, in `curios-prelude`'s suite.
 - Check: the round-trip; `to_core`'s refusals; the tests that pinned a dump's old spelling restated.
 
-### 6. The puts and the module witnesses
+### 4. The puts and the module witnesses
 
 - The board's put of Core text over the prelude, through `curios-pipeline`; the twelve module witnesses rewritten as Core text, still inside their Rust tickets, the doc comment that described each in prose becoming its text; `declared` and the module builders gone; `probe` reading a `.crsc`.
 - Check: `cargo xboard report` gives every witness the verdict it gave before the stage.
 
-### 7. The board's records
+### 5. The board's records
 
 - `xboard/tickets/<part>/` with its `metadata.toml`, and each ticket's directory, `metadata.toml` and witness files; the loader and the words it holds, each checker's names stated once under `test-support`; the tickets embedded at build; `probe` reading a ticket's directory; `xboard/src/support/` undone into `xboard/src/`; `every_ticket_is_filed_under_its_title` and the allowance on `Status::Open` gone; the parts' retirement notes dropped.
 - `xboard/README.md` restated: a ticket is data; a witness is put by the layer that can put it; a probe reads a file; the rationale that a ticket's fields are Rust values, and the rejection of a module built by hand on the command line, which now has a spelling, rewritten. `.claude/rules/rust.md` loses the board's exception to the flat namespace; `.claude/rules/documentation.md`'s row, [The soundness board](../design/soundness/the-soundness-board.md) and every comment citing a ticket's file name `xboard/tickets/<part>/`.
 - Check: `cargo xboard report` gives every witness the verdict it gave before the stage; the board's own tests, a whole ticket read from its files among them.
 
-### 8. Histories and withholding
+### 6. Histories and withholding
 
 - First, what a unit compiled from Core text holds where `Unit::new` takes the lowering of its text: what reads a unit's lowering after its walk decides between an absent lowering and a stage of its own, and the stage stops for a decision where neither is clean.
 - `curios-pipeline` gains, under `test-support`, the seam where a Core-text step enters the fold in place of its lowering and elaboration; `curios-verdict` the put of a history over a store in a temporary directory, a step's withheld record written into it; a witness's steps in its `metadata.toml`; `probe` reading a history's directory. The board's own tests hold an example of a history and one of a withheld record.
 - `xboard/README.md` states the history and withholding; [The soundness board](../design/soundness/the-soundness-board.md)'s second boundary names withholding as the power a witness has over a believed record.
 - Check: the board's examples; the verification below.
 
-### 9. The tests that guard a rule
+### 7. The tests that guard a rule
 
 - The rule for an attack that held goes into [The soundness board](../design/soundness/the-soundness-board.md). `curios/src/tests/board/` becomes `curios/src/tests/rules/`, and the positivity tests, the totality obligations of `tests::soundness` and the coherence tests of `tests::concepts` join it, a file for each rule, each refusal beside its control; each `rejected_by` becomes a pattern over the checker's error, a term it pins written as Core text; each file names its counterpart in `curios-cert` and the rule's ticket; the references to `tests/board` in `curios-cert`, `curios-analysis` and the documents are updated.
 - Check: every test moved runs under its name or the name the move gives it, listed before and after; `curios`'s suite.
 
-### 10. Hunts without worktrees
+### 8. Hunts without worktrees
 
 - `.claude/commands/hunt-findings.md`'s **Worktrees** becomes the snapshot: made at the hunt's commit, removed at the close. `.claude/commands/hunt-soundness.md` probes through the snapshot's binaries, writes a module built by hand as Core text on `probe`'s standard input, and sends a held attack as the test it would land as. `.claude/agents/hunter.md`'s **What you touch** becomes the snapshot, its tools lose `Write` and `Edit`; `guard.sh` admits the snapshot's binaries and no cargo; `write-guard.sh` and `worktree.sh` are removed; `.gitignore` ignores `/.claude/snapshots`.
 - Check: `guard.sh` put to a stated list of commands, each admitted or refused as the list says.
 
 ## Verification
 
-The gate, `cargo xtask gate`. The bench reports what it reported before stage 2, and the board gives every witness the verdict it gave before stages 6 and 7. The round-trip holds over `/std`. The Hurkens route, written as a history of three steps — the carrier under its constraints, the carrier without them, and the paradox read through it — is admitted in a scratch copy with `45e8eeb67`'s comparison reverted and refused at the tree's commit. The route of 2026-11-02, written as a library compiled, its record withheld and the library read, runs as the board's example of withholding. Every test stage 9 moves still runs.
+The gate, `cargo xtask gate`. The board gives every witness the verdict it gave before stages 4 and 5. The round-trip holds over `/std`. The Hurkens route, written as a history of three steps — the carrier under its constraints, the carrier without them, and the paradox read through it — is admitted in a scratch copy with `45e8eeb67`'s comparison reverted and refused at the tree's commit. The route of 2026-11-02, written as a library compiled, its record withheld and the library read, runs as the board's example of withholding. Every test stage 7 moves still runs.
 
 ## Retirement
 
-The specification is deleted when stage 10 lands. Its contracts are owned by `xboard/README.md` and `xbench/README.md`; `curios-surface/README.md` for the written form, Core text and its reader; `curios-module/README.md`, `curios-common/README.md` and `curios-verdict/README.md` for what each holds; the READMEs of `curios-cert`, `curios-pipeline` and `curios-verdict` for the puts and the hook; [The soundness board](../design/soundness/the-soundness-board.md) for the rule a held attack follows and the power a witness has over a believed record; `.claude/rules/` for the layout; and the hunt commands and the hunter's definition for the snapshot. Outside the repository, the paper's capture modules read the tickets and the readings through `/std/Toml`, and name the renamed crates, at its next pin.
+The specification is deleted when stage 8 lands. Its contracts are owned by `xboard/README.md`; `curios-surface/README.md` for the written form, Core text and its reader; `curios-module/README.md` for what it holds; the READMEs of `curios-cert`, `curios-pipeline` and `curios-verdict` for the puts and the hook; [The soundness board](../design/soundness/the-soundness-board.md) for the rule a held attack follows and the power a witness has over a believed record; `.claude/rules/` for the layout; and the hunt commands and the hunter's definition for the snapshot. Outside the repository, the paper's capture modules read the tickets and the bench's readings through `/std/Toml`, and name the renamed crates, at its next pin.
