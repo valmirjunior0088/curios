@@ -82,3 +82,35 @@ fn a_value_that_is_its_own_child_is_not_known_to_terminate() {
         "reaches 'x', which is not known to terminate",
     );
 }
+
+// The size order reads an arm's case for a `Prop`-sorted scrutinee as for any other (`refined_by_arm`), so a recursion descends on an inductive proposition's constructors, and a proof irrelevance holds equal to the scrutinee is then graded below it. What stands between that reading and a closed inhabitant of `False` is coverage, and this is the shape that asks for it: `Q`'s index is a proof, so irrelevance makes `Q(v)` and `Q(Wit/s(v))` one type and the recursive call on the payload is well typed, and `Q/nil()` inhabits `Q(Wit/s(Wit/triv()))` for the same reason — a proof of `Q` at the scrutinee's own type whose payload the descent reads as smaller.
+//
+// `drain` has no base case, so the forgery needs `nil`'s arm absent, and a proposition's two constructors never clash (`curios-analysis`'s `invert`, whose tag test fires only at a relevant family). So the arm is mandatory and has to inhabit `False`. The refusal is coverage's, not the size order's: a change that let a `Prop`-valued index excuse an omitted arm would hand this program the descent it already has.
+#[test]
+fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        induct Wit: Prop
+        | triv()
+        | s(inner: Wit)
+        end
+
+        induct Q: (Wit) -> Prop
+        | nil(): (Wit/triv())
+        | cons(v: Wit, inner: Q(v)): (Wit/s(v))
+        end
+
+        let drain(v: Wit, q: Q(Wit/s(v))) -> False =
+            match q: (_, _) => False
+            | cons(w, inner) => drain(w, inner)
+            end;
+
+        let bad: False = drain(Wit/triv(), Q/nil());
+
+        /std/print("FORGED")
+        "#,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
