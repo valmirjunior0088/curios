@@ -91,14 +91,14 @@ pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Hold
         end
     end;
 
---- `n - k <= n`: `Nat` subtraction never grows what it takes from.
-pub let sub_le(n: Nat, k: Nat) -> Bool/Holds(n - k <= n) =
-    match k
-    | 0 => refl(n)
-    | kp + 1 =>
-        match n
+--- `a <= b + (a - b)`: adding back what a difference took off reaches at least the minuend. The half of the adjunction `a - b <= c` iff `a <= b + c` that holds with nothing known of `a` and `b`, which conversion does not decide: a proof the elaborator writes reads it beside `a - b <= a` before it splits on `b <= a`.
+pub let add_sub(a: Nat, b: Nat) -> Bool/Holds(a <= b + (a - b)) =
+    match b
+    | 0 => refl(a)
+    | bp + 1 =>
+        match a
         | 0 => Bool/True/qed()
-        | np + 1 => trans(@np - kp, @np, @np + 1, sub_le(np, kp), Bool/True/qed())
+        | ap + 1 => add_sub(ap, bp)
         end
     end;
 

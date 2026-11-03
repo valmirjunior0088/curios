@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, a range check's true arm, through `le/of_in_range`, and a conjunction's true arm, each conjunct through `and/first` or `and/second`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state and conversion decides — `a - b <= a`, a `min` at most each operand, a `max` at least each — and an `abs` and a `sign` through what every case states and a lemma of their module proves — a magnitude at least its operand and its negation, a sign within one of zero — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state — `a - b <= a`, which conversion decides, and `a <= b + (a - b)`, which `le/add_sub` proves, a `min` at most each operand, a `max` at least each — and an `abs` and a `sign` through what every case states and a lemma of their module proves — a magnitude at least its operand and its negation, a sign within one of zero — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
 //! - Where their products leave an assignment too, a disequality the scope states — an `==` guard's false arm, a `!=` guard's true one, a hypothesis or a field stating either, `Bool/not` of an equality among them — as the strict bound conversion holds it to be, `n != 0` being `0 < n`, proved by what states it, and otherwise through the two cases the order of its sides makes ([`Reader::distinct`]); and a `!=` guard's false arm as the equation it is ([`disequalities`]). Read last and by a reader of its own, so what the scope kept hands out no atom, class or spelling a search before it reads ([`Kept`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
@@ -140,7 +140,7 @@ pub struct Target {
 pub struct Facts {
     facts: Vec<Fact>,
     splits: Vec<Split>,
-    /// What both cases of a split state, where conversion decides it: asked only where the facts alone leave an assignment and before any case is opened (`plan`), so a bound the facts prove is proved as it was, and one that turns on no case opens none.
+    /// What both cases of a split state, where conversion decides it or a lemma of the operation's module proves it: asked only where the facts alone leave an assignment and before any case is opened (`plan`), so a bound the facts prove is proved as it was, and one that turns on no case opens none.
     common: Vec<Fact>,
     lifts: Vec<Lift>,
     unread: Vec<(Origin, Term)>,
@@ -1304,7 +1304,7 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    /// Each truncated subtraction `a - b` among the atoms read so far, through the cases its definition makes: `b <= a`, where `b + (a - b) = a`, and `a < b`, where `a - b <= 0`. A case the scope already decides — under a guard, or where conversion decides `b <= a` — is read as facts; otherwise the cases are kept as a split the search opens where it needs one, beside what both of them state, `a - b <= a`, which conversion decides and the search asks before it opens a case ([`Facts::common`]): a bound that does not turn on the case opens no split, where a sum of `n` subtractions would open `2ⁿ` cases. Whether it read one.
+    /// Each truncated subtraction `a - b` among the atoms read so far, through the cases its definition makes: `b <= a`, where `b + (a - b) = a`, and `a < b`, where `a - b <= 0`. A case the scope already decides — under a guard, or where conversion decides `b <= a` — is read as facts; otherwise the cases are kept as a split the search opens where it needs one, beside what both of them state — `a - b <= a`, which conversion decides, and `a <= b + (a - b)`, which `le/add_sub` proves — which the search asks before it opens a case ([`Facts::common`]): a bound that does not turn on the case opens no split, where a sum of `n` subtractions would open `2ⁿ` cases. Whether it read one.
     fn subtractions(
         &mut self,
         context: &mut Context,
@@ -1315,6 +1315,7 @@ impl<'a> Reader<'a> {
         let names = [
             natural.difference,
             natural.truncated,
+            natural.residual,
             order.of_lt,
             order.of_not_le,
             order.of_eq,
@@ -1342,9 +1343,15 @@ impl<'a> Reader<'a> {
                 Subterm::Intrinsic(Intrinsic::Bool(false)) => self.truncated(context, &a, &b)?,
                 _ => {
                     let difference = Term::intrinsic(Intrinsic::NatSub(a.clone(), b.clone()));
-                    let within = Intrinsic::NatLe(difference, a.clone());
+                    let within = Intrinsic::NatLe(difference.clone(), a.clone());
+                    let raised = Intrinsic::NatLe(
+                        a.clone(),
+                        Term::intrinsic(Intrinsic::NatAdd(b.clone(), difference)),
+                    );
+                    let lower = Term::apply(global(natural.residual), [a.clone(), b.clone()]);
                     let both = self.apart(context, |reader, context| {
-                        reader.admit(context, within, qed(context), Origin::Definition)
+                        reader.admit(context, within, qed(context), Origin::Definition)?;
+                        reader.admit(context, raised, lower, Origin::Definition)
                     })?;
                     self.read.common.extend(both);
                     let holds =

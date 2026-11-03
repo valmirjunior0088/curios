@@ -417,6 +417,8 @@ pub struct NaturalSyntax {
     pub difference: SyntaxName,
     /// `a <= b` gives `a - b <= 0`: the case that does.
     pub truncated: SyntaxName,
+    /// `a <= b + (a - b)`: the half of the adjunction both cases of a truncated subtraction state, which conversion does not decide, read beside `a - b <= a` before any case is opened.
+    pub residual: SyntaxName,
 }
 
 impl NaturalSyntax {
@@ -427,9 +429,10 @@ impl NaturalSyntax {
             shift,
             difference,
             truncated,
+            residual,
         } = self;
 
-        [below, above, shift, difference, truncated].into_iter()
+        [below, above, shift, difference, truncated, residual].into_iter()
     }
 }
 

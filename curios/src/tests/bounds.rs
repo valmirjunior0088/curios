@@ -354,6 +354,11 @@ const ROWS: &[Row] = &[
         "a1: Nat, b1: Nat, a2: Nat, b2: Nat, a3: Nat, b3: Nat, a4: Nat, b4: Nat, a5: Nat, b5: Nat, a6: Nat, b6: Nat, a7: Nat, b7: Nat, a8: Nat, b8: Nat, a9: Nat, b9: Nat, a10: Nat, b10: Nat",
         "Holds((a1 - b1) + (a2 - b2) + (a3 - b3) + (a4 - b4) + (a5 - b5) + (a6 - b6) + (a7 - b7) + (a8 - b8) + (a9 - b9) + (a10 - b10) <= a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10)",
     ),
+    // And the lower half, `a <= b + (a - b)`, which conversion does not decide and `le/add_sub` proves: ten of them are no 1,024 cases either.
+    claim(
+        "a1: Nat, b1: Nat, a2: Nat, b2: Nat, a3: Nat, b3: Nat, a4: Nat, b4: Nat, a5: Nat, b5: Nat, a6: Nat, b6: Nat, a7: Nat, b7: Nat, a8: Nat, b8: Nat, a9: Nat, b9: Nat, a10: Nat, b10: Nat",
+        "Holds(a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 <= b1 + (a1 - b1) + b2 + (a2 - b2) + b3 + (a3 - b3) + b4 + (a4 - b4) + b5 + (a5 - b5) + b6 + (a6 - b6) + b7 + (a7 - b7) + b8 + (a8 - b8) + b9 + (a9 - b9) + b10 + (a10 - b10))",
+    ),
     // Division and remainder by a literal, through the quotient and remainder they denote.
     claim(
         "code: Nat, p: Holds(code < 0x800)",
