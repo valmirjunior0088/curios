@@ -17,13 +17,9 @@ workspace = true
 [dependencies]
 curios-utilities = { workspace = true }
 curios-text = { workspace = true }
-serde = { version = "1.0.228", features = ["derive"] }
-toml = { version = "1.1.8", default-features = false, features = [
-    "parse",
-    "serde",
-    "std",
-] }
-toml_edit = { version = "0.25.15" }
+serde = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
 semver = "1.0.28"
 
 [dev-dependencies]

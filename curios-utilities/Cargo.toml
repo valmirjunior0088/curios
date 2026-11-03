@@ -18,4 +18,4 @@ curios-archive = { workspace = true }
 # The grapheme clusters and East Asian widths a report's caret is placed and sized by.
 curios-unicode = { workspace = true }
 stacker = { version = "0.1.25" }
-sha2 = "0.11.0"
+sha2 = { workspace = true }

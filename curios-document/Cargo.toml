@@ -12,7 +12,7 @@ workspace = true
 [dependencies]
 curios-archive = { workspace = true }
 curios-utilities = { workspace = true }
-askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
+askama = { workspace = true }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.

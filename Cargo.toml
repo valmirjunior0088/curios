@@ -98,6 +98,15 @@ wasm-bindgen-cli-support = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
 # One row for the two crates that read the OS's randomness: `curios-native`'s host answers `/std/rand/bytes` with it, and `curios` mints the token a test serve admits reports under.
 getrandom = { version = "0.4.3" }
+# Each a dependency two or more manifests take, its version stated once: `documentation/design/one-crate-is-the-authority-for-one-external-concern.md`.
+askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
+clap = { version = "4.6.1", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.154" }
+sha2 = { version = "0.11.0" }
+toml = { version = "1.1.8", default-features = false, features = ["parse", "serde", "std"] }
+toml_edit = { version = "0.25.15" }
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
 
 [profile.dev]
 opt-level = 3

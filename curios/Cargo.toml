@@ -35,7 +35,7 @@ curios-native = { workspace = true }
 curios-browser = { workspace = true }
 # Cranelift behind the runtime's engine: what compiles a module, which the launcher never links. Wasmtime itself is named nowhere in this crate.
 curios-cranelift = { workspace = true }
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { workspace = true }
 # The token a test serve admits reports under, on the workspace's one row for the OS's randomness.
 getrandom = { workspace = true }
 

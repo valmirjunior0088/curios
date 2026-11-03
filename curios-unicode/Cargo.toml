@@ -14,5 +14,5 @@ test-support = []
 
 # The pinned files are fetched and checked as `curios-binaryen` fetches and checks its source.
 [build-dependencies]
-ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
-sha2 = "0.11.0"
+ureq = { workspace = true }
+sha2 = { workspace = true }
