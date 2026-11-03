@@ -80,7 +80,7 @@ fn a_sum_one_summand_longer_holds_the_sum_it_extends() {
     let (_, chain) = Nat::decompose(&shorter);
     let (_, extended) = Nat::decompose(&longer);
     let Subterm::Intrinsic(Intrinsic::NatAdd(held, _)) = &*extended else {
-        panic!("a sum of three summands: {longer}");
+        panic!("a sum of three summands: {longer:?}");
     };
     assert_eq!(held.identity(), chain.identity(), "the sum it extends");
     assert_eq!(
@@ -99,7 +99,7 @@ fn a_summand_at_its_coefficient_is_the_node_it_was_read_from() {
     let sum = Nat::sum(&a, &scaled);
 
     let Subterm::Intrinsic(Intrinsic::NatAdd(_, written)) = &*sum else {
-        panic!("a sum of two summands: {sum}");
+        panic!("a sum of two summands: {sum:?}");
     };
     assert_eq!(written.identity(), scaled.identity());
 }
@@ -150,8 +150,8 @@ fn a_product_distributed_under_a_sum_is_merged_into_it() {
 
     let normalized = Nat::normalize(&mut Folding, add(product, y.clone())).expect("normalizes");
     let (floor, inner) = Nat::decompose(&normalized);
-    assert_eq!(floor, Natural::from(1usize), "{normalized}");
-    assert_eq!(Nat::summands(&inner).len(), 6, "{normalized}");
+    assert_eq!(floor, Natural::from(1usize), "{normalized:?}");
+    assert_eq!(Nat::summands(&inner).len(), 6, "{normalized:?}");
     assert_eq!(occurrences(&inner, &y), 1);
 }
 

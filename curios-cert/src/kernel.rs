@@ -63,10 +63,9 @@ use {
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
-        Advance, Atom, ClosedMemo, Consumption, Cost, Definitions, Exhaustion, Free, Global,
-        InductDecl, Level, LevelHead, Lexicon, Names, Polarity, Probe, Quality, Reads, ReduceError,
-        Reducer, Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
-        Universes, Variance,
+        Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
+        LevelHead, Names, Notation, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
+        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
     },
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
@@ -250,53 +249,32 @@ impl From<UniverseError> for Error {
 }
 
 impl Error {
-    /// Render this refusal with global names shortened against `module`'s symbol table and a nominal family's implicit parameters marked — the two axes a reader needs to recognize the types they wrote.
+    /// This refusal as a reader is told it, its terms and levels written by `notation`, which whoever reports it hands in under the policy it reports by.
     ///
-    /// Universe instances are deliberately *not* suppressed here, unlike an elaboration diagnostic. A kernel refusal is often *about* the universes: `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type`. The same call `wonder stage`'s dumps make, for the same reason — a reader looking at the checker wants the levels the checker is arguing about.
-    pub fn format_with(
-        &self,
-        definitions: &Definitions,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-    ) -> String {
-        self.format_stating(None, definitions, scope, syntax)
+    /// Universe instances are deliberately *not* suppressed in a kernel refusal, unlike an elaboration diagnostic: one is often *about* the universes. `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type` — the same reason `wonder stage`'s dumps show them, since a reader looking at the checker wants the levels the checker is arguing about.
+    pub fn rendered(&self, notation: &dyn Notation) -> String {
+        self.rendered_stating(None, notation)
     }
 
-    /// [`Error::format_with`] for a refusal of the declaration that states the type `stated`: one reached at an assignment of the sorts the declaration leaves to its caller restates that type read at the assignment. The refusal spells the declaration's terms at the assignment, where the declaration's text says `Sort`, so the type is where a reader sees which written `Sort` stood at which sort.
-    pub(crate) fn format_stating(
+    /// [`Error::rendered`] for a refusal of the declaration that states the type `stated`: one reached at an assignment of the sorts the declaration leaves to its caller restates that type read at the assignment. The refusal spells the declaration's terms at the assignment, where the declaration's text says `Sort`, so the type is where a reader sees which written `Sort` stood at which sort.
+    pub(crate) fn rendered_stating(
         &self,
         stated: Option<&Term>,
-        definitions: &Definitions,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
+        notation: &dyn Notation,
     ) -> String {
-        // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
-        let own = definitions.lexicon();
-        let spelling = Rc::new(
-            Spelling::default()
-                .with_lexicons(&own, scope)
-                .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
-        );
-        Displayed(self, spelling, stated).to_string()
+        Displayed(self, notation, stated).to_string()
     }
 }
 
-/// The faithful rendering: core's own names, every universe shown. A refusal reported to a reader goes through [`Error::format_with`].
-impl fmt::Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Displayed(self, Rc::new(Spelling::default()), None).fmt(formatter)
-    }
-}
-
-/// A refusal paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take. Local to this crate because the orphan rule forbids implementing a foreign trait for a foreign wrapper, and because the axes a kernel refusal wants are not the ones an elaboration diagnostic wants.
+/// A refusal paired with the [`Notation`] its terms are written by — the parameter `Display::fmt` cannot take.
 ///
-/// The third is the type the refused declaration states, where whoever renders the refusal holds the declaration: what a refusal at one assignment of the declaration's sorts restates at it ([`Error::format_stating`]).
-struct Displayed<'a>(&'a Error, Rc<Spelling>, Option<&'a Term>);
+/// The third is the type the refused declaration states, where whoever renders the refusal holds the declaration: what a refusal at one assignment of the declaration's sorts restates at it ([`Error::rendered_stating`]).
+struct Displayed<'a>(&'a Error, &'a dyn Notation, Option<&'a Term>);
 
-/// Every arm below rebinds its term fields through the spelling before interpolating them. A field left unrebound renders core's own spelling and still compiles, which is why the rebinding is mechanical rather than left to each `write!`.
+/// Every arm below writes its term and level fields through the notation before interpolating them, so nothing a refusal names is written by any other printer.
 impl fmt::Display for Displayed<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let spelling = &self.1;
+        let notation = self.1;
         match self.0 {
             Error::Reduce(ReduceError::Exhausted {
                 category,
@@ -323,15 +301,15 @@ impl fmt::Display for Displayed<'_> {
                 write!(formatter, "`{}` is already declared", name.faithful())
             }
             Error::Unclassified(type_) => {
-                let type_ = type_.spelled(spelling);
+                let type_ = notation.term(type_);
                 write!(formatter, "cannot determine the sort of `{type_}`")
             }
             Error::NotASort(term) => {
-                let term = term.spelled(spelling);
+                let term = notation.term(term);
                 write!(formatter, "`{term}` is not a universe")
             }
             Error::OpenSort(term) => {
-                let term = term.spelled(spelling);
+                let term = notation.term(term);
                 write!(formatter, "`{term}` states neither `Prop` nor `Type`")
             }
             Error::AtSorts { sorts, refusal } => {
@@ -349,11 +327,11 @@ impl fmt::Display for Displayed<'_> {
                 )?;
                 if let Some(stated) = self.2 {
                     let stated = instantiate_qualities(stated, sorts);
-                    let stated = stated.spelled(spelling);
+                    let stated = notation.term(&stated);
                     write!(formatter, ", where it reads `{stated}`")?;
                 }
                 formatter.write_str(": ")?;
-                Displayed(refusal, Rc::clone(spelling), None).fmt(formatter)
+                Displayed(refusal, notation, None).fmt(formatter)
             }
             Error::TooManySorts { stated } => write!(
                 formatter,
@@ -361,49 +339,49 @@ impl fmt::Display for Displayed<'_> {
                 UniverseContext::QUALITY_LIMIT,
             ),
             Error::NoProof(type_) => {
-                let type_ = type_.spelled(spelling);
+                let type_ = notation.term(type_);
                 write!(
                     formatter,
                     "a binder states it binds a proof at `{type_}`, which is no proposition"
                 )
             }
             Error::ValueSort { stated, reached } => {
-                let (stated, reached) = (stated.spelled(spelling), reached.spelled(spelling));
+                let (stated, reached) = (notation.term(stated), notation.term(reached));
                 write!(
                     formatter,
                     "a definition states its value inhabits `{stated}`, where it inhabits `{reached}`"
                 )
             }
             Error::NotAMotive { stated, refusal } => {
-                let stated = stated.spelled(spelling);
+                let stated = notation.term(stated);
                 write!(
                     formatter,
                     "`{stated}` is not a valid motive, which is well typed and lands in a sort: ",
                 )?;
-                Displayed(refusal, Rc::clone(spelling), None).fmt(formatter)
+                Displayed(refusal, notation, None).fmt(formatter)
             }
             Error::AmbientFold(goal) => {
-                let goal = goal.spelled(spelling);
+                let goal = notation.term(goal);
                 write!(
                     formatter,
                     "a fold that reads its induction hypothesis needs a motive to type it, and `{goal}` is an ambient goal",
                 )
             }
             Error::Mismatch { inferred, expected } => {
-                let inferred = inferred.spelled(spelling);
-                let expected = expected.spelled(spelling);
+                let inferred = notation.term(inferred);
+                let expected = notation.term(expected);
                 write!(formatter, "expected `{expected}`, found `{inferred}`")
             }
             Error::NotAFunction(type_) => {
-                let type_ = type_.spelled(spelling);
+                let type_ = notation.term(type_);
                 write!(formatter, "`{type_}` is not a function type")
             }
             Error::NotATuple(type_) => {
-                let type_ = type_.spelled(spelling);
+                let type_ = notation.term(type_);
                 write!(formatter, "`{type_}` has no components")
             }
             Error::NotASlotOf { named, head_type } => {
-                let head_type = head_type.spelled(spelling);
+                let head_type = notation.term(head_type);
                 match named {
                     Some(structure) => write!(
                         formatter,
@@ -447,7 +425,7 @@ impl fmt::Display for Displayed<'_> {
                 name.faithful()
             ),
             Error::NotCore(term) => {
-                let term = term.spelled(spelling);
+                let term = notation.term(term);
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
             Error::RepeatedTag(tag) => {
@@ -462,7 +440,7 @@ impl fmt::Display for Displayed<'_> {
                 family.faithful()
             ),
             Error::NotDescending { type_ } => {
-                let type_ = type_.spelled(spelling);
+                let type_ = notation.term(type_);
                 write!(
                     formatter,
                     "a recursive proof or type at `{type_}` does not descend",
@@ -481,7 +459,8 @@ impl fmt::Display for Displayed<'_> {
             ),
             Error::Informative { field } => write!(
                 formatter,
-                "a `Prop` structure carries an informative field at `{field}`",
+                "a `Prop` structure carries an informative field at `{}`",
+                notation.term(field),
             ),
             Error::NotTotal {
                 erased,
@@ -528,11 +507,15 @@ impl fmt::Display for Displayed<'_> {
             ),
             Error::Oversized { domain, bound } => write!(
                 formatter,
-                "a declaration domain at level `{domain}` exceeds its family's `{bound}`",
+                "a declaration domain at level `{}` exceeds its family's `{}`",
+                notation.level(domain),
+                notation.level(bound),
             ),
             Error::UniverseInstance { lower, upper } => write!(
                 formatter,
-                "this instance does not satisfy its scheme's `{lower} <= {upper}`",
+                "this instance does not satisfy its scheme's `{} <= {}`",
+                notation.level(lower),
+                notation.level(upper),
             ),
         }
     }

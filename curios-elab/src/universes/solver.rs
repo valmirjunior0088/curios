@@ -27,6 +27,9 @@ use {
     },
 };
 
+#[cfg(feature = "profile")]
+use curios_surface::Spellable;
+
 /// Where a scheme is instantiated: the declaration an occurrence names, and where that occurrence is written, when a term of the declaration being elaborated wrote it. A constraint the scheme states is restated under both ([`UniverseSolver::instantiate_at`]).
 #[derive(Debug, Clone, Copy)]
 pub struct Occurrence {
@@ -1059,8 +1062,8 @@ impl UniverseSolver {
         } else {
             curios_profile::note!(
                 target: "curios_elab::universe",
-                left = %pairs[0].0,
-                right = %pairs[0].1,
+                left = %pairs[0].0.faithful(),
+                right = %pairs[0].1.faithful(),
                 "dropped a weak equation the store refuses",
             );
         }

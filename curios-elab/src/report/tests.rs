@@ -32,7 +32,7 @@ fn doubled_around_a_hole() -> Term {
 /// Whether both operands of a sum at the root are one node — what a walk that kept the graph hands back.
 fn root_operands_shared(term: &Term) -> bool {
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &**term else {
-        panic!("the walk changed the root: {term}");
+        panic!("the walk changed the root: {term:?}");
     };
     std::ptr::eq::<Subterm>(&**left, &**right)
 }

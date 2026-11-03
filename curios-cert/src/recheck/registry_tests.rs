@@ -9,6 +9,7 @@ use {
         Definition, DefinitionKind, Definitions, Global, InductDecl, Intrinsic, Item, Level, Nat,
         Telescope, Term, Totality, UniverseContext, UniverseParam, test_support::*,
     },
+    curios_surface::Spelling,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -79,7 +80,10 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
     assert!(
         verdicts.iter().any(|verdict| {
             verdict.name.as_ref() == Some(&family)
-                && verdict.error.to_string().contains("does not descend")
+                && verdict
+                    .error
+                    .rendered(&Spelling::default())
+                    .contains("does not descend")
         }),
         "the kernel certified a non-descending proof standing as a constructor's index target: {verdicts:?}",
     );

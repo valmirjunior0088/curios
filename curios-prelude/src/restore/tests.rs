@@ -14,7 +14,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
-    curios_surface::TopItem,
+    curios_surface::{Spellable, TopItem},
     curios_unit::{Record, Unit, segments},
     std::{
         cell::{Cell, RefCell},
@@ -457,7 +457,7 @@ fn every_registered_concept_declares_its_method_after_restore() {
 
 /// A term's printed head, clipped — enough to tell one refusal's shape from another's without pasting a standard-library type into a tally.
 fn head(term: &Term) -> String {
-    let rendered = format!("{term}");
+    let rendered = term.faithful().to_string();
     let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
 
     match rendered.char_indices().nth(44) {
@@ -657,7 +657,7 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
                                 Ok(_) => {}
                                 Err(error) if error.is_exhausted() => {}
                                 Err(error) => refused.push(format!(
-                                    "{} at {value} in place of parameter {}: {error:?}",
+                                    "{} at {value:?} in place of parameter {}: {error:?}",
                                     definition.name.faithful(),
                                     position + 1,
                                 )),
@@ -906,10 +906,16 @@ fn universe_parameter_census() {
                 let constraints = context
                     .constraints
                     .iter()
-                    .map(|constraint| format!("{} ≤ {}", constraint.lower, constraint.upper))
+                    .map(|constraint| {
+                        format!(
+                            "{} ≤ {}",
+                            constraint.lower.faithful(),
+                            constraint.upper.faithful()
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
-                let type_ = definition.type_.to_string().replace('\n', " ");
+                let type_ = definition.type_.faithful().to_string().replace('\n', " ");
 
                 println!(
                     "{}\t{}\t{constraints}\t{type_}",

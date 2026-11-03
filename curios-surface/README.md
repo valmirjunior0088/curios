@@ -1,8 +1,16 @@
 # curios-surface
 
-The Curios surface language as a tree: the scannerless parser that reads a `.crs` file into it, the printer that writes it back as written, the formatter `curios format` runs, and the way back for a report — `from_core`, which translates a Core term to the tree whole or not at all, and `spell`, which names a declaration as resolution takes it back from where a reader stands ([A diagnostic spells what its reader can write](../documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md)). What the surface language *is* belongs to [syntax.md](../documentation/syntax.md), which is normative and which `src/parse.rs` implements; that a surface feature is a tree node desugared during lowering, never in the parser, is [Syntax forms are closed, semantics extend by witness](../documentation/design/surface/syntax-forms-are-closed-semantics-extend-by-witness.md). Resolution and lowering are [`curios-module`](../curios-module/README.md)'s. Local architecture — the combinator grammar, the printer's layouts — belongs to the crate rustdoc.
+The Curios surface language as a tree: the scannerless parser that reads a `.crs` file into it, the printer that writes it back as written, the formatter `curios format` runs, and the way back for a report — `from_core`, which translates a Core term to the tree whole or not at all, and `spell`, which names a declaration as resolution takes it back from where a reader stands ([A diagnostic spells what its reader can write](../documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md)) — and Core's own printer with the naming policy every term is spelled by. What the surface language *is* belongs to [syntax.md](../documentation/syntax.md), which is normative and which `src/parse.rs` implements; that a surface feature is a tree node desugared during lowering, never in the parser, is [Syntax forms are closed, semantics extend by witness](../documentation/design/surface/syntax-forms-are-closed-semantics-extend-by-witness.md). Resolution and lowering are [`curios-module`](../curios-module/README.md)'s. Local architecture — the combinator grammar, the printer's layouts — belongs to the crate rustdoc.
 
 ## Design
+
+### Core is written here, and the kernel writes through a hook
+
+**Decision.** The naming policy a term is spelled by — `Spelling` and its axes, `Shorten`, `Rename`, `Minting` — and Core's own printer live in this crate, beside `from_core`, which translates a report's term to the surface tree. `curios-core` keeps what a unit's names are spelled by, the `Lexicon` kept with the unit, and `Notation`, the hook a crate below this one writes a term or a level through: a kernel refusal renders through the one its reporter hands in, `Spelling::for_refusal` where a reader reads it. Nothing below this crate implements `Display` by writing Core's syntax; a term, a level, a module and a program are written by `Spellable`, under a spelling or faithfully.
+
+**Rationale.** The translation and Core's printer read one policy, so they live together, and the kernel stays out of the printer's graph: what `curios-cert` reaches is its trusted base, and a printer decides nothing.
+
+**Rejected.** The policy in `curios-core` with a hook back to this crate for the translation (`ReaderPrinter`), a seam that existed only because the two halves sat in two crates. The kernel depending on this crate, which would put the parser and the formatter in the trusted base's graph.
 
 ### A top-level item is dispatched on its head, and a reserved head commits
 

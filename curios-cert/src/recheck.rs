@@ -65,7 +65,7 @@ use {
     curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
         Abroad, Bound, Certification, Certified, Changes, Concluded, Definitions, Entrypoint,
-        Global, HeldReads, InductDecl, Item, ItemRun, Level, Lexicon, MetavarId, Places, Polarity,
+        Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId, Notation, Places, Polarity,
         Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext,
         Variance, Zonked,
     },
@@ -88,13 +88,8 @@ pub struct Verdict {
 }
 
 impl Verdict {
-    /// The refusal as a reader is told it: [`Error::format_with`]'s rendering, and, where the declaration was refused at one assignment of the sorts it leaves to its caller, the type `module` holds under the verdict's name restated at that assignment.
-    pub fn format_with(
-        &self,
-        definitions: &Definitions,
-        scope: &[&Lexicon],
-        syntax: &SyntaxRegistry,
-    ) -> String {
+    /// The refusal as a reader is told it, written by `notation` ([`Error::rendered`]), and, where the declaration was refused at one assignment of the sorts it leaves to its caller, the type `definitions` holds under the verdict's name restated at that assignment.
+    pub fn rendered(&self, definitions: &Definitions, notation: &dyn Notation) -> String {
         let stated = match (&self.error, self.name) {
             (Error::AtSorts { .. }, Some(name)) => definitions
                 .items
@@ -105,8 +100,7 @@ impl Verdict {
             _ => None,
         };
 
-        self.error
-            .format_stating(stated.as_ref(), definitions, scope, syntax)
+        self.error.rendered_stating(stated.as_ref(), notation)
     }
 }
 

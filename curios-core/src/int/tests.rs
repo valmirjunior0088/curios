@@ -171,13 +171,13 @@ fn a_sum_one_summand_longer_holds_the_sum_it_extends() {
     let longer = int_sum(&shorter, &k);
 
     let Subterm::Intrinsic(Intrinsic::IntAdd(chain, _)) = &*shorter else {
-        panic!("a spine under its constant: {shorter}");
+        panic!("a spine under its constant: {shorter:?}");
     };
     let Subterm::Intrinsic(Intrinsic::IntAdd(extended, _)) = &*longer else {
-        panic!("a spine under its constant: {longer}");
+        panic!("a spine under its constant: {longer:?}");
     };
     let Subterm::Intrinsic(Intrinsic::IntAdd(held, _)) = &**extended else {
-        panic!("a spine of three summands: {longer}");
+        panic!("a spine of three summands: {longer:?}");
     };
     assert_eq!(held.identity(), chain.identity(), "the spine it extends");
     assert_eq!(

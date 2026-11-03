@@ -276,7 +276,7 @@ fn an_order_asked_of_a_decided_store_is_answered_as_the_store_answers() {
                     assert_eq!(
                         asked,
                         Some(stored),
-                        "{label}: whether {raised} ≤ {upper} is entailed"
+                        "{label}: whether {raised:?} ≤ {upper:?} is entailed"
                     );
                     match stored {
                         true => entailed += 1,

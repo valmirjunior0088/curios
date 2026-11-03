@@ -78,6 +78,7 @@ use {
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
     curios_surface::Entrypoint,
+    curios_surface::Spellable,
 };
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
@@ -248,7 +249,7 @@ fn core(source: &str) -> String {
     let mut printed = None;
     let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
         if let Stage::Core(module) = stage {
-            printed = Some(module.to_string());
+            printed = Some(module.faithful().to_string());
         }
     });
 
@@ -262,7 +263,7 @@ fn core_elab(source: &str) -> String {
     let mut printed = None;
     let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
         if let Stage::CoreElab(module) = stage {
-            printed = Some(module.to_string());
+            printed = Some(module.faithful().to_string());
         }
     });
 

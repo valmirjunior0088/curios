@@ -1,6 +1,6 @@
 //! `pub use` and the facades it builds: transitive chains, globs, and the constructor namespaces that may not be re-exported.
 
-use crate::into_core::test_support::*;
+use {crate::into_core::test_support::*, curios_surface::Spellable};
 
 #[test]
 fn rejects_unresolved_qualifier_in_term() {
@@ -346,8 +346,8 @@ fn re_exports_inductive_constructor_by_name() {
 
     // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
-        format!("{term}").contains("Foo/U/A"),
-        "unexpected term: {term}"
+        term.faithful().to_string().contains("Foo/U/A"),
+        "unexpected term: {term:?}"
     );
 }
 
@@ -369,8 +369,8 @@ fn re_exports_inductive_constructors_by_glob() {
 
     // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
-        format!("{term}").contains("Foo/U/A"),
-        "unexpected term: {term}"
+        term.faithful().to_string().contains("Foo/U/A"),
+        "unexpected term: {term:?}"
     );
 }
 
@@ -467,7 +467,7 @@ fn private_inductive_with_public_representation_can_export_constructor_facade() 
 
     // Asserted on the printed term, not on `Debug`: a qualifier's `Debug` shows its segments, deliberately, so that `/Foo/bar` and a single segment spelled `Foo/bar` never look alike in a dump.
     assert!(
-        format!("{term}").contains("Foo/U/A"),
-        "unexpected term: {term}"
+        term.faithful().to_string().contains("Foo/U/A"),
+        "unexpected term: {term:?}"
     );
 }

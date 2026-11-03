@@ -1,58 +1,36 @@
 //! The translation of a Core term back to the surface tree: what a report's term is printed through.
 //!
-//! The inverse of lowering and elaboration, for a reader standing at one place. A term a report shows is translated here and printed by [`print_term`], the printer that formats source, so what a reader is shown is a form the grammar produces: a match as its patterns, a projection by its label, a witness as resolution would restore it. `curios-core`'s own printer prints what is read about the compiler, a dump and a kernel's refusal, and the term a translation declines.
+//! The inverse of lowering and elaboration, for a reader standing at one place. A term a report shows is translated here and printed by `print_term`, the printer that formats source, so what a reader is shown is a form the grammar produces: a match as its patterns, a projection by its label, a witness as resolution would restore it. `curios-core`'s own printer prints what is read about the compiler, a dump and a kernel's refusal, and the term a translation declines.
 //!
-//! **A translation is whole or it is none.** [`from_core`] hands back a surface term, or `None`: the term is past what a report prints ([`curios_core::Minting::elides`]), or holds a form no program spells where its reader stands — a declaration the reader reaches by no name, a witness resolution would not put back, a hidden member with no label read off a value, a handle the host minted. The surface tree gains no node for what is left out, and a report that is handed `None` shows the term as the compiler holds it and says so.
+//! **A translation is whole or it is none.** [`from_core`] hands back a surface term, or `None`: the term is past what a report prints ([`Minting::elides`]), or holds a form no program spells where its reader stands — a declaration the reader reaches by no name, a witness resolution would not put back, a hidden member with no label read off a value, a handle the host minted. The surface tree gains no node for what is left out, and a report that is handed `None` shows the term as the compiler holds it and says so.
 //!
 //! **Which witnesses a term leaves out is settled before it reaches here.** The elaborator writes a report's term as a program writes it where the reader stands (`curios-elab`'s `written`): a witness resolution puts back there becomes an open slot, and a method projected off one becomes its operator or its wrapper's call. This walk leaves an open slot out, and declines a witness still standing — a global one, a binder's reference, the reader's own binders among them — since the grammar spells neither. Whether resolution restores a witness is resolution's to say, under the binders, the arms and the definitions it answers by, so nothing here models it.
 //!
-//! **It reads what the Core printer reads**: the reader's [`curios_core::Spelling`], which names each global as resolution finds it from where the reader stands ([`curios_core::Spelling::reached`]) and each binder as the report's rename spells it, and the lexicons of the units in scope, for a nominal family's marks, a structure's fields and a constructor's payload. Binders are labelled through the render's [`curios_core::Minting`] in the order this walk opens them, which is the order its dry run opened them in.
+//! **It reads what the Core printer reads**: the reader's [`Spelling`], which names each global as resolution finds it from where the reader stands ([`Spelling::reached`]) and each binder as the report's rename spells it, and the lexicons of the units in scope, for a nominal family's marks, a structure's fields and a constructor's payload. Binders are labelled through the render's [`Minting`] in the order this walk opens them, which is the order its dry run opened them in.
 
 use {
+    super::{
+        ELIDED_LITERAL_CHARACTERS, IntrinsicForm, LiteralEntry, Minting, Spelling, intrinsic_form,
+        intrinsic_global,
+    },
     crate::{
         Apply, Argument, BytesPattern, BytesSegment, Field, Func, FuncParam, FuncType,
         FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
         ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral,
         NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructLit,
-        StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, print_term,
-        spell,
+        StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
     curios_num::{Floating, Integer, Natural},
-    curios_print::Printer,
     std::{cell::Cell, rc::Rc},
 };
-
-/// The reader's printer a pipeline hands a report ([`curios_core::Spelling::with_reader_printer`]): a term translated back to the surface tree and printed as source is.
-pub struct Translation;
-
-impl curios_core::ReaderPrinter for Translation {
-    fn print(
-        &self,
-        term: &curios_core::Term,
-        spelling: &Rc<curios_core::Spelling>,
-        mint: &curios_core::Minting,
-    ) -> Option<Printer> {
-        from_core(term, spelling, mint).map(print_term)
-    }
-
-    fn spell(
-        &self,
-        spellings: &curios_core::Spellings,
-        island: &Qualifier,
-        owner: Option<&curios_core::Global>,
-        global: &curios_core::Global,
-    ) -> Option<String> {
-        spell(spellings, island, owner, global)
-    }
-}
 
 /// `term` as a reader standing where `spelling` does writes it, its binders labelled through `mint`, or `None` where it cannot be written.
 pub fn from_core(
     term: &curios_core::Term,
-    spelling: &Rc<curios_core::Spelling>,
-    mint: &curios_core::Minting,
+    spelling: &Rc<Spelling>,
+    mint: &Minting,
 ) -> Option<Term> {
     // A level is no part of what a program writes, so a render asked to show the instances is the compiler's own: the report that asks has found two terms no source tells apart.
     if !spelling.erases_universes() {
@@ -71,8 +49,8 @@ pub fn from_core(
 /// The state the walk threads: the render-constant spelling, the render's mint, and the witness binders in scope.
 #[derive(Clone, Copy)]
 struct Frame<'a> {
-    spelling: &'a Rc<curios_core::Spelling>,
-    mint: &'a curios_core::Minting,
+    spelling: &'a Rc<Spelling>,
+    mint: &'a Minting,
     /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder.
     witnesses: Option<&'a WitnessNode<'a>>,
     /// Whether the term this frame is handed stands where no expected type reaches it: the head of a call or of a projection, a scrutinee. What a checked position would supply is then written, a lambda's parameter types and a match's motive. Read by the node the frame is handed to and by none below it ([`sub`], [`unchecked`]).
@@ -99,11 +77,11 @@ impl<'a> Frame<'a> {
     }
 }
 
-/// How a form of core's one table of intrinsics ([`curios_core::intrinsic_form`]) has its pieces written: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
+/// How a form of core's one table of intrinsics ([`intrinsic_form`]) has its pieces written: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
 pub(crate) trait Writer<T> {
     fn operand(&self, operand: T) -> Option<Term>;
 
-    /// The declaration of `/sys` at `path` ([`curios_core::intrinsic_global`]), as a name.
+    /// The declaration of `/sys` at `path` ([`intrinsic_global`]), as a name.
     fn sys(&self, path: &str) -> Option<Term>;
 }
 
@@ -113,7 +91,7 @@ impl Writer<curios_core::Term> for Frame<'_> {
     }
 
     fn sys(&self, path: &str) -> Option<Term> {
-        global(&curios_core::intrinsic_global(path), *self)
+        global(&intrinsic_global(path), *self)
     }
 }
 
@@ -235,7 +213,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         Core::Instance(curios_core::Instance { name, .. })
         | Core::Transient(curios_core::Transient::Name(name)) => global(&name, frame)?,
         Core::Intrinsic(intrinsic) => {
-            let form = curios_core::intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
+            let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
 
             recurse(|| written_intrinsic(form, &frame))?
         }
@@ -494,7 +472,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
 /// A match whose patterns are not yet compiled, as the `match` it was lowered from: each row as its pattern over the names its body binds. A `choose` bind arm reads back as the match of two arms it stands for.
 ///
-/// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order `curios-core`'s printer opens them in.
+/// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
     let curios_core::Matrix { head, motive, rows } = matrix;
 
@@ -842,9 +820,7 @@ fn writable_former(former: &curios_core::FormerEta, terminal: &curios_core::Term
 /// A type former a lambda eta-expands: the name alone where the binders took every argument, the application to what they left otherwise, each argument under the mark the declaration gives it.
 fn written_former(former: curios_core::FormerEta, frame: Frame) -> Option<Term> {
     match former {
-        curios_core::FormerEta::Intrinsic(path) => {
-            global(&curios_core::intrinsic_global(path), frame)
-        }
+        curios_core::FormerEta::Intrinsic(path) => global(&intrinsic_global(path), frame),
         curios_core::FormerEta::Nominal(name, prefix, arity) => {
             let marks = frame.spelling.nominal_marks(&name, arity);
             let head = global(&name, frame)?;
@@ -882,12 +858,12 @@ fn written_field(field: &curios_core::Field, frame: Frame) -> Option<Field> {
     }
 }
 
-/// An intrinsic as its one table writes it ([`curios_core::intrinsic_form`]): a declaration of `/sys` named as `writer` names it, a literal as the grammar spells it.
+/// An intrinsic as its one table writes it ([`intrinsic_form`]): a declaration of `/sys` named as `writer` names it, a literal as the grammar spells it.
 pub(crate) fn written_intrinsic<T>(
-    form: curios_core::IntrinsicForm<T>,
+    form: IntrinsicForm<T>,
     writer: &impl Writer<T>,
 ) -> Option<Term> {
-    use curios_core::IntrinsicForm as Form;
+    use IntrinsicForm as Form;
 
     Some(match form {
         Form::Named(path) => writer.sys(path)?,
@@ -939,14 +915,10 @@ pub(crate) fn written_intrinsic<T>(
                 .into_iter()
                 .map(|entry| {
                     Some(match entry {
-                        curios_core::LiteralEntry::Spread(run) => {
-                            ListEntry::Spread(writer.operand(run)?)
-                        }
-                        curios_core::LiteralEntry::Item(item) => {
-                            ListEntry::Elem(writer.operand(item)?)
-                        }
+                        LiteralEntry::Spread(run) => ListEntry::Spread(writer.operand(run)?),
+                        LiteralEntry::Item(item) => ListEntry::Elem(writer.operand(item)?),
                         // A list holds no packed atom.
-                        curios_core::LiteralEntry::Byte(_) => {
+                        LiteralEntry::Byte(_) => {
                             return None;
                         }
                     })
@@ -961,14 +933,11 @@ pub(crate) fn written_intrinsic<T>(
 }
 
 /// One entry of a packed literal: a constant atom as the numeral it is written by, a term's atom, or a spread.
-fn written_segment<T>(
-    entry: curios_core::LiteralEntry<T>,
-    writer: &impl Writer<T>,
-) -> Option<BytesSegment> {
+fn written_segment<T>(entry: LiteralEntry<T>, writer: &impl Writer<T>) -> Option<BytesSegment> {
     Some(match entry {
-        curios_core::LiteralEntry::Byte(byte) => written_byte(byte),
-        curios_core::LiteralEntry::Item(item) => BytesSegment::Atom(writer.operand(item)?),
-        curios_core::LiteralEntry::Spread(run) => BytesSegment::Spread(writer.operand(run)?),
+        LiteralEntry::Byte(byte) => written_byte(byte),
+        LiteralEntry::Item(item) => BytesSegment::Atom(writer.operand(item)?),
+        LiteralEntry::Spread(run) => BytesSegment::Spread(writer.operand(run)?),
     })
 }
 
@@ -1155,7 +1124,7 @@ fn string_literal(
         return None;
     };
     let text = String::from_utf8(packed.to_bytes()).ok()?;
-    if text.chars().count() > curios_core::ELIDED_LITERAL_CHARACTERS {
+    if text.chars().count() > ELIDED_LITERAL_CHARACTERS {
         return Some(None);
     }
 

@@ -13,6 +13,7 @@ use {
     },
     curios_module::{RootSource, SYNTAX},
     curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
+    curios_surface::Spelling,
     std::fmt,
 };
 
@@ -173,7 +174,13 @@ impl fmt::Display for Refusal {
                 formatter.write_str(reported)
             }
             Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
-            Refusal::Kernel(verdict) => write!(formatter, "{}", verdict.error),
+            Refusal::Kernel(verdict) => {
+                write!(
+                    formatter,
+                    "{}",
+                    verdict.error.rendered(&Spelling::default())
+                )
+            }
         }
     }
 }

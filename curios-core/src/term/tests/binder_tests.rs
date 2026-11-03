@@ -149,21 +149,8 @@ fn a_telescope_maps_its_terminal_under_its_binders() {
 }
 
 #[test]
-fn implicit_marks_print_and_default_to_explicit() {
+fn an_unmarked_builder_marks_every_slot_explicit() {
     let binder_0 = Free::local(0, Some("T"));
-    let x = Free::local(1, Some("x"));
-    let foo = Free::local(2, Some("foo"));
-    let binder_3 = Free::local(3, Some("Nat"));
-    let ft = Term::func_type_marked(
-        [
-            (Plicity::Implicit, binder_0, Term::type_ground()),
-            (Plicity::Explicit, x, Term::free_var(&binder_0)),
-        ],
-        Term::free_var(&binder_0),
-    );
-    assert_eq!(format!("{ft}"), "(@T: Type, x: T) -> T");
-
-    // The unmarked builders default every slot to `Explicit`.
     let plain = Term::func_type([(binder_0, Term::type_ground())], Term::type_ground());
     match &*plain {
         Subterm::FuncType(function) => {
@@ -171,15 +158,6 @@ fn implicit_marks_print_and_default_to_explicit() {
         }
         _ => unreachable!(),
     }
-
-    let call = Term::apply_marked(
-        Term::free_var(&foo),
-        [
-            (Plicity::Implicit, Term::free_var(&binder_3)),
-            (Plicity::Explicit, Term::free_var(&x)),
-        ],
-    );
-    assert_eq!(format!("{call}"), "foo(@Nat, x)");
 }
 
 #[test]
@@ -197,27 +175,6 @@ fn inductive_match_case_binders_are_captured() {
     let free = term.mentions();
     assert!(free.contains(r));
     assert!(!free.contains(value));
-}
-
-#[test]
-fn inductive_match_default_prints_a_catch_all_arm() {
-    let r = Free::local(0, Some("r"));
-    let a = Free::local(1, Some("a"));
-    let b = Free::local(2, Some("b"));
-    // The catch-all renders as a trailing `| _ =>` arm, after the enumerated constructors — mirroring `Cases::Switch`'s default.
-    let term = Term::induct_match_default(
-        Term::free_var(&r),
-        None,
-        Term::type_ground(),
-        [("none", Vec::<Free>::new(), Term::free_var(&a))],
-        Term::free_var(&b),
-    );
-
-    let printed = term.to_string();
-    assert!(
-        printed.contains("| 'none =>") && printed.contains("| _ =>"),
-        "expected an enumerated arm and a catch-all, got:\n{printed}"
-    );
 }
 
 #[test]

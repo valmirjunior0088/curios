@@ -609,33 +609,33 @@ fn a_lexicon_revised_at_what_changed_answers_as_the_whole_one() {
 
     let revised = now.lexicon_over(&then.lexicon(), &Places::of(&now), &changed);
     let read = |lexicon: &Lexicon| {
-        let spelling = Spelling::default().with_lexicons(lexicon, &[]);
         then.symbols()
             .into_iter()
             .chain(now.symbols())
             .map(|name| {
-                (
-                    spelling.symbol(&name),
-                    spelling.structure_fields(&name).map(<[_]>::to_vec),
-                )
+                let carried = suffixes_of(&name)
+                    .iter()
+                    .map(|suffix| lexicon.symbols.carrying(suffix))
+                    .collect::<Vec<_>>();
+                let fields = lexicon
+                    .members
+                    .fields
+                    .get(&name)
+                    .map(|fields| fields.to_vec());
+
+                (lexicon.symbols.contains(&name), carried, fields)
             })
             .collect::<Vec<_>>()
     };
     assert_eq!(read(&revised), read(&now.lexicon()));
-    let shared = Global::Authored(Qualifier::from(["a", "shared"]));
-    let spelled = |lexicon: &Lexicon| {
-        Spelling::default()
-            .with_lexicons(lexicon, &[])
-            .symbol(&shared)
-    };
     assert_eq!(
-        spelled(&then.lexicon()),
-        "a/shared",
+        then.lexicon().symbols.carrying("shared"),
+        2,
         "two names end in `shared`"
     );
     assert_eq!(
-        spelled(&revised),
-        "shared",
+        revised.symbols.carrying("shared"),
+        1,
         "the one ending in `shared` with it is gone"
     );
 }

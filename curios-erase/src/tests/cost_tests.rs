@@ -220,7 +220,7 @@ fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
         crate::reduced(reader, &sum).expect_err("a spent budget refuses the reading")
     });
     // Spelled as a report spells a unit's terms, the unit's own names by its lexicon.
-    let spelling = curios_core::Spelling::default()
+    let spelling = curios_surface::Spelling::default()
         .with_lexicons(&unit.as_definitions().lexicon(), &[])
         .with_erased_universes();
 

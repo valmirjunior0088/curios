@@ -294,7 +294,7 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
     let pinned = value_of(&k).expect("the binder is pinned");
     assert!(
         !pinned.mentions_free(&n),
-        "the pinned value still names what the substitution replaces: {pinned}"
+        "the pinned value still names what the substitution replaces: {pinned:?}"
     );
 }
 

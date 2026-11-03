@@ -55,7 +55,7 @@ fn classified(
     kept: &[Option<Rc<Classification>>],
 ) -> (Option<Term>, Classification, Seed) {
     let Subterm::Intrinsic(operation) = &**term else {
-        panic!("a stuck operation: {term}");
+        panic!("a stuck operation: {term:?}");
     };
     let mut within =
         atoms_within(&mut Inert, operation, kept).expect("the inert reducer spends nothing");
@@ -136,45 +136,45 @@ fn entries<K: Hash + Eq + Clone, V: Clone>(map: &Persistent<K, V>) -> Vec<(K, V)
 fn extends_alike(term: &Term) -> Seed {
     let (folded, whole, _) = classified(term, &[]);
     let (extended_fold, extended, seed) = classified(term, &beside(term));
-    assert_eq!(extended_fold, folded, "the fold taken again, over {term}");
+    assert_eq!(extended_fold, folded, "the fold taken again, over {term:?}");
     assert_eq!(
         extended.spelled, whole.spelled,
-        "the operation's spelling, over {term}"
+        "the operation's spelling, over {term:?}"
     );
     assert_eq!(
         opened(&extended.classes),
         opened(&whole.classes),
-        "the classes opened, over {term}"
+        "the classes opened, over {term:?}"
     );
     assert_eq!(
         entries(&extended.classes.representatives),
         entries(&whole.classes.representatives),
-        "the atoms joined, over {term}"
+        "the atoms joined, over {term:?}"
     );
     assert_eq!(
         buckets(&extended.classes),
         buckets(&whole.classes),
-        "the nodes held, over {term}"
+        "the nodes held, over {term:?}"
     );
     assert_eq!(
         entries(&extended.classes.held),
         entries(&whole.classes.held),
-        "every node's class, over {term}"
+        "every node's class, over {term:?}"
     );
     assert_eq!(
         entries(&extended.classes.unread),
         entries(&whole.classes.unread),
-        "the quotients, over {term}"
+        "the quotients, over {term:?}"
     );
     assert_eq!(
         entries(&extended.classes.spelled),
         entries(&whole.classes.spelled),
-        "the atoms spelled, over {term}"
+        "the atoms spelled, over {term:?}"
     );
     assert_eq!(
         entries(&extended.handed),
         entries(&whole.handed),
-        "the atoms handed out, over {term}"
+        "the atoms handed out, over {term:?}"
     );
     seed
 }

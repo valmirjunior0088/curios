@@ -1,10 +1,10 @@
 //! The Curios core language: the term representation both checkers build on.
 //!
-//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the intrinsic roster ([`Intrinsic`]) with its free-monoid spine algebra and its folds ([`reduce_intrinsic`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Definitions`], [`Program`], [`Item`], [`Definition`]), compiler names, and the printer.
+//! This crate holds **what a term is** and nothing that judges one. It defines [`Term`]/[`Subterm`] and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]), the intrinsic roster ([`Intrinsic`]) with its free-monoid spine algebra and its folds ([`reduce_intrinsic`]), algebraic universe [`Level`]s and the [`UniverseContext`] declarations generalize into, the nominal registry entries ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]) and the [`Polarity`] lattice they carry, the finished-program shape both checkers walk ([`Definitions`], [`Program`], [`Item`], [`Definition`]), compiler names, and what a unit's names are spelled by ([`Lexicon`]).
 //!
 //! The judgments live on either side of it, as `README.md` states. `curios-analysis` holds the rules both checkers run and `curios-cert` the kernel that only one of them does — together, every rule that can admit a program — and `curios-elab` holds everything that makes the *surface language* work: elaboration, unification, zonking, witness resolution, erasure, and the universe *solver*. Both depend on this crate and never the reverse. A [`UniverseContext`] is data the elaborator's solver infers over and each checker decides the satisfiability of for itself, and [`Reducer`] is the seam between a fold's arithmetic and a checker's reduction strategy; both lines are `README.md`'s decisions.
 //!
-//! Two modules are not trusted, `print` and `builders` — the constructors the surface lowering and the elaborator both build terms with, such as [`str_literal`] and [`Term::num_lit`] — and why they live here is `README.md`'s decision. Neither can admit a bad program: no judgment calls a builder, and printing decides nothing.
+//! One module is not trusted, `builders` — the constructors the surface lowering and the elaborator both build terms with, such as [`str_literal`] and [`Term::num_lit`] — and why it lives here is `README.md`'s decision. It cannot admit a bad program: no judgment calls a builder. A term is written by `curios-surface`, and a crate below it writes one through the [`Notation`] its reporter hands it.
 //!
 //! The crate is a flat module space: every module re-exports at the root, so consumers use `curios_core::Term`, not paths into the modules.
 
@@ -110,8 +110,11 @@ pub use polarity::*;
 mod variance;
 pub use variance::*;
 
-mod print;
-pub use print::*;
+mod lexicon;
+pub use lexicon::*;
+
+mod notation;
+pub use notation::*;
 
 mod builders;
 pub use builders::*;

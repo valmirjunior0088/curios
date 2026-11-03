@@ -3,7 +3,7 @@ name = "curios-surface"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios surface syntax: the tree a file is read into, its parser, the printer that writes it back as written, the formatter, and the translation of a Core term back to the tree"
+description = "The Curios written form: the tree a file is read into, its parser, the printer that writes it back as written, the formatter, the translation of a Core term back to the tree, and Core's printer with the naming policy terms are spelled by"
 
 [lints]
 workspace = true

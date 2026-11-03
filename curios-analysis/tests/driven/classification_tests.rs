@@ -508,7 +508,7 @@ fn a_spine_of_stuck_folds_reduces_alike_with_its_classifications_kept_and_withou
         assert_eq!(
             reduced(Kernel::new(10_000_000, SYNTAX), &term),
             reduced(Kernel::uncached(10_000_000, SYNTAX), &term),
-            "{term}"
+            "{term:?}"
         );
     }
 }

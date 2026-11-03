@@ -15,6 +15,9 @@ use {
     std::{collections::HashMap, rc::Rc},
 };
 
+#[cfg(feature = "profile")]
+use curios_surface::Spellable;
+
 /// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
 ///
 /// Comparing the two sides through `project_erased_universes` and accepting on projection equality would rest on the premise that a universe instance cannot affect computation, and that premise is false (see `documentation/design/soundness/case-equations-and-their-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances, and the projection would accept such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
@@ -522,7 +525,7 @@ pub fn probe_level_fallback(site: &'static str, type_: &Term) {
     curios_profile::note!(
         target: "curios_elab::sort",
         site,
-        type_ = %type_,
+        type_ = %type_.faithful(),
         "level defaulted to 0",
     );
 }

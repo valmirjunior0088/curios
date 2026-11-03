@@ -283,13 +283,13 @@ fn misplaced_by_the_kernel(
         .filter_map(|(index, (refusal, (_, row)))| match (index < held, refusal) {
             (true, None) | (false, Some(curios_cert::Error::Mismatch { .. })) => None,
             (true, Some(error)) => Some(format!(
-                "{name}: `{row}` is held but the kernel, asked alone, refuses it: {error}"
+                "{name}: `{row}` is held but the kernel, asked alone, refuses it: {error:?}"
             )),
             (false, None) => Some(format!(
                 "{name}: `{row}` is refused but the kernel, asked alone, holds it"
             )),
             (false, Some(error)) => Some(format!(
-                "{name}: `{row}` is refused, but the kernel, asked alone, does not refuse it as a mismatch: {error}"
+                "{name}: `{row}` is refused, but the kernel, asked alone, does not refuse it as a mismatch: {error:?}"
             )),
         })
         .collect()
@@ -341,7 +341,7 @@ fn asked_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<Answe
                 None => true,
                 Some(curios_cert::Error::Mismatch { .. }) => false,
                 Some(error) => panic!(
-                    "{name}: the kernel, asked alone, refuses `{row}` otherwise than as a mismatch: {error}"
+                    "{name}: the kernel, asked alone, refuses `{row}` otherwise than as a mismatch: {error:?}"
                 ),
             },
         })

@@ -5,11 +5,11 @@
 use {
     super::test_support::*,
     curios_common::Qualifier,
-    curios_core::{Global, Item, ReaderPosition, build_rename, display_names},
+    curios_core::{Global, Item},
     curios_elab::{Established, Reading, test_support::*},
     curios_module::SYNTAX,
     curios_prelude::with_prelude,
-    curios_surface::Translation,
+    curios_surface::{ReaderPosition, Spellable, build_rename, display_names},
     curios_unit::Predecessors,
     std::rc::Rc,
 };
@@ -35,7 +35,6 @@ fn shown(source: &str, name: &str) -> (String, String) {
             syntax: &SYNTAX,
             spellings: Some(&spellings),
             anchors: &[],
-            printer: Some(Rc::new(Translation)),
         };
         let owner = Global::Authored(Qualifier::from(["lib", name]));
         let definition = unit

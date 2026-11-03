@@ -490,7 +490,7 @@ impl InductArm {
     }
 
     /// What the arm's scope remembers of its payload binders, in order.
-    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
+    pub fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
         self.body.label_iter()
     }
 

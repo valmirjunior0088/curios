@@ -204,7 +204,7 @@ impl InductDecl {
             .unwrap_or(Variance::Invariant)
     }
 
-    /// This declaration with every term hash-consed against `sharing`. See [`Definitions::shared`](crate::Module::shared).
+    /// This declaration with every term hash-consed against `sharing`. See [`Definitions::shared`](crate::Definitions::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
             universe_context: self.universe_context.unplaced(),

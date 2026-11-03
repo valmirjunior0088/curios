@@ -202,7 +202,7 @@ fn materializes_a_shared_graph_once_per_node() {
 
     assert!(zonked.metavars().is_empty());
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*zonked else {
-        panic!("zonking kept the root: {zonked}");
+        panic!("zonking kept the root: {zonked:?}");
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
@@ -238,7 +238,7 @@ fn a_shared_graph_is_zonked_once_per_node() {
 
     assert!(zonked.metavars().is_empty());
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*zonked else {
-        panic!("zonking kept the root: {zonked}");
+        panic!("zonking kept the root: {zonked:?}");
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
@@ -264,7 +264,7 @@ fn a_hole_zonked_once_keeps_each_occurrence_s_extent() {
     let zonked = zonk(&context, &term).expect("the hole is solved");
 
     let Subterm::Tuple(tuple) = &*zonked else {
-        panic!("zonking changed the shape: {zonked}");
+        panic!("zonking changed the shape: {zonked:?}");
     };
     assert_eq!(tuple.fields[0].extent(), Some(extent(0)));
     assert_eq!(tuple.fields[1].extent(), Some(extent(2)));
@@ -296,7 +296,6 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
                 syntax: &SYNTAX,
                 spellings: None,
                 anchors: &[],
-                printer: None,
             })
             .contains("ran out"),
     );

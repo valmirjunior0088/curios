@@ -9,12 +9,15 @@ use {
     curios_analysis::{DeclaredPart, Erased},
     curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     curios_core::{
-        Anchors, Atom, CalleeId, Definition, DefinitionKind, Definitions, DisplayNames, Exhaustion,
-        Extent, Free, Global, Islands, Item, Level, Lexicon, Mention, Places, Polarity,
-        ReaderNames, ReaderPosition, ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term,
-        UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, build_rename,
+        Anchors, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion, Extent, Free,
+        Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings, Term,
+        UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
     },
     curios_num::{Integer, Natural},
+    curios_surface::{
+        DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
+        build_rename,
+    },
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
@@ -2359,7 +2362,7 @@ impl From<UniverseError> for Error {
             UniverseError::Inconsistency { lower, upper, path } => {
                 Self::UniverseInconsistency { lower, upper, path }
             }
-            other => Self::UniverseInvariant(other.to_string()),
+            other => Self::UniverseInvariant(other.faithful().to_string()),
         }
     }
 }
@@ -2409,8 +2412,6 @@ pub struct Reading<'a> {
     pub spellings: Option<&'a Rc<Spellings>>,
     /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub anchors: &'a [&'a Anchors],
-    /// What prints a term for the report's reader: the surface crate's translation, handed in by whoever holds that crate, which this one sits below. `None` where none is at hand, and a term then prints as the compiler holds it.
-    pub printer: Option<Rc<dyn ReaderPrinter>>,
 }
 
 impl Reading<'_> {
@@ -2422,10 +2423,7 @@ impl Reading<'_> {
             self.scope,
             self.syntax,
         );
-        let spelling = match &self.printer {
-            Some(printer) => spelling.with_reader_printer(Rc::clone(printer)),
-            None => spelling,
-        };
+        let spelling = spelling.with_translation();
         let Some(spellings) = self.spellings else {
             return spelling;
         };

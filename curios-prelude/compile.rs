@@ -17,13 +17,12 @@ use {
     },
     curios_erase::{ErasedUnit, Erasures, erase_unit},
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude},
-    curios_surface::Translation,
+    curios_surface::Spelling,
     curios_unit::{Indexed, Record, Unit, framed, packed},
     std::{
         collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
-        rc::Rc,
         sync::Arc,
     },
 };
@@ -114,7 +113,6 @@ fn reported(
         syntax: &SYNTAX,
         spellings: None,
         anchors: &[anchors],
-        printer: Some(Rc::new(Translation)),
     })
 }
 
@@ -242,7 +240,7 @@ fn certified(
             "/{root} failed the kernel: {} refusals over {} items, first: {name} — {}",
             refusals.len(),
             core.items.len(),
-            verdict.error,
+            verdict.error.rendered(&Spelling::default()),
         );
     }
     // Plain stdout rather than `cargo:warning=`, as for the hash-consing metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has certified. What this adds is the count, which changes only when the prelude does.

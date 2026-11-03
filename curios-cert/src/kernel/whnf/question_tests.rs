@@ -537,7 +537,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let successor = on_nat(product(1));
     for decided in [&contradiction, &successor] {
         let arm = whnf(&mut kernel, decided.clone()).expect("reduces");
-        assert!(arm.as_nat().is_some(), "{decided} stands as {arm}");
+        assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
         assert_eq!(
             Env::force(&mut kernel, decided),
             Ok(arm),
@@ -549,7 +549,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
 
     for open in [on_bool(and(less(&a, &b), less(&c, &b))), on_nat(product(0))] {
         let stuck = whnf(&mut kernel, open.clone()).expect("reduces");
-        assert!(stuck.as_nat().is_none(), "{open} takes an arm: {stuck}");
+        assert!(stuck.as_nat().is_none(), "{open:?} takes an arm: {stuck:?}");
     }
 }
 
@@ -581,12 +581,12 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
     let plain = Env::force(&mut kernel, &classed).expect("reduces");
     assert!(
         plain.as_nat().is_none(),
-        "plain reduction classed {classed}"
+        "plain reduction classed {classed:?}"
     );
 
     let other = whnf(&mut kernel, on(asked.call(&asked.a, &asked.c))).expect("reduces");
     assert!(
         other.as_nat().is_none(),
-        "a call on another argument classed: {other}"
+        "a call on another argument classed: {other:?}"
     );
 }

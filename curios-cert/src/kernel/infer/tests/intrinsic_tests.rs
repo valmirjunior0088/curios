@@ -405,7 +405,7 @@ fn a_description_a_cell_and_a_channel_are_taken_apart_by_nothing() {
             let answer = infer(&mut kernel, &term);
             assert!(
                 answer.as_ref().err().is_some_and(refused),
-                "{form} over a `{}` answered {answer:?}",
+                "{form} over a `{:?}` answered {answer:?}",
                 Term::intrinsic(carrier(nat_type())),
             );
         }

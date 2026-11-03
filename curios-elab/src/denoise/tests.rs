@@ -26,7 +26,7 @@ fn a_shared_term_is_refolded_once_per_node() {
     );
 
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*refolded else {
-        panic!("the walk changed the root: {refolded}");
+        panic!("the walk changed the root: {refolded:?}");
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }

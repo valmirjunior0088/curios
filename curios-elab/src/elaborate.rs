@@ -43,8 +43,8 @@ use {
     curios_core::{
         Ascribed, Extent, Func, FuncType, Global, Subterm, Term, Transient, Universes,
         foreign_operands, foreign_produced, former_spelling, instantiate_universes,
-        intrinsic_former,
     },
+    curios_surface::intrinsic_former,
     std::sync::Arc,
 };
 

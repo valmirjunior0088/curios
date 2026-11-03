@@ -53,6 +53,9 @@ use {
     },
 };
 
+#[cfg(feature = "profile")]
+use curios_surface::Spellable;
+
 /// The outcome of attempting to solve a metavariable against a candidate.
 enum Solved {
     /// Committed `m := t`.
@@ -1857,7 +1860,7 @@ impl Convert {
                     .map(|other| {
                         let result = context
                             .metavar_entry(*other)
-                            .map(|entry| format!("{}", entry.result()))
+                            .map(|entry| entry.result().faithful().to_string())
                             .unwrap_or_else(|| "<no birth record>".into());
                         format!("?{} : {result}", other.0)
                     })
@@ -2079,7 +2082,7 @@ impl Convert {
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    against = %result,
+                    against = %result.faithful(),
                     "postponed: re-validation could not judge the candidate yet",
                 );
                 Solved::Postponed
@@ -2088,7 +2091,7 @@ impl Convert {
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    against = %result,
+                    against = %result.faithful(),
                     "failed: re-validation",
                 );
                 self.rejected = Some(Box::new(Rejected {

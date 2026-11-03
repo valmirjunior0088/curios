@@ -154,7 +154,7 @@ fn doubled(base: Term, depth: usize) -> Term {
 
 fn root_operands_shared(term: &Term) -> bool {
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = term.as_ref() else {
-        panic!("the walk changed the root: {term}");
+        panic!("the walk changed the root: {term:?}");
     };
     Rc::ptr_eq(&left.inner, &right.inner)
 }

@@ -1,6 +1,9 @@
 //! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder stage`'s rungs are derived from.
 
-use {curios_surface::Entrypoint, std::fmt};
+use {
+    curios_surface::{Entrypoint, Spellable},
+    std::fmt,
+};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///
@@ -61,8 +64,8 @@ impl fmt::Display for Stage<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
-            Stage::Core(program) => write!(f, "{program}"),
-            Stage::CoreElab(program) => write!(f, "{program}"),
+            Stage::Core(program) => write!(f, "{}", program.faithful()),
+            Stage::CoreElab(program) => write!(f, "{}", program.faithful()),
             Stage::Anf(module) => write!(f, "{module}"),
             Stage::AnfOptm(module) => write!(f, "{module}"),
             Stage::Cps(module) => write!(f, "{module}"),

@@ -4,7 +4,7 @@ use {
     curios_core::{Item, Program, Variance},
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
-    curios_surface::Entrypoint,
+    curios_surface::{Entrypoint, Spellable},
     std::collections::BTreeMap,
 };
 
@@ -91,7 +91,7 @@ pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
             let described = item.describe();
             item.definitions()
                 .into_iter()
-                .map(move |definition| (described.clone(), definition.type_.to_string()))
+                .map(move |definition| (described.clone(), definition.type_.faithful().to_string()))
         })
         .collect()
 }

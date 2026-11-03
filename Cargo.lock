@@ -687,6 +687,7 @@ dependencies = [
  "curios-core",
  "curios-num",
  "curios-profile",
+ "curios-surface",
 ]
 
 [[package]]
@@ -708,7 +709,6 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-num",
- "curios-print",
  "curios-profile",
 ]
 
@@ -752,6 +752,7 @@ dependencies = [
  "curios-core",
  "curios-num",
  "curios-profile",
+ "curios-surface",
 ]
 
 [[package]]
@@ -780,6 +781,7 @@ dependencies = [
  "curios-elab",
  "curios-num",
  "curios-profile",
+ "curios-surface",
 ]
 
 [[package]]

@@ -75,7 +75,7 @@ fn two_alpha_variant_recursive_groups_convert() {
     );
 
     assert_ne!(
-        format!("{left}"),
+        format!("{left:?}"),
         String::new(),
         "the fixture should render, so a failure names real terms",
     );

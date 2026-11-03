@@ -277,7 +277,7 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
             continue;
         }
         let Subterm::Struct(literal) = &*definition.body else {
-            panic!("`c` elaborates to a literal: {}", definition.body);
+            panic!("`c` elaborates to a literal: {:?}", definition.body);
         };
         let mut literal = literal.clone();
         literal.fields[0] = Term::intrinsic(Intrinsic::Nat(Nat::new(0xD800usize)));

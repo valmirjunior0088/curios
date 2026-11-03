@@ -166,7 +166,7 @@ fn a_field_holding_a_carrier_of_the_structs_own_types_is_refused() {
                 check_struct_decl(&mut kernel, &declaration),
                 Err(Error::Oversized { .. }),
             ),
-            "a small structure held `{}`",
+            "a small structure held `{:?}`",
             codes(),
         );
 

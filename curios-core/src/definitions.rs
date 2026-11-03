@@ -10,8 +10,8 @@ use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
         Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, Scope,
-        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
-        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
+        Sharing, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
+        UniverseError, Variance, WitnessId, WitnessKey,
     },
     curios_common::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
@@ -1028,16 +1028,6 @@ impl Definition {
         names.extend(construction_heads(&self.body));
         names
     }
-
-    fn print(&self, formatter: &mut fmt::Formatter<'_>, spelling: &Rc<Spelling>) -> fmt::Result {
-        write!(
-            formatter,
-            "{} : {} = {}",
-            self.name.faithful(),
-            self.type_.spelled(spelling),
-            self.body.spelled(spelling)
-        )
-    }
 }
 
 /// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`). A definition is held by a box: it carries what its declaration publishes beside its terms, and a group carries its members' behind the group it shares, so held inline it would size every item of a module by the widest.
@@ -1510,65 +1500,6 @@ impl Definitions {
             symbols.extend(self.items.names(place).into_iter().copied());
         }
         symbols
-    }
-}
-
-impl Definitions {
-    /// The spelling this module prints its terms in.
-    ///
-    /// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Definitions]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
-    fn spelling(&self) -> Rc<Spelling> {
-        Rc::new(Spelling::default().with_short_names(Rc::new(build_shorten(&self.symbols()))))
-    }
-
-    /// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
-    fn print_items(
-        &self,
-        formatter: &mut fmt::Formatter<'_>,
-        spelling: &Rc<Spelling>,
-    ) -> fmt::Result {
-        for item in &self.items {
-            match item {
-                Item::Let(def) => {
-                    write!(formatter, "let ")?;
-                    def.print(formatter, spelling)?;
-                    writeln!(formatter, ";")?;
-                }
-                Item::Rec(rec) => {
-                    write!(formatter, "rec ")?;
-                    for (index, def) in rec.definitions().iter().enumerate() {
-                        if index > 0 {
-                            write!(formatter, "and ")?;
-                        }
-                        def.print(formatter, spelling)?;
-                        write!(formatter, " ")?;
-                    }
-                    writeln!(formatter, ";")?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl fmt::Display for Definitions {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.print_items(formatter, &self.spelling())
-    }
-}
-
-impl fmt::Display for Program {
-    /// The module's items, then the entry in the module's spelling, with the type it states beneath it.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let spelling = self.definitions.spelling();
-        self.definitions.print_items(formatter, &spelling)?;
-        write!(formatter, "{}", self.entrypoint.body.spelled(&spelling))?;
-        if let Some(type_) = &self.entrypoint.type_ {
-            write!(formatter, "\n: {}", type_.spelled(&spelling))?;
-        }
-
-        Ok(())
     }
 }
 

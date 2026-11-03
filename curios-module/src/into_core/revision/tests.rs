@@ -162,7 +162,7 @@ fn same_unit(over: &PreparedText, whole: &PreparedText) {
     );
     let read = |unit: &PreparedText| {
         let lexicon = unit.lexicon();
-        let spelling = curios_core::Spelling::default().with_lexicons(&lexicon, &[]);
+        let spelling = curios_surface::Spelling::default().with_lexicons(&lexicon, &[]);
         whole
             .core()
             .symbols()

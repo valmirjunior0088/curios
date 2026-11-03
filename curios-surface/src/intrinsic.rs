@@ -1,5 +1,5 @@
 use {
-    super::{Subterm, Term},
+    super::{IntrinsicOperand, Subterm, Term},
     curios_num::Floating,
 };
 
@@ -33,7 +33,7 @@ pub enum Literal {
 pub type Intrinsic = curios_core::Intrinsic<Term>;
 
 // What core's one table of intrinsics looks into, so `/sys`'s own trees are written by it as a report's terms are.
-impl curios_core::IntrinsicOperand for Term {
+impl IntrinsicOperand for Term {
     fn as_intrinsic(&self) -> Option<&Intrinsic> {
         match self.as_subterm() {
             Subterm::Intrinsic(node) => Some(node),

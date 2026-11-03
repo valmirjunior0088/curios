@@ -6,7 +6,7 @@ use {
     crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
     curios_module::{Overlay, RootSource, read_module},
     curios_pipeline::{Cache, Fold, Stage},
-    curios_surface::Module,
+    curios_surface::{Module, Spellable},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::path::Path,
@@ -133,12 +133,14 @@ pub fn unit_stage(
                 }]
             })
         }
-        "core" => last_unit(budget, &units, None, |unit| unit.text().core().to_string()),
+        "core" => last_unit(budget, &units, None, |unit| {
+            unit.text().core().faithful().to_string()
+        }),
         _ => last_unit(
             budget,
             &units,
             reached.as_ref().map(|cache| cache as &dyn Cache),
-            |unit| unit.core().to_string(),
+            |unit| unit.core().faithful().to_string(),
         ),
     };
 

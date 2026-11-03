@@ -24,6 +24,7 @@ use {
         Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
+    curios_surface::written_pattern,
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
@@ -391,7 +392,7 @@ impl<'m> Compiler<'m> {
             .iter()
             .map(|(hint, _)| hint.clone().unwrap_or_else(|| "_".to_string()));
 
-        self.matrix.rows[row].pattern.written(&mut names)
+        written_pattern(&self.matrix.rows[row].pattern, &mut names)
     }
 
     /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value.

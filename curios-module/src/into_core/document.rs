@@ -295,7 +295,7 @@ impl Reader<'_> {
 
     /// What a name written `spelling` shows on a page — decided before the signature is laid out, so it breaks where its shown text does.
     ///
-    /// **Everything an author wrote is shown as written, and a path the compiler wrote is spelled for a consumer.** `/sys` is generated, and its declarations spell what they name by absolute `/sys` paths, which resolve against the compilation root and which no consumer may write. Such a spelling — absolute, into a root no consumer can name — shows the path below that root, as core's table writes it (`curios_core::intrinsic_form`): `Option`, `Bool/Holds`, `Bytes/len`. `/std` re-exports what `/sys` declares under those same paths, so it is what a consumer writes once the first segment is in scope, and the mark links the declaration wherever a page shows it.
+    /// **Everything an author wrote is shown as written, and a path the compiler wrote is spelled for a consumer.** `/sys` is generated, and its declarations spell what they name by absolute `/sys` paths, which resolve against the compilation root and which no consumer may write. Such a spelling — absolute, into a root no consumer can name — shows the path below that root, as the printer's table writes it (`curios_surface::intrinsic_form`): `Option`, `Bool/Holds`, `Bytes/len`. `/std` re-exports what `/sys` declares under those same paths, so it is what a consumer writes once the first segment is in scope, and the mark links the declaration wherever a page shows it.
     fn shown(&self, spelling: &str) -> String {
         let Some(path) = spelling.strip_prefix('/') else {
             return spelling.to_string();

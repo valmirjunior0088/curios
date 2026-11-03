@@ -58,7 +58,6 @@ fn metavar_is_a_closed_global_head() {
     let m = Term::hole(7);
     assert_eq!(m.reach(), 0);
     assert!(m.closed());
-    assert_eq!(format!("{m}"), "?7");
 }
 
 #[test]
@@ -210,7 +209,7 @@ fn metavar_is_inert_under_traversal() {
 }
 
 #[test]
-fn variant_collects_metavars_and_prints_as_function_call() {
+fn a_variant_and_its_type_collect_their_metavariables() {
     let ctor = Term::variant(
         nominal("Result"),
         [Term::hole(1)],
@@ -218,7 +217,6 @@ fn variant_collects_metavars_and_prints_as_function_call() {
         [Term::hole(2)],
     );
     assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
-    assert_eq!(format!("{ctor}"), "/Result/success(?2)");
 
     let type_ = Term::induct_type(
         nominal("Result"),
@@ -226,7 +224,6 @@ fn variant_collects_metavars_and_prints_as_function_call() {
         Vec::<Term>::new(),
     );
     assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetavarId)));
-    assert_eq!(format!("{type_}"), "/Result(Nat, ?3)");
 }
 
 #[test]

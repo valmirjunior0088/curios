@@ -67,7 +67,7 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     );
     assert!(
         reduct.mentions_declaration(&g),
-        "the argument survives as the name it was passed as:\n{reduct}"
+        "the argument survives as the name it was passed as:\n{reduct:?}"
     );
 }
 
@@ -132,7 +132,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     );
     assert!(
         witness.mentions_declaration(&g),
-        "the witness survives as the instance it was passed as:\n{witness}"
+        "the witness survives as the instance it was passed as:\n{witness:?}"
     );
 
     let ordinary = machined
@@ -140,7 +140,7 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
         .expect("the machine reduces");
     assert!(
         !ordinary.mentions_declaration(&g),
-        "an instance passed as an ordinary argument is evaluated:\n{ordinary}"
+        "an instance passed as an ordinary argument is evaluated:\n{ordinary:?}"
     );
 }
 
@@ -455,7 +455,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         assert_eq!(
             machined.reduce_forced(term.clone()),
             strategy.reduce_forced(term.clone()),
-            "the machine and the strategy disagreed on {term}",
+            "the machine and the strategy disagreed on {term:?}",
         );
 
         // The plain demand is a separate contract, not a weaker reading of the one above: it is where a folded recursive spelling is the answer rather than a step on the way to one, so a machine that unfolds here computes a value the strategy never offers. Asking only the forced demand would leave that whole half of the machine uncompared.
@@ -465,7 +465,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         assert_eq!(
             machined.reduce(term.clone()),
             strategy.reduce(term.clone()),
-            "the machine and the strategy disagreed at a plain demand on {term}",
+            "the machine and the strategy disagreed at a plain demand on {term:?}",
         );
     }
 }
@@ -518,12 +518,12 @@ fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
         assert_eq!(
             kernel().reduce_forced(term.clone()),
             Ok(value),
-            "the machine answers the bytes the runs spell for {term}",
+            "the machine answers the bytes the runs spell for {term:?}",
         );
         assert_eq!(
             kernel().reduce_forced(term.clone()),
             strategy_kernel().reduce_forced(term.clone()),
-            "the machine and the strategy agree on {term}",
+            "the machine and the strategy agree on {term:?}",
         );
     }
 }
@@ -584,7 +584,7 @@ fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
     assert_eq!(
         machined.reduce_forced(term.clone()),
         strategy.reduce_forced(term.clone()),
-        "the machine and the strategy read one payload for {term}",
+        "the machine and the strategy read one payload for {term:?}",
     );
 }
 
@@ -633,7 +633,7 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
     assert_eq!(
         machined.reduce_forced(term.clone()),
         strategy.reduce_forced(term.clone()),
-        "the machine and the strategy disagreed on {term}",
+        "the machine and the strategy disagreed on {term:?}",
     );
 }
 
@@ -718,7 +718,7 @@ fn the_closed_machine_folds_a_call_restuck_under_a_reached_head_as_the_strategy_
         assert_eq!(
             machined.reduce_forced(term.clone()),
             strategy.reduce_forced(term.clone()),
-            "{label}: the machine and the strategy disagreed on {term}",
+            "{label}: the machine and the strategy disagreed on {term:?}",
         );
     }
 }
@@ -751,7 +751,7 @@ fn a_host_calls_operands_are_left_as_the_strategy_leaves_them() {
     assert_eq!(
         machined.reduce(call.clone()),
         strategy.reduce(call.clone()),
-        "the machine and the strategy disagreed at a plain demand on {call}",
+        "the machine and the strategy disagreed at a plain demand on {call:?}",
     );
 }
 
@@ -807,6 +807,6 @@ fn an_operand_a_fold_reads_plainly_is_not_served_its_forced_value() {
     assert_eq!(
         machined.reduce(term.clone()),
         strategy.reduce(term.clone()),
-        "the machine and the strategy disagreed at a plain demand on {term}",
+        "the machine and the strategy disagreed at a plain demand on {term:?}",
     );
 }

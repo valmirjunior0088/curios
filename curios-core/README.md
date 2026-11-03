@@ -78,8 +78,10 @@ The Curios core language: the term representation both checkers build on — wha
 
 **Rationale.** What a fold computes is arithmetic on the representation, which is Core's; how far an operand reduces first is a strategy, and each checker has its own.
 
-### Two untrusted modules live here for their consumers
+### An untrusted module lives here for its consumers, and the printer does not
 
-**Decision.** `print` and `builders` live in this crate, though neither is trusted: `print` because `Term`'s `Display` is used throughout the elaborator's error paths, `builders` because neither the surface lowering nor the elaborator, which both build terms with it, owns what a term is.
+**Decision.** `builders` lives in this crate, though it is not trusted, because neither the surface lowering nor the elaborator, which both build terms with it, owns what a term is. A term is written by `curios-surface`. This crate keeps what a unit's names are spelled by, `lexicon`, which is data kept with the unit, and `Notation`, the hook a crate below the surface writes a term or a level through, handed the surface's printer by whoever reports.
 
-**Rationale.** Neither can admit a bad program: no judgment calls a builder, and printing decides nothing.
+**Rationale.** A builder cannot admit a bad program: no judgment calls one. Core is written by one printer, beside the reader of what it writes, and a refusal the kernel reports is written by the printer its reporter hands it under the reporter's policy.
+
+**Rejected.** The printer here, behind `Term`'s `Display`: a second printer of Core beside the surface's, writing a syntax nothing reads back.

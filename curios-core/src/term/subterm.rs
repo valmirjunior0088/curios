@@ -7,14 +7,13 @@ use {
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
         Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Nat, Proj,
-        Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
-        UniverseMetaId, Universes, Var, Variant, Visit, print_term,
+        Quality, Rec, RecGroup, Struct, StructType, Term, Transient, Tuple, TupleType,
+        UniverseMetaId, Universes, Var, Variant, Visit,
     },
     curios_abi::ForeignFunction,
     curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
-    curios_print::run_printer,
-    std::{collections::BTreeSet, fmt, rc::Rc, sync::Arc},
+    std::{collections::BTreeSet, sync::Arc},
 };
 
 /// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional extent, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final variant groups the elaboration-transient constructors under [`Transient`]: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
@@ -571,16 +570,6 @@ impl Subterm {
             false
         });
         union.finish()
-    }
-}
-
-impl fmt::Display for Subterm {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(
-            print_term(self.clone().into(), &Rc::new(Spelling::default())),
-            formatter,
-            4,
-        )
     }
 }
 

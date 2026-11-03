@@ -630,7 +630,7 @@ fn nat_reads_a_side_against_a_literal_as_it_stands() {
     assert_eq!(apart, Comparison::Ne, "an odd product is never `2`");
     assert!(
         Nat::has_stuck_product(&left),
-        "the product stands as written: {left}"
+        "the product stands as written: {left:?}"
     );
     let (open, _, _) = compare_nat(&mut Inert, product.clone(), lit(3)).expect("reduces");
     assert_eq!(open, Comparison::Stuck, "floors that agree decide nothing");

@@ -13,7 +13,7 @@ fn applied() -> Term {
 /// The one argument of the application `term` is.
 fn argument(term: &Term) -> &Term {
     let Subterm::Apply(apply) = term.as_ref() else {
-        panic!("consing changed the term's shape: {term}");
+        panic!("consing changed the term's shape: {term:?}");
     };
     apply
         .params()
@@ -35,7 +35,7 @@ fn binary(first: &str, second: &str) -> Term {
 
 fn hints(term: &Term) -> Vec<String> {
     let Subterm::FuncType(function) = term.as_ref() else {
-        panic!("consing changed the term's shape: {term}");
+        panic!("consing changed the term's shape: {term:?}");
     };
     function
         .telescope
@@ -123,7 +123,7 @@ fn a_node_met_first_without_a_span_comes_back_without_one() {
     let consed = Sharing::new().share(&term);
 
     let Subterm::Tuple(tuple) = consed.as_ref() else {
-        panic!("consing changed the term's shape: {consed}");
+        panic!("consing changed the term's shape: {consed:?}");
     };
     assert_eq!(tuple.fields[0].extent(), None);
     assert_eq!(tuple.fields[1].extent(), None);

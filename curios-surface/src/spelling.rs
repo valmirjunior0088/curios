@@ -1,18 +1,27 @@
+//! How Core is written: the naming policy a term is spelled by for a reader ([`Spelling`]), and Core's own printer, which a dump, a kernel's refusal and a term the translation to the surface tree declines are printed by. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
+
 use {
-    super::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
-        FormerEta, Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label,
-        Let, Match, MatchResult, Matrix, Mention, Nat, NumLit, Pattern, Proj, Quality, Rec, Row,
-        Scope, Spellings, Struct, StructType, Subterm, Term, Three, Transient, Tuple, TupleType,
-        Two, Universes, Var, Variant, former_eta,
-    },
+    crate::{from_core, print_term, spell},
     curios_abi::stdio,
-    curios_common::{InfixOp, Persistent, Plicity, Qualifier, Symbol, recurse},
+    curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry, recurse},
+    curios_core::{
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor,
+        Definition, Definitions, Field, FormerEta, Free, Func, FuncType, Global, HeadKey,
+        InductArm, InductType, Infix, Intrinsic, Item, Label, Let, Level, LevelHead, Lexicon,
+        Marks, Match, MatchResult, Matrix, Members, Mention, Nat, Notation, NumLit, Pattern,
+        Program, Proj, Quality, Rec, Row, Scope, Spellings, Struct, StructType, Subterm, Symbols,
+        Term, Three, Transient, Tuple, TupleType, Two, UniverseError, Universes, Var, Variant,
+        WitnessKey, former_eta, inconsistent_sort, suffixes_of,
+    },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
-    curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
+    curios_print::{
+        Printer, flat, group, hard_line, indent, line, pure, run_printer, run_printer_within,
+        sep_flat, soft_line,
+    },
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
+        fmt,
         rc::Rc,
         sync::OnceLock,
     },
@@ -42,7 +51,7 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
     let levels = universes
         .levels
         .iter()
-        .map(ToString::to_string)
+        .map(level_text)
         .collect::<Vec<_>>()
         .join(",");
     match (qualities.is_empty(), levels.is_empty()) {
@@ -54,13 +63,13 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
 
 // === Source-style names (diagnostics) ========================================
 //
-// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so the faithful `Display` for a bare term leaves names untouched.
+// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so a faithful render ([`Spellable::faithful`]) leaves names untouched.
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, and thread-locals installed around a render would make a term's spelling depend on an enclosing frame nobody could see from the call, and "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — `Definitions` display, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Definitions::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — a module's dump, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Definitions::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -76,7 +85,7 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
-/// How a term is spelled for a reader. The default spells nothing differently, which is what a bare `Display` uses.
+/// How a term is spelled for a reader. The default spells nothing differently, which is what a faithful render uses.
 #[derive(Clone, Default)]
 pub struct Spelling {
     /// axis (a) — local binders to their source-style names.
@@ -99,44 +108,11 @@ pub struct Spelling {
     reader: ReaderPosition,
     /// Each unit's structure fields and constructor payloads, the reader's own unit first: the marks and labels a field, a literal's entry and a constructor's argument are written by.
     members: Vec<Rc<Members>>,
-    /// The reader's printer: a term shown to a reader is printed by it where it can be, and by this printer where it declines.
-    printer: Option<Rc<dyn ReaderPrinter>>,
+    /// Whether a term shown to a reader is translated back to the surface tree and printed as a program writes it ([`from_core()`]), and printed here only where the translation declines.
+    translated: bool,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
     declined: Rc<Cell<bool>>,
 }
-
-/// What prints a term for a reader, where one is set ([`Spelling::with_reader_printer`]): the surface crate's, which this crate sits below and so is handed. A report's term is translated back to the surface tree and printed by the printer that formats source, and this printer prints what is read about the compiler: a dump, a kernel's refusal, and the term a reader's printer declines.
-pub trait ReaderPrinter {
-    /// The document `term` prints as for the reader `spelling` stands at, its binders labelled through `mint` in the order they are opened, or `None` where the term cannot be written back: it holds a form no program spells, or it is past what a report prints ([`Minting::elides`]).
-    fn print(&self, term: &Term, spelling: &Rc<Spelling>, mint: &Minting) -> Option<Printer>;
-
-    /// The shortest name a reader in module `island`, writing inside `owner`, reaches `global` by, read off `spellings`, or `None` where they reach it by none. The reverse of resolution, which is the surface crate's as resolution is, so this crate asks for it as it asks for a term's print.
-    fn spell(
-        &self,
-        spellings: &Spellings,
-        island: &Qualifier,
-        owner: Option<&Global>,
-        global: &Global,
-    ) -> Option<String>;
-}
-
-/// Each nominal family's argument plicities, by the family's name: what a report marks an applied family by (axis (d)). Persistent, so a unit compiled over another holds the other's with the families it changed read again.
-pub type Marks = Persistent<Global, Rc<Vec<Plicity>>>;
-
-/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`]; persistent, as [`Marks`] are.
-#[derive(Debug, Default, Clone)]
-pub struct Members {
-    /// Each structure's fields, a concept's among them, by the structure's name.
-    pub(crate) fields: Persistent<Global, Rc<Fields>>,
-    /// Each family's constructors, by the family's name.
-    pub(crate) payloads: Persistent<Global, Rc<Payloads>>,
-}
-
-/// One structure's fields in slot order: the mark a field is declared under, and its label where it has one.
-pub type Fields = Vec<(Plicity, Option<String>)>;
-
-/// One family's constructors in declaration order, with the marks each one is called by: the family's parameters, every one hidden, then its payload.
-pub type Payloads = Vec<(Atom, Vec<Plicity>)>;
 
 /// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
 #[derive(Clone, Debug, Default)]
@@ -152,7 +128,7 @@ pub struct ReaderNames {
     memo: RefCell<Asked>,
 }
 
-/// The module the definition a global names sits in, asked for by the global ([`Definition::island`](crate::Definition::island)): what a reader standing in it reaches a name from.
+/// The module the definition a global names sits in, asked for by the global ([`Definition::island`]): what a reader standing in it reaches a name from.
 pub type Islands = Box<dyn Fn(&Global) -> Option<Qualifier>>;
 
 /// The spellings a render already asked for, keyed by the definition the reader stands in and the global spelled — `None` where the reader can reach it by none.
@@ -167,12 +143,7 @@ impl ReaderNames {
         }
     }
 
-    fn spell(
-        &self,
-        reader: &ReaderPosition,
-        global: &Global,
-        printer: &dyn ReaderPrinter,
-    ) -> Option<String> {
+    fn spell(&self, reader: &ReaderPosition, global: &Global) -> Option<String> {
         let key = (reader.owner, *global);
         if let Some(spelled) = self.memo.borrow().get(&key) {
             return spelled.clone();
@@ -182,20 +153,10 @@ impl ReaderNames {
             .as_ref()
             .and_then(|owner| (self.islands)(owner))
             .unwrap_or_else(Qualifier::empty);
-        let spelled = printer.spell(&self.spellings, &island, reader.owner.as_ref(), global);
+        let spelled = spell(&self.spellings, &island, reader.owner.as_ref(), global);
         self.memo.borrow_mut().insert(key, spelled.clone());
         spelled
     }
-}
-
-/// What a report spells one unit's names by: the globals it declares (axis (b)), its nominal families' parameter marks (axis (d)), and its structures' fields and constructors' payloads.
-///
-/// **Made once for a unit and kept with it** ([`Definitions::lexicon`](crate::Module::lexicon)). A report reads each unit of its scope where it stands ([`Spelling::with_lexicons`]) and builds no table over them, so what a report costs does not follow how much is in scope, and it reads no declaration it does not print.
-#[derive(Clone, Default)]
-pub struct Lexicon {
-    pub(crate) symbols: Rc<Symbols>,
-    pub(crate) plicities: Rc<Marks>,
-    pub(crate) members: Rc<Members>,
 }
 
 impl Spelling {
@@ -269,14 +230,14 @@ impl Spelling {
             .unwrap_or_else(|| path.to_string())
     }
 
-    /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set, or no printer to read them by: spelling a name for a reader is resolution in reverse, which is the surface crate's ([`ReaderPrinter::spell`]).
+    /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set: spelling a name for a reader is resolution in reverse ([`spell()`]).
     fn read(&self, global: &Global) -> Option<Option<String>> {
-        let (names, printer) = (self.names.as_ref()?, self.printer.as_ref()?);
+        let names = self.names.as_ref()?;
 
-        Some(names.spell(&self.reader, global, &**printer))
+        Some(names.spell(&self.reader, global))
     }
 
-    /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_common::SyntaxRegistry)'s, since this crate may not spell it.
+    /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`]'s, since this crate may not spell it.
     pub fn with_string_literals(mut self, name: Global) -> Self {
         self.string_literal = Some(name);
         self
@@ -376,9 +337,23 @@ impl Spelling {
         self.erase_universes
     }
 
-    /// Print a term shown to a reader through `printer`, and through this crate's own where it declines.
-    pub fn with_reader_printer(mut self, printer: Rc<dyn ReaderPrinter>) -> Self {
-        self.printer = Some(printer);
+    /// How a kernel refusal of `definitions` is written for a reader: globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a kernel refusal is often about the universes.
+    pub fn for_refusal(
+        definitions: &Definitions,
+        scope: &[&Lexicon],
+        syntax: &SyntaxRegistry,
+    ) -> Self {
+        // A module carries only its own declarations, so the spelling is told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
+        let own = definitions.lexicon();
+
+        Self::default()
+            .with_lexicons(&own, scope)
+            .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
+    }
+
+    /// Print a term shown to a reader as a program writes it, translated back to the surface tree, and as the compiler holds it where the translation declines.
+    pub fn with_translation(mut self) -> Self {
+        self.translated = true;
         self
     }
 }
@@ -426,7 +401,7 @@ fn nominal_arguments(
         .collect()
 }
 
-/// A value paired with the [`Spelling`] it renders under — the parameter channel `Display::fmt` does not have. Produced by [`Term::spelled`] and its siblings.
+/// A value paired with the [`Spelling`] it renders under — the parameter channel `Display::fmt` does not have. Produced by [`Spellable::spelled`] and [`Spellable::faithful`].
 pub struct Spelled<'a, T> {
     value: &'a T,
     spelling: Rc<Spelling>,
@@ -434,7 +409,7 @@ pub struct Spelled<'a, T> {
 }
 
 impl<'a, T> Spelled<'a, T> {
-    pub(crate) fn new(value: &'a T, spelling: &Rc<Spelling>) -> Self {
+    fn new(value: &'a T, spelling: &Rc<Spelling>) -> Self {
         Self {
             value,
             spelling: Rc::clone(spelling),
@@ -448,15 +423,15 @@ impl<'a, T> Spelled<'a, T> {
         self
     }
 
-    pub(crate) fn value(&self) -> &'a T {
+    fn value(&self) -> &'a T {
         self.value
     }
 
-    pub(crate) fn spelling(&self) -> &Rc<Spelling> {
+    fn spelling(&self) -> &Rc<Spelling> {
         &self.spelling
     }
 
-    pub(crate) fn width(&self) -> Option<usize> {
+    fn width(&self) -> Option<usize> {
         self.width
     }
 }
@@ -555,85 +530,6 @@ fn assign(
         spellings.insert(*key, candidate);
     }
     Rename { spellings }
-}
-
-/// The globals one unit declares, with how many of them carry each segment-suffix: what a global is shortened against (axis (b) without a reader). Made once for a unit and read where it stands ([`Lexicon`]); persistent, so a unit compiled over another holds the other's with the names it changed counted again ([`Symbols::revised`]).
-#[derive(Debug, Default, Clone)]
-pub struct Symbols {
-    names: Persistent<Global, ()>,
-    suffixes: Persistent<String, usize>,
-}
-
-impl Symbols {
-    /// `names`, each counted once: one global can be listed twice, an inductive being both an `induct_decls` registry key and an `items` type-constructor definition, and such a name would otherwise look ambiguous with itself and never shorten.
-    pub fn of(names: impl IntoIterator<Item = Global>) -> Self {
-        let mut symbols = Self::default();
-        for name in names {
-            symbols.add(name);
-        }
-
-        symbols
-    }
-
-    /// These symbols with each name of `gone` taken out and each of `added` put in, every suffix counted as [`Symbols::of`] counts it.
-    pub fn revised(
-        &self,
-        gone: impl IntoIterator<Item = Global>,
-        added: impl IntoIterator<Item = Global>,
-    ) -> Self {
-        let mut symbols = self.clone();
-        for name in gone {
-            if symbols.names.remove(&name).is_some() {
-                for suffix in suffixes_of(&name) {
-                    let count = symbols.suffixes.get(&suffix).copied().unwrap_or(0);
-                    match count {
-                        0 | 1 => {
-                            symbols.suffixes.remove(&suffix);
-                        }
-                        _ => symbols.suffixes.insert(suffix, count - 1),
-                    }
-                }
-            }
-        }
-        for name in added {
-            symbols.add(name);
-        }
-
-        symbols
-    }
-
-    /// `name` among these symbols, counted where it was not.
-    fn add(&mut self, name: Global) {
-        if self.names.contains_key(&name) {
-            return;
-        }
-        for suffix in suffixes_of(&name) {
-            let count = self.suffixes.get(&suffix).copied().unwrap_or(0);
-            self.suffixes.insert(suffix, count + 1);
-        }
-        self.names.insert(name, ());
-    }
-
-    /// Whether `name` is one of these.
-    fn contains(&self, name: &Global) -> bool {
-        self.names.contains_key(name)
-    }
-
-    /// How many of these carry `suffix`.
-    fn carrying(&self, suffix: &str) -> usize {
-        self.suffixes.get(&suffix.to_string()).copied().unwrap_or(0)
-    }
-}
-
-/// Every segment-suffix of a global's path, shortest first. Taken over the *segments* a name is made of, never over its rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the structure says so.
-fn suffixes_of(name: &Global) -> Vec<String> {
-    let Some(segments) = name.qualifier().map(Qualifier::segments) else {
-        return Vec::new();
-    };
-
-    (1..=segments.len())
-        .map(|k| segments[segments.len() - k..].join("/"))
-        .collect()
 }
 
 /// Each global's shortest `/`-suffix that no other global in scope shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only a name that actually shortens has one; an ambiguous (or single-segment) name keeps its full path.
@@ -2037,16 +1933,16 @@ fn sub_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
     recurse(|| print_intrinsic(intrinsic, frame))
 }
 
-pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
+fn print_core(term: Term, spelling: &Rc<Spelling>) -> Printer {
     print_minting(term, spelling, &Minting::default())
 }
 
-/// [`print_term`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
+/// [`print_core`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
-    // A reader's printer is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been with no printer set.
-    if let Some(printer) = &spelling.printer {
+    // The translation is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been untranslated.
+    if spelling.translated {
         let attempt = mint.attempt(&term);
-        if let Some(printed) = printer.print(&term, spelling, &attempt) {
+        if let Some(printed) = from_core(&term, spelling, &attempt).map(print_term) {
             mint.adopt(attempt);
             return printed;
         }
@@ -2065,7 +1961,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             {
                 pure(word)
             } else {
-                pure(format!("{word}.{{{level}}}"))
+                pure(format!("{word}.{{{}}}", level_text(&level)))
             }
         }
         Subterm::Instance(instance) => flat([
@@ -2365,7 +2261,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                                             .iter()
                                             .enumerate()
                                             .map(|(idx, l)| {
-                                                let mark = plicity_mark(arm.plicities.get(idx));
+                                                let mark = plicity_mark(arm.plicities().get(idx));
                                                 format!("{mark}{}", frame.spelling.label(l))
                                             })
                                             .collect::<Vec<_>>()
@@ -2568,7 +2464,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
 
                     flat([
                         pure("\n| "),
-                        pure(pattern_text(&pattern, &mut names.into_iter())),
+                        pure(written_pattern(&pattern, &mut names.into_iter())),
                         pure(" =>"),
                         body,
                         pure(";"),
@@ -2606,26 +2502,262 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
     }
 }
 
+/// A value of Core a report or a dump writes, under a spelling or faithfully.
+pub trait Spellable: Sized {
+    /// This value paired with the [`Spelling`] it renders under — the parameter `Display::fmt` cannot take. See the axes documented above.
+    fn spelled<'a>(&'a self, spelling: &Rc<Spelling>) -> Spelled<'a, Self> {
+        Spelled::new(self, spelling)
+    }
+
+    /// The faithful rendering: core's own names, every universe shown.
+    fn faithful(&self) -> Spelled<'_, Self> {
+        Spelled::new(self, &Rc::new(Spelling::default()))
+    }
+}
+
+impl Spellable for Term {}
+
+impl Spellable for Level {}
+
+impl Spellable for WitnessKey {}
+
+impl Spellable for UniverseError {}
+
+/// A module's dump is spelled by its own symbols alone, which a scope-wide table would blur: a qualified `/std/Str/concat` beside a bare `append` says which unit each came from.
+impl Spellable for Definitions {
+    fn faithful(&self) -> Spelled<'_, Self> {
+        Spelled::new(self, &definitions_spelling(self))
+    }
+}
+
+/// A program's dump is spelled as its module's is.
+impl Spellable for Program {
+    fn faithful(&self) -> Spelled<'_, Self> {
+        Spelled::new(self, &definitions_spelling(&self.definitions))
+    }
+}
+
+impl fmt::Display for Spelled<'_, Term> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let printer = print_core(self.value().clone(), self.spelling());
+        match self.width() {
+            // The width is a target, not a guarantee: content with no break point still overruns.
+            Some(width) => run_printer_within(printer, formatter, 4, width),
+            None => run_printer(printer, formatter, 4),
+        }
+    }
+}
+
+impl fmt::Display for Spelled<'_, Level> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&level_text(self.value()))
+    }
+}
+
+/// A key as a reader sees it: each nominal head spelled as the report's reader reaches it. A key is core's identity for a witness — the thing the registry is indexed by — so its own `Display` is faithful, and only a report has a reader to spell it for.
+impl fmt::Display for Spelled<'_, WitnessKey> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let head = |head: &HeadKey| match head {
+            HeadKey::Nominal(name) => self.spelling().symbol(name),
+            head => head.to_string(),
+        };
+        match self.value().heads() {
+            [single] => formatter.write_str(&head(single)),
+            heads => {
+                let heads = heads.iter().map(head).collect::<Vec<_>>();
+
+                write!(formatter, "({})", heads.join(", "))
+            }
+        }
+    }
+}
+
+impl fmt::Display for Spelled<'_, UniverseError> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value() {
+            UniverseError::OffsetOverflow => formatter.write_str("universe level offset overflow"),
+            UniverseError::EscapingLevel => {
+                formatter.write_str("a universe metavariable or parameter escaped its scope")
+            }
+            UniverseError::InstanceArity { expected, got } => {
+                write!(
+                    formatter,
+                    "universe instance has {got} arguments but its scheme expects {expected}"
+                )
+            }
+            UniverseError::QualityArity { expected, got } => {
+                write!(
+                    formatter,
+                    "universe instance states {got} sorts but its scheme leaves {expected} to its caller"
+                )
+            }
+            UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),
+            UniverseError::MismatchedRecursiveContexts => formatter
+                .write_str("members of one recursive group carry different universe contexts"),
+            UniverseError::SearchExhausted {
+                constraints,
+                branches,
+                widths,
+            } => write!(
+                formatter,
+                "universe consistency search exceeded its budget: \
+                 {constraints} constraints, {branches} disjunctive clauses, widths {widths:?}"
+            ),
+            UniverseError::Inconsistency { lower, upper, path } => {
+                write!(
+                    formatter,
+                    "this {} would need to be strictly below itself ({} ≤ {})",
+                    inconsistent_sort(path),
+                    level_text(lower),
+                    level_text(upper),
+                )?;
+                for origin in path {
+                    write!(formatter, "\n  required by {:?}", origin.kind)?;
+                    if let Some(instantiated) = &origin.instantiated {
+                        write!(formatter, " of {}", instantiated.faithful())?;
+                    }
+                    if let Some(declaration) = &origin.declaration {
+                        write!(formatter, " in {declaration}")?;
+                    }
+                    if let Some(binder) = &origin.binder {
+                        write!(formatter, " at binder {binder}")?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl fmt::Display for Spelled<'_, Definitions> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        print_items(self.value(), formatter, self.spelling())
+    }
+}
+
+/// The module's items, then the entry, with the type it states beneath it.
+impl fmt::Display for Spelled<'_, Program> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (program, spelling) = (self.value(), self.spelling());
+        print_items(&program.definitions, formatter, spelling)?;
+        write!(formatter, "{}", program.entrypoint.body.spelled(spelling))?;
+        if let Some(type_) = &program.entrypoint.type_ {
+            write!(formatter, "\n: {}", type_.spelled(spelling))?;
+        }
+
+        Ok(())
+    }
+}
+
+/// A crate below this one writes Core through a spelling it is handed: a term as [`Spelled`] writes it, a level as a dump does.
+impl Notation for Spelling {
+    fn term(&self, term: &Term) -> String {
+        term.spelled(&Rc::new(self.clone())).to_string()
+    }
+
+    fn level(&self, level: &Level) -> String {
+        level_text(level)
+    }
+}
+
+/// A level as Core writes it: a constant, a parameter (`u` through `z`, then numbered cycles) or a metavariable each under its offset, and their `max` where there are several.
+fn level_text(level: &Level) -> String {
+    if level.atoms.is_empty() {
+        return level.constant.to_string();
+    }
+
+    let mut parts = Vec::new();
+    if level.constant != 0 {
+        parts.push(level.constant.to_string());
+    }
+    for (head, offset) in &level.atoms {
+        let name = match head {
+            // Stepping 26 letters from `u` instead runs off the end of the alphabet at the seventh parameter and prints `{`, `|`, `}` as level names.
+            LevelHead::Param(param) => {
+                const LETTERS: usize = (b'z' - b'u' + 1) as usize;
+                let letter = char::from(b'u' + u8::try_from(param.0 % LETTERS).unwrap());
+                match param.0 / LETTERS {
+                    0 => letter.to_string(),
+                    cycle => format!("{letter}{cycle}"),
+                }
+            }
+            LevelHead::Meta(meta) => meta.to_string(),
+        };
+        parts.push(if *offset == 0 {
+            name
+        } else {
+            format!("{name}+{offset}")
+        });
+    }
+    match parts.as_slice() {
+        [single] => single.clone(),
+        _ => format!("max({})", parts.join(",")),
+    }
+}
+
+/// The spelling a module's dump prints its terms in.
+///
+/// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope. Deliberate, on three grounds. A dump is handed no scope. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
+fn definitions_spelling(definitions: &Definitions) -> Rc<Spelling> {
+    Rc::new(Spelling::default().with_short_names(Rc::new(build_shorten(&definitions.symbols()))))
+}
+
+/// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
+fn print_items(
+    definitions: &Definitions,
+    formatter: &mut fmt::Formatter<'_>,
+    spelling: &Rc<Spelling>,
+) -> fmt::Result {
+    for item in &definitions.items {
+        match item {
+            Item::Let(definition) => {
+                write!(formatter, "let ")?;
+                print_definition(definition, formatter, spelling)?;
+                writeln!(formatter, ";")?;
+            }
+            Item::Rec(rec) => {
+                write!(formatter, "rec ")?;
+                for (index, definition) in rec.definitions().iter().enumerate() {
+                    if index > 0 {
+                        write!(formatter, "and ")?;
+                    }
+                    print_definition(definition, formatter, spelling)?;
+                    write!(formatter, " ")?;
+                }
+                writeln!(formatter, ";")?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_definition(
+    definition: &Definition,
+    formatter: &mut fmt::Formatter<'_>,
+    spelling: &Rc<Spelling>,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "{} : {} = {}",
+        definition.name.faithful(),
+        definition.type_.spelled(spelling),
+        definition.body.spelled(spelling)
+    )
+}
+
 #[cfg(test)]
 mod form_tests;
 #[cfg(test)]
 mod spelling_tests;
 
-/// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
-impl Pattern {
-    /// The pattern as source writes it, each binder under the next of `names`: what a report names an arm by.
-    pub fn written(&self, names: &mut dyn Iterator<Item = String>) -> String {
-        pattern_text(self, names)
-    }
-}
-
-/// A pattern of a [`Matrix`]'s row as source writes it, each binder under the next of `names`.
-fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> String {
+/// A pattern of a [`Matrix`]'s row as source writes it, each binder under the next of `names`: what a report names an arm by.
+pub fn written_pattern(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> String {
     let fields = |fields: &[(Option<String>, Pattern)], names: &mut dyn Iterator<Item = String>| {
         fields
             .iter()
             .map(|(label, field)| {
-                let field = pattern_text(field, names);
+                let field = written_pattern(field, names);
                 match label {
                     Some(label) => format!("{label} = {field}"),
                     None => field,
@@ -2649,7 +2781,7 @@ fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> S
                     format!(
                         "{}{}",
                         plicity_mark(Some(plicity)),
-                        pattern_text(arg, names)
+                        written_pattern(arg, names)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -2716,6 +2848,7 @@ fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
     }
 }
 
+/// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
 fn escape_character(character: char) -> String {
     match character {
         '\n' => "\\n".to_string(),

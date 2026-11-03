@@ -10,6 +10,7 @@ use {
         Minted, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
         rewrite_universe_levels, universe_metas,
     },
+    curios_surface::Spellable,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -40,7 +41,8 @@ fn validate_bound_universes<B: Bound>(
                 format!("parameter index {escaping} is not below the {parameter_count} declared")
             };
             Err(format!(
-                "{owner}: level {level} escapes its universe parameter context: {detail}"
+                "{owner}: level {} escapes its universe parameter context: {detail}",
+                level.faithful()
             ))
         }
     })
@@ -397,8 +399,9 @@ pub fn validate_universes_in(
         for definition in item.definitions() {
             universe_context_validate(&definition.universe_context).map_err(|error| {
                 Error::UniverseInvariant(format!(
-                    "definition {} has an invalid universe context: {error}",
-                    definition.name.faithful()
+                    "definition {} has an invalid universe context: {}",
+                    definition.name.faithful(),
+                    error.faithful()
                 ))
             })?;
             let parameter_count = definition.universe_context.parameter_count;
@@ -419,7 +422,8 @@ pub fn validate_universes_in(
         let shown = name.faithful();
         universe_context_validate(&induct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "inductive {shown} has an invalid universe context: {error}"
+                "inductive {shown} has an invalid universe context: {}",
+                error.faithful()
             ))
         })?;
         let parameter_count = induct_decl.universe_context.parameter_count;
@@ -445,7 +449,8 @@ pub fn validate_universes_in(
         let shown = name.faithful();
         universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "structure {shown} has an invalid universe context: {error}"
+                "structure {shown} has an invalid universe context: {}",
+                error.faithful()
             ))
         })?;
         let parameter_count = struct_decl.universe_context.parameter_count;
@@ -471,7 +476,8 @@ pub fn validate_universes_in(
         let shown = name.faithful();
         universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
-                "concept {shown} has an invalid universe context: {error}"
+                "concept {shown} has an invalid universe context: {}",
+                error.faithful()
             ))
         })?;
         validate_bound_universes(

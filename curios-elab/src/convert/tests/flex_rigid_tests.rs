@@ -51,7 +51,7 @@ fn abstraction_walks_a_shared_candidate_once_per_node() {
     assert!(!abstracted.mentions_free(&f));
     assert!(abstracted.mentions_free(&birth));
     let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &*abstracted else {
-        panic!("the abstraction changed the root: {abstracted}");
+        panic!("the abstraction changed the root: {abstracted:?}");
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
@@ -142,7 +142,7 @@ fn a_candidate_is_committed_as_its_check_rebuilt_it() {
     let family = Term::func_type([(carrier, sort(1))], sort(1));
     let annotation = |term: &Term| {
         let Subterm::Func(func) = &**term else {
-            panic!("not a lambda: {term}");
+            panic!("not a lambda: {term:?}");
         };
         func.telescope
             .cursor()
@@ -175,7 +175,7 @@ fn a_candidate_is_committed_as_its_check_rebuilt_it() {
         .cloned()
         .expect("the candidate checks");
     let Subterm::Tuple(tuple) = &*solution else {
-        panic!("not a tuple: {solution}");
+        panic!("not a tuple: {solution:?}");
     };
     assert_eq!(annotation(&tuple.fields[0]), sort(1));
 }

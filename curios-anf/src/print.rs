@@ -820,7 +820,7 @@ fn grain_prefix(grain: &SequenceGrain) -> &'static str {
 
 // === Operation names =========================================================
 //
-// The table follows `/sys`'s own spelling, which is where a reader met these operations — `Nat/add`, `Byte/to_nat`, `Flt/of_le_bytes`. `curios-core`'s printer hardcodes the same paths for the same reason: this is display text, not a name the compiler emits, so it reaches no `SyntaxRegistry` slot and no prelude declaration. A handful of operations are lowering-internal and have no `/sys` declaration to follow — `Bool/neq`, which the surface desugars through `Bool/xor`, and `List/build`, which is what a list literal lowers to — and those are spelled in the same style rather than left to leak a Rust variant name.
+// The table follows `/sys`'s own spelling, which is where a reader met these operations — `Nat/add`, `Byte/to_nat`, `Flt/of_le_bytes`. Core's printer (`curios-surface`'s `intrinsic_form`) hardcodes the same paths for the same reason: this is display text, not a name the compiler emits, so it reaches no `SyntaxRegistry` slot and no prelude declaration. A handful of operations are lowering-internal and have no `/sys` declaration to follow — `Bool/neq`, which the surface desugars through `Bool/xor`, and `List/build`, which is what a list literal lowers to — and those are spelled in the same style rather than left to leak a Rust variant name.
 
 fn operation_name(operation: Operation) -> String {
     let name = match operation {

@@ -472,7 +472,7 @@ impl Machine {
 
         #[cfg(test)]
         if std::env::var_os("CURIOS_MACHINE_TRACE").is_some() {
-            eprintln!("eval depth={} {}", self.stack.len(), term);
+            eprintln!("eval depth={} {term:?}", self.stack.len());
         }
 
         // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so at a plain demand it *is* its own weak-head form, decided from the shape.

@@ -17,6 +17,9 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
+#[cfg(feature = "profile")]
+use curios_surface::Spellable;
+
 impl<'s> Context<'s> {
     /// [`Solutions::note_solve_blockers`](super::Solutions::note_solve_blockers).
     pub(crate) fn note_solve_blockers(
@@ -616,7 +619,7 @@ impl<'s> Context<'s> {
         curios_profile::note!(
             target: "curios_elab::solve",
             meta = inner.0,
-            %stand_in,
+            stand_in = %stand_in.faithful(),
             "restricted",
         );
         self.solve_metavar(inner, stand_in);

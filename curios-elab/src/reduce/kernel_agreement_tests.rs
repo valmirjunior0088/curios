@@ -32,7 +32,7 @@ fn agree(term: Term) {
 
     assert_eq!(
         elaborated, checked,
-        "the elaborator and the kernel disagree on {term}",
+        "the elaborator and the kernel disagree on {term:?}",
     );
 }
 

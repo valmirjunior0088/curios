@@ -32,15 +32,14 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Mention, Quality, QualityMetaId, Scope, Spelled, Spelling, Telescope, Three,
-        Two, UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, print_term,
-        project_erased_universes, stamp_declaration_instance, universe_metas,
+        MaskedLevels, Mention, Quality, QualityMetaId, Scope, Telescope, Three, Two,
+        UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, project_erased_universes,
+        stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
     curios_common::{Plicity, recurse},
     curios_num::Natural,
-    curios_print::{run_printer, run_printer_within},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt,
@@ -349,7 +348,7 @@ impl Term {
     }
 
     /// How many distinct nodes this term's graph holds, a node two owners share counted once — what a print's allowance is a multiple of.
-    pub(crate) fn distinct_nodes(&self) -> usize {
+    pub fn distinct_nodes(&self) -> usize {
         let mut seen: HashSet<*const Node> = HashSet::new();
         self.walk(
             &mut seen,
@@ -2368,35 +2367,6 @@ impl From<Subterm> for Term {
         Self {
             extent: None,
             inner: Rc::new(Node::new(built(term))),
-        }
-    }
-}
-
-/// The faithful rendering: core's own names, every universe shown. A diagnostic wanting source-style spelling goes through [`Term::spelled`].
-impl fmt::Display for Term {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(
-            print_term(self.clone(), &Rc::new(Spelling::default())),
-            formatter,
-            4,
-        )
-    }
-}
-
-impl Term {
-    /// This term paired with the [`Spelling`] it renders under — the parameter `Display::fmt` cannot take. See the axes documented in `print`.
-    pub fn spelled<'a>(&'a self, spelling: &Rc<Spelling>) -> Spelled<'a, Term> {
-        Spelled::new(self, spelling)
-    }
-}
-
-impl fmt::Display for Spelled<'_, Term> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let printer = print_term(self.value().clone(), self.spelling());
-        match self.width() {
-            // The width is a target, not a guarantee: content with no break point still overruns.
-            Some(width) => run_printer_within(printer, formatter, 4, width),
-            None => run_printer(printer, formatter, 4),
         }
     }
 }

@@ -539,14 +539,14 @@ fn every_context_places_its_hole_under_the_former_it_names() {
         parents_of(body, &marker, &mut parents);
         assert!(
             !parents.is_empty(),
-            "`{}`: the elaborator left its marker nowhere in {body}",
+            "`{}`: the elaborator left its marker nowhere in {body:?}",
             context.name
         );
         for parent in &parents {
             assert_eq!(
                 former(parent),
                 Some(context.under),
-                "`{}` places its hole under `{parent}`",
+                "`{}` places its hole under `{parent:?}`",
                 context.name
             );
         }
@@ -558,7 +558,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
             if let (false, Some(former)) = (children.is_empty(), former(&term)) {
                 assert!(
                     placed.contains(&former),
-                    "`{}` is written in a former no context holds a hole under: `{term}`",
+                    "`{}` is written in a former no context holds a hole under: `{term:?}`",
                     context.name
                 );
             }

@@ -9,6 +9,7 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
+    curios_surface::Spellable,
 };
 
 /// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the kernel's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `kernel::convert::variance_tests` holds the answers under this name.
@@ -125,8 +126,8 @@ fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
     let answer = reduce(&mut context, asked.clone()).expect("a Π-type is its own form");
     assert_eq!(answer, asked);
     assert!(
-        answer.to_string().starts_with("(A: "),
-        "the asking spelling's binder, not the stored one's: {answer}"
+        answer.faithful().to_string().starts_with("(A: "),
+        "the asking spelling's binder, not the stored one's: {answer:?}"
     );
 }
 
@@ -587,7 +588,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let successor = on_nat(product(1));
     for decided in [&contradiction, &successor] {
         let arm = reduce(&mut context, decided.clone()).expect("reduces");
-        assert!(arm.as_nat().is_some(), "{decided} stands as {arm}");
+        assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
         assert_eq!(
             curios_analysis::Env::force(&mut context, decided).ok(),
             Some(arm),
@@ -599,7 +600,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
 
     for open in [on_bool(and(less(&a, &b), less(&c, &b))), on_nat(product(0))] {
         let stuck = reduce(&mut context, open.clone()).expect("reduces");
-        assert!(stuck.as_nat().is_none(), "{open} takes an arm: {stuck}");
+        assert!(stuck.as_nat().is_none(), "{open:?} takes an arm: {stuck:?}");
     }
 }
 
@@ -637,13 +638,13 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
     let plain = curios_analysis::Env::force(&mut context, &classed).ok();
     assert!(
         plain.as_ref().is_some_and(|plain| plain.as_nat().is_none()),
-        "plain reduction classed {classed}"
+        "plain reduction classed {classed:?}"
     );
 
     let other = reduce(&mut context, on(asked.call(&asked.a, &asked.c))).expect("reduces");
     assert!(
         other.as_nat().is_none(),
-        "a call on another argument classed: {other}"
+        "a call on another argument classed: {other:?}"
     );
 }
 

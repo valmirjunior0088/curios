@@ -7,7 +7,7 @@ use {
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
         Certification, Definition, DefinitionKind, Definitions, Global, Item, Nominal, Places,
-        ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
+        Sharing, Term, Totality, Zonked,
     },
     curios_elab::{
         Context, Error, Established, Reading, Recompile, Recompiled, elaborate_and_zonk_unit_over,
@@ -18,7 +18,10 @@ use {
         Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
     curios_prelude::{std_module::*, with_prelude},
-    curios_surface::{Label, LetSignature, TopItem, TopLet, TopMod, Translation},
+    curios_surface::{
+        Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod,
+        build_rename, display_names,
+    },
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
     std::{
         cell::RefCell,
@@ -1080,8 +1083,9 @@ fn std_former_derivation() {
                 let examples = shown.entry(kind).or_default();
                 if *examples < EXAMPLES {
                     *examples += 1;
-                    let cut = |term: &dyn ToString| {
-                        term.to_string().chars().take(SHOWN).collect::<String>()
+                    let cut = |term: &Term| {
+                        let printed = term.faithful().to_string();
+                        printed.chars().take(SHOWN).collect::<String>()
                     };
                     println!("{kind} {}: {}", stored.name.faithful(), parts.join(", "));
                     if stored.type_ != derived.type_ {
@@ -1423,7 +1427,6 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             syntax: &SYNTAX,
             spellings: Some(&spellings),
             anchors: &[],
-            printer: Some(Rc::new(Translation)),
         };
         // Made once: the library's own lexicon is what every reader of it is spelled by.
         let unplaced = reading.spelling();
@@ -1695,7 +1698,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             verdict
                                 .name
                                 .map_or_else(String::new, |name| name.faithful().to_string()),
-                            clipped(&verdict.error.to_string())
+                            clipped(&verdict.error.rendered(&Spelling::default()))
                         )
                     })
                     .collect::<Vec<_>>()

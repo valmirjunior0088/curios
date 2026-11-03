@@ -14,9 +14,10 @@ use {
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{LINE_WIDTH, Plicity, Qualifier},
     curios_core::{
-        Anchors, CalleeId, Global, Level, Mention, Quality, ReaderPosition, ReduceError, Spelling,
-        Subterm, Term, UniverseMetaId, WitnessKey,
+        Anchors, CalleeId, Global, Level, Mention, Quality, ReduceError, Subterm, Term,
+        UniverseMetaId, WitnessKey,
     },
+    curios_surface::{ReaderPosition, Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
@@ -143,7 +144,7 @@ fn level_meta_names<'a>(
 
 /// A level under those names, the rest of its spelling left to [`Level`]'s own.
 fn renamed_level(level: &Level, names: &HashMap<UniverseMetaId, String>) -> String {
-    let mut text = level.to_string();
+    let mut text = level.faithful().to_string();
     // Longest first: `?u12` contains `?u1`, and replacing the shorter one first would leave `?u1` followed by a stray `2`.
     let mut metas = names.iter().collect::<Vec<_>>();
     metas.sort_by_key(|(meta, _)| std::cmp::Reverse(meta.to_string().len()));
@@ -334,7 +335,7 @@ impl Callee {
                 "the witness of '{}' for {} '{}'",
                 spelling.symbol(concept),
                 key_noun(key),
-                key.spelled(spelling)
+                key.spelled(&Rc::new(spelling.clone()))
             ),
         }
     }

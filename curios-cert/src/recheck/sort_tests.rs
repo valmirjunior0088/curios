@@ -10,6 +10,7 @@ use {
         Level, Many, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
         UniverseContext, UniverseParam, Universes, test_support::*,
     },
+    curios_surface::Spelling,
     std::collections::BTreeSet,
 };
 
@@ -368,7 +369,12 @@ fn a_refusal_at_one_sort_restates_the_declaration_at_it() {
     let definitions = definitions(vec![handing_back("back", Term::prop())], []);
     let reports = verdicts(&definitions)
         .iter()
-        .map(|verdict| verdict.format_with(&definitions, &[], &SYNTAX))
+        .map(|verdict| {
+            verdict.rendered(
+                &definitions,
+                &Spelling::for_refusal(&definitions, &[], &SYNTAX),
+            )
+        })
         .collect::<Vec<_>>();
 
     assert!(

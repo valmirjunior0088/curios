@@ -12,6 +12,7 @@ use {
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseParam, Universes, test_support::*,
     },
+    curios_surface::Spelling,
     std::collections::BTreeSet,
 };
 
@@ -504,9 +505,10 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
         let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| verdict.error.to_string().contains(refusal)),
+            verdicts.iter().any(|verdict| verdict
+                .error
+                .rendered(&Spelling::default())
+                .contains(refusal)),
             "{label}: the kernel read a universe scheme at the ambient item's parameters: {verdicts:?}",
         );
     }

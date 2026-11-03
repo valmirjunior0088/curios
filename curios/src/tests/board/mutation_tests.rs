@@ -6,6 +6,7 @@ use {
     curios_core::{Definitions, Item, Program, Term, Zonked},
     curios_module::RootSource,
     curios_surface::Entrypoint,
+    curios_surface::Spellable,
 };
 
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.
@@ -112,7 +113,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
                 !recheck(&mutant, curios_pipeline::DEFAULT_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
                 definition.name.faithful(),
-                definition.type_,
+                definition.type_.faithful(),
             );
             mutated += 1;
         }
@@ -170,7 +171,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
 
                 assert!(
                     !recheck(&mutant, curios_pipeline::DEFAULT_BUDGET).is_empty(),
-                    "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
+                    "{description}: the kernel accepted `{}` redeclared at `{replacement:?}`",
                     definition.name.faithful(),
                 );
                 mutated += 1;

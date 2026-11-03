@@ -347,7 +347,7 @@ fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
         split(&n, |pred| call(&f, Term::free_var(pred))),
     );
     let Subterm::Rec(rec) = &*term else {
-        panic!("`group` states a group: {term}");
+        panic!("`group` states a group: {term:?}");
     };
     let mut kernel = kernel();
 

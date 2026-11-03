@@ -24,7 +24,7 @@ use {
         BrokenItem, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
         into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
-    curios_surface::{Entrypoint, Translation},
+    curios_surface::{Entrypoint, Spelling},
     curios_unit::{Predecessors, Unit},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
@@ -310,7 +310,6 @@ fn read_for_report(
         syntax,
         spellings: Some(&spellings),
         anchors: &anchors_of(text, predecessors),
-        printer: Some(Rc::new(Translation)),
     };
 
     report(&reading)
@@ -339,7 +338,10 @@ pub(crate) fn kernel_refusal(
     scope: &[&curios_core::Lexicon],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.format_with(definitions, scope, syntax);
+    let refusal = verdict.rendered(
+        definitions,
+        &Spelling::for_refusal(definitions, scope, syntax),
+    );
 
     CompileError::failure(match &verdict.name {
         Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
@@ -764,7 +766,6 @@ where
         syntax,
         spellings: Some(&*spellings),
         anchors: &anchors,
-        printer: Some(Rc::new(Translation)),
     };
     // The error is kept as raised beside what it renders to: rendering is where its variant is lost.
     let (error, elaborated) = match elaborated {
@@ -1129,8 +1130,11 @@ fn judged(
         certify_program(&program, budget, &globals, *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal =
-            verdict.format_with(&program.as_program().definitions, &scope.lexicons(), syntax);
+        let definitions = &program.as_program().definitions;
+        let refusal = verdict.rendered(
+            definitions,
+            &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
+        );
         return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
             None => format!("the kernel refused the entrypoint: {refusal}"),

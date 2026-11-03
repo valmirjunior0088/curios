@@ -105,7 +105,7 @@ pub enum Global {
 }
 
 impl Global {
-    /// This name as the compiler holds it, in full: what a dump, a kernel refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's [`Spelling`](crate::Spelling), which is why a `Global` has no `Display` and this is asked for by name.
+    /// This name as the compiler holds it, in full: what a dump, a kernel refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's spelling (`curios-surface`'s `Spelling`), which is why a `Global` has no `Display` and this is asked for by name.
     pub fn faithful(&self) -> Faithful<'_, Self> {
         Faithful(self)
     }
@@ -174,7 +174,7 @@ pub struct Mints {
 ///
 /// **Within the declaration, never across declarations.** Every counter starts at zero for each source declaration, and the items one declaration lowers to — a type former with its constructors, a concept with its method wrappers — share its identities, a written type copied into several of them being one level. So what a declaration's lowered form holds depends on nothing written before it, and neither does what its elaboration mints above it: an edit to one declaration renumbers no other. No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing another declaration or a predecessor minted can meet a declaration's walk.
 ///
-/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Definitions`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
+/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Definitions`](crate::Definitions) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
 ///
 /// **By name, persistent**, so what a unit lowered over a baseline minted is the baseline's with the names of what it lowered again placed again; the names of one declaration share its entry.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -305,7 +305,7 @@ impl Free {
     }
 
     /// [`Free::local`] for a caller that already holds the hint as a symbol — a printer reopening a scope under the hint it remembers.
-    pub(crate) fn local_hinted(index: u64, hint: Option<Symbol>) -> Self {
+    pub fn local_hinted(index: u64, hint: Option<Symbol>) -> Self {
         Free(Mint {
             index,
             hint,
@@ -331,7 +331,7 @@ impl Free {
     }
 
     /// [`Free::hint`] as the interned symbol it is kept as.
-    pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
+    pub fn hint_symbol(&self) -> Option<Symbol> {
         self.0.hint_symbol()
     }
 

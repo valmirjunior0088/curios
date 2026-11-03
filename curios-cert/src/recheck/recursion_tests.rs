@@ -10,6 +10,7 @@ use {
         Program, Rec, RecGroup, RecItem, RecMemberScopes, Scope, Subterm, Term, Universes,
         test_support::*,
     },
+    curios_surface::Spelling,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -46,9 +47,10 @@ fn a_recursive_member_is_certified_only_with_its_group() {
         );
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| verdict.error.to_string().contains(refusal)),
+            verdicts.iter().any(|verdict| verdict
+                .error
+                .rendered(&Spelling::default())
+                .contains(refusal)),
             "{label}: the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }

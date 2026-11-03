@@ -540,7 +540,7 @@ pub fn stamp_declaration_instance<B: Bound>(
 /// **`proof` is stated once, when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub(crate) struct Label {
+pub struct Label {
     hint: Option<Symbol>,
     written: Option<u32>,
     proof: bool,
@@ -577,12 +577,12 @@ impl Label {
     }
 
     /// The hint the binder was written with; `None` for a hintless one.
-    pub(crate) fn hint(&self) -> Option<&'static str> {
+    pub fn hint(&self) -> Option<&'static str> {
         self.hint.map(|hint| hint.as_str())
     }
 
     /// The hint the binder was written with, as the symbol a local is minted from.
-    pub(crate) fn hint_symbol(&self) -> Option<Symbol> {
+    pub fn hint_symbol(&self) -> Option<Symbol> {
         self.hint
     }
 
@@ -679,7 +679,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 
     /// What this scope remembers of the binder at position `index` (0 = first/outermost), for a printer reopening it.
-    pub(crate) fn label(&self, index: usize) -> Option<&Label> {
+    pub fn label(&self, index: usize) -> Option<&Label> {
         self.labels.as_deref()?.get(index)
     }
 
@@ -740,7 +740,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 
     /// What this scope remembers of each binder in order, `None` where the scope was built without them (`constant`).
-    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
+    pub fn label_iter(&self) -> impl Iterator<Item = Option<&Label>> {
         (0..self.arity()).map(move |index| self.label(index))
     }
 

@@ -345,7 +345,7 @@ fn taken_again(operation: Intrinsic) -> Option<Term> {
         .expect("the folding reducer spends nothing")
         .into();
     let Subterm::Intrinsic(stuck) = &*stuck else {
-        panic!("the fold left no operation to take again: {stuck}");
+        panic!("the fold left no operation to take again: {stuck:?}");
     };
     let mut within =
         atoms_within(&mut Inert, stuck, &[]).expect("the inert reducer spends nothing");
@@ -513,7 +513,7 @@ fn a_magnitude_is_spelled_by_its_fold_over_its_classed_operand() {
     };
 
     let (this, that) = classed_pair(&sign(&first, &other), &sign(&second, &other));
-    assert!(int_same(&this, &that), "{this} against {that}");
+    assert!(int_same(&this, &that), "{this:?} against {that:?}");
 
     let magnitude = |call: &Term| folded(Intrinsic::IntAbs(int_sub(call.clone(), other.clone())));
     let (this, that) = classed_pair(&magnitude(&first), &magnitude(&second));

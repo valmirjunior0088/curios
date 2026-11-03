@@ -12,11 +12,12 @@ use {
     super::{
         Apply, Argument, BytesPattern, BytesSegment, Choose, ChooseArm, ChooseTest, ConceptField,
         Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
-        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
-        MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
-        ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
-        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match,
+        MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
+        PatternField, Proj, ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm,
+        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
+        WitnessField, intrinsic_form, intrinsic_path,
     },
     crate::{Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -682,7 +683,7 @@ fn print_literal(literal: Literal) -> Printer {
     }
 }
 
-/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`curios_core::intrinsic_path`]) — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
+/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`intrinsic_path`]) — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
 struct Quoted;
 
 impl Writer<Term> for Quoted {
@@ -691,14 +692,14 @@ impl Writer<Term> for Quoted {
     }
 
     fn sys(&self, path: &str) -> Option<Term> {
-        Some(Subterm::Name(Name::new(true, curios_core::intrinsic_path(path))).into())
+        Some(Subterm::Name(Name::new(true, intrinsic_path(path))).into())
     }
 }
 
-/// An intrinsic as core's one table writes it ([`curios_core::intrinsic_form`]), through the translation a report's term is written by. A `/sys` declaration is the only place a text-stage intrinsic node exists, and a handle the host minted is one no source spells, shown by its token.
+/// An intrinsic as core's one table writes it ([`intrinsic_form`]), through the translation a report's term is written by. A `/sys` declaration is the only place a text-stage intrinsic node exists, and a handle the host minted is one no source spells, shown by its token.
 fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
-    match curios_core::intrinsic_form(intrinsic, true) {
-        curios_core::IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
+    match intrinsic_form(intrinsic, true) {
+        IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
         form => {
             print_term(written_intrinsic(form, &Quoted).expect("a quoted form is written whole"))
         }

@@ -8,6 +8,7 @@ use {
     crate::ErasedNames,
     curios_common::{Note, Report},
     curios_num::Natural,
+    curios_surface::Spellable,
     std::{collections::BTreeMap, rc::Rc},
 };
 
@@ -20,7 +21,7 @@ pub enum ErasedName {
 
 impl ErasedName {
     /// This name as its reader writes it: a declaration as resolution reaches it, a local binder by its label.
-    fn spelled(&self, spelling: &curios_core::Spelling) -> String {
+    fn spelled(&self, spelling: &curios_surface::Spelling) -> String {
         match self {
             ErasedName::Named(curios_core::Mention::Declaration(global)) => spelling.symbol(global),
             ErasedName::Named(curios_core::Mention::Local(local)) => {
@@ -166,7 +167,7 @@ impl Error {
     /// Render this error for its reader: [`Error::reports`], rendered.
     pub fn format(
         &self,
-        spelling: curios_core::Spelling,
+        spelling: curios_surface::Spelling,
         anchors: &[&curios_core::Anchors],
     ) -> String {
         Report::render_all(&self.reports(spelling, anchors))
@@ -175,14 +176,14 @@ impl Error {
     /// This error as its reports: one at its extent, its terms spelled by `spelling` for a reader standing outside every declaration, and its positions placed in the files `anchors` say they were written in. What spells a term and where a declaration lies are the report layer's to hand in, which holds the tables a unit's names are spelled by.
     pub fn reports(
         &self,
-        spelling: curios_core::Spelling,
+        spelling: curios_surface::Spelling,
         anchors: &[&curios_core::Anchors],
     ) -> Vec<Report> {
         let (extent, refusal) = match self {
             Self::Located { extent, error } => (Some(extent), &**error),
             refusal => (None, refusal),
         };
-        let spelling = Rc::new(spelling.for_reader(curios_core::ReaderPosition {
+        let spelling = Rc::new(spelling.for_reader(curios_surface::ReaderPosition {
             owner: None,
             witnesses: Rc::default(),
         }));
@@ -195,7 +196,7 @@ impl Error {
     }
 
     /// The sentence one of erasure's own refusals says.
-    fn message(&self, spelling: &Rc<curios_core::Spelling>) -> String {
+    fn message(&self, spelling: &Rc<curios_surface::Spelling>) -> String {
         match self {
             Self::Exhausted { term, refusal } => {
                 let spent = match refusal {
@@ -213,11 +214,13 @@ impl Error {
             }
             Self::Unreadable { term, refusal } => match term {
                 Some(term) => format!(
-                    "compiler fault: erasure could not read {}, which the kernel certified\n  the kernel refused it: {refusal}",
-                    term.spelled(spelling)
+                    "compiler fault: erasure could not read {}, which the kernel certified\n  the kernel refused it: {}",
+                    term.spelled(spelling),
+                    refusal.rendered(&curios_surface::Spelling::default())
                 ),
                 None => format!(
-                    "compiler fault: erasure could not read a declaration at its instance, which the kernel certified\n  the kernel refused it: {refusal}"
+                    "compiler fault: erasure could not read a declaration at its instance, which the kernel certified\n  the kernel refused it: {}",
+                    refusal.rendered(&curios_surface::Spelling::default())
                 ),
             },
             Self::NatCaseKeyOverflow { value } => {
@@ -274,7 +277,7 @@ impl Error {
     /// The further places one of erasure's own refusals is about: a value read where it evaluates itself is written in its declaration.
     fn notes(
         &self,
-        spelling: &Rc<curios_core::Spelling>,
+        spelling: &Rc<curios_surface::Spelling>,
         anchors: &[&curios_core::Anchors],
     ) -> Vec<Note> {
         match self {
@@ -293,7 +296,7 @@ impl Error {
 fn declared_here(
     member: &curios_core::Global,
     named: &ErasedName,
-    spelling: &curios_core::Spelling,
+    spelling: &curios_surface::Spelling,
     anchors: &[&curios_core::Anchors],
 ) -> Vec<Note> {
     curios_core::Anchors::label(anchors, member)

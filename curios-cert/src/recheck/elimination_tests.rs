@@ -11,6 +11,7 @@ use {
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam, test_support::*,
     },
+    curios_surface::Spellable,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -347,7 +348,7 @@ fn a_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
     // Refused at the zero arm, whose goal is the motive as it is written: no successor is in it.
     assert!(
         verdicts.iter().any(|verdict| match &verdict.error {
-            Error::Mismatch { expected, .. } => !expected.to_string().contains("+ 1"),
+            Error::Mismatch { expected, .. } => !expected.faithful().to_string().contains("+ 1"),
             _ => false,
         }),
         "the kernel typed a fold's zero arm with its scrutinee at zero: {verdicts:?}",
@@ -366,7 +367,7 @@ fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
     // The successor arm's hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`: refused as the mismatch it is, at the successor.
     assert!(
         verdicts.iter().any(|verdict| match &verdict.error {
-            Error::Mismatch { expected, .. } => expected.to_string().contains("+ 1"),
+            Error::Mismatch { expected, .. } => expected.faithful().to_string().contains("+ 1"),
             _ => false,
         }),
         "the honest motive was not refused at the successor arm: {verdicts:?}",

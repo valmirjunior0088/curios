@@ -10,6 +10,7 @@ use {
         Intrinsic, Item, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term, Totality,
         UniverseContext, Universes, test_support::*,
     },
+    curios_surface::Spelling,
     std::{
         collections::{BTreeMap, BTreeSet},
         panic::{AssertUnwindSafe, catch_unwind},
@@ -376,9 +377,9 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
 /// A refusal names the types the way the program that produced them wrote them.
 ///
-/// `Error`'s own `Display` is faithful to Core — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. `format_with` supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
+/// A refusal written faithfully keeps Core's own spelling — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. The spelling a refusal is reported under (`curios-surface`'s `Spelling::for_refusal`) supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
 ///
-/// Universe instances are deliberately left alone; see `Error::format_with`.
+/// Universe instances are deliberately left alone; see `Error::rendered`.
 #[test]
 fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     let name = Global::Authored(Qualifier::from(["demo", "Box", "Box"]));
@@ -434,12 +435,12 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     assert_eq!(
-        refusal.format_with(&definitions, &[], &SYNTAX),
+        refusal.rendered(&Spelling::for_refusal(&definitions, &[], &SYNTAX)),
         "expected `Nat`, found `Box(@Nat)`"
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.
     assert_eq!(
-        refusal.to_string(),
+        refusal.rendered(&Spelling::default()),
         "expected `Nat`, found `/demo/Box/Box(Nat)`"
     );
 }

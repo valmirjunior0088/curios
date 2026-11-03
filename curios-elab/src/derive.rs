@@ -26,6 +26,7 @@ use {
         WitnessOrigin, str_literal, syn_call,
     },
     curios_num::Natural,
+    curios_surface::Spellable,
 };
 
 /// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-module`'s scheduler read one value rather than two lists obliged to agree.
@@ -313,7 +314,7 @@ fn classify(
         position,
         payload,
         part: Part::Value {
-            premise: telescope_variable.then(|| reduced.to_string()),
+            premise: telescope_variable.then(|| reduced.faithful().to_string()),
         },
         hidden: false,
     })

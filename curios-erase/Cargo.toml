@@ -9,7 +9,7 @@ description = "Curios erasure: a certified Core unit lowered into the erased IR,
 workspace = true
 
 [features]
-profile = ["curios-profile/enabled", "curios-cert/profile"]
+profile = ["curios-profile/enabled", "curios-cert/profile", "curios-surface/profile"]
 # `test_support`: the families a unit's items declare, as each declaring item erased them, and the digest of every part a unit's items are read by, for the suites of `curios-pipeline` and `curios` that pin what erasure built. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate's tests — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 
@@ -24,6 +24,8 @@ curios-core = { workspace = true }
 curios-num = { workspace = true }
 curios-profile = { workspace = true }
 curios-common = { workspace = true }
+# The printer an erasure refusal spells its terms by.
+curios-surface = { workspace = true }
 
 [dev-dependencies]
 # The budget the compiler judges each declaration on (`DEFAULT_BUDGET`), which the suite certifies its fixtures on before erasing them: tests only, so erasure does not reach the elaborator.

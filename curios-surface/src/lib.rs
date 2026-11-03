@@ -1,4 +1,4 @@
-//! The surface syntax of the `.crs` language: the tree a file is read into, the parser that reads it, the printer that writes it back as written, the formatter behind `curios format`, and the translation of a Core term back to the tree, which a report prints through.
+//! The written form of the `.crs` language: the tree a file is read into, the parser that reads it, the printer that writes it back as written, the formatter behind `curios format`, the translation of a Core term back to the tree, which a report prints through, and Core's own printer with the naming policy every term is spelled by.
 //!
 //! [`Term`]s keep sugar as written, which `README.md` decides; `curios-module`'s lowering undoes it.
 
@@ -19,6 +19,9 @@ pub use spell::*;
 
 mod from_core;
 pub use from_core::*;
+
+mod spelling;
+pub use spelling::*;
 
 mod format;
 pub use format::*;

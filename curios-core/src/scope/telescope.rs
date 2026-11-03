@@ -563,7 +563,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     }
 
     /// What the scope remembers of the binder at this position, for a caller that renders it; `None` at the end, or for a scope built without labels.
-    pub(crate) fn label(&self) -> Option<&'a Label> {
+    pub fn label(&self) -> Option<&'a Label> {
         match self.at {
             Telescope::Cons(_, _, rest, ..) => rest.label(0),
             Telescope::Done(_) => None,

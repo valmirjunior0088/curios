@@ -5,13 +5,10 @@
 use {
     super::test_support::*,
     curios_common::{Qualifier, fill},
-    curios_core::{
-        Enter, Global, IntrinsicForm, Item, Subterm, Term, Transient, intrinsic_form,
-        intrinsic_global,
-    },
+    curios_core::{Enter, Global, Item, Subterm, Term, Transient},
     curios_module::{RootSource, SYNTAX, into_core_with_prelude},
     curios_prelude::with_prelude,
-    curios_surface::spell,
+    curios_surface::{IntrinsicForm, intrinsic_form, intrinsic_global, spell},
     curios_unit::Predecessors,
     std::{
         collections::{BTreeMap, BTreeSet},

@@ -1,6 +1,6 @@
 //! The names a print spells: a binder suffixed beside a like-named global or label, a reader's own declaration claiming its bare name, suffixes counted across a scope, and a level a metavariable heads.
 
-use {super::*, crate::*};
+use {super::*, curios_core::UniverseMetaId};
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
@@ -153,7 +153,7 @@ fn a_concrete_level_prints_where_a_metavariable_headed_one_is_suppressed() {
     let spelling = Rc::new(Spelling::default().with_erased_universes());
     let printed = |level: Level| Term::type_at(level).spelled(&spelling).to_string();
     let one = |level: Level| level.succ().expect("a successor is a level");
-    let open = Level::meta(crate::UniverseMetaId(7));
+    let open = Level::meta(UniverseMetaId(7));
 
     assert_eq!(printed(Level::zero()), "Type");
     assert_eq!(printed(one(Level::zero())), "Type.{1}");

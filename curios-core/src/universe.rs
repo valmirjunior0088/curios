@@ -253,43 +253,6 @@ impl Level {
     }
 }
 
-impl fmt::Display for Level {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.atoms.is_empty() {
-            return write!(formatter, "{}", self.constant);
-        }
-
-        let mut parts = Vec::new();
-        if self.constant != 0 {
-            parts.push(self.constant.to_string());
-        }
-        for (head, offset) in &self.atoms {
-            let name = match head {
-                // `u` through `z`, then numbered cycles. Stepping 26 letters from `u` instead runs off the end of the alphabet at the seventh parameter and prints `{`, `|`, `}` as level names.
-                LevelHead::Param(param) => {
-                    const LETTERS: usize = (b'z' - b'u' + 1) as usize;
-                    let letter = char::from(b'u' + u8::try_from(param.0 % LETTERS).unwrap());
-                    match param.0 / LETTERS {
-                        0 => letter.to_string(),
-                        cycle => format!("{letter}{cycle}"),
-                    }
-                }
-                LevelHead::Meta(meta) => meta.to_string(),
-            };
-            parts.push(if *offset == 0 {
-                name
-            } else {
-                format!("{name}+{offset}")
-            });
-        }
-        if parts.len() == 1 {
-            formatter.write_str(&parts[0])
-        } else {
-            write!(formatter, "max({})", parts.join(","))
-        }
-    }
-}
-
 /// A declaration-local quality parameter: which of the sorts its top-level item leaves to a caller this is, counted from zero in that item's [`UniverseContext`].
 ///
 /// Flat, where a [`UniverseParam`] is scoped: only a top-level item binds a quality, so one names the same parameter at every depth beneath it and nothing shifts it.
@@ -663,63 +626,6 @@ pub enum UniverseError {
         path: Vec<UniverseConstraintOrigin>,
     },
 }
-
-impl fmt::Display for UniverseError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UniverseError::OffsetOverflow => formatter.write_str("universe level offset overflow"),
-            UniverseError::EscapingLevel => {
-                formatter.write_str("a universe metavariable or parameter escaped its scope")
-            }
-            UniverseError::InstanceArity { expected, got } => {
-                write!(
-                    formatter,
-                    "universe instance has {got} arguments but its scheme expects {expected}"
-                )
-            }
-            UniverseError::QualityArity { expected, got } => {
-                write!(
-                    formatter,
-                    "universe instance states {got} sorts but its scheme leaves {expected} to its caller"
-                )
-            }
-            UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),
-            UniverseError::MismatchedRecursiveContexts => formatter
-                .write_str("members of one recursive group carry different universe contexts"),
-            UniverseError::SearchExhausted {
-                constraints,
-                branches,
-                widths,
-            } => write!(
-                formatter,
-                "universe consistency search exceeded its budget: \
-                 {constraints} constraints, {branches} disjunctive clauses, widths {widths:?}"
-            ),
-            UniverseError::Inconsistency { lower, upper, path } => {
-                write!(
-                    formatter,
-                    "this {} would need to be strictly below itself ({lower} ≤ {upper})",
-                    inconsistent_sort(path),
-                )?;
-                for origin in path {
-                    write!(formatter, "\n  required by {:?}", origin.kind)?;
-                    if let Some(instantiated) = &origin.instantiated {
-                        write!(formatter, " of {}", instantiated.faithful())?;
-                    }
-                    if let Some(declaration) = &origin.declaration {
-                        write!(formatter, " in {declaration}")?;
-                    }
-                    if let Some(binder) = &origin.binder {
-                        write!(formatter, " at binder {binder}")?;
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-impl std::error::Error for UniverseError {}
 
 #[cfg(test)]
 mod tests;

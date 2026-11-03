@@ -47,6 +47,9 @@ use {
     },
 };
 
+#[cfg(feature = "profile")]
+use curios_surface::Spellable;
+
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Context<'_> {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
@@ -1278,7 +1281,7 @@ fn settle(
     original: &Term,
 ) -> Result<(), ReduceError> {
     // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
-    curios_profile::profile!("reduce::settle", key = %original, frame);
+    curios_profile::profile!("reduce::settle", key = %original.faithful(), frame);
     let declined = context.declined();
     let questions = context.questions();
     let settled = context.with_refinements_withheld_from(frame, |context| {

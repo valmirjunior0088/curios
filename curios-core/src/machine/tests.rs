@@ -296,7 +296,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
 
     assert!(
         matches!(&*folded, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some()),
-        "a plain probe was served a forced value: {folded}"
+        "a plain probe was served a forced value: {folded:?}"
     );
 
     // The same term at a demand for its value still computes one: the machine withholds the member's body from a plain probe, not from the eliminator.
