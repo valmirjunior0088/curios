@@ -24,7 +24,7 @@ Curios's fixed prelude: the `/std` package as it is authored, in `std/`, the `/s
 
 **Rationale.** A build script cannot depend on the library of its own package, and the two roots' sources are read by the library's suites as well as by the build, so one file both compile states each once. A module included by path finds its children beside it rather than in its own directory, and rustfmt follows a module whatever its `cfg`, so a child named by path is the one spelling every compilation and the formatter resolve alike.
 
-**Rejected.** The roster in `curios-text`, which the build reached as a dependency, putting a root of the prelude in the surface language's crate. An inline module in each program carrying the path to `src/`, which would spare the children their attributes behind a wrapper module in each program.
+**Rejected.** The roster in `curios-module`, which the build reached as a dependency, putting a root of the prelude in the surface language's crate. An inline module in each program carrying the path to `src/`, which would spare the children their attributes behind a wrapper module in each program.
 
 ### A root is imaged as a certified unit
 

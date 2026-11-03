@@ -20,7 +20,7 @@ use {
     },
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
-    curios_text::{
+    curios_module::{
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
@@ -508,7 +508,7 @@ pub enum EntryTail {
     Program,
     /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness, through [`examine_entrypoint`].
     False,
-    /// The synthesized `Test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_text::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `Test/main([])`, which runs nothing and answers that every test held.
+    /// The synthesized `Test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_module::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `Test/main([])`, which runs nothing and answers that every test held.
     ///
     /// **Which tests is the program's, never the unit's.** The unit holds every test it declares whatever is selected, so one tested unit serves every selection, `wonder` and `lint`; what the tail does not reach is linked into nothing, so a selection narrows the program's back end, where most of a test program's cost is.
     Test { under: Vec<Qualifier> },

@@ -5,7 +5,7 @@ use {
         Atom, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nominal, Scope,
         Telescope, Term, UniverseContext, Universes,
     },
-    curios_text::SYNTAX,
+    curios_module::SYNTAX,
 };
 
 pub(super) const TICKET: Ticket = Ticket {

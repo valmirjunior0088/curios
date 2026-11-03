@@ -1,7 +1,7 @@
 use {
     crate::{Date, Proof, Status, Ticket, Witness, false_type, refused},
     curios_core::{Definitions, Free, Global, Intrinsic, Nat, Term, Universes},
-    curios_text::SYNTAX,
+    curios_module::SYNTAX,
 };
 
 pub(super) const TICKET: Ticket = Ticket {

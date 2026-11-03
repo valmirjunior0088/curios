@@ -6,9 +6,9 @@ use {
     super::*,
     curios_common::{Qualifier, fill, test_support::*},
     curios_core::{Certification, Global},
+    curios_module::Entrypoint,
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
-    curios_text::Entrypoint,
     std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
 

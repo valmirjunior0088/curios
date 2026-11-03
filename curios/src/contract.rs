@@ -9,9 +9,9 @@ mod tests;
 
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
+    curios_module::Overlay,
     curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
     curios_pipeline::Stage,
-    curios_text::Overlay,
     curios_verdict::Verdicts,
     curios_wonder::{Staged, file_subject},
     std::{

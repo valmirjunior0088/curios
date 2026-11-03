@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
+    curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
 };
 

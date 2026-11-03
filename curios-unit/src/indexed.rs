@@ -7,7 +7,7 @@ use {
     curios_core::{Anchors, Definitions, Global, HeldReads, Imports, ItemRun, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, HeldAsked},
-    curios_text::PreparedText,
+    curios_module::PreparedText,
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
 };
 

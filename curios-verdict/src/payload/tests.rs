@@ -7,8 +7,8 @@
 use {
     super::*,
     curios_common::{RootKind, fill, test_support::*},
+    curios_module::{Entrypoint, Module},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold},
-    curios_text::{Entrypoint, Module},
     curios_wasm::to_bytes,
     std::path::PathBuf,
 };
@@ -39,7 +39,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         curios_package::Spelling::of(target),
         None,
         directory,
-        &curios_text::Overlay::default(),
+        &curios_module::Overlay::default(),
     )
     .expect("a governed package")
     {

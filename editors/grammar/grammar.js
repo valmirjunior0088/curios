@@ -1,13 +1,13 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// The surface grammar of `documentation/syntax.md`, mirrored from `curios-text/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
+// The surface grammar of `documentation/syntax.md`, mirrored from `curios-module/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
 
 // An identifier is a nonempty run of Unicode alphanumerics and `_` (`curios_common::is_identifier`).
 const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/u;
 const CONTEXTUAL_WORDS = ["concept", "satisfy", "and", "test"];
 const SORT_WORDS = ["Type", "Prop", "Sort"];
 
-// Higher binds tighter, every level left-associative (`curios_text::op_precedence`).
+// Higher binds tighter, every level left-associative (`curios_module::op_precedence`).
 const PRECEDENCE = {
   or: 1,
   and: 2,

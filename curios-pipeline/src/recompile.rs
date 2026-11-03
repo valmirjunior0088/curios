@@ -17,7 +17,7 @@ use {
         elaborate_and_zonk_unit_over,
     },
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
-    curios_text::{PreparedText, UnitSource, into_core_unit_over},
+    curios_module::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Unit},
     std::collections::BTreeSet,
 };

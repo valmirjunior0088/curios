@@ -11,7 +11,7 @@ mod tests;
 
 use {
     crate::{MANIFEST, Manifest, Package, Store, Umbrella, compiler_requirement, require_compiler},
-    curios_text::identity,
+    curios_module::identity,
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},

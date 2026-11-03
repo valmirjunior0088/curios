@@ -13,8 +13,8 @@ use {
     crate::{Verdicts, chained, replace, unchanged},
     curios_abi::ForeignStore,
     curios_common::{Qualifier, digest},
+    curios_module::{RootSource, UnitSource},
     curios_package::{Runs, payload_slot},
-    curios_text::{RootSource, UnitSource},
     curios_unit::{digested, read_within, segments},
     std::{collections::BTreeSet, fs, io, path::Path},
 };

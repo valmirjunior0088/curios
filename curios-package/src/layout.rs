@@ -1,6 +1,6 @@
 //! How a package on disk becomes the unit the compiler lowers.
 //!
-//! [`curios_text::RootSource`] states the layout rule every header obeys: a unit's root reads its modules from the directory it sits in, and a module below it from its stem directory. A package's library header sits beside the manifest, so its namespace is the manifest's directory: `lib` enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory, a qualified name's tail and its path the same string and only the head mapped to the manifest, which is what names that namespace (law 2).
+//! [`curios_module::RootSource`] states the layout rule every header obeys: a unit's root reads its modules from the directory it sits in, and a module below it from its stem directory. A package's library header sits beside the manifest, so its namespace is the manifest's directory: `lib` enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory, a qualified name's tail and its path the same string and only the head mapped to the manifest, which is what names that namespace (law 2).
 //!
 //! The consequence enforced below is that **a file is one unit's**: the library and every executable beside the manifest read their modules from the package's directory alike, and a row may point anywhere below it, so a file two units' `mod` chains reach is a refusal naming both (law 4).
 //!
@@ -14,7 +14,7 @@ mod tests;
 use {
     crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
     curios_common::{Qualifier, RootKind, is_identifier},
-    curios_text::{Entrypoint, RootSource},
+    curios_module::{Entrypoint, RootSource},
     std::{
         collections::BTreeMap,
         iter,
@@ -107,7 +107,7 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_text::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
+/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_module::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let umbrella = umbrella_over(directory)?;
     require_compiler(

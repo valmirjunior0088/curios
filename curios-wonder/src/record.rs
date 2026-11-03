@@ -1,6 +1,6 @@
 //! The records a query answers with: plain data over the compiler's coordinates, deliberately distinct from any stage's own error type so a compiler refactor is never a protocol change by accident.
 
-use {curios_common::Report, curios_text::Lint};
+use {curios_common::Report, curios_module::Lint};
 
 /// How a diagnostic classifies. The first two are the compile path's own split — a goal batch exits 2 where a hard error exits 1 — carried per record because a transport renders them apart: a goal is something the author wrote and asked about, not something wrong. A lint is neither: an exact finding the lowering reports and nothing stops on, which `curios lint` alone turns into an exit code. A note is less than a lint: what a question says about how it was asked, which no exit code counts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,7 +9,7 @@ pub enum Severity {
     Error,
     /// A written `?`, reported with what elaboration determined there.
     Goal,
-    /// An unused import, binder or declaration — see `curios_text::Lint`.
+    /// An unused import, binder or declaration — see `curios_module::Lint`.
     Lint,
     /// How the question was answered rather than anything wrong with the program: a file a package holds and none of its units declares, checked on its own.
     Note,

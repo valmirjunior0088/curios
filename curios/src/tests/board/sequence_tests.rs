@@ -5,9 +5,9 @@ use {
     curios_cert::{Error, Verdict},
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
+    curios_module::{Entrypoint, RootSource},
     curios_num::Binary,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
-    curios_text::{Entrypoint, RootSource},
     std::hash::{DefaultHasher, Hash, Hasher},
 };
 

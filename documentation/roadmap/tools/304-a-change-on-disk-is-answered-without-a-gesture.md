@@ -7,7 +7,7 @@ It has no prerequisite in another specification. The next step is a ready delive
 ## What is missing
 
 - **The server registers for no file event.** `serve` declares full-text sync, formatting, definition, hover and document symbols, and `Server::notified` handles `didOpen`, `didChange`, `didSave` and `didClose`; a `workspace/didChangeWatchedFiles` notification reaches its catch-all arm and is dropped, and the server asks no client to send one.
-- **Which open document a changed file reaches is known to no state the analyst keeps.** A unit's read log names the files it read when it compiled, and only then: a refused unit is taken into no fold (`compile_units_reading`, `curios-pipeline/src/compile.rs`), a file looked for and missing is no read (`RootSource::reads`, `curios-text/src/root_source.rs`), and the manifests and `mod` chains a document's placement walks are read by `Selection` (`curios-package/src/selection.rs`) into no log at all.
+- **Which open document a changed file reaches is known to no state the analyst keeps.** A unit's read log names the files it read when it compiled, and only then: a refused unit is taken into no fold (`compile_units_reading`, `curios-pipeline/src/compile.rs`), a file looked for and missing is no read (`RootSource::reads`, `curios-module/src/root_source.rs`), and the manifests and `mod` chains a document's placement walks are read by `Selection` (`curios-package/src/selection.rs`) into no log at all.
 
 ## What this builds on
 

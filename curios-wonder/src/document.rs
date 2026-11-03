@@ -4,8 +4,8 @@ use {
     crate::{Overlaid, overlaid},
     curios_common::Qualifier,
     curios_document::Documentation,
+    curios_module::{Overlay, RootSource},
     curios_pipeline::{Cache, CompileError, Fold, prelude_documentation},
-    curios_text::{Overlay, RootSource},
     curios_verdict::Verdicts,
 };
 

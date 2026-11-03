@@ -28,7 +28,7 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 **Decision.** `is_identifier` and `is_keyword` — the identifier characters and the reserved words — live beside `Qualifier`, not in the parser.
 
-**Rationale.** A segment's legality is a property of the identity: `curios-text` refuses a keyword in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One list below both keeps the two refusals one refusal.
+**Rationale.** A segment's legality is a property of the identity: `curios-module` refuses a keyword in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One list below both keeps the two refusals one refusal.
 
 ### A mount is a prefix, not an identity beside it
 
@@ -38,7 +38,7 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 ### The syntax registry states slots, never spellings
 
-**Decision.** `SyntaxRegistry` names every compiler-known slot as a typed field; `curios-text` fills it (`registry.rs`), `curios-prelude`'s build holds every slot to a declaration of the prelude, and `curios-text`'s lowering and `curios-elab`'s type-directed features read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates.
+**Decision.** `SyntaxRegistry` names every compiler-known slot as a typed field; `curios-module` fills it (`registry.rs`), `curios-prelude`'s build holds every slot to a declaration of the prelude, and `curios-module`'s lowering and `curios-elab`'s type-directed features read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates.
 
 **Rationale.** The consumers sit below the crate holding the authored declarations, so the shape lives below both. A pattern naming fewer fields than its struct does not compile, so a slot added to a group is a compile error until it is enumerated.
 

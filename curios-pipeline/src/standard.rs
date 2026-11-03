@@ -15,8 +15,8 @@ use {
     curios_abi::ForeignStore,
     curios_common::Qualifier,
     curios_document::Documentation,
+    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_prelude::with_prelude,
-    curios_text::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_unit::{Predecessors, Unit},
 };
 
@@ -25,8 +25,8 @@ use {
 /// Reports no progress. Every caller of this one is a test, an embedder or the browser, none of which has a terminal to narrate to; the CLI folds its units through a [`Fold`] instead.
 pub fn compile_with_prelude<O>(
     budget: u64,
-    entrypoint: &curios_text::Entrypoint,
-    loader: &curios_text::RootSource,
+    entrypoint: &curios_module::Entrypoint,
+    loader: &curios_module::RootSource,
     observe: O,
 ) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
 where
@@ -73,7 +73,7 @@ impl<'a> Fold<'a> {
     /// Compile `entrypoint` on top of the fold, through to the emitted module.
     pub fn compile<O, P>(
         self,
-        entrypoint: &curios_text::Entrypoint,
+        entrypoint: &curios_module::Entrypoint,
         loader: &RootSource,
         observe: O,
         progress: P,
@@ -104,7 +104,7 @@ impl<'a> Fold<'a> {
     /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, kernel judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
     pub fn tests<O, P>(
         self,
-        entrypoint: &curios_text::Entrypoint,
+        entrypoint: &curios_module::Entrypoint,
         loader: &RootSource,
         under: Vec<Qualifier>,
         observe: O,
@@ -135,7 +135,7 @@ impl<'a> Fold<'a> {
     /// [`Fold::compile`] stopped where the verdicts stop: `entrypoint` lowered, elaborated and judged on top of the fold — see [`check_entrypoint`](crate::check_entrypoint). The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
     pub fn check<P>(
         self,
-        entrypoint: &curios_text::Entrypoint,
+        entrypoint: &curios_module::Entrypoint,
         loader: &RootSource,
         tail: EntryTail,
         progress: P,
@@ -192,7 +192,7 @@ impl<'a> Fold<'a> {
     /// The program `entrypoint` is, lowered on top of the fold and no further (`lower_subject`), handed to `then` with the term it closes with and the units in scope, the prelude's roots first: what a question about what a program writes reads, asked of no checker, so a program that would be refused answers.
     pub fn lowered<P, T>(
         self,
-        entrypoint: &curios_text::Entrypoint,
+        entrypoint: &curios_module::Entrypoint,
         loader: &RootSource,
         progress: P,
         then: impl FnOnce(&[&Unit], &PreparedText, &curios_core::Entrypoint) -> T,
@@ -428,8 +428,8 @@ pub fn prelude_documentation() -> Vec<Documentation> {
 /// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`].
 pub fn typecheck_with_prelude(
     budget: u64,
-    entrypoint: &curios_text::Entrypoint,
-    loader: &curios_text::RootSource,
+    entrypoint: &curios_module::Entrypoint,
+    loader: &curios_module::RootSource,
 ) -> Result<Typechecked, Refused> {
     with_prelude(|prelude| {
         typecheck_entrypoint(
@@ -445,8 +445,8 @@ pub fn typecheck_with_prelude(
 /// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`].
 pub fn examine_with_prelude(
     budget: u64,
-    entrypoint: &curios_text::Entrypoint,
-    loader: &curios_text::RootSource,
+    entrypoint: &curios_module::Entrypoint,
+    loader: &curios_module::RootSource,
 ) -> Result<Examined, Refused> {
     with_prelude(|prelude| {
         examine_entrypoint(

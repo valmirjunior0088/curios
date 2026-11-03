@@ -5,11 +5,11 @@
 use {
     curios::{TestSubject, run_wasm, test_subjects},
     curios_common::{Qualifier, fill},
+    curios_module::{Entrypoint, Formatted, Overlay, RootSource},
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_package::{Selection, Spelling, Target},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_prelude::std_module::*,
-    curios_text::{Entrypoint, Formatted, Overlay, RootSource},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
         is_extended_pictographic, test_support::*,

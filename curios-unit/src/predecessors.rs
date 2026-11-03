@@ -4,7 +4,7 @@ use {
     crate::Unit,
     curios_core::{Anchors, Certification, Definitions, Lexicon, Places},
     curios_erase::ErasedUnit,
-    curios_text::PreparedText,
+    curios_module::PreparedText,
 };
 
 /// The units already compiled, in dependency order.
@@ -30,7 +30,7 @@ impl<'a> Predecessors<'a> {
         self.units
     }
 
-    /// The resolution state of each predecessor, for `curios-text`.
+    /// The resolution state of each predecessor, for `curios-module`.
     ///
     /// A slice of that crate's own opaque type, not of anything unpacked here — which is what lets its tables stay private while still being layered rather than copied.
     pub fn text(&self) -> Vec<&'a PreparedText> {

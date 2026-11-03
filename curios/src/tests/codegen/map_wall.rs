@@ -2,9 +2,9 @@
 
 use {
     crate::*,
+    curios_module::{Entrypoint, RootSource},
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
 

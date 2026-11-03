@@ -3,9 +3,9 @@
 use {
     curios_common::{Qualifier, test_support::*},
     curios_document::Kind,
+    curios_module::Overlay,
     curios_package::{Governing, order},
     curios_pipeline::DEFAULT_BUDGET,
-    curios_text::Overlay,
     curios_wonder::{documentation, std_documentation},
     std::fs,
 };

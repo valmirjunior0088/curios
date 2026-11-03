@@ -12,7 +12,7 @@ use {
         FileHash, MANIFEST, Manifest, Store, Target, TreeHash, deliver, deliver_module,
         nearest_manifest, umbrella_over,
     },
-    curios_text::identity,
+    curios_module::identity,
     std::{
         fs,
         path::{Component, Path, PathBuf},

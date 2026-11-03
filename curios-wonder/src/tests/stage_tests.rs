@@ -2,8 +2,8 @@
 
 use {
     crate::*,
+    curios_module::{Overlay, RootSource},
     curios_pipeline::DEFAULT_BUDGET,
-    curios_text::{Overlay, RootSource},
     std::path::Path,
 };
 

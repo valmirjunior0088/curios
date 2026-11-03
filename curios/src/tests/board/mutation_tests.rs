@@ -4,7 +4,7 @@
 
 use {
     curios_core::{Definitions, Item, Program, Term, Zonked},
-    curios_text::{Entrypoint, RootSource},
+    curios_module::{Entrypoint, RootSource},
 };
 
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.

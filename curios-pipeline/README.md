@@ -1,6 +1,6 @@
 # curios-pipeline
 
-The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and the fold that strings the pipeline together from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module` — plus, in `standard.rs`, the same fold with the fixed prelude supplied. It is the compiler boundary: everything a compilation needs and nothing a product decides. How the stages work belongs to each stage's crate; where judgment sits in the sequence and what `Stage` observes belong to the crate rustdoc.
+The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and the fold that strings the pipeline together from a parsed `curios_module::Entrypoint` to a `curios_wasm::Module` — plus, in `standard.rs`, the same fold with the fixed prelude supplied. It is the compiler boundary: everything a compilation needs and nothing a product decides. How the stages work belongs to each stage's crate; where judgment sits in the sequence and what `Stage` observes belong to the crate rustdoc.
 
 ## Design
 

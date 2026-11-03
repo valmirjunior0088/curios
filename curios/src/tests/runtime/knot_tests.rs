@@ -6,9 +6,9 @@ use {
         *,
     },
     curios_common::fill,
+    curios_module::{Entrypoint, RootSource},
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
 };
 
 /// Run `source` expecting failure, as [`error`] does, with the wasm name section kept through Binaryen: what a trap's report names its frames by, and what a shipped build drops.

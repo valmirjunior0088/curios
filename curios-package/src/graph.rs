@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{Dependency, Governing, MANIFEST, Manifest, Package, Snapshot, package_source},
-    curios_text::RootSource,
+    curios_module::RootSource,
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},

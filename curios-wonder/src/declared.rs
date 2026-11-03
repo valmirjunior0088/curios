@@ -2,8 +2,8 @@
 
 use {
     crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},
+    curios_module::Overlay,
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
-    curios_text::Overlay,
     curios_verdict::Verdicts,
 };
 

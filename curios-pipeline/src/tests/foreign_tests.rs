@@ -64,7 +64,7 @@ fn a_program_is_handed_the_rows_it_reaches() {
     let (_, foreigns) = crate::compile_with_prelude(
         crate::DEFAULT_BUDGET,
         &entry,
-        &curios_text::RootSource::none(),
+        &curios_module::RootSource::none(),
         |_| {},
     )
     .expect("the program compiles");

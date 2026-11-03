@@ -127,7 +127,7 @@ pub fn foreign_signature(
 ///
 /// An intrinsic that performs an effect returns an `Io`, including guest cell and channel operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
-/// **Generic over what an operand is**, which is [`Term`] in this crate and every stage below it. `curios-text` holds the same enum over the surface term, for the `/sys` roster to plant in a declaration's body, so the surface tree restates no variant and lowering one is [`try_map`](Self::try_map) over its operands. Everything that gives an intrinsic meaning — its signature, its reduction, its algebra — is stated at `Term` alone.
+/// **Generic over what an operand is**, which is [`Term`] in this crate and every stage below it. `curios-module` holds the same enum over the surface term, for the `/sys` roster to plant in a declaration's body, so the surface tree restates no variant and lowering one is [`try_map`](Self::try_map) over its operands. Everything that gives an intrinsic meaning — its signature, its reduction, its algebra — is stated at `Term` alone.
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bytes_slice`, …) take `impl Into<Term>` operands, sparing reduction's neutral rebuilds the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

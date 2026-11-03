@@ -12,8 +12,8 @@ use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
     curios_common::{Source, Span},
     curios_core::{Anchors, Declared, Global},
+    curios_module::{Heading, Overlay, PreparedText, heading, identity},
     curios_pipeline::{Cache, Fold},
-    curios_text::{Heading, Overlay, PreparedText, heading, identity},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -58,7 +58,7 @@ impl Declaration {
         self.held.then_some(&self.label)
     }
 
-    /// The declaration's head as its author wrote it, and the prose above it: read off its own text by the printers a documentation page is printed by (`curios_text::heading`), so it is what a page says of it, and is said of a declaration no page shows. Parsed where it is asked for, the one declaration's text.
+    /// The declaration's head as its author wrote it, and the prose above it: read off its own text by the printers a documentation page is printed by (`curios_module::heading`), so it is what a page says of it, and is said of a declaration no page shows. Parsed where it is asked for, the one declaration's text.
     pub fn heading(&self) -> Option<Heading> {
         let text = &self.text;
 

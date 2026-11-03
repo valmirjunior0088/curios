@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_common::test_support::*,
+    curios_module::{Overlay, RootSource, UnitSource},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
-    curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_verdict::{Session, Verdicts},
     std::{

@@ -3690,7 +3690,7 @@ fn into_core_unit_within(
     Ok((unit, entry))
 }
 
-/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-text`'s own stage tests do.
+/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-module`'s own stage tests do.
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,

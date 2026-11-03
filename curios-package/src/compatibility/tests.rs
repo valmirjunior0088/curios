@@ -4,7 +4,7 @@ use {
     super::*,
     crate::*,
     curios_common::{fill, test_support::*},
-    curios_text::Overlay,
+    curios_module::Overlay,
     std::fs,
 };
 

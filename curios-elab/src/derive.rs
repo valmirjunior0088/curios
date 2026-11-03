@@ -2,7 +2,7 @@
 //!
 //! Lowering carries the declaration into Core as the same anonymous definition a written witness produces, with [`Transient::Derive`](curios_core::Transient) in body position, so the witness's telescope — its implicit binders and `use` premises — is in scope when the body is checked, and its signature registers in the witness table exactly as a written one does (orphan and duplicate-key refusals need no body). Checking the transient against the concept application is what writes the body: the roster row for the concept produces the Core the lowerer would have produced for the equivalent written witness, and that Core is elaborated under the same expectation, so a derived body is typed, resolved, zonked and certified like any authored one — the kernel never sees the transient.
 //!
-//! **The blessed set is one value.** Which concepts derive, and their specific method and renderer names, are one row of `curios_common::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. `Spell` also uses the registry's shared string vocabulary; both its writer and the scheduler receive that same entry.
+//! **The blessed set is one value.** Which concepts derive, and their specific method and renderer names, are one row of `curios_common::DerivationSyntax` — read here to pick the writer, and read by `curios-module`'s `order_flat_items` to supply the hard edges the transient hides. `Spell` also uses the registry's shared string vocabulary; both its writer and the scheduler receive that same entry.
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island, its parameters and indices given by the key. A proposition is no key: every concept with a derivation is over a `Type`, where none stands. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` extent.
 //!
@@ -28,7 +28,7 @@ use {
     curios_num::Natural,
 };
 
-/// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-text`'s scheduler read one value rather than two lists obliged to agree.
+/// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-module`'s scheduler read one value rather than two lists obliged to agree.
 fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivation> {
     let concept = *concept.qualifier()?;
     syntax

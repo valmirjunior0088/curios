@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     std::cell::{Cell, RefCell},
 };

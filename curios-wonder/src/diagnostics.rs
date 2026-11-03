@@ -3,9 +3,9 @@
 use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
     curios_common::{Qualifier, Report, Source, Span, is_identifier},
+    curios_module::{Entrypoint, Form, Overlay, PreparedText, RootSource, UnitSource},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
-    curios_text::{Entrypoint, Form, Overlay, PreparedText, RootSource, UnitSource},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{

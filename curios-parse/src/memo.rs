@@ -14,7 +14,7 @@ thread_local! {
 
 /// Wraps a parser so its result at each start offset is computed once and reused. This is what makes the term grammar linear instead of exponential: the same position is probed by several overlapping alternatives (a `(` is tried as a dependent function type, then a non-dependent one, then a lambda, then parens), and without memoization each retry re-parses the whole nested subterm.
 ///
-/// Sound as straight packrat because the wrapped parsers (`curios-text`'s term, atomic-term and two pattern nonterminals) are pure functions of the offset — parsing carries no symbol table or other context that could make the same input parse differently. `key` distinguishes the grammar nonterminals that share the table. The wrapped parser must never re-enter itself at the *same* offset without consuming input (no left recursion), which the term grammar satisfies.
+/// Sound as straight packrat because the wrapped parsers (`curios-module`'s term, atomic-term and two pattern nonterminals) are pure functions of the offset — parsing carries no symbol table or other context that could make the same input parse differently. `key` distinguishes the grammar nonterminals that share the table. The wrapped parser must never re-enter itself at the *same* offset without consuming input (no left recursion), which the term grammar satisfies.
 pub fn memoize<'a, A, M>(key: u32, parser: impl IntoParser<'a, A, M>) -> impl Parser<'a, A>
 where
     A: Clone + 'static,

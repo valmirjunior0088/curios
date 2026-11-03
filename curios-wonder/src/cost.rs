@@ -7,8 +7,8 @@
 use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
     curios_cps::{Fate, descendants, fates},
+    curios_module::Overlay,
     curios_pipeline::{Cache, Fold, Stage},
-    curios_text::Overlay,
     curios_verdict::Verdicts,
     std::collections::BTreeMap,
 };

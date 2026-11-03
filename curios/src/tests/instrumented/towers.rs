@@ -3,8 +3,8 @@
 use {
     crate::tests::{Shape, Stands, tower},
     curios_core::{Zonked, take_looks},
+    curios_module::{Entrypoint, RootSource},
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude_measured, typecheck_with_prelude},
-    curios_text::{Entrypoint, RootSource},
 };
 
 /// What one checker made of a tower: its verdict, what its heaviest declaration spent where it reached one, and the nodes its walks looked at.

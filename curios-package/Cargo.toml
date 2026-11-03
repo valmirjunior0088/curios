@@ -16,7 +16,7 @@ workspace = true
 # driver; xtask's own `toml_edit` answers for `Cargo.toml`, which is not this format's business.
 [dependencies]
 curios-common = { workspace = true }
-curios-text = { workspace = true }
+curios-module = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }

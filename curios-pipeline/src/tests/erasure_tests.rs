@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_anf::{Analysis, Rhs, Statement, test_support::*},
-    curios_text::RootSource,
+    curios_module::RootSource,
     curios_wasm::to_bytes,
 };
 

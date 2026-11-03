@@ -1,14 +1,14 @@
 //! A package, compiled and run the way the CLI does it.
 //!
-//! Everything below `Selection::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
+//! Everything below `Selection::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-module`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
     crate::*,
     curios_common::{Qualifier, digest, test_support::*},
+    curios_module::{Entrypoint, Overlay, RootSource},
     curios_native::{ForeignBindings, MockHost},
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
-    curios_text::{Entrypoint, Overlay, RootSource},
     curios_verdict::Verdicts,
     std::{
         fs,

@@ -1,6 +1,6 @@
 //! What a goal reports — its solution, its pin, its scope and its batch. The candidates suggested to fill one are `suggestion_tests`'.
 
-use {super::test_support::*, crate::*, curios_text::RootSource};
+use {super::test_support::*, crate::*, curios_module::RootSource};
 
 #[test]
 fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {

@@ -7,8 +7,8 @@
 use {
     super::*,
     curios_common::fill,
+    curios_module::{Entrypoint, RootSource},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
     std::fmt::Write,
 };
 

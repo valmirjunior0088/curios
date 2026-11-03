@@ -24,8 +24,8 @@ use {
     crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Written},
     curios_common::{Report, Source, Span},
     curios_core::Declared,
+    curios_module::{Formatted, Overlay},
     curios_package::{Selection, Spelling},
-    curios_text::{Formatted, Overlay},
     curios_verdict::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
@@ -362,7 +362,7 @@ impl Server {
 
     /// `span` as a place an editor opens. In a document the editor holds it is where the span stands in the buffer, and nothing where the buffer was edited there since the span was taken; in any other file it is the span's own range.
     fn located(&self, span: &Span) -> Option<Location> {
-        let path = curios_text::identity(span.source.path.as_deref()?);
+        let path = curios_module::identity(span.source.path.as_deref()?);
         let range = match self.documents.get(&path) {
             Some(buffer) => {
                 let moved = Standing::of(&span.source.text, buffer).moved(span)?;
@@ -771,7 +771,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
         span.source
             .path
             .as_deref()
-            .map(curios_text::identity)
+            .map(curios_module::identity)
             .unwrap_or_else(|| document.to_path_buf())
     };
     let (path, range) = match &record.report.span {
@@ -941,7 +941,7 @@ fn path_of(uri: &Uri) -> Option<PathBuf> {
         }
     }
 
-    Some(curios_text::identity(Path::new(
+    Some(curios_module::identity(Path::new(
         &String::from_utf8_lossy(&bytes).into_owned(),
     )))
 }

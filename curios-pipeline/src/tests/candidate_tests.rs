@@ -6,8 +6,8 @@ use {
     curios_common::{Candidates, Digest, Facet, Qualifier},
     curios_core::{Global, ItemRun},
     curios_elab::{declaration_input, lowered_digest},
+    curios_module::{SYNTAX, UnitSource},
     curios_prelude::with_prelude,
-    curios_text::{SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
 };
 

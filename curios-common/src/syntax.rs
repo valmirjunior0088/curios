@@ -2,7 +2,7 @@
 //!
 //! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!
-//! The registry is *shape only*: it names slots, never spellings. `curios-text` fills them (`registry.rs`), and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and why every enumeration destructures, are `README.md`'s decisions.
+//! The registry is *shape only*: it names slots, never spellings. `curios-module` fills them (`registry.rs`), and the two stages that emit those names — `curios-module`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and why every enumeration destructures, are `README.md`'s decisions.
 
 use crate::{InfixOp, Qualifier};
 
@@ -601,7 +601,7 @@ impl TestSyntax {
 ///
 /// A struct of rows rather than a list of them, for the reason this whole registry is one — a row is a named slot, so a derivation added here is a compile error at every fill site until it is filled, where a list would have let a missing row pass every check. That is the drift the roster exists to end, and a list would have relocated it rather than removed it.
 ///
-/// The tag a body writer dispatches on and the vocabulary `curios-text`'s unused-declaration lint reads are the same value, so the two cannot disagree.
+/// The tag a body writer dispatches on and the vocabulary `curios-module`'s unused-declaration lint reads are the same value, so the two cannot disagree.
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationSyntax {
     pub spell: SpellDerivation,
@@ -696,7 +696,7 @@ impl Derivation {
         }
     }
 
-    /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the references `curios-text`'s unused-declaration lint cannot read off the `Derive` transient, since the body naming them does not exist yet.
+    /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the references `curios-module`'s unused-declaration lint cannot read off the `Derive` transient, since the body naming them does not exist yet.
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`]: a concept *method* is its concept's path extended by a field label, which is built rather than spelled, so no `&'static` segment list for it exists or could be made.
     ///

@@ -4,9 +4,9 @@
 
 use {
     super::*,
+    curios_module::{Entrypoint, RootSource},
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
 };
 
 /// Whether the printed ANF still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Error`'s product line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.

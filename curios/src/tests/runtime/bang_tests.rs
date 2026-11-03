@@ -3,8 +3,8 @@
 use {
     crate::tests::{run, run_entrypoint},
     curios_common::fill,
+    curios_module::{Entrypoint, RootSource},
     curios_native::MockHost,
-    curios_text::{Entrypoint, RootSource},
 };
 
 #[test]

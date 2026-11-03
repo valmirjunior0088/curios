@@ -8,8 +8,8 @@ use {
     curios_common::fill,
     curios_core::Zonked,
     curios_erase::{Erasures, erase_program},
+    curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     std::fmt::Write,
 };

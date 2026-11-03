@@ -584,7 +584,7 @@ impl Imports {
         &body[..body.len().min(in_scope.count as usize)]
     }
 
-    /// The bindings in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, each under every spelling a `use` gave it there and in the order the `use`s were written: a module's members where the module was imported, by label. One binding may be listed under several spellings, all of which resolve; a reader is shown the shortest, which the text stage picks (`curios-text`'s `spell`).
+    /// The bindings in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, each under every spelling a `use` gave it there and in the order the `use`s were written: a module's members where the module was imported, by label. One binding may be listed under several spellings, all of which resolve; a reader is shown the shortest, which the text stage picks (`curios-module`'s `spell`).
     pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = Imported<'_>> {
         self.at(owner)
             .iter()

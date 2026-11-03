@@ -11,13 +11,13 @@ use {
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Places},
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
-    curios_text::PreparedText,
+    curios_module::PreparedText,
     std::{cell::OnceCell, rc::Rc},
 };
 
 /// What each stage produced for a unit: everything a [`Unit`] holds beside the certifier's record.
 ///
-/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-erase`'s erased forms are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the artifacts describe *one* unit, and nothing else says so.
+/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-module`'s resolution tables and `curios-erase`'s erased forms are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the artifacts describe *one* unit, and nothing else says so.
 ///
 /// **Each artifact is held by pointer, so a unit is handed over and never copied.** A fold hands a unit to its successors, a session keeps one as the next question's baseline, and a store offers one, and each of those is a clone of the handles and of nothing they hold.
 #[derive(Clone)]

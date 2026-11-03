@@ -16,8 +16,8 @@ use {
     super::*,
     curios_common::Qualifier,
     curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
+    curios_module::{Entrypoint, RootSource},
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
-    curios_text::{Entrypoint, RootSource},
     std::fmt,
 };
 

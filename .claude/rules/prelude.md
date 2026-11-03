@@ -1,7 +1,7 @@
 ---
 paths:
   - "curios-prelude/**"
-  - "curios-text/src/registry.rs"
+  - "curios-module/src/registry.rs"
 ---
 
 # The prelude: `/sys` and `/std`
@@ -10,5 +10,5 @@ paths:
 - There is no source fallback: an archive that fails to build or restore is a compiler invariant and fails loudly.
 - A package named `std` is the standard library: `curios-pipeline`'s `standard` module withholds the archived `/std` for it when it is the fold's first unit and hands the archive over as its baseline. Any other unit claiming a prelude prefix collides and is refused.
 - `cargo tree -p curios-prelude --edges normal,build` contains neither `curios-emit` nor `curios-wasm`: a build script reaching the emitter would re-elaborate the library on every emitter edit.
-- A name the compiler emits is filled into the `SyntaxRegistry` from `curios-text/src/registry.rs`; fill it there only when Rust emits it.
+- A name the compiler emits is filled into the `SyntaxRegistry` from `curios-module/src/registry.rs`; fill it there only when Rust emits it.
 - A `/sys` roster entry states its name, its parameters' names and its node; its types are read off `Intrinsic::signature`, so an operation is typed in `curios-core` and nowhere in `curios-prelude`.

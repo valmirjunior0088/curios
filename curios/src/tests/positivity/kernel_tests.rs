@@ -8,8 +8,8 @@ use {
         Item, Many, Nat, Nominal, Program, RecItem, Scope, StructDecl, StructType, Subterm,
         Telescope, Term, UniverseContext, Universes, Zonked,
     },
+    curios_module::SYNTAX,
     curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude},
-    curios_text::SYNTAX,
 };
 
 fn bad() -> Global {

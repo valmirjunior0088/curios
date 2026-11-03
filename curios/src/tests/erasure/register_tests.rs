@@ -2,8 +2,8 @@
 
 use {
     curios_anf::{Module, RegisterShape},
+    curios_module::{Entrypoint, RootSource},
     curios_pipeline::{Stage, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
 };
 
 const STATING: &str = r#"

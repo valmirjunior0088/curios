@@ -4,9 +4,9 @@ use {
     crate::*,
     curios_abi::ForeignStore,
     curios_common::fill,
+    curios_module::{Entrypoint, RootSource},
     curios_native::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
-    curios_text::{Entrypoint, RootSource},
 };
 
 /// A program compiled, ready to run.

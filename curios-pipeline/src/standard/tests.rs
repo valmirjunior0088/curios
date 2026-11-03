@@ -14,11 +14,11 @@ use {
         test_support::*,
     },
     curios_erase::{ErasedUnit, test_support::*},
-    curios_prelude::{std_module::*, with_prelude},
-    curios_text::{
+    curios_module::{
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
+    curios_prelude::{std_module::*, with_prelude},
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
     std::{
         cell::RefCell,
@@ -1394,7 +1394,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         .filter(|(_, at)| **at == part)
         .map(|((path, module, text), _)| {
             let tree = text
-                .parse::<curios_text::Module>()
+                .parse::<curios_module::Module>()
                 .unwrap_or_else(|error| panic!("{} parses: {error:?}", path.display()));
 
             (path, module, tree)
@@ -1436,7 +1436,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             .collect::<BTreeMap<_, _>>();
 
         let parsed = |text: &str, owner: Global| {
-            text.parse::<curios_text::Term>().unwrap_or_else(|error| {
+            text.parse::<curios_module::Term>().unwrap_or_else(|error| {
                 panic!(
                     "a term written for {} parses:\n{text}\n{error:?}",
                     owner.faithful()

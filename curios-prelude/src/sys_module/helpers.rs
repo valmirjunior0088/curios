@@ -4,10 +4,10 @@
 
 use {
     curios_common::Plicity,
-    curios_num::{Binary, Natural},
-    curios_text::{
+    curios_module::{
         Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Name, Subterm, Term, TupleType,
     },
+    curios_num::{Binary, Natural},
 };
 
 pub(super) fn name(label: &str) -> Term {

@@ -4,8 +4,8 @@
 
 use {
     curios_common::Qualifier,
+    curios_module::RootSource,
     curios_package::package_at,
-    curios_text::RootSource,
     std::path::{Path, PathBuf},
 };
 

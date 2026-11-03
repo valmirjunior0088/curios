@@ -1,5 +1,5 @@
 [package]
-name = "curios-text"
+name = "curios-module"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

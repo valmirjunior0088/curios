@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{Enter, Global, Instance, Reads, Subterm, Term, Totality},
+    curios_module::RootSource,
     curios_prelude::with_prelude,
-    curios_text::RootSource,
     curios_unit::Unit,
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };

@@ -579,13 +579,13 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-emit",
+ "curios-module",
  "curios-native",
  "curios-num",
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
- "curios-text",
  "curios-verdict",
  "curios-wasm",
  "curios-wonder",
@@ -786,11 +786,27 @@ name = "curios-js"
 version = "0.16.17"
 dependencies = [
  "curios-browser",
+ "curios-module",
  "curios-pipeline",
- "curios-text",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "curios-module"
+version = "0.16.17"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-common",
+ "curios-core",
+ "curios-document",
+ "curios-elab",
+ "curios-num",
+ "curios-parse",
+ "curios-print",
+ "curios-profile",
 ]
 
 [[package]]
@@ -825,7 +841,7 @@ name = "curios-package"
 version = "0.16.17"
 dependencies = [
  "curios-common",
- "curios-text",
+ "curios-module",
  "semver",
  "serde",
  "toml",
@@ -856,9 +872,9 @@ dependencies = [
  "curios-elab",
  "curios-emit",
  "curios-erase",
+ "curios-module",
  "curios-prelude",
  "curios-profile",
- "curios-text",
  "curios-unit",
  "curios-wasm",
 ]
@@ -876,13 +892,13 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-erase",
+ "curios-module",
  "curios-native",
  "curios-num",
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
- "curios-text",
  "curios-unicode",
  "curios-unit",
  "curios-verdict",
@@ -899,22 +915,6 @@ dependencies = [
  "curios-common",
  "libc",
  "tracing",
-]
-
-[[package]]
-name = "curios-text"
-version = "0.16.17"
-dependencies = [
- "curios-abi",
- "curios-archive",
- "curios-common",
- "curios-core",
- "curios-document",
- "curios-elab",
- "curios-num",
- "curios-parse",
- "curios-print",
- "curios-profile",
 ]
 
 [[package]]
@@ -936,7 +936,7 @@ dependencies = [
  "curios-core",
  "curios-elab",
  "curios-erase",
- "curios-text",
+ "curios-module",
 ]
 
 [[package]]
@@ -947,10 +947,10 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-core",
+ "curios-module",
  "curios-package",
  "curios-pipeline",
  "curios-profile",
- "curios-text",
  "curios-unit",
  "curios-wasm",
 ]
@@ -972,9 +972,9 @@ dependencies = [
  "curios-core",
  "curios-cps",
  "curios-document",
+ "curios-module",
  "curios-package",
  "curios-pipeline",
- "curios-text",
  "curios-unit",
  "curios-verdict",
  "curios-wasm",
@@ -2638,8 +2638,8 @@ dependencies = [
  "curios-common",
  "curios-core",
  "curios-elab",
+ "curios-module",
  "curios-pipeline",
- "curios-text",
 ]
 
 [[package]]

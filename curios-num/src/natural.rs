@@ -296,7 +296,7 @@ macro_rules! from_primitive {
 
 from_primitive!(u8, u16, u32, u64, u128, usize);
 
-/// Decimal, hex and binary rendering, so a printer can round-trip a literal in the radix it was written in: curios-text's `NatLiteral` carries the written radix and picks the matching format specifier.
+/// Decimal, hex and binary rendering, so a printer can round-trip a literal in the radix it was written in: curios-module's `NatLiteral` carries the written radix and picks the matching format specifier.
 macro_rules! radix_format {
     ($($trait:ident),+ $(,)?) => {
         $(

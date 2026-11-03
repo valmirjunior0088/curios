@@ -2,7 +2,7 @@
 //!
 //! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table, by its archived segments where they lie ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude`'s `stored_prelude_measurements`, which is where a figure for it belongs.
 //!
-//! **What a segment may spell lives here too**, as [`is_identifier`] and [`is_keyword`], rather than inside the lexer: `curios-text` refuses a keyword when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one list below both keeps those two refusals the same refusal — `README.md`'s decision.
+//! **What a segment may spell lives here too**, as [`is_identifier`] and [`is_keyword`], rather than inside the lexer: `curios-module` refuses a keyword when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one list below both keeps those two refusals the same refusal — `README.md`'s decision.
 
 #[cfg(test)]
 mod tests;

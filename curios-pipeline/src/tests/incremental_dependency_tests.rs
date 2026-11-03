@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     curios_core::{Definitions, Zonked},
     curios_elab::DEFAULT_BUDGET,
+    curios_module::SYNTAX,
     curios_prelude::with_prelude,
-    curios_text::SYNTAX,
     curios_unit::{Predecessors, Unit},
     std::fs,
 };

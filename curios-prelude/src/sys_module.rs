@@ -32,11 +32,11 @@ mod tests;
 use {
     curios_abi::{CodeCarrier, Failure, code_sets, stdio},
     curios_common::{RootKind, SyntaxRegistry},
-    curios_num::{Natural, Rounding},
-    curios_text::{
+    curios_module::{
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, RootSource, SYNTAX, Subterm,
         TopCase, TopInduct, TopItem,
     },
+    curios_num::{Natural, Rounding},
     curios_unicode::{PACKED_RUN, class_codes, packed_tables},
 };
 

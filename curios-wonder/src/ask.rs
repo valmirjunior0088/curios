@@ -13,9 +13,9 @@ use {
     curios_common::Span,
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
+    curios_module::{LoadError, Overlay},
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
-    curios_text::{LoadError, Overlay},
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,

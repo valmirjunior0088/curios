@@ -421,7 +421,7 @@ fn elaborate_struct(
 
 /// Replace a struct's registry parameter telescope with the one its type-former's declared type already carries, before that former's body is checked.
 ///
-/// The lowerer files a `StructDecl` whose arity is the *written* telescope, untouched by elaboration (`curios-text/src/into_core.rs`, `universe_context: empty()`). The former's body is the `StructType` node over its own parameters, and `elaborate_struct_type` checks those parameters against that arity — against terms carrying no universe instances, while the binders the body meets come from `type_`, which was just elaborated and does carry them.
+/// The lowerer files a `StructDecl` whose arity is the *written* telescope, untouched by elaboration (`curios-module/src/into_core.rs`, `universe_context: empty()`). The former's body is the `StructType` node over its own parameters, and `elaborate_struct_type` checks those parameters against that arity — against terms carrying no universe instances, while the binders the body meets come from `type_`, which was just elaborated and does carry them.
 ///
 /// The two can never be reconciled, and not for want of trying: [`Frames::var_reduct`](crate::context) refuses to unfold a universe-polymorphic global reached through a bare `Var`, because there is no instance to substitute into its body. So the raw side is irreducible by construction, and conversion is being handed a problem no reduction could decide. Elaborating the telescope a second time here would only mint a *third* set of instances; taking the one the former's type already holds makes the comparison compare a term with itself.
 ///

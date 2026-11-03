@@ -10,8 +10,8 @@ use {
     curios_core::{Definitions, Enter, Item, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
+    curios_module::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
-    curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
     std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
 };
@@ -159,12 +159,12 @@ pub(crate) fn compile_with_units(
     let parsed = sources
         .iter()
         .map(|(prefix, source)| {
-            let mut modules = curios_text::RootSource::supplied();
+            let mut modules = curios_module::RootSource::supplied();
             modules.insert_root(
                 prefix,
                 RootKind::Ordinary,
                 source
-                    .parse::<curios_text::Module>()
+                    .parse::<curios_module::Module>()
                     .expect("a unit parses"),
             );
             modules
@@ -175,7 +175,7 @@ pub(crate) fn compile_with_units(
     with_prelude(|prelude| {
         let sources = parsed
             .iter()
-            .map(|modules| (curios_text::UnitSource::mounted(modules), None))
+            .map(|modules| (curios_module::UnitSource::mounted(modules), None))
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_BUDGET,
@@ -213,7 +213,7 @@ pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
         prefix,
         RootKind::Ordinary,
         source
-            .parse::<curios_text::Module>()
+            .parse::<curios_module::Module>()
             .expect("a unit parses"),
     );
 
@@ -285,7 +285,7 @@ fn elaborated(
     floor: u64,
     wholesale: bool,
 ) -> Definitions {
-    let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
+    let lowered = curios_module::into_core_unit(source, &predecessors.text(), &SYNTAX)
         .expect("the unit lowers");
     let mut raised = curios_core::Minted::default();
     for (name, mints) in lowered.minted().each() {

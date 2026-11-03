@@ -16,9 +16,9 @@ mod tests;
 use {
     crate::{Packs, opened, replace},
     curios_common::{Candidates, Qualifier, digest},
+    curios_module::{Compiled, Overlay, UnitSource},
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier, complete_records},
-    curios_text::{Compiled, Overlay, UnitSource},
     curios_unit::{Indexed, Record, Unit, digested, read_within},
     std::{
         cell::{OnceCell, RefCell},

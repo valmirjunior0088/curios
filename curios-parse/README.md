@@ -1,6 +1,6 @@
 # curios-parse
 
-The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`): single-use parsers that are functions of the input, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
+The parser combinator DSL behind both the `.crs` surface grammar (`curios-module`) and the WAT parser (`curios-wasm`): single-use parsers that are functions of the input, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, recovery past a committed failure, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc; why this and `curios-print` are two crates is `curios-print/README.md`'s decision.
 
 ## Design
 
@@ -24,7 +24,7 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Decision.** A grammar function that takes arguments answers `impl Parser`, and its body is one closure of the input that builds its chain where it runs: `move |state| take_exact(expected).and_drop(parse_whitespace).parse(state)`.
 
-**Rationale.** A combinator's type is the chain it was built from, and a closure's is what it captures. A function returning its chain returns the chain's whole type, and a function over such a function nests it into the type of every caller, which the compiler's checks of each caller pay for, the borrow checker's most: returned as their chains, the struct and concept members over `declared` over `parse_literal` make the borrow checking of `curios-text` most of its build.
+**Rationale.** A combinator's type is the chain it was built from, and a closure's is what it captures. A function returning its chain returns the chain's whole type, and a function over such a function nests it into the type of every caller, which the compiler's checks of each caller pay for, the borrow checker's most: returned as their chains, the struct and concept members over `declared` over `parse_literal` make the borrow checking of `curios-module` most of its build.
 
 **Rejected.** Boxing what such a function returns, an allocation at every application again. A check of the source refusing a function written as its chain, which reads Rust text for what a type says.
 

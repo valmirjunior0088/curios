@@ -11,7 +11,7 @@ workspace = true
 [features]
 profile = [
     "curios-profile/enabled",
-    "curios-text/profile",
+    "curios-module/profile",
     "curios-unit/profile",
     "curios-elab/profile",
     "curios-erase/profile",
@@ -33,7 +33,7 @@ curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-anf = { workspace = true }
 curios-profile = { workspace = true }
-curios-text = { workspace = true }
+curios-module = { workspace = true }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }
