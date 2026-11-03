@@ -1294,3 +1294,69 @@ fn a_carried_variance_the_walk_denies_is_refused_where_the_item_is_judged_and_no
         "while the vector it files, which every judgment reads, is the one the baseline's walk computed",
     );
 }
+
+/// `A.{u, v} : Type v = Type u` as a one-member group under `universe_context`, the scheme [`universe_scheme_module`] declares as a `let`: its body inhabits `Type (u + 1)`, so it fits the declared type only where the declaration assumes `u + 1 <= v`.
+fn grouped_scheme(universe_context: curios_core::UniverseContext) -> Item {
+    use curios_core::{DefinitionKind, RecItem};
+
+    let member = Free::local(70, Some("A"));
+    let definition = Definition {
+        name: global("A"),
+        kind: DefinitionKind::Authored,
+        universe_context,
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_: Term::type_at(Level::param(UniverseParam(1))),
+        body: Term::type_at(Level::param(UniverseParam(0))),
+    };
+
+    Item::Rec(RecItem::new(vec![(member, definition)]))
+}
+
+/// A group's universe context dropped: the terms are the baseline's, the context is not, and `Baseline::holds` reads a group by its members' terms, names and marks alone.
+#[test]
+fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_it() {
+    let baseline = versioned(Module {
+        items: vec![grouped_scheme(scheme_context())].into(),
+        ..Module::default()
+    });
+    let certification = walked(&baseline).certification;
+    let edited = replaced(&baseline, "A", grouped_scheme(open_context()));
+
+    let whole = walked_whole(&edited);
+    assert!(
+        !whole.verdicts.is_empty(),
+        "a whole walk refuses the group whose declaration assumes nothing: {:?}",
+        whole.verdicts,
+    );
+
+    let over = walked_over(&edited, &baseline, &certification);
+    assert_eq!(over.verdicts, whole.verdicts);
+}
+
+/// A module that declares a name twice reaches no walk over a baseline: `three` respelled as a second `identity`, a name the baseline holds at a place the edit leaves alone and no unit in scope declares, so the clause that would answer is [`declares_a_held_name`]'s reading of the baseline's places.
+///
+/// It never gets there. A walk over a baseline is handed where the module holds each name, and `Places::of` asserts a name is declared once, so the duplicate refuses the compilation ahead of the walk's own `Error::Redeclared` — a panic where it refuses, as the soundness board's fourth boundary allows. The whole-module walk, handed no places, is the one `redeclarations` guards, and `xboard`'s admission ticket is its witness.
+#[test]
+#[should_panic(expected = "a module declares one name twice")]
+fn a_module_that_declares_a_name_twice_reaches_no_walk_over_a_baseline() {
+    let baseline = versioned(written());
+    let certification = walked(&baseline).certification;
+    let x = Free::local(11, Some("x"));
+    let edited = replaced(
+        &baseline,
+        "three",
+        authored(
+            &global("identity"),
+            Term::func_type([(x, nat())], nat()),
+            Term::func([(x, nat())], Term::free_var(&x)),
+        ),
+    );
+
+    walked_over(&edited, &baseline, &certification);
+}

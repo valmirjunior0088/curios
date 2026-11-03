@@ -13,8 +13,9 @@
 use {
     super::{Globals, Held, held, induct_alike, struct_alike},
     curios_core::{
-        Certification, Concluded, Global, InductDecl, Item, ItemRun, Module, Nominal, Places,
-        Polarity, Reads, Sharing, StructDecl, Totality, UniverseContext, Variance,
+        Certification, Concluded, Definition, Global, InductDecl, Item, ItemRun, Module, Nominal,
+        Places, Polarity, Reads, RecDefinition, RecItem, Sharing, StructDecl, Totality,
+        UniverseContext, Variance,
     },
     curios_utilities::{Digest, Qualifier, digest},
     std::collections::{BTreeMap, HashMap},
@@ -54,6 +55,8 @@ impl<'a> Baseline<'a> {
     }
 
     /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, each marked a proof or not as the baseline's is, and the same registry entries under each name. Elaboration's other stamps take no part, as they take none where an environment is asked whether a declaration is its own; the proof mark does, being the one an environment reads a name by.
+    ///
+    /// Each form is compared by a function that destructures it whole ([`definition_alike`], [`group_alike`]), so a field added to the representation is classified there or does not compile. That is the rule and not a courtesy: comparing by the fields someone thought of is how the `rec` form came to be compared by its group and its members' names and marks, and silently not by the universe context its members' levels mean, which admitted Hurkens' paradox through a group adopted under constraints no walk assumed.
     pub(crate) fn holds(&self, item: &Item) -> bool {
         let names = item.declared_names();
         let Some(place) = names.first().and_then(|name| self.places.place(name)) else {
@@ -61,23 +64,8 @@ impl<'a> Baseline<'a> {
         };
         let held = &self.module.items[place.item()];
         let terms = match (item, held) {
-            (Item::Let(this), Item::Let(that)) => {
-                this.name == that.name
-                    && this.universe_context == that.universe_context
-                    && this.type_ == that.type_
-                    && this.body == that.body
-                    && this.proof == that.proof
-                    && this.value_sort == that.value_sort
-            }
-            (Item::Rec(this), Item::Rec(that)) => {
-                this.group == that.group
-                    && this.definitions.len() == that.definitions.len()
-                    && this
-                        .definitions
-                        .iter()
-                        .zip(&that.definitions)
-                        .all(|(this, that)| this.name == that.name && this.proof == that.proof)
-            }
+            (Item::Let(this), Item::Let(that)) => definition_alike(this, that),
+            (Item::Rec(this), Item::Rec(that)) => group_alike(this, that),
             _ => false,
         };
 
@@ -86,6 +74,65 @@ impl<'a> Baseline<'a> {
                 .iter()
                 .all(|name| Self::entries_alike(name, item, held))
     }
+}
+
+/// Whether a `let` item is the baseline's: everything a judgment reads of a name in scope, the definition destructured whole so that what is left out is left out on purpose.
+///
+/// What is read is what [`Held`] publishes — the type, the body, the stated value sort and the universe context — and the proof mark, which decides whether a body is published at all. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name; the island and the two variance vectors, which are elaboration's record where the ones an environment answers from are the certifier's own; and the classification, since a later walk reads the certifier's totality record and never the stamp the item carries.
+fn definition_alike(this: &Definition, that: &Definition) -> bool {
+    let Definition {
+        name,
+        universe_context,
+        proof,
+        value_sort,
+        type_,
+        body,
+        kind: _,
+        island: _,
+        totality: _,
+        variances: _,
+        field_variances: _,
+        parameter_field: _,
+    } = this;
+
+    *name == that.name
+        && *universe_context == that.universe_context
+        && *proof == that.proof
+        && *value_sort == that.value_sort
+        && *type_ == that.type_
+        && *body == that.body
+}
+
+/// Whether a `rec` item is the baseline's: the universe context its members' levels mean, the group's own scopes, which hold every member's type and body, and each member by what is read of one.
+///
+/// The context is the item's and not the group's, positionally the parameters of whatever declaration holds it, and `globals::held` publishes it to every reader of a member — so a group adopted under a context no walk assumed leaves its members' products quantifying where a reader's instance says rather than where the declaration's own constraints allow.
+fn group_alike(this: &RecItem, that: &RecItem) -> bool {
+    let RecItem {
+        definitions,
+        group,
+        universe_context,
+    } = this;
+
+    *universe_context == that.universe_context
+        && *group == that.group
+        && definitions.len() == that.definitions.len()
+        && definitions
+            .iter()
+            .zip(&that.definitions)
+            .all(|(this, that)| member_alike(this, that))
+}
+
+/// Whether a group's member is the baseline's. Its terms are the group's, so what is left is the name it is exported under and the mark deciding whether its body is published; the rest is what [`definition_alike`] leaves out, for the reasons stated there.
+fn member_alike(this: &RecDefinition, that: &RecDefinition) -> bool {
+    let RecDefinition {
+        name,
+        proof,
+        kind: _,
+        island: _,
+        totality: _,
+    } = this;
+
+    *name == that.name && *proof == that.proof
 }
 
 /// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context by what it is compared by ([`UniverseContext::inequalities`]), the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
