@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::tests::{LISTING_PROGRAM, test_support::*},
+    crate::{test_support::*, tests::LISTING_PROGRAM},
     curios_native::{ForeignBindings, MockHost, MockIo},
     curios_profile::{Destination, fold, trace},
     std::{
