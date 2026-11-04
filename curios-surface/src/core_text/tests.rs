@@ -4,9 +4,10 @@ use {
     crate::{Spellable, Spelling},
     curios_common::Qualifier,
     curios_core::{
-        CalleeId, Cases, Field, Free, Global, HeadKey, Intrinsic, Level, Match, MatchResult,
-        MetavarId, MetavarOrigin, Nat, Proj, Quality, QualityParam, Sort, Subterm, Term,
-        UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Atom, CalleeId, Cases, Definition, Definitions, Field, Free, Global, HeadKey, InductDecl,
+        InductParam, Intrinsic, Item, Level, Match, MatchResult, MetavarId, MetavarOrigin, Nat,
+        Nominal, Proj, Quality, QualityParam, RecItem, Sort, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -193,5 +194,129 @@ fn a_method_named_by_its_path_is_its_path_under_its_node() {
     assert_eq!(
         written(&goal),
         "#{id = 3, origin = Witness({func = Method({concept = /std/Show/Show, field = \"show\"}), role = None})} ?"
+    );
+}
+
+/// `induct /Bit: Type | zero() | one() end`'s entry, whose name stands in the root.
+fn bit() -> InductDecl {
+    let case = |tag: &str| {
+        (
+            Atom::from(tag),
+            InductParam::new(
+                Telescope::build(Vec::<(Free, Term)>::new(), Vec::new()),
+                Vec::new(),
+            ),
+        )
+    };
+
+    InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            Vec::<(Free, Term)>::new(),
+            Telescope::build(Vec::<(Free, Term)>::new(), ()),
+        ),
+        constructors: [case("zero"), case("one")].into_iter().collect(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: false,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    }
+}
+
+/// A module of `/Bit`'s former, a group of its own as a family's is, beside `constructors`, in the order a module is stored in.
+fn module(declaration: InductDecl, constructors: Vec<Definition>) -> Definitions {
+    let former = Definition::former(
+        global(&["Bit"]),
+        Qualifier::empty(),
+        Nominal::Inductive(declaration),
+    );
+    let items = [Item::Rec(RecItem::new(vec![(
+        Free::local(0, Some("Bit")),
+        former,
+    )]))]
+    .into_iter()
+    .chain(
+        constructors
+            .into_iter()
+            .map(|constructor| Item::Let(Box::new(constructor))),
+    )
+    .collect::<Vec<_>>();
+
+    Definitions {
+        items: items.into(),
+    }
+    .ordered()
+}
+
+/// A family is written in its form, which builds its former and its constructors, so no item of either is written.
+#[test]
+fn a_family_is_written_in_its_form_and_its_constructors_are_left_to_it() {
+    let constructors =
+        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
+
+    assert_eq!(
+        module(bit(), constructors).faithful().to_string(),
+        "induct /Bit: Type\n| zero()\n| one()\nend;\n"
+    );
+}
+
+/// A constructor its family's form would not make is written out, under the kind that says whose it is.
+#[test]
+fn a_constructor_its_family_does_not_make_is_written_out() {
+    let mut constructors =
+        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
+    constructors[1].body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+
+    let written = module(bit(), constructors).faithful().to_string();
+    assert!(
+        written.contains("#{kind = InductiveConstructor({owner = /Bit, tag = one})} let /Bit/one"),
+        "{written}"
+    );
+    assert!(!written.contains("let /Bit/zero"), "{written}");
+}
+
+/// A constructor its family's form implies and the module lacks is stated absent.
+#[test]
+fn a_constructor_the_module_lacks_is_stated_absent() {
+    let mut constructors =
+        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
+    constructors.truncate(1);
+
+    assert_eq!(
+        module(bit(), constructors).faithful().to_string(),
+        "#{absent = [/Bit/one]} induct /Bit: Type\n| zero()\n| one()\nend;\n"
+    );
+}
+
+/// A record is written in its form, each field by its label under the parameters it reads, a lone record's item a `let`.
+#[test]
+fn a_record_is_written_in_its_form() {
+    let (a, b) = (Free::local(0, Some("A")), Free::local(1, Some("B")));
+    let (fst, snd) = (Free::local(2, Some("fst")), Free::local(3, Some("snd")));
+    let record = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            [(a, Term::type_ground()), (b, Term::type_ground())],
+            Telescope::build([(fst, Term::free_var(&a)), (snd, Term::free_var(&b))], ()),
+        ),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let former = Definition::former(
+        global(&["Pair"]),
+        Qualifier::empty(),
+        Nominal::Struct(record),
+    );
+    let definitions = Definitions {
+        items: vec![Item::Let(Box::new(former))].into(),
+    };
+
+    assert_eq!(
+        definitions.faithful().to_string(),
+        "struct /Pair(A: Type, B: Type): pub Type { fst: A, snd: B };\n"
     );
 }

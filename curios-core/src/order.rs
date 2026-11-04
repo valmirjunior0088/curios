@@ -521,6 +521,41 @@ impl Definitions {
         self.in_order().0
     }
 
+    /// `written` in the order it stands, with each of `implied` put where the order's key — its depth, then its first name — places it among the written items: ahead of the first written item whose key is past its own, and after every one where none is. Over written items that stand in the order this is the order ([`Definitions::ordered`]); over others it keeps theirs, and places the implied ones by the same key.
+    ///
+    /// **Where a declaration's implied items stand**, for a reader of Core text, which writes an item its declaration implies only where it stands elsewhere, and its reader, which puts the ones it is not given here.
+    pub fn placed_among(written: Vec<Item>, implied: Vec<Item>) -> Vec<Item> {
+        let every = written.iter().chain(&implied).cloned().collect::<Vec<_>>();
+        let (_, order) = Definitions {
+            items: every.into(),
+        }
+        .in_order();
+        let key = |item: &Item| {
+            item.declared_names().first().map(|name| {
+                let depth = order.reach(name).map_or(0, |reach| reach.depth);
+                (depth, **name)
+            })
+        };
+        let mut implied = implied
+            .into_iter()
+            .map(|item| (key(&item), item))
+            .collect::<Vec<_>>();
+        implied.sort_by_key(|(key, _)| *key);
+        let mut implied = implied.into_iter().peekable();
+
+        let mut placed = Vec::with_capacity(written.len() + implied.len());
+        for item in written {
+            let here = key(&item);
+            while let Some((_, next)) = implied.next_if(|(key, _)| *key < here) {
+                placed.push(next);
+            }
+            placed.push(item);
+        }
+        placed.extend(implied.map(|(_, item)| item));
+
+        placed
+    }
+
     /// [`Definitions::ordered`], with the order it puts the items in: what each reaches and its depth.
     pub fn in_order(mut self) -> (Self, Order) {
         let items = mem::take(&mut self.items).into_iter().collect::<Vec<_>>();

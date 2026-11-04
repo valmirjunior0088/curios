@@ -2,16 +2,18 @@
 
 use {
     crate::{
-        Decoration, Frame, core_written, decorated, escape_character, from_core, level_spelled,
-        plicity_mark, print_term, spell, universe_context_written,
+        Decoration, Frame, binders, bracketed, core_written, decorated, escape_character, escaped,
+        family_declared, from_core, level_spelled, nested, plicity_mark, print_term,
+        record_declared, spell, sub, universe_context_written, written_entries,
     },
     curios_abi::stdio,
     curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
-        Arity, Atom, Bind, Bound, Cursor, Definition, DefinitionKind, Definitions, Free, Global,
-        HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks, Members, Mention, Nat,
-        Notation, Pattern, Program, Scope, Spellings, Subterm, Symbols, Term, UniverseError,
-        WitnessKey, inconsistent_sort, suffixes_of,
+        Arity, Atom, Bind, Bound, ConceptDecl, Cursor, Definition, DefinitionKind, Definitions,
+        Field, Free, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks,
+        Members, Mention, Nat, Nominal, Notation, Pattern, Program, Scope, Spellings, StructDecl,
+        Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort,
+        suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, flat, indent, pure, run_printer, run_printer_within},
@@ -308,6 +310,36 @@ impl Spelling {
                 Rc::new((**self).clone().with_pretty_names(Rc::new(rename)))
             }
         }
+    }
+
+    /// This spelling with every binder `render` opens under a word of its own, where it was handed no rename: [`Spelling::with_words`] for a render that writes several terms in one naming, a declaration's head and its cases, whose dry run is the render itself. `terms` are what it writes, whose names no word may read like.
+    pub(crate) fn with_words_of(
+        self: &Rc<Self>,
+        terms: &[Term],
+        render: impl Fn(Frame) -> Printer,
+    ) -> Rc<Self> {
+        if self.pretty.is_some() {
+            return Rc::clone(self);
+        }
+        let mint = Minting::recording();
+        mint.allow_all(terms);
+        render(Frame {
+            spelling: self,
+            mint: &mint,
+        });
+        let recorded = mint
+            .recorded
+            .expect("a recording mint records")
+            .into_inner();
+        let mut shown = terms
+            .iter()
+            .flat_map(|term| term.mentions().iter().copied().collect::<Vec<_>>())
+            .map(|name| DisplayKey::mentioned(&name))
+            .collect::<BTreeSet<_>>();
+        shown.extend(recorded.names);
+        let rename = assign(&shown, &recorded.tuple_labels, self);
+
+        Rc::new((**self).clone().with_pretty_names(Rc::new(rename)))
     }
 
     /// The certified-string declaration (axis (f)), where one is set.
@@ -608,6 +640,16 @@ impl Minting {
     /// Allow a render of `term` its child documents: its graph [`RENDER_PER_NODE`] times over, and never fewer than [`RENDER_FLOOR`].
     fn allow(&self, term: &Term) {
         let nodes = u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX);
+        self.allowance
+            .set(RENDER_FLOOR.max(RENDER_PER_NODE.saturating_mul(nodes)));
+    }
+
+    /// Allow a render of `terms` together their child documents, as [`Minting::allow`] allows one term's.
+    pub(crate) fn allow_all(&self, terms: &[Term]) {
+        let nodes = terms
+            .iter()
+            .map(|term| u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX))
+            .fold(0, u64::saturating_add);
         self.allowance
             .set(RENDER_FLOOR.max(RENDER_PER_NODE.saturating_mul(nodes)));
     }
@@ -1705,7 +1747,7 @@ impl Notation for Spelling {
     }
 }
 
-/// The items, one per declaration, each as Core text declares it — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
+/// The items, one per declaration, each as Core text declares it — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on. An item a declaration implies is written nowhere, where it is the one the declaration makes and stands where a reader puts it ([`Implied`]).
 fn print_items(
     definitions: &Definitions,
     formatter: &mut fmt::Formatter<'_>,
@@ -1713,58 +1755,39 @@ fn print_items(
 ) -> fmt::Result {
     let write =
         |formatter: &mut fmt::Formatter<'_>, printer: Printer| run_printer(printer, formatter, 4);
-    for item in &definitions.items {
+    let implied = Implied::of(definitions);
+    for (index, item) in definitions.items.iter().enumerate() {
+        if implied.omitted.contains(&index) {
+            continue;
+        }
         match item {
             Item::Let(definition) => {
-                let fields = definition_fields(
-                    &definition.name,
-                    &definition.kind,
-                    &definition.island,
-                    definition.proof,
-                    definition.value_sort.as_ref(),
-                    universe_context_written(&definition.universe_context),
-                    spelling,
-                );
-                write(
-                    formatter,
-                    decorated(
-                        fields,
-                        flat([pure("let "), print_definition(definition, spelling)]),
-                        true,
-                    ),
-                )?;
+                let member = Member {
+                    definition,
+                    proof: definition.proof,
+                    value_sort: definition.value_sort.as_ref(),
+                    universe_context: Some(&definition.universe_context),
+                    group: None,
+                };
+                write(formatter, member.written(&implied, spelling))?;
             }
             Item::Rec(rec) => {
-                let mut context = universe_context_written(&rec.universe_context);
-                for (index, (definition, member)) in
-                    rec.definitions().iter().zip(&rec.definitions).enumerate()
+                let mut context = Some(&rec.universe_context);
+                let definitions = rec.definitions();
+                for (index, (definition, held)) in
+                    definitions.iter().zip(&rec.definitions).enumerate()
                 {
-                    let fields = definition_fields(
-                        &member.name,
-                        &member.kind,
-                        &member.island,
-                        member.proof,
-                        None,
-                        context.take(),
-                        spelling,
-                    );
-                    let keyword = match index {
-                        0 => "let ",
-                        _ => "\nand ",
+                    let member = Member {
+                        definition,
+                        proof: held.proof,
+                        value_sort: None,
+                        universe_context: context.take(),
+                        group: Some((index, rec.definitions.len())),
                     };
-                    // A group of one member is written as a `let` is, so it says it is a group.
-                    let mut fields = fields;
-                    if rec.definitions.len() == 1 {
-                        fields.insert(0, ("node", pure("Rec")));
+                    if index > 0 {
+                        write(formatter, pure("\n"))?;
                     }
-                    write(
-                        formatter,
-                        decorated(
-                            fields,
-                            flat([pure(keyword), print_definition(definition, spelling)]),
-                            true,
-                        ),
-                    )?;
+                    write(formatter, member.written(&implied, spelling))?;
                 }
             }
         }
@@ -1774,7 +1797,378 @@ fn print_items(
     Ok(())
 }
 
-/// The fields a declaration's decorator sets: its scheme where it has one, its kind where it is not one a declaration writes, its island where it is not its name's parent, its proof mark and the sort its value inhabits where it states them. A former's entry is no decorator's: it is the declaration's own form.
+/// What the declarations of a module imply of its items: the items left to the declaration that implies them, by their places, and the names a declaration implies that no item of the module declares, by the declaration.
+///
+/// **An implied item is written nowhere where it is the one its declaration makes and stands where a reader puts it.** A family's constructors are made by [`Definition::constructors`]; a constructor that differs from what it makes is written out, and so is every one a declaration implies where the reader's placement ([`Definitions::placed_among`]) would not stand them where the module does.
+struct Implied {
+    omitted: BTreeSet<usize>,
+    absent: HashMap<Global, Vec<Global>>,
+}
+
+impl Implied {
+    fn of(definitions: &Definitions) -> Self {
+        let items = &definitions.items;
+        let place = items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| {
+                item.declared_names()
+                    .into_iter()
+                    .map(move |name| (*name, index))
+            })
+            .collect::<HashMap<_, _>>();
+        let mut candidates = BTreeSet::new();
+        let mut absent = HashMap::<Global, Vec<Global>>::new();
+        for definition in items.iter().flat_map(Item::definitions) {
+            let (Some(declaration), Global::Authored(owner)) = (
+                definition
+                    .kind
+                    .nominal()
+                    .and_then(|nominal| nominal.inductive()),
+                definition.name,
+            ) else {
+                continue;
+            };
+            for constructor in Definition::constructors(owner, definition.island, declaration) {
+                match place.get(&constructor.name) {
+                    None => absent
+                        .entry(definition.name)
+                        .or_default()
+                        .push(constructor.name),
+                    Some(&index) => {
+                        if let Item::Let(stored) = &items[index]
+                            && **stored == constructor
+                        {
+                            candidates.insert(index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Where a reader puts them is where they stand, or each is written out.
+        let written = items
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !candidates.contains(index))
+            .map(|(_, item)| item.clone())
+            .collect::<Vec<_>>();
+        let implied = candidates
+            .iter()
+            .map(|index| items[*index].clone())
+            .collect::<Vec<_>>();
+        let first = |item: &Item| item.declared_names().first().map(|name| **name);
+        let placed = Definitions::placed_among(written, implied);
+        let stands = placed.iter().map(first).eq(items.iter().map(first));
+
+        Self {
+            omitted: match stands {
+                true => candidates,
+                false => BTreeSet::new(),
+            },
+            absent,
+        }
+    }
+}
+
+/// One definition of an item, as Core text declares it: with what its item holds beside it, and its place in a group where it is a member of one, with the group's size.
+struct Member<'a> {
+    definition: &'a Definition,
+    proof: bool,
+    value_sort: Option<&'a Term>,
+    /// The scheme it states: its own, or its group's where it is a group's first member, and none for a later one.
+    universe_context: Option<&'a UniverseContext>,
+    group: Option<(usize, usize)>,
+}
+
+impl Member<'_> {
+    /// This member under its decorator: a nominal declaration in its form, any other definition as a `let`, a group's later member after `and`.
+    fn written(self, implied: &Implied, spelling: &Rc<Spelling>) -> Printer {
+        let and = match self.group {
+            Some((index, _)) if index > 0 => "and ",
+            _ => "",
+        };
+        match self.definition.kind.nominal() {
+            Some(nominal) => {
+                let nominal = nominal.clone();
+                let terms = declaration_terms(self.definition, &nominal);
+                let words = spelling
+                    .with_words_of(&terms, |frame| self.declared(&nominal, implied, and, frame));
+                let mint = Minting::default();
+                mint.allow_all(&terms);
+
+                self.declared(
+                    &nominal,
+                    implied,
+                    and,
+                    Frame {
+                        spelling: &words,
+                        mint: &mint,
+                    },
+                )
+            }
+            None => {
+                let mut fields = definition_fields(
+                    &self.definition.name,
+                    &self.definition.kind,
+                    &self.definition.island,
+                    self.proof,
+                    self.value_sort,
+                    self.universe_context.and_then(universe_context_written),
+                    spelling,
+                );
+                // A group of one member is written as a `let` is, so it says it is a group.
+                if let Some((_, 1)) = self.group {
+                    fields.insert(0, ("node", pure("Rec")));
+                }
+                let keyword = match self.group {
+                    Some((index, _)) if index > 0 => "and ",
+                    _ => "let ",
+                };
+
+                decorated(
+                    fields,
+                    flat([pure(keyword), print_definition(self.definition, spelling)]),
+                    true,
+                )
+            }
+        }
+    }
+
+    /// A nominal declaration in its form under `frame`, its decorator stating what differs from what the form builds: the node it is where its item is not the one its keyword makes, its former's parts and its entry's beside the ones the form spells, and the items it implies that its module lacks.
+    fn declared(&self, nominal: &Nominal, implied: &Implied, and: &str, frame: Frame) -> Printer {
+        let definition = self.definition;
+        let (keyword, grouped) = match nominal {
+            Nominal::Inductive(_) => ("induct", true),
+            Nominal::Struct(_) => ("struct", false),
+            Nominal::Concept { .. } => ("concept", false),
+        };
+        let (form, words) = match nominal {
+            Nominal::Inductive(declaration) => (
+                family_declared(&definition.name, declaration, frame),
+                Vec::new(),
+            ),
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => {
+                record_declared(keyword, &definition.name, record, frame)
+            }
+        };
+
+        // A family's item is a group, its own where it is alone; a record's and a concept's is a `let` where it is alone.
+        let mut fields = Vec::<Decoration>::new();
+        match (self.group, grouped) {
+            (None, true) => fields.push(("node", pure("Let"))),
+            (Some((_, 1)), false) => fields.push(("node", pure("Rec"))),
+            _ => {}
+        }
+        fields.extend(definition_fields(
+            &definition.name,
+            &definition.kind,
+            &definition.island,
+            self.proof,
+            self.value_sort,
+            self.universe_context.and_then(universe_context_written),
+            frame.spelling,
+        ));
+        let former = Definition::former(definition.name, definition.island, nominal.clone());
+        if definition.type_ != former.type_ {
+            fields.push(("type_", sub(definition.type_.clone(), frame)));
+        }
+        if definition.body != former.body {
+            fields.push(("body", sub(definition.body.clone(), frame)));
+        }
+        fields.extend(entry_fields(definition, nominal, &words, frame));
+        if let Some(absent) = implied.absent.get(&definition.name) {
+            fields.push((
+                "absent",
+                bracketed(
+                    absent
+                        .iter()
+                        .map(|name| pure(frame.spelling.symbol(name)))
+                        .collect(),
+                ),
+            ));
+        }
+
+        decorated(fields, flat([pure(and), form]), true)
+    }
+}
+
+/// The terms a nominal declaration's form writes, whose names its binders' words must not read like and which bound what its render may build: its former's, and a family's constructors'.
+fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
+    let mut terms = vec![definition.type_.clone(), definition.body.clone()];
+    if let (Nominal::Inductive(declaration), Global::Authored(owner)) = (nominal, definition.name) {
+        terms.extend(
+            Definition::constructors(owner, definition.island, declaration)
+                .into_iter()
+                .map(|constructor| constructor.type_),
+        );
+    }
+    if let Some(record) = nominal.record() {
+        terms.extend(
+            (0..record.fields().len())
+                .filter_map(|index| record.fields().entry_type(index).cloned()),
+        );
+    }
+
+    terms
+}
+
+/// What a nominal declaration's entry holds beside what its form spells and its former's: the module its representation belongs to where it is not its name's parent, the polarities and the variances its elaboration filed, and a scheme apart from its former's; and a concept's own parts where they are not read off its record — its parameters, its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
+fn entry_fields(
+    definition: &Definition,
+    nominal: &Nominal,
+    words: &[String],
+    frame: Frame,
+) -> Vec<Decoration> {
+    let (universe_context, module, polarities, variances) = match nominal {
+        Nominal::Inductive(declaration) => (
+            &declaration.universe_context,
+            &declaration.module,
+            &declaration.polarities,
+            &declaration.variances,
+        ),
+        Nominal::Struct(record) | Nominal::Concept { record, .. } => (
+            &record.universe_context,
+            &record.module,
+            &record.polarities,
+            &record.variances,
+        ),
+    };
+    let mut fields = Vec::<Decoration>::new();
+    if Some(*module) != definition.name.qualifier().map(Qualifier::without_last) {
+        fields.push(("module", pure(module_written(module, frame.spelling))));
+    }
+    let listed = |values: Vec<String>| bracketed(values.into_iter().map(pure).collect());
+    if !polarities.is_empty() {
+        fields.push((
+            "polarities",
+            listed(
+                polarities
+                    .iter()
+                    .map(|polarity| format!("{polarity:?}"))
+                    .collect(),
+            ),
+        ));
+    }
+    if !variances.is_empty() {
+        fields.push((
+            "variances",
+            listed(
+                variances
+                    .iter()
+                    .map(|variance| format!("{variance:?}"))
+                    .collect(),
+            ),
+        ));
+    }
+    if *universe_context != definition.universe_context {
+        let context = universe_context_written(universe_context).unwrap_or_else(|| pure("{}"));
+        fields.push(("entry", nested(vec![("universe_context", context)])));
+    }
+    if let Nominal::Concept { concept, record } = nominal {
+        let mut own = Vec::<Decoration>::new();
+        if concept.universe_context != record.universe_context {
+            let context =
+                universe_context_written(&concept.universe_context).unwrap_or_else(|| pure("{}"));
+            own.push(("universe_context", context));
+        }
+        if !concept_params_read_off(concept, record) {
+            own.push(("params", concept_params_written(concept, frame)));
+        }
+        if concept.supers != concept_supers_read_off(definition.name, record) {
+            own.push((
+                "supers",
+                bracketed(
+                    concept
+                        .supers
+                        .iter()
+                        .map(|name| pure(frame.spelling.symbol(name)))
+                        .collect(),
+                ),
+            ));
+        }
+        if concept.fields != words {
+            own.push((
+                "fields",
+                listed(
+                    concept
+                        .fields
+                        .iter()
+                        .map(|label| format!("\"{}\"", escaped(label)))
+                        .collect(),
+                ),
+            ));
+        }
+        if !own.is_empty() {
+            fields.push(("concept", nested(own)));
+        }
+    }
+
+    fields
+}
+
+/// A module as a decorator names it: by its path, and the root, which no path names, as the slash every absolute path leads with.
+fn module_written(module: &Qualifier, spelling: &Spelling) -> String {
+    match module.is_root() {
+        true => "/".to_string(),
+        false => spelling.symbol(&Global::Authored(*module)),
+    }
+}
+
+/// Whether a concept's parameters are its record's, each read as the concept holds it with no mark.
+fn concept_params_read_off(concept: &ConceptDecl, record: &StructDecl) -> bool {
+    let (mut own, mut read) = (concept.params.cursor(), record.arity.cursor());
+    let mut index = 0;
+    loop {
+        match (own.entry(), read.entry()) {
+            (None, None) => return true,
+            (Some((_, this)), Some((_, that))) if this == that => {
+                let variable = Term::free_var(&Free::local(index, None));
+                own.advance(variable.clone());
+                read.advance(variable);
+                index += 1;
+            }
+            _ => return false,
+        }
+    }
+}
+
+/// A concept's parameters as it holds them: each type, under the parameters before it by words of their own.
+fn concept_params_written(concept: &ConceptDecl, frame: Frame) -> Printer {
+    bracketed(written_entries(
+        &binders(&mut concept.params.cursor(), frame),
+        frame,
+    ))
+}
+
+/// The concepts a record's superclass edges reach, read off each edge's type, as a concept's are where its fields elaborate.
+fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global> {
+    let mut parameters = Vec::new();
+    let mut cursor = record.arity.cursor();
+    while cursor.entry().is_some() {
+        let variable = Term::free_var(&Free::local(parameters.len() as u64, None));
+        cursor.advance(variable.clone());
+        parameters.push(variable);
+    }
+    let value = Term::free_var(&Free::local(parameters.len() as u64, None));
+    let fields = record.fields();
+
+    fields
+        .marks()
+        .into_iter()
+        .enumerate()
+        .filter(|(_, mark)| *mark == Plicity::Witness)
+        .filter_map(|(index, _)| {
+            let field = Field::Struct(name, index);
+            match &*fields.field_type_beneath(&parameters, &value, &field)? {
+                Subterm::StructType(applied) => Some(applied.name),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// The fields a declaration's decorator sets: its scheme where it has one, its kind where it is not one a declaration writes, its island where it is not its name's parent, or a constructor's family's module, its proof mark and the sort its value inhabits where it states them. A former's entry is no decorator's: it is the declaration's own form.
 fn definition_fields(
     name: &Global,
     kind: &DefinitionKind,
@@ -1807,14 +2201,13 @@ fn definition_fields(
             ),
         )),
     }
-    let parent = name.qualifier().map(Qualifier::without_last);
+    // A definition's island defaults to its name's parent, and a constructor's, whose name stands below its family's, to its family's.
+    let parent = match kind {
+        DefinitionKind::InductiveConstructor { owner, .. } => Some(owner.without_last()),
+        _ => name.qualifier().map(Qualifier::without_last),
+    };
     if parent.as_ref() != Some(island) {
-        // The root is the module no path names, written as the slash every absolute path leads with.
-        let module = match island.is_root() {
-            true => "/".to_string(),
-            false => spelling.symbol(&Global::Authored(*island)),
-        };
-        fields.push(("island", pure(module)));
+        fields.push(("island", pure(module_written(island, spelling))));
     }
     if proof {
         fields.push(("proof", pure("true")));

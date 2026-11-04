@@ -10,7 +10,7 @@
 //!
 //! **What Core's equality does not read is not written.** A term's position, a constraint's origin and a binder's place among the written ones are left out, and a binder is written by its hint, renamed where it would capture or has none: two terms printed alike are one term to every judgment.
 //!
-//! **Each node kind's form and template live in a module of their own.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, and the forms only elaboration builds.
+//! **Each node kind's form and template live in a module of their own.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form.
 
 #[cfg(test)]
 mod tests;
@@ -20,6 +20,9 @@ pub use frame::*;
 
 mod binding;
 use binding::*;
+
+mod declaration;
+pub use declaration::*;
 
 mod family;
 use family::*;
