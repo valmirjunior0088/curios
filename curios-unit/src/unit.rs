@@ -12,8 +12,21 @@ use {
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_module::PreparedText,
-    std::{cell::OnceCell, rc::Rc},
+    std::{borrow::Cow, cell::OnceCell, rc::Rc},
 };
+
+/// What a unit was written in: a program's sources, whose lowering it holds, or Core text, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
+///
+/// **A lowering is a program's.** What reads one — a later lowering resolving a name, a recompile keeping what its digests say stands, a lint's findings, a report's anchors, the documentation, the tests a program schedules — reads it of a unit written as a program, and of a unit read from Core text reads nothing, so a later program names nothing such a unit declares.
+#[derive(Clone)]
+#[curios_archive::archived]
+enum Written {
+    Program(Rc<PreparedText>),
+    CoreText {
+        mounts: Vec<Mount>,
+        foreigns: ForeignStore,
+    },
+}
 
 /// What each stage produced for a unit: everything a [`Unit`] holds beside the certifier's record.
 ///
@@ -23,7 +36,7 @@ use {
 #[derive(Clone)]
 #[curios_archive::archived]
 struct Produced {
-    text: Rc<PreparedText>,
+    written: Written,
     /// Elaborated and zonked, as the kernel handed it back: elaboration's items, with every proof mark and value sort the kernel stated of them. This is what a successor's elaboration and the kernel's walk over it read where it stands.
     ///
     /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
@@ -53,9 +66,9 @@ struct Produced {
 }
 
 impl Produced {
-    fn new(text: PreparedText, core: Definitions, erased: ErasedUnit, traces: Traces) -> Self {
+    fn new(written: Written, core: Definitions, erased: ErasedUnit, traces: Traces) -> Self {
         Self {
-            text: Rc::new(text),
+            written,
             core: Rc::new(core),
             places: Rc::default(),
             lexicon: Rc::default(),
@@ -68,12 +81,18 @@ impl Produced {
 
     /// See [`Unit::mounts`].
     pub fn mounts(&self) -> &[Mount] {
-        self.text.mounts()
+        match &self.written {
+            Written::Program(text) => text.mounts(),
+            Written::CoreText { mounts, .. } => mounts,
+        }
     }
 
     /// See [`Unit::text`].
-    pub fn text(&self) -> &PreparedText {
-        &self.text
+    pub fn text(&self) -> Option<&PreparedText> {
+        match &self.written {
+            Written::Program(text) => Some(text),
+            Written::CoreText { .. } => None,
+        }
     }
 
     /// See [`Unit::core`].
@@ -98,7 +117,10 @@ impl Produced {
 
     /// See [`Unit::foreigns`].
     pub fn foreigns(&self) -> &ForeignStore {
-        self.text.foreigns()
+        match &self.written {
+            Written::Program(text) => text.foreigns(),
+            Written::CoreText { foreigns, .. } => foreigns,
+        }
     }
 
     /// See [`Unit::traces`].
@@ -122,12 +144,17 @@ impl Produced {
         (reads, certification): (Option<(&[u8], Kind)>, &Certification),
         candidates: bool,
     ) -> Result<Indexed, String> {
-        let items = self.text.items_objects()?;
+        let items = match &self.written {
+            Written::Program(text) => text.items_objects()?,
+            Written::CoreText { .. } => Vec::new(),
+        };
         let forms = self.erased.items_objects()?;
         let named = self.elaborated()?;
-        // A unit whose records are as it restored them files them as it restored them.
-        if candidates && self.traces.as_stored().is_none() {
-            self.complete_elaborations(&items, &named)?;
+        // A unit whose records are as it restored them files them as it restored them, and one read from Core text was elaborated from nothing a candidate could be found by.
+        if let (true, None, Written::Program(text)) =
+            (candidates, self.traces.as_stored(), &self.written)
+        {
+            self.complete_elaborations(text, &items, &named)?;
         }
         if candidates && self.erased.recorded().as_stored().is_none() {
             self.erased.complete(
@@ -149,9 +176,18 @@ impl Produced {
         };
         let (traces_table, traces) = traces_indexed(&self.traces)?;
         let (asked_table, asked) = asked_indexed(self.erased.recorded())?;
-        let (text, lowering) = lowering_indexed(&self.text)?;
-        let (imports, scopes) = imports_indexed(&self.text)?;
-        let (anchors, places) = anchors_indexed(&self.text)?;
+        let ((text, lowering), (imports, scopes), (anchors, places)) = match &self.written {
+            Written::Program(text) => (
+                lowering_indexed(text)?,
+                imports_indexed(text)?,
+                anchors_indexed(text)?,
+            ),
+            // The parts a lowering stores, each empty: the parts a unit stores apart from itself are the same whatever it was written in.
+            Written::CoreText { .. } => {
+                let empty = || (Cow::Borrowed(&[][..]), Kind::Stored(Vec::new()));
+                (empty(), empty(), empty())
+            }
+        };
         let mut kinds = vec![elaborated, traces, asked, lowering, scopes, places];
 
         let mut parts = vec![
@@ -192,13 +228,14 @@ impl Produced {
     /// Complete the record of each declaration's elaboration a filing has not completed ([`Candidating::complete`]): `items` being the objects the unit's lowered items are stored as, and `named` the digest of each elaborated item ([`Produced::elaborated`]).
     fn complete_elaborations(
         &self,
+        text: &PreparedText,
         items: &[Object],
         named: &[(usize, Digest)],
     ) -> Result<(), String> {
-        let lowered = self.text.core();
+        let lowered = text.core();
         let candidating = Candidating::new(
             lowered,
-            self.text.declarations(),
+            text.declarations(),
             lowered
                 .items
                 .places()
@@ -209,7 +246,7 @@ impl Produced {
             self.traces.get()?,
         );
 
-        candidating.complete(|names| self.text.credited_in(names))
+        candidating.complete(|names| text.credited_in(names))
     }
 
     /// The digest of the elaborated item at each place: the one it was stored under where the module holds it as it was read, and what it is named by alone otherwise ([`ItemRun::identity`]), which a whole compile and a recompile name it by alike.
@@ -254,15 +291,18 @@ impl Produced {
 
         Ok(Self {
             fixed,
-            text: Rc::new(
-                Rc::unwrap_or_clone(self.text)
-                    .with_baseline(text, found(&lowering, find)?)
-                    .with_reported(
-                        (imports, found(&scopes, find)?),
-                        (anchors, found(&places, find)?),
-                    )
-                    .with_items(found(&items, find)?)?,
-            ),
+            written: match self.written {
+                Written::Program(written) => Written::Program(Rc::new(
+                    Rc::unwrap_or_clone(written)
+                        .with_baseline(text, found(&lowering, find)?)
+                        .with_reported(
+                            (imports, found(&scopes, find)?),
+                            (anchors, found(&places, find)?),
+                        )
+                        .with_items(found(&items, find)?)?,
+                )),
+                read @ Written::CoreText { .. } => read,
+            },
             erased: Rc::new(
                 Rc::unwrap_or_clone(self.erased)
                     .with_baseline(asked_table, found(&asked, find)?)
@@ -291,7 +331,7 @@ pub struct Unit {
 }
 
 impl Unit {
-    /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — the only way a unit is made, so none is without one.
+    /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — with [`Unit::read`], the only way a unit is made, so none is without one.
     pub fn new(
         text: PreparedText,
         core: Definitions,
@@ -300,7 +340,26 @@ impl Unit {
         certification: Certification,
     ) -> Self {
         Self {
-            unit: Produced::new(text, core, erased, traces),
+            unit: Produced::new(Written::Program(Rc::new(text)), core, erased, traces),
+            certification: Rc::new(certification),
+        }
+    }
+
+    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module `core` as the kernel stated it, erased to `erased`, and the record the certifier's walk over it left. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
+    pub fn read(
+        mounts: Vec<Mount>,
+        foreigns: ForeignStore,
+        core: Definitions,
+        erased: ErasedUnit,
+        certification: Certification,
+    ) -> Self {
+        Self {
+            unit: Produced::new(
+                Written::CoreText { mounts, foreigns },
+                core,
+                erased,
+                Traces::default(),
+            ),
             certification: Rc::new(certification),
         }
     }
@@ -329,8 +388,8 @@ impl Unit {
         self.unit.mounts()
     }
 
-    /// This unit's resolution state, as what a later unit's names resolve against.
-    pub fn text(&self) -> &PreparedText {
+    /// This unit's resolution state, as what a later unit's names resolve against: a program's lowering, and nothing for a unit read from Core text ([`Unit::read`]).
+    pub fn text(&self) -> Option<&PreparedText> {
         self.unit.text()
     }
 

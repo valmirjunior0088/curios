@@ -177,14 +177,33 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     };
 
     assert!(
-        bytes(alone.text().core()) == bytes(after.text().core()),
+        bytes(
+            alone
+                .text()
+                .expect("a program's unit holds its lowering")
+                .core()
+        ) == bytes(
+            after
+                .text()
+                .expect("a program's unit holds its lowering")
+                .core()
+        ),
         "the lowered module moved with its predecessors"
     );
     assert!(
         bytes(alone.core()) == bytes(after.core()),
         "the elaborated module moved with its predecessors"
     );
-    assert_eq!(alone.text().minted(), after.text().minted());
+    assert_eq!(
+        alone
+            .text()
+            .expect("a program's unit holds its lowering")
+            .minted(),
+        after
+            .text()
+            .expect("a program's unit holds its lowering")
+            .minted()
+    );
     assert!(
         curios_archive::to_bytes(alone.erased()).expect("an erased unit serializes")[..]
             == curios_archive::to_bytes(after.erased()).expect("an erased unit serializes")[..],
@@ -194,9 +213,17 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
 
 /// The texts of the prelude's roots and then of `earlier`: what a unit compiled after them was lowered against.
 fn scope_of<'a>(prelude: &[&'a Unit], earlier: &'a [Unit]) -> Vec<&'a PreparedText> {
-    let prelude = prelude.iter().map(|root| root.text());
+    let prelude = prelude
+        .iter()
+        .map(|root| root.text().expect("a program's unit holds its lowering"));
 
-    prelude.chain(earlier.iter().map(Unit::text)).collect()
+    prelude
+        .chain(
+            earlier
+                .iter()
+                .map(|unit| unit.text().expect("a program's unit holds its lowering")),
+        )
+        .collect()
 }
 
 /// The paths a unit gives its names are listed once for the unit, and every report over it reads the one list: two units compiled after `/lib` are handed the very table the first of them to ask had made.
@@ -208,8 +235,14 @@ fn a_units_paths_are_listed_once_for_every_report_over_it() {
     let units = compile_in_order(&[&lib, &one, &two]);
 
     with_prelude(|prelude| {
-        let first = units[1].text().spellings(&scope_of(prelude, &units[..1]));
-        let second = units[2].text().spellings(&scope_of(prelude, &units[..2]));
+        let first = units[1]
+            .text()
+            .expect("a program's unit holds its lowering")
+            .spellings(&scope_of(prelude, &units[..1]));
+        let second = units[2]
+            .text()
+            .expect("a program's unit holds its lowering")
+            .spellings(&scope_of(prelude, &units[..2]));
 
         for place in 0..=prelude.len() {
             assert!(
@@ -230,13 +263,19 @@ fn a_name_a_later_unit_exports_is_spelled_by_either_units_path() {
     let x = Global::Authored(Qualifier::from(["lib", "deep", "x"]));
 
     with_prelude(|prelude| {
-        let inside = units[1].text().spellings(&scope_of(prelude, &units[..1]));
+        let inside = units[1]
+            .text()
+            .expect("a program's unit holds its lowering")
+            .spellings(&scope_of(prelude, &units[..1]));
         assert_eq!(
             spell(&inside, &Qualifier::from(["facade"]), None, &x).as_deref(),
             Some("x")
         );
 
-        let after = units[2].text().spellings(&scope_of(prelude, &units[..2]));
+        let after = units[2]
+            .text()
+            .expect("a program's unit holds its lowering")
+            .spellings(&scope_of(prelude, &units[..2]));
         assert_eq!(
             spell(&after, &Qualifier::from(["reader"]), None, &x).as_deref(),
             Some("/facade/x")
@@ -261,8 +300,13 @@ fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
     for _ in 0..16 {
         let unit = unit_of(source);
         let spellings = with_prelude(|prelude| {
-            let scope = prelude.iter().map(|root| root.text()).collect::<Vec<_>>();
-            unit.text().spellings(&scope)
+            let scope = prelude
+                .iter()
+                .map(|root| root.text().expect("a program's unit holds its lowering"))
+                .collect::<Vec<_>>();
+            unit.text()
+                .expect("a program's unit holds its lowering")
+                .spellings(&scope)
         });
         let own = spellings.units.last().expect("the unit's own paths");
         let written = own

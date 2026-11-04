@@ -105,7 +105,10 @@ pub(super) fn definition_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
 
     with_prelude(|prelude| {
-        let texts = prelude.iter().map(|unit| unit.text()).collect::<Vec<_>>();
+        let texts = prelude
+            .iter()
+            .map(|unit| unit.text().expect("a program's unit holds its lowering"))
+            .collect::<Vec<_>>();
         let (lowered, entry) = into_core_entry(
             &UnitSource::entry(&entrypoint, &RootSource::none()),
             &texts,

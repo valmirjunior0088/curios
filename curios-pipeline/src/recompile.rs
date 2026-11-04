@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Closing, CompileError, erasure_refusal, globals_after, kernel_refusal, lowering_refusal,
-        with_broken,
+        Closing, CompileError, compile_unit_told, erasure_refusal, globals_after, kernel_refusal,
+        lowering_refusal, with_broken,
     },
     curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
@@ -62,11 +62,15 @@ pub(crate) fn compile_unit_over_told(
     told: &dyn Fn(&PreparedText),
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
+    // A unit read from Core text holds no lowering to lower over, so a program over one is compiled whole.
+    let Some(written) = over.baseline.text() else {
+        return compile_unit_told(budget, predecessors, syntax, source, told);
+    };
     let lowered = into_core_unit_over(
         source,
         &predecessors.text(),
         syntax,
-        over.baseline.text(),
+        written,
         over.moved.iter().all(|moved| !moved),
     )
     .map_err(|error| CompileError::Failure(vec![error.report()]))?;
@@ -190,7 +194,9 @@ pub(crate) fn compile_lowered_over(
         entry,
     ) = walked.map_err(|error| refuse(&lowered, error))?;
     // And what the baseline's read in the declarations kept from it.
-    lowered.credit_reused(baseline.text(), |name| !made.contains(name));
+    if let Some(written) = baseline.text() {
+        lowered.credit_reused(written, |name| !made.contains(name));
+    }
     if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
         elaborated(&core, entry);
     }

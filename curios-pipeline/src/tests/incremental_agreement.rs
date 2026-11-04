@@ -95,8 +95,14 @@ fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
     assert!(!reuses_body(&baseline, &incremental, "above"));
     assert!(unused_binders(&incremental).is_empty());
     assert!(
-        curios_archive::to_bytes(incremental.text()).unwrap()[..]
-            == curios_archive::to_bytes(whole.text()).unwrap()[..],
+        curios_archive::to_bytes(
+            incremental
+                .text()
+                .expect("a program's unit holds its lowering")
+        )
+        .unwrap()[..]
+            == curios_archive::to_bytes(whole.text().expect("a program's unit holds its lowering"))
+                .unwrap()[..],
         "the text stage's part is stored differently over a baseline"
     );
 }

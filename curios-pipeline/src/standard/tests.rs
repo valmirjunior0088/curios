@@ -96,7 +96,11 @@ fn elaborated_over(
     context.set_broken(lowered.broken_names());
     // A unit lowered whole drops what the archived unit's lowering declares and it does not.
     let dropped = lowered.dropped().cloned().unwrap_or_else(|| {
-        let items = &std.text().core().items;
+        let items = &std
+            .text()
+            .expect("a program's unit holds its lowering")
+            .core()
+            .items;
         items
             .places()
             .flat_map(|place| items.names(place))
@@ -145,9 +149,14 @@ fn std_recompile_census() {
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             let start = Instant::now();
-            let lowered =
-                into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
-                    .expect("the edited library lowers");
+            let lowered = into_core_unit_over(
+                &unit,
+                &predecessors.text(),
+                &SYNTAX,
+                std.text().expect("a program's unit holds its lowering"),
+                true,
+            )
+            .expect("the edited library lowers");
             let lowered_in = start.elapsed();
             let relowered = lowered
                 .lowered_anew()
@@ -219,7 +228,9 @@ fn std_unit_reproduction() {
             };
         }
         let mut differing = Vec::new();
-        if stored!(first.text()) != stored!(second.text()) {
+        if stored!(first.text().expect("a program's unit holds its lowering"))
+            != stored!(second.text().expect("a program's unit holds its lowering"))
+        {
             differing.push("the text stage's part".to_string());
         }
         if stored!(first.erased()) != stored!(second.erased()) {
@@ -566,9 +577,13 @@ fn std_image_division() {
         let reads = reads_filed(std.certification().recorded())
             .expect("the certifier's reads serialize")
             .len();
-        let records = lowering_stored(std.text()).len();
+        let records =
+            lowering_stored(std.text().expect("a program's unit holds its lowering")).len();
         let anchors = {
-            let held = std.text().anchors();
+            let held = std
+                .text()
+                .expect("a program's unit holds its lowering")
+                .anchors();
             curios_archive::to_bytes(held)
                 .expect("the anchors serialize")
                 .len()
@@ -580,7 +595,10 @@ fn std_image_division() {
                     .sum::<usize>()
         };
         let imports = {
-            let held = std.text().imports();
+            let held = std
+                .text()
+                .expect("a program's unit holds its lowering")
+                .imports();
             curios_archive::to_bytes(held)
                 .expect("the import scopes serialize")
                 .len()
@@ -636,7 +654,11 @@ fn std_image_division() {
             unit.len(),
             Some(restored!(Unit, unit)),
         );
-        part!("  the lowering's state", PreparedText, std.text());
+        part!(
+            "  the lowering's state",
+            PreparedText,
+            std.text().expect("a program's unit holds its lowering")
+        );
         let consed = std.core().shared(&Sharing::new());
         part!("  the elaborated module, consed", Definitions, &consed);
         items!("    its items", &consed);
@@ -1439,7 +1461,11 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
         let lexicons = predecessors.lexicons();
-        let spellings = Rc::new(std.text().spellings(&predecessors.text()));
+        let spellings = Rc::new(
+            std.text()
+                .expect("a program's unit holds its lowering")
+                .spellings(&predecessors.text()),
+        );
         let reading = Reading {
             definitions: std.core(),
             kept: None,
@@ -1577,14 +1603,19 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 
             let source = std_from_its_tree().with_overlay(Overlay::of(overlay));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-            let lowered =
-                into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
-                    .unwrap_or_else(|error| {
-                        panic!(
-                            "the library lowers with its printed terms beside it:\n{}",
-                            error.format()
-                        )
-                    });
+            let lowered = into_core_unit_over(
+                &unit,
+                &predecessors.text(),
+                &SYNTAX,
+                std.text().expect("a program's unit holds its lowering"),
+                true,
+            )
+            .unwrap_or_else(|error| {
+                panic!(
+                    "the library lowers with its printed terms beside it:\n{}",
+                    error.format()
+                )
+            });
             let elaborated = elaborated_over(
                 predecessors,
                 std,

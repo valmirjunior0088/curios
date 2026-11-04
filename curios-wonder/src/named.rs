@@ -223,14 +223,16 @@ impl<'a> Reading<'a> {
             return Some((declared, written(own.anchors(), &|_| true)));
         }
 
-        let (unit, declared) = scope
-            .iter()
-            .find_map(|unit| Some((unit, unit.text().declared_as(name)?)))?;
+        // A unit read from Core text holds no lowering, and so declares nothing a name is found by.
+        let (unit, lowered, declared) = scope.iter().find_map(|unit| {
+            let lowered = unit.text()?;
+            Some((unit, lowered, lowered.declared_as(name)?))
+        })?;
         let fixed = unit.fixed();
 
         Some((
             declared,
-            written(unit.text().anchors(), &|label| !fixed || self.stands(label)),
+            written(lowered.anchors(), &|label| !fixed || self.stands(label)),
         ))
     }
 

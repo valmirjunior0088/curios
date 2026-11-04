@@ -27,7 +27,11 @@ fn shown(source: &str, name: &str) -> (String, String) {
             .collect::<Vec<_>>();
         let established = Established::placed(&units);
         let lexicons = predecessors.lexicons();
-        let spellings = Rc::new(unit.text().spellings(&predecessors.text()));
+        let spellings = Rc::new(
+            unit.text()
+                .expect("a program's unit holds its lowering")
+                .spellings(&predecessors.text()),
+        );
         let reading = Reading {
             definitions: unit.core(),
             kept: None,

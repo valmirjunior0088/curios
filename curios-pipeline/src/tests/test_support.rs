@@ -324,6 +324,7 @@ fn elaborated(
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
 pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
     unit.text()
+        .expect("a program's unit holds its lowering")
         .lints()
         .iter()
         .filter(|lint| lint.kind == LintKind::UnusedBinder)
@@ -540,7 +541,8 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
             .map(|(name, record)| record.digest(name).ok())
             .collect::<Vec<_>>()
     };
-    let baseline = |unit: &Unit| lowering_stored(unit.text());
+    let baseline =
+        |unit: &Unit| lowering_stored(unit.text().expect("a program's unit holds its lowering"));
     let traces = traces_stored;
     let erasures = |unit: &Unit| {
         asked_stored(
@@ -565,8 +567,14 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
         ),
         (
             "the text stage's part",
-            curios_archive::to_bytes(whole.text()).unwrap()[..]
-                == curios_archive::to_bytes(incremental.text()).unwrap()[..],
+            curios_archive::to_bytes(whole.text().expect("a program's unit holds its lowering"))
+                .unwrap()[..]
+                == curios_archive::to_bytes(
+                    incremental
+                        .text()
+                        .expect("a program's unit holds its lowering"),
+                )
+                .unwrap()[..],
         ),
         (
             "the elaborated module",
@@ -636,7 +644,11 @@ pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
             })
             .unwrap_or_else(|| panic!("{name} is a name of the unit"));
 
-        match unit.text().lowered(declared) {
+        match unit
+            .text()
+            .expect("a program's unit holds its lowering")
+            .lowered(declared)
+        {
             Some(Item::Let(definition)) => definition.body.clone(),
             _ => panic!("{name} is a let item of the unit"),
         }
@@ -702,6 +714,7 @@ pub(super) fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
         .map(|extent| {
             let span = unit
                 .text()
+                .expect("a program's unit holds its lowering")
                 .anchors()
                 .resolve(extent)
                 .expect("a declaration of the unit is sited");

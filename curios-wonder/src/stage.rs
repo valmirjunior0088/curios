@@ -133,8 +133,11 @@ pub fn unit_stage(
                 }]
             })
         }
+        // A question's unit is a program's, so it holds the lowering this rung prints.
         "core" => last_unit(budget, &units, None, |unit, spelling| {
-            unit.text().core().spelled(spelling).to_string()
+            unit.text()
+                .map(|lowered| lowered.core().spelled(spelling).to_string())
+                .unwrap_or_default()
         }),
         _ => last_unit(
             budget,

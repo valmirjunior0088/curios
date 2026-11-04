@@ -78,8 +78,14 @@ fn standard_declarations() -> Vec<Qualifier> {
             |_| {},
             |prelude, _| {
                 let (unit, earlier) = prelude.split_last().expect("the prelude has roots");
-                let scope = earlier.iter().map(|root| root.text()).collect::<Vec<_>>();
-                let spellings = unit.text().spellings(&scope);
+                let scope = earlier
+                    .iter()
+                    .map(|root| root.text().expect("a program's unit holds its lowering"))
+                    .collect::<Vec<_>>();
+                let spellings = unit
+                    .text()
+                    .expect("a program's unit holds its lowering")
+                    .spellings(&scope);
                 let own = spellings.units.last().expect("the unit's own paths");
                 Ok(own
                     .paths

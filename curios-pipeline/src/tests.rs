@@ -26,6 +26,7 @@ mod paste_back_module;
 mod paste_back_type;
 mod paste_back_witness;
 mod placement;
+mod read;
 mod resolution;
 mod spelling;
 mod suggestion;

@@ -26,6 +26,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** An optional record, a special case every reader carries; a unit generic over its record, or a second type for a unit not yet certified, which only a unit stored before its certification needed, and the fixed prelude's images, once made below the certifier, were the one such; the record outside the unit, which turns the predecessors into a slice of pairs.
 
+### A unit read from Core text holds no lowering
+
+**Decision.** A unit is written as a program, holding the lowering of its sources, or read from Core text, holding in the lowering's place only the prefixes it claims and the rows it declares (`Unit::read`). What reads a lowering reads a program's: a later lowering resolves no name a unit read from Core text declares, a program compiled over one as its baseline is compiled whole, and its findings, anchors, documentation and tests are none. The kernel, erasure and a store read it as any unit, so the soundness board's histories put Core text through the compiler's own path from judgment on (`curios_pipeline::test_support::compile_read`).
+
+**Rationale.** Core text states every node a module holds and nothing of the source a lowering resolves names in: no module tree, no visibility, no import. So the lowering's readers are the program's own concerns, where the record, which every reader of a unit reads, is not — which is why a unit is certified by construction and holds a lowering only where it has one.
+
+**Rejected.** A lowering made of the read module, which would invent the module tree and the visibility a later program resolves by. An empty lowering at the unit's mount, which says a unit declares nothing beside a module that declares items, so every reader that holds the two to each other reads the unit as empty without saying so — a test Core text declares, among them, would never be scheduled.
+
 ### A unit is handed over, never copied
 
 **Decision.** A unit holds its lowered state, its elaborated module, its erased forms and its certification each by pointer, and each item's erased form by pointer among them, so a clone of a unit is a clone of its handles. Where its elaborated module holds each name it defines (`curios_core::Places`) is made once, the first time the unit is read by name, and kept with it for as long as it is held; so is who asked what of its traces (`curios_elab::Readers`), the first time a recompile over it asks, and a unit compiled over a baseline holds the baseline's with the edges of each declaration it elaborated again or took away replaced.

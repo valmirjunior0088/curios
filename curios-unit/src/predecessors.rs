@@ -32,16 +32,19 @@ impl<'a> Predecessors<'a> {
         self.units
     }
 
-    /// The resolution state of each predecessor, for `curios-module`.
+    /// The resolution state of each predecessor written as a program, for `curios-module`: a unit read from Core text holds no lowering, so a later lowering resolves nothing it declares ([`Unit::text`]).
     ///
     /// A slice of that crate's own opaque type, not of anything unpacked here — which is what lets its tables stay private while still being layered rather than copied.
     pub fn text(&self) -> Vec<&'a PreparedText> {
-        self.units.iter().map(|unit| unit.text()).collect()
+        self.units.iter().filter_map(|unit| unit.text()).collect()
     }
 
-    /// The lowered module of each predecessor: the items its sources declare, in the order they declare them, which is the order a test program runs its tests in.
+    /// The lowered module of each predecessor written as a program: the items its sources declare, in the order they declare them, which is the order a test program runs its tests in.
     pub fn lowered(&self) -> Vec<&'a Definitions> {
-        self.units.iter().map(|unit| unit.text().core()).collect()
+        self.units
+            .iter()
+            .filter_map(|unit| unit.text().map(PreparedText::core))
+            .collect()
     }
 
     /// The elaborated module of each predecessor, for the kernel's environment and for a report that spells a predecessor's name.
@@ -72,11 +75,11 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.places()).collect()
     }
 
-    /// Where the source declarations of each predecessor lie, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.
+    /// Where the source declarations of each predecessor written as a program lie, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.
     pub fn anchors(&self) -> Vec<&'a Anchors> {
         self.units
             .iter()
-            .map(|unit| unit.text().anchors())
+            .filter_map(|unit| unit.text().map(PreparedText::anchors))
             .collect()
     }
 

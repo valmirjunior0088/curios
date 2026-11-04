@@ -250,12 +250,7 @@ fn diagnosed_reading(
             let units = tested_last(overlaid(units, overlay));
             let found = fold(&units).units(
                 |_| {},
-                |_, produced| {
-                    Ok(produced
-                        .last()
-                        .map(|unit| Findings::of_text(unit.text()))
-                        .unwrap_or_default())
-                },
+                |_, produced| Ok(produced.last().map(Findings::of_unit).unwrap_or_default()),
             );
             match found {
                 Ok(findings) => Diagnosed::found(None, findings),

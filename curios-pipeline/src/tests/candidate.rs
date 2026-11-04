@@ -67,7 +67,14 @@ fn form(unit: &Unit, name: &str) -> Digest {
 
 /// What the declaration `unit` lowered as `name` was made from, as a candidate is found by.
 fn input(unit: &Unit, name: &str) -> Digest {
-    let (lowered, declarations) = (unit.text().core(), unit.text().declarations());
+    let (lowered, declarations) = (
+        unit.text()
+            .expect("a program's unit holds its lowering")
+            .core(),
+        unit.text()
+            .expect("a program's unit holds its lowering")
+            .declarations(),
+    );
     let declaration = declarations
         .declaration(&named(name))
         .expect("the unit declares the name");

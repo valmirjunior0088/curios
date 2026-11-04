@@ -46,10 +46,14 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
     );
     let placed = incremental
         .text()
+        .expect("a program's unit holds its lowering")
         .lints()
         .iter()
         .map(|lint| {
-            let report = lint.report(&[incremental.text().anchors()]);
+            let report = lint.report(&[incremental
+                .text()
+                .expect("a program's unit holds its lowering")
+                .anchors()]);
             let span = report.span.as_ref().expect("a lint is placed");
 
             span.source.path.clone().expect("in a file")
@@ -85,7 +89,11 @@ fn a_file_no_edit_reached_keeps_what_its_declarations_read_without_asking_them()
         );
     }
     assert_eq!(
-        incremental.text().lints().len(),
+        incremental
+            .text()
+            .expect("a program's unit holds its lowering")
+            .lints()
+            .len(),
         1,
         "the import nothing reads is the one finding"
     );

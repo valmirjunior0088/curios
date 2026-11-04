@@ -272,7 +272,7 @@ impl<'a> Fold<'a> {
                 .iter()
                 .copied()
                 .chain(earlier)
-                .map(Unit::text)
+                .filter_map(Unit::text)
                 .collect::<Vec<_>>();
             // Of the roots in scope alone: a root this fold withheld is the unit being documented.
             let records = prelude_documentation();
@@ -286,7 +286,12 @@ impl<'a> Fold<'a> {
                 })
                 .collect::<Vec<_>>();
 
-            document_unit(source, unit.text(), &predecessors, &records)
+            // A unit read from Core text holds no lowering, which is what a unit is documented from.
+            let Some(written) = unit.text() else {
+                return Err(undocumented());
+            };
+
+            document_unit(source, written, &predecessors, &records)
                 .map_err(|error| CompileError::Failure(vec![error.report()]))?
                 .ok_or_else(undocumented)
         })

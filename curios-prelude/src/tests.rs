@@ -58,8 +58,18 @@ fn every_authored_source_is_lint_clean() {
         .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
     // Credited as a recompile credits a declaration it reuses: with what the build's elaboration of the same sources recorded as read by a proof it wrote.
     with_prelude(|units| {
-        sys.credit_reused(units[0].text(), |_| true);
-        std.credit_reused(units[1].text(), |_| true);
+        sys.credit_reused(
+            units[0]
+                .text()
+                .expect("a program's unit holds its lowering"),
+            |_| true,
+        );
+        std.credit_reused(
+            units[1]
+                .text()
+                .expect("a program's unit holds its lowering"),
+            |_| true,
+        );
     });
     let lints = [&sys, &std]
         .iter()

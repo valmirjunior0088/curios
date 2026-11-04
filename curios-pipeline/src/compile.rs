@@ -39,7 +39,12 @@ pub struct Findings {
 }
 
 impl Findings {
-    /// A stored unit's, as its lowering left them and its elaboration credited them.
+    /// A stored unit's, as its lowering left them and its elaboration credited them: none of a unit read from Core text, which no lowering made ([`Unit::text`]).
+    pub fn of_unit(unit: &Unit) -> Self {
+        unit.text().map(Self::of_text).unwrap_or_default()
+    }
+
+    /// A lowering's, as it left them and its elaboration credited them.
     pub fn of_text(text: &PreparedText) -> Self {
         Self {
             lints: text.lints().to_vec(),
@@ -965,7 +970,7 @@ where
     let mut findings = None;
     let closed = match (hit, baseline) {
         (Some(unit), _) => {
-            let mut restored = Findings::of_text(unit.text());
+            let mut restored = Findings::of_unit(&unit);
             let closed = close_over(
                 budget,
                 predecessors,
@@ -1035,7 +1040,7 @@ where
         Err(error) => (findings.unwrap_or_default(), Err(error)),
         Ok((unit, lowered, entry)) => {
             // Read off the unit before the term that closes the program is judged: a lint is no part of that verdict either.
-            let findings = findings.unwrap_or_else(|| Findings::of_text(unit.text()));
+            let findings = findings.unwrap_or_else(|| Findings::of_unit(&unit));
             if lowered.is_some() {
                 observe(Stage::CoreElab(
                     &Program {
@@ -1054,14 +1059,14 @@ where
                     .copied()
                     .chain([&unit])
                     .collect::<Vec<_>>();
-                let text = lowered.as_ref().unwrap_or_else(|| unit.text());
+                let text = lowered.as_ref().or(unit.text());
 
                 judged(
                     budget,
                     (Predecessors::over(&units), predecessors),
                     syntax,
                     entry,
-                    erases.then_some(text),
+                    text.filter(|_| erases),
                 )
             };
 
@@ -1546,7 +1551,10 @@ where
         let (hit, baseline) = held(source, *offered, cache);
         if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
-            told(unit.text());
+            // A unit read from Core text holds no lowering to tell of.
+            if let Some(text) = unit.text() {
+                told(text);
+            }
             answered(source, &unit)?;
             produced.push(unit);
             continue;
@@ -1627,7 +1635,8 @@ fn lower_program(
         source,
         &predecessors.text(),
         syntax,
-        earlier.map(|(unit, settled)| (unit.text(), settled)),
+        // A unit read from Core text offers no lowering to lower over, so a program is lowered whole over one.
+        earlier.and_then(|(unit, settled)| unit.text().map(|text| (text, settled))),
     )
     .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
@@ -1662,14 +1671,20 @@ pub(crate) fn lower_subject<T>(
     }
 
     let text = predecessors.text();
-    Ok(match (hit, baseline) {
-        (Some(unit), _) => then(unit.text(), None),
+    // A unit read from Core text holds no lowering, so where one is held or offered the source is lowered whole.
+    let hit = hit.filter(|unit| unit.text().is_some());
+    let baseline = baseline.filter(|earlier| earlier.unit.text().is_some());
+    Ok(match (hit.as_ref().and_then(Unit::text), baseline) {
+        (Some(lowered), _) => then(lowered, None),
         (None, Some(earlier)) => then(
             &into_core_unit_over(
                 source,
                 &text,
                 syntax,
-                earlier.unit.text(),
+                earlier
+                    .unit
+                    .text()
+                    .expect("a baseline holding no lowering is not offered"),
                 settled(&earlier),
             )
             .map_err(|error| CompileError::Failure(vec![error.report()]))?,
