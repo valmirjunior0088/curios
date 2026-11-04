@@ -2,7 +2,7 @@
 //!
 //! It is the pipeline's last stage: it consumes and produces serialized module bytes, after `curios_wasm::to_bytes`, and knows nothing about any Curios IR, as `README.md` decides.
 //!
-//! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder stage wasm-optm` payload, eyes-only as `README.md` decides.
+//! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder --stage wasm-optm` payload, eyes-only as `README.md` decides.
 
 mod sys;
 use sys::*;

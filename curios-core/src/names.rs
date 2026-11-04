@@ -126,9 +126,9 @@ impl Global {
         }
     }
 
-    /// The written path as a test's report line, the runner's records and `wonder tests` all spell it — empty for a witness, which is anonymous by design.
+    /// The written path as a test's report line, the runner's records and `wonder --tests` all spell it — empty for a witness, which is anonymous by design.
     ///
-    /// Shared rather than restated, because the tail baked into the test program, the records the CLI filters on and the paths `wonder tests` prints are one identity read three times: `documentation/usage.md` states that a path means the same thing whichever subcommand asks, and this is what makes that true rather than merely intended.
+    /// Shared rather than restated, because the tail baked into the test program, the records the CLI filters on and the paths `wonder --tests` prints are one identity read three times: `documentation/usage.md` states that a path means the same thing whichever subcommand asks, and this is what makes that true rather than merely intended.
     pub fn path(&self) -> String {
         self.qualifier().map(Qualifier::join).unwrap_or_default()
     }

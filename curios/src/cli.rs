@@ -217,7 +217,7 @@ pub(crate) enum Mode {
         directory: PathBuf,
     },
 
-    /// The gate over what `wonder diagnostics` reports: every diagnostic, goal and lint of the subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
+    /// The gate over what `wonder` reports: every diagnostic, goal and lint of the subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
     #[command(
         about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
     )]

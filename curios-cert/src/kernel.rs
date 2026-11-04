@@ -250,7 +250,7 @@ impl From<UniverseError> for Error {
 impl Error {
     /// This refusal as a reader is told it, its terms and levels written by `notation`, which whoever reports it hands in under the policy it reports by.
     ///
-    /// Universe instances are deliberately *not* suppressed in a kernel refusal, unlike an elaboration diagnostic: one is often *about* the universes. `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type` — the same reason `wonder stage`'s dumps show them, since a reader looking at the checker wants the levels the checker is arguing about.
+    /// Universe instances are deliberately *not* suppressed in a kernel refusal, unlike an elaboration diagnostic: one is often *about* the universes. `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type` — the same reason `wonder --stage`'s dumps show them, since a reader looking at the checker wants the levels the checker is arguing about.
     pub fn rendered(&self, notation: &dyn Notation) -> String {
         self.rendered_stating(None, notation)
     }

@@ -14,7 +14,7 @@ What the compiler knows about a program, handed out as records: the `wonder` eng
 
 **Decision.** Nothing in the engine reads a file by a name it was not handed, encodes JSON, or spells an LSP type; a record is plain data over the compiler's coordinates — a `Span` of source identity and UTF-8 byte range — and a transport converts at its own edge. UTF-16 exists only in the server's adapter.
 
-**Rationale.** Every rendering is computed from the record, which keeps the transports honest with each other: the command line reads `wonder diagnostics` exactly as `curios run` would report the same program, because it is the same `Report` rendered.
+**Rationale.** Every rendering is computed from the record, which keeps the transports honest with each other: the command line reads `wonder` exactly as `curios run` would report the same program, because it is the same `Report` rendered.
 
 ### A question files the units it compiled from disk
 
@@ -34,7 +34,7 @@ Nothing that takes these figures is checked in: a driver and a fold are small, a
 
 **The binary.** `cargo xtask launcher build`, then `cargo build --release -p curios --features profile`: without `--profile` it measures wall clock, with `--profile <PATH>` it files one row per span. A rebuilt binary has a new digest, which moves every store slot, so refile a package measured as built with the same binary first — `target/release/curios test <lib.crs>`.
 
-**A session.** Start `target/release/curios [--profile <PATH>] wonder server` and speak the protocol over its standard streams, each message JSON behind a `Content-Length` header. Send `initialize` with `workspaceFolders` naming the package root — a folder no manifest governs warms nothing — wait for its response, and send `initialized`. One fresh server per scenario, so the first check carries the one-time costs.
+**A session.** Start `target/release/curios [--profile <PATH>] server` and speak the protocol over its standard streams, each message JSON behind a `Content-Length` header. Send `initialize` with `workspaceFolders` naming the package root — a folder no manifest governs warms nothing — wait for its response, and send `initialized`. One fresh server per scenario, so the first check carries the one-time costs.
 
 **The events.** `didOpen` with the full text, then `didChange` with the full text, every one distinct, since a change carrying the overlay the last check read measures what reusing that check costs rather than an edit. Time each notification from its write to the `publishDiagnostics` whose `uri` is that document, in wall-clock nanoseconds at both ends so a profile can be split by check. The analyst waits a tenth of its last check's cost, capped at `SETTLE`, before compiling, so wall clock includes that wait.
 

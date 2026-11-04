@@ -174,7 +174,7 @@ entry()
 ///
 /// Over the seven: encoded 43, 44, 44, 45, 45, 45, 46, median 45; control 4, 5, 5, 6, 6, 7, 7, median 6; key construction 37, 37, 39, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 656 nanoseconds, under 6%.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's fifteen surviving `br_table`s, as `wonder stage wasm-optm` prints it at that commit, eleven sit in the program's entry, one in `/std/answered`, one in text decoding (`/std/Str/At/next`) and two in `/std/Map/internal/Node/insert` itself, none in a bit test, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's fifteen surviving `br_table`s, as `wonder --stage wasm-optm` prints it at that commit, eleven sit in the program's entry, one in `/std/answered`, one in text decoding (`/std/Str/At/next`) and two in `/std/Map/internal/Node/insert` itself, none in a bit test, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {

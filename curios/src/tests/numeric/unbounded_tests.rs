@@ -430,7 +430,7 @@ fn a_closed_computation_folds_at_the_theory_s_width() {
 
 /// A growing fold declines rather than building a numeral past its allowance, and the program it leaves standing computes the value at run time instead.
 ///
-/// **Nothing upstream closes this.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder stage anf` shows the call arriving with both operands literal. Unbounded, a fold would be asked for a forty-million-bit numeral; the allowance declines instead, and a decline is invisible: the operation stays, and the running program builds the five megabytes the value is and reads its top bits back.
+/// **Nothing upstream closes this.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder --stage anf` shows the call arriving with both operands literal. Unbounded, a fold would be asked for a forty-million-bit numeral; the allowance declines instead, and a decline is invisible: the operation stays, and the running program builds the five megabytes the value is and reads its top bits back.
 #[test]
 fn a_growing_fold_declines_and_the_running_program_computes_the_value() {
     assert_eq!(

@@ -65,7 +65,7 @@ fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     );
 }
 
-/// A lint is reported on stdout as `wonder diagnostics` reports it, and turns the exit into 1; a clean program exits 0 with nothing said.
+/// A lint is reported on stdout as `wonder` reports it, and turns the exit into 1; a clean program exits 0 with nothing said.
 #[test]
 fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     let root = temporary("stdin");

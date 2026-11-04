@@ -597,7 +597,7 @@ pub struct TestRecord {
     pub body: String,
 }
 
-/// The declaration-ordered paths of a lowered module's tests — how `curios test` and `wonder tests` name them, read off [`Definitions::tests`](curios_core::Definitions::tests) so the two cannot disagree with the schedule.
+/// The declaration-ordered paths of a lowered module's tests — how `curios test` and `wonder --tests` name them, read off [`Definitions::tests`](curios_core::Definitions::tests) so the two cannot disagree with the schedule.
 pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String> {
     definitions
         .tests()
@@ -809,7 +809,7 @@ where
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
 ///
-/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder diagnostics` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
@@ -1711,14 +1711,14 @@ fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
 
 /// Told a subject's lowering as soon as it is made — or restored, where the store held the unit — beside the units it was lowered against and, for a program, the term it closes with: what a question about what the subject writes reads, whatever the rest of its compile goes on to conclude.
 ///
-/// **What was produced, told once, for the subject alone.** Beside [`Progress`] and the [`Stage`] observer rather than inside either: the first reports what is happening and the second the rungs `wonder stage` prints, while this hands a reader the lowering a refused subject still has, so a question about what a file writes is answered from the check that compiled it.
+/// **What was produced, told once, for the subject alone.** Beside [`Progress`] and the [`Stage`] observer rather than inside either: the first reports what is happening and the second the rungs `wonder --stage` prints, while this hands a reader the lowering a refused subject still has, so a question about what a file writes is answered from the check that compiled it.
 pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>);
 
 /// What the fold is doing, for a caller that reports it.
 ///
 /// Sequential by construction — the fold compiles one unit at a time — so [`Progress::Reused`] and [`Progress::Compiled`] refer to whichever subject was announced last and need not name it again.
 ///
-/// Deliberately separate from the [`Stage`] observer, which belongs to `wonder stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
+/// Deliberately separate from the [`Stage`] observer, which belongs to `wonder --stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
     /// A mounted unit is about to be compiled, named by the prefix it claims.
     Compiling(&'a Qualifier),

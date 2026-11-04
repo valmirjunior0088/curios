@@ -1,6 +1,6 @@
 //! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
-//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and a question has one: that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
+//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and a question has one: that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
 //! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
@@ -147,7 +147,7 @@ impl Asked {
     }
 }
 
-/// `wonder diagnostics [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each. `unfiled` is told why, where a store took nothing of what the question compiled.
+/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each. `unfiled` is told why, where a store took nothing of what the question compiled.
 pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
@@ -168,7 +168,7 @@ pub fn wonder_diagnostics(
     Ok(())
 }
 
-/// `wonder tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_tests(
     budget: u64,
     selection: Selection,
@@ -241,13 +241,13 @@ pub(crate) fn rendered(
     (reports, unfiled)
 }
 
-/// What `wonder stage` reprints a rung of: a program, at any rung, or a library through one of its files, at the rungs a unit has.
+/// What `wonder --stage` reprints a rung of: a program, at any rung, or a library through one of its files, at the rungs a unit has.
 pub enum Staged {
     Program(Program),
     Library(Library),
 }
 
-/// `wonder stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted, to stdout.
+/// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted, to stdout.
 ///
 /// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_stage(
@@ -372,7 +372,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder at LINE:COLUMN [SUBJECT]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at LINE:COLUMN [SUBJECT]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -398,7 +398,7 @@ pub fn wonder_at(
     })
 }
 
-/// `wonder declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_declarations(
     budget: u64,
     staged: Staged,

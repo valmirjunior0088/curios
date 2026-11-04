@@ -121,7 +121,7 @@ fn one_slot_serves_run_and_compile() {
     );
 }
 
-/// A stage is a question, and a question files the units it compiled whole and no payload: after `wonder stage`, the plain invocation finds the library in the store and compiles the program over it.
+/// A stage is a question, and a question files the units it compiled whole and no payload: after `wonder --stage`, the plain invocation finds the library in the store and compiles the program over it.
 #[test]
 fn asking_for_a_stage_files_its_units_and_no_payload() {
     let root = project("asking");

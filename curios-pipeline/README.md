@@ -26,4 +26,4 @@ The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and t
 
 **Rationale.** A baseline crosses the seam as the one thing the fold understands, a `Unit`, never a path or a record, and which commands take one is written in one place: a build takes one because the store's cache answers, and nothing of the fold says so.
 
-**Rejected.** A `baselines` parameter on `compile_units`, a second seam for the same fact; deciding by entry point, when `wonder stage` and `curios test` reach the fold through the same ones.
+**Rejected.** A `baselines` parameter on `compile_units`, a second seam for the same fact; deciding by entry point, when `wonder --stage` and `curios test` reach the fold through the same ones.

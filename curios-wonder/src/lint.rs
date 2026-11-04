@@ -1,4 +1,4 @@
-//! `curios lint`: the gate over what `wonder diagnostics` reports.
+//! `curios lint`: the gate over what `wonder` reports.
 //!
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
@@ -99,7 +99,7 @@ fn unused_dependencies<'a>(
         .collect()
 }
 
-/// Renderings in the order they arrived, each distinct one once — the collapse `wonder diagnostics` applies, since the subjects of a package overlap on their library.
+/// Renderings in the order they arrived, each distinct one once — the collapse `wonder` applies, since the subjects of a package overlap on their library.
 #[derive(Default)]
 struct Renderings {
     rendered: Vec<String>,

@@ -7,7 +7,7 @@ use {
 
 /// One fact is reported once, however many subjects reach it.
 ///
-/// **A package's subjects overlap.** `wonder diagnostics` with no subject asks about the library and about every executable the package declares, and every executable is compiled against that library — so without the collapse one unbound variable in it would print once per subject, three times in a package declaring two programs, and an agent walking its errors one at a time would walk the same one three times.
+/// **A package's subjects overlap.** `wonder` with no subject asks about the library and about every executable the package declares, and every executable is compiled against that library — so without the collapse one unbound variable in it would print once per subject, three times in a package declaring two programs, and an agent walking its errors one at a time would walk the same one three times.
 ///
 /// Two subjects over one text stand in for that overlap. What the collapse rests on is only that equal renderings are one fact, which the second half pins from the other side: two subjects saying different things still say both.
 #[test]

@@ -109,7 +109,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         refusal.contains("\"serve\"") && refusal.contains("\"bench\""),
         "{refusal}"
     );
-    // `compile` and `wonder stage` resolve a bare command through the same call, so the refusal names no subcommand.
+    // `compile` and `wonder --stage` resolve a bare command through the same call, so the refusal names no subcommand.
     assert!(!refusal.contains("`run`"), "{refusal}");
 
     let decided = tree("run-default", &{
@@ -411,7 +411,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
     );
 }
 
-/// A package declaring no executable refuses a bare command naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal.
+/// A package declaring no executable refuses a bare command naming the two ways to declare one — and no subcommand, since `compile` and `wonder --stage` reach the same refusal.
 #[test]
 fn a_bare_command_on_a_package_of_a_library_alone_says_how_to_declare_one() {
     let root = tree(

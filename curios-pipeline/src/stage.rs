@@ -1,4 +1,4 @@
-//! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder stage`'s rungs are derived from.
+//! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder --stage`'s rungs are derived from.
 
 use {
     curios_common::SyntaxRegistry,
@@ -7,7 +7,7 @@ use {
     std::{fmt, rc::Rc},
 };
 
-/// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
+/// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder --stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///
 /// The enum is the vocabulary of observation points, not a promise that the pure pipeline emits each: [`Stage::WasmOptm`] observes what Binaryen did to the emitted module, and this crate must not depend on Binaryen, so that one variant is emitted downstream, by the native product where Binaryen runs, and its payload is a rendering Binaryen is asked for rather than a borrowed IR.
 pub enum Stage<'a> {
@@ -50,7 +50,7 @@ impl DumpScope<'_> {
 }
 
 impl<'a> Stage<'a> {
-    /// Every stage name, in pipeline order — the single source `wonder stage`'s rung names are derived from. Nothing structural ties this list to [`Stage::name`]; the `every_stage_is_observed_once_in_names_order` test is what pins the two to each other and to the driver's emission order — including the last entry's absence from that order, per [`Stage::WasmOptm`]'s own note.
+    /// Every stage name, in pipeline order — the single source `wonder --stage`'s rung names are derived from. Nothing structural ties this list to [`Stage::name`]; the `every_stage_is_observed_once_in_names_order` test is what pins the two to each other and to the driver's emission order — including the last entry's absence from that order, per [`Stage::WasmOptm`]'s own note.
     pub const NAMES: [&'static str; 9] = [
         "text",
         "core",
@@ -95,7 +95,7 @@ impl fmt::Display for Stage<'_> {
             Stage::AnfOptm(module) => write!(f, "{module}"),
             Stage::Cps(module) => write!(f, "{module}"),
             Stage::CpsOptm(module) => write!(f, "{module}"),
-            // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
+            // The one stage dump rendered within a width: `wonder --stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
             Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
             // Already laid out by Binaryen's writer; only its trailing newline is trimmed, so this dump ends like every house-rendered one.
             Stage::WasmOptm(rendering) => write!(f, "{}", rendering.to_string().trim_end()),

@@ -24,7 +24,7 @@ pub enum Uncosted {
 
 /// What each of `subject`'s declarations cost it, compiled against its units and the prelude.
 ///
-/// The two observations are the same ones `wonder stage cps` and `wonder stage cps-optm` render, taken together rather than one at a time: the difference between them is the answer, and neither alone is.
+/// The two observations are the same ones `wonder --stage cps` and `wonder --stage cps-optm` render, taken together rather than one at a time: the difference between them is the answer, and neither alone is.
 ///
 /// A program that does not compile as far as CPS has no fates to report, so this refuses with what stopped it — unlike a rung, which is an answer as soon as the driver emits it. A failure *after* `cps-optm` cannot happen without the graph already being final, so there is no partial case to admit.
 pub fn cost(

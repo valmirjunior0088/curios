@@ -1,4 +1,4 @@
-//! What `wonder stage` answers: a rung the driver reached is an answer whatever stopped the program after it, and a rung it never reached is a refusal carrying what stopped it.
+//! What `wonder --stage` answers: a rung the driver reached is an answer whatever stopped the program after it, and a rung it never reached is a refusal carrying what stopped it.
 
 use {
     crate::*,
