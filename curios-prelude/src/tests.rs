@@ -7,13 +7,19 @@ use {
         *,
     },
     curios_abi::HostOp,
+    curios_common::Report,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term},
+    curios_core::{Definitions, Item},
     curios_module::{SYNTAX, prepare_prelude},
-    curios_surface::{GroupItem, Module, TopItem, UseGroup, intrinsic_former},
+    curios_surface::{
+        CoreFile, FormScope, GroupItem, Module, ReadError, Spellable, TopItem, UseGroup,
+        intrinsic_former, to_core,
+    },
     std::{
         collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
+        rc::Rc,
     },
 };
 
@@ -385,4 +391,55 @@ fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
         mentions.extend(named.declarations().copied());
     }
     mentions
+}
+
+/// Every unit of the prelude reads back from the Core text it prints as the unit it is, item for item and by Core's equality, each read over the units before it, which its tests' and foreign rows' forms are made against: the printer and the reader hold one another to every form the prelude's terms take.
+#[test]
+fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
+    with_prelude(|prelude| {
+        for (index, unit) in prelude.iter().enumerate() {
+            let scope = Rc::new(FormScope::over(
+                SYNTAX,
+                prelude[..index].iter().map(|unit| unit.core()),
+            ));
+            let spelling = Rc::new(
+                curios_surface::Spelling::core_text()
+                    .with_form_scope(Rc::clone(&scope))
+                    .written_whole(),
+            );
+            let written = unit.core();
+            let text = written.spelled(&spelling).to_string();
+            let file = text
+                .parse::<CoreFile>()
+                .unwrap_or_else(|error| panic!("{}", error.format()));
+            let (read, entry) =
+                to_core(&file, Some(&scope)).unwrap_or_else(|error| panic!("{}", refusal(&error)));
+            assert!(entry.is_none(), "a unit closes with no entry");
+            let spelled = |item: &Item| {
+                Definitions {
+                    items: vec![item.clone()].into(),
+                }
+                .spelled(&spelling)
+                .to_string()
+            };
+            for (place, (read, written)) in read.items.iter().zip(written.items.iter()).enumerate()
+            {
+                assert!(
+                    read == written,
+                    "item {place} reads back otherwise:\n{}\nas\n{}",
+                    spelled(written),
+                    spelled(read)
+                );
+            }
+            assert_eq!(read.items.len(), written.items.len(), "the unit's items");
+        }
+    });
+}
+
+/// A reader's refusal, at the text it refuses.
+fn refusal(error: &ReadError) -> String {
+    match &error.span {
+        Some(span) => Report::at(span.clone(), error.to_string()).render(),
+        None => error.to_string(),
+    }
 }

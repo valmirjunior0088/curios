@@ -3,10 +3,17 @@
 //! **A literal form builds its own node.** A numeral is the `Nat` it spells, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes; every other value of a carrier states its variant: `%Int(-3)`, `%Byte(7)`, `%Flt(+1.5)`, `%Handle(2)`. A `Nat` over a term is `%Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `%FltAdd(TiesToEven, a, b)`, `%BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
 
 use {
-    super::{bracketed, universes_written},
-    crate::{Frame, IntrinsicForm, LiteralEntry, intrinsic_form, listed, marked_arguments, sub},
+    super::{
+        ReadError, Reader, Refusal, bracketed, core_read, malformed, term_word, universes_read,
+        universes_written, value_term, value_unmarked, value_word,
+    },
+    crate::{
+        BytesSegment, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
+        LiteralEntry, NumLit, intrinsic_form, listed, marked_arguments, sub,
+    },
+    curios_common::{Sign, Span},
     curios_core::{Intrinsic, Nat, Subterm, Term, Transient, Universes},
-    curios_num::Floating,
+    curios_num::{Binary, Floating, Integer, Rounding},
     curios_print::{Printer, flat, pure, sep_flat},
 };
 
@@ -746,4 +753,791 @@ fn reader_flt(flt: Floating, frame: Frame) -> Printer {
     }
 
     pure(flt_written(flt))
+}
+
+/// An intrinsic node as Core text writes it, `%` and its variant's name over its operands, each read as its variant holds it: a term, a rounding by its name, a list of terms, an instance as a decorator's universes are written; a carrier's value by what it is.
+pub fn intrinsic_read(
+    intrinsic: &CoreIntrinsic,
+    reader: &mut Reader<'_>,
+    span: Option<&Span>,
+) -> Result<Term, ReadError> {
+    let read = match intrinsic.variant.as_str() {
+        "Nat" => {
+            let [nat] = operands(intrinsic, span)?;
+            Intrinsic::Nat(nat_read(nat, reader)?)
+        }
+        "Byte" => {
+            let [byte] = operands(intrinsic, span)?;
+            Intrinsic::Byte(
+                unsigned(byte)
+                    .and_then(|byte| u8::try_from(&byte).ok())
+                    .ok_or_else(|| malformed("a byte's value", byte))?,
+            )
+        }
+        "Int" => {
+            let [integer] = operands(intrinsic, span)?;
+            Intrinsic::Int(int_read(integer)?)
+        }
+        "Flt" => {
+            let [flt] = operands(intrinsic, span)?;
+            Intrinsic::Flt(flt_read(flt)?)
+        }
+        "Handle" => {
+            let [handle] = operands(intrinsic, span)?;
+            Intrinsic::Handle(
+                unsigned(handle)
+                    .and_then(|handle| u32::try_from(&handle).ok())
+                    .ok_or_else(|| malformed("a handle's number", handle))?,
+            )
+        }
+        "BoolType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::BoolType
+        }
+        "BoolAnd" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BoolAnd(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "BoolOr" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BoolOr(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "BoolXor" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BoolXor(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "BoolEql" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BoolEql(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "BoolNeq" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BoolNeq(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::NatType
+        }
+        "NatEql" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatEql(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatNeq" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatNeq(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatAdd" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatAdd(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatSub" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatSub(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatMul" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatMul(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatLt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatLt(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatDiv" => {
+            let [dividend, divisor, non_zero] = operands(intrinsic, span)?;
+            Intrinsic::NatDiv {
+                dividend: term(dividend, reader)?,
+                divisor: term(divisor, reader)?,
+                non_zero: term(non_zero, reader)?,
+            }
+        }
+        "NatRem" => {
+            let [dividend, divisor, non_zero] = operands(intrinsic, span)?;
+            Intrinsic::NatRem {
+                dividend: term(dividend, reader)?,
+                divisor: term(divisor, reader)?,
+                non_zero: term(non_zero, reader)?,
+            }
+        }
+        "NatLe" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatLe(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatAnd" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatAnd(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatOr" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatOr(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatXor" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatXor(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatMin" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatMin(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatMax" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatMax(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatPow" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatPow(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatShl" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatShl(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatShr" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatShr(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "ByteType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::ByteType
+        }
+        "ByteToNat" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::ByteToNat(term(operand0, reader)?)
+        }
+        "NatToByte" => {
+            let [nat, below] = operands(intrinsic, span)?;
+            Intrinsic::NatToByte {
+                nat: term(nat, reader)?,
+                below: term(below, reader)?,
+            }
+        }
+        "IntType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::IntType
+        }
+        "IntEql" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntEql(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntNeq" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntNeq(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntAdd" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntAdd(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntSub" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntSub(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntMul" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntMul(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntDiv" => {
+            let [dividend, divisor, non_zero] = operands(intrinsic, span)?;
+            Intrinsic::IntDiv {
+                dividend: term(dividend, reader)?,
+                divisor: term(divisor, reader)?,
+                non_zero: term(non_zero, reader)?,
+            }
+        }
+        "IntRem" => {
+            let [dividend, divisor, non_zero] = operands(intrinsic, span)?;
+            Intrinsic::IntRem {
+                dividend: term(dividend, reader)?,
+                divisor: term(divisor, reader)?,
+                non_zero: term(non_zero, reader)?,
+            }
+        }
+        "IntLt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntLt(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntLe" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntLe(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntAnd" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntAnd(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntOr" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntOr(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntXor" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntXor(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntMin" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntMin(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntMax" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntMax(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntAbs" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::IntAbs(term(operand0, reader)?)
+        }
+        "IntSign" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::IntSign(term(operand0, reader)?)
+        }
+        "IntShl" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntShl(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "IntShr" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntShr(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::FltType
+        }
+        "FltAdd" => {
+            let [operand0, operand1, operand2] = operands(intrinsic, span)?;
+            Intrinsic::FltAdd(
+                rounding(operand0)?,
+                term(operand1, reader)?,
+                term(operand2, reader)?,
+            )
+        }
+        "FltSub" => {
+            let [operand0, operand1, operand2] = operands(intrinsic, span)?;
+            Intrinsic::FltSub(
+                rounding(operand0)?,
+                term(operand1, reader)?,
+                term(operand2, reader)?,
+            )
+        }
+        "FltMul" => {
+            let [operand0, operand1, operand2] = operands(intrinsic, span)?;
+            Intrinsic::FltMul(
+                rounding(operand0)?,
+                term(operand1, reader)?,
+                term(operand2, reader)?,
+            )
+        }
+        "FltDiv" => {
+            let [operand0, operand1, operand2] = operands(intrinsic, span)?;
+            Intrinsic::FltDiv(
+                rounding(operand0)?,
+                term(operand1, reader)?,
+                term(operand2, reader)?,
+            )
+        }
+        "FltFma" => {
+            let [operand0, operand1, operand2, operand3] = operands(intrinsic, span)?;
+            Intrinsic::FltFma(
+                rounding(operand0)?,
+                term(operand1, reader)?,
+                term(operand2, reader)?,
+                term(operand3, reader)?,
+            )
+        }
+        "FltRem" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltRem(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltEql" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltEql(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltNeq" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltNeq(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltLt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltLt(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltLe" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltLe(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltMin" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltMin(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltMax" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltMax(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "FltNeg" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::FltNeg(term(operand0, reader)?)
+        }
+        "FltAbs" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::FltAbs(term(operand0, reader)?)
+        }
+        "FltSqrt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltSqrt(rounding(operand0)?, term(operand1, reader)?)
+        }
+        "FltRoundIntegral" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltRoundIntegral(rounding(operand0)?, term(operand1, reader)?)
+        }
+        "FltCopysign" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::FltCopysign(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "NatToInt" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::NatToInt(term(operand0, reader)?)
+        }
+        "NatToFlt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::NatToFlt(rounding(operand0)?, term(operand1, reader)?)
+        }
+        "IntToNat" => {
+            let [int, non_neg] = operands(intrinsic, span)?;
+            Intrinsic::IntToNat {
+                int: term(int, reader)?,
+                non_neg: term(non_neg, reader)?,
+            }
+        }
+        "IntToFlt" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::IntToFlt(rounding(operand0)?, term(operand1, reader)?)
+        }
+        "FltToNat" => {
+            let [flt, non_neg] = operands(intrinsic, span)?;
+            Intrinsic::FltToNat {
+                flt: term(flt, reader)?,
+                non_neg: term(non_neg, reader)?,
+            }
+        }
+        "FltToLeBytes" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::FltToLeBytes(term(operand0, reader)?)
+        }
+        "FltOfLeBytes" => {
+            let [bytes, eight_bytes] = operands(intrinsic, span)?;
+            Intrinsic::FltOfLeBytes {
+                bytes: term(bytes, reader)?,
+                eight_bytes: term(eight_bytes, reader)?,
+            }
+        }
+        "FltToInt" => {
+            let [flt, finite] = operands(intrinsic, span)?;
+            Intrinsic::FltToInt {
+                flt: term(flt, reader)?,
+                finite: term(finite, reader)?,
+            }
+        }
+        "FltMantissa" => {
+            let [flt, finite] = operands(intrinsic, span)?;
+            Intrinsic::FltMantissa {
+                flt: term(flt, reader)?,
+                finite: term(finite, reader)?,
+            }
+        }
+        "FltExponent" => {
+            let [flt, finite] = operands(intrinsic, span)?;
+            Intrinsic::FltExponent {
+                flt: term(flt, reader)?,
+                finite: term(finite, reader)?,
+            }
+        }
+        "BytesType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::BytesType
+        }
+        "BytesLen" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::BytesLen(term(operand0, reader)?)
+        }
+        "BytesEql" => {
+            let [operand0, operand1] = operands(intrinsic, span)?;
+            Intrinsic::BytesEql(term(operand0, reader)?, term(operand1, reader)?)
+        }
+        "BytesGet" => {
+            let [bytes, index, in_range] = operands(intrinsic, span)?;
+            Intrinsic::BytesGet {
+                bytes: term(bytes, reader)?,
+                index: term(index, reader)?,
+                in_range: term(in_range, reader)?,
+            }
+        }
+        "BytesSlice" => {
+            let [bytes, start, length, within] = operands(intrinsic, span)?;
+            Intrinsic::BytesSlice {
+                bytes: term(bytes, reader)?,
+                start: term(start, reader)?,
+                length: term(length, reader)?,
+                within: term(within, reader)?,
+            }
+        }
+        "BytesAppend" => {
+            let [bytes, element] = operands(intrinsic, span)?;
+            Intrinsic::BytesAppend {
+                bytes: term(bytes, reader)?,
+                element: term(element, reader)?,
+            }
+        }
+        "BytesConcat" => {
+            let [operands] = operands(intrinsic, span)?;
+            Intrinsic::BytesConcat {
+                operands: terms(operands, reader)?,
+            }
+        }
+        "BytesReplicate" => {
+            let [count, atom] = operands(intrinsic, span)?;
+            Intrinsic::BytesReplicate {
+                count: term(count, reader)?,
+                atom: term(atom, reader)?,
+            }
+        }
+        "BytesAnd" => {
+            let [left, right, same_length] = operands(intrinsic, span)?;
+            Intrinsic::BytesAnd {
+                left: term(left, reader)?,
+                right: term(right, reader)?,
+                same_length: term(same_length, reader)?,
+            }
+        }
+        "BytesOr" => {
+            let [left, right, same_length] = operands(intrinsic, span)?;
+            Intrinsic::BytesOr {
+                left: term(left, reader)?,
+                right: term(right, reader)?,
+                same_length: term(same_length, reader)?,
+            }
+        }
+        "BytesXor" => {
+            let [left, right, same_length] = operands(intrinsic, span)?;
+            Intrinsic::BytesXor {
+                left: term(left, reader)?,
+                right: term(right, reader)?,
+                same_length: term(same_length, reader)?,
+            }
+        }
+        "ListType" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::ListType(term(operand0, reader)?)
+        }
+        "List" => {
+            let [element, items] = operands(intrinsic, span)?;
+            Intrinsic::List {
+                element: term(element, reader)?,
+                items: terms(items, reader)?,
+            }
+        }
+        "ListLen" => {
+            let [element, list] = operands(intrinsic, span)?;
+            Intrinsic::ListLen {
+                element: term(element, reader)?,
+                list: term(list, reader)?,
+            }
+        }
+        "ListGet" => {
+            let [element, list, index, in_range] = operands(intrinsic, span)?;
+            Intrinsic::ListGet {
+                element: term(element, reader)?,
+                list: term(list, reader)?,
+                index: term(index, reader)?,
+                in_range: term(in_range, reader)?,
+            }
+        }
+        "ListSlice" => {
+            let [element, list, start, length, within] = operands(intrinsic, span)?;
+            Intrinsic::ListSlice {
+                element: term(element, reader)?,
+                list: term(list, reader)?,
+                start: term(start, reader)?,
+                length: term(length, reader)?,
+                within: term(within, reader)?,
+            }
+        }
+        "ListAppend" => {
+            let [element, list, item] = operands(intrinsic, span)?;
+            Intrinsic::ListAppend {
+                element: term(element, reader)?,
+                list: term(list, reader)?,
+                item: term(item, reader)?,
+            }
+        }
+        "ListConcat" => {
+            let [element, operands] = operands(intrinsic, span)?;
+            Intrinsic::ListConcat {
+                element: term(element, reader)?,
+                operands: terms(operands, reader)?,
+            }
+        }
+        "ListMap" => {
+            let [from, to, list, function] = operands(intrinsic, span)?;
+            Intrinsic::ListMap {
+                from: term(from, reader)?,
+                to: term(to, reader)?,
+                list: term(list, reader)?,
+                function: term(function, reader)?,
+            }
+        }
+        "ListFold" => {
+            let [element, result, list, init, function] = operands(intrinsic, span)?;
+            Intrinsic::ListFold {
+                element: term(element, reader)?,
+                result: term(result, reader)?,
+                list: term(list, reader)?,
+                init: term(init, reader)?,
+                function: term(function, reader)?,
+            }
+        }
+        "HandleType" => {
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::HandleType
+        }
+        "CellType" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::CellType(term(operand0, reader)?)
+        }
+        "Cell" => {
+            let [element] = operands(intrinsic, span)?;
+            Intrinsic::Cell {
+                element: term(element, reader)?,
+            }
+        }
+        "CellFill" => {
+            let [element, cell, value] = operands(intrinsic, span)?;
+            Intrinsic::CellFill {
+                element: term(element, reader)?,
+                cell: term(cell, reader)?,
+                value: term(value, reader)?,
+            }
+        }
+        "CellPoll" => {
+            let [element, cell, universes] = operands(intrinsic, span)?;
+            Intrinsic::CellPoll {
+                element: term(element, reader)?,
+                cell: term(cell, reader)?,
+                universes: universes_read(universes)?,
+            }
+        }
+        "ChannelType" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::ChannelType(term(operand0, reader)?)
+        }
+        "Channel" => {
+            let [element, capacity, positive] = operands(intrinsic, span)?;
+            Intrinsic::Channel {
+                element: term(element, reader)?,
+                capacity: term(capacity, reader)?,
+                positive: term(positive, reader)?,
+            }
+        }
+        "ChannelPush" => {
+            let [element, channel, value] = operands(intrinsic, span)?;
+            Intrinsic::ChannelPush {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+                value: term(value, reader)?,
+            }
+        }
+        "ChannelTake" => {
+            let [element, channel, universes] = operands(intrinsic, span)?;
+            Intrinsic::ChannelTake {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+                universes: universes_read(universes)?,
+            }
+        }
+        "ChannelClose" => {
+            let [element, channel] = operands(intrinsic, span)?;
+            Intrinsic::ChannelClose {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+            }
+        }
+        "ChannelClosed" => {
+            let [element, channel] = operands(intrinsic, span)?;
+            Intrinsic::ChannelClosed {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+            }
+        }
+        "ChannelCount" => {
+            let [element, channel] = operands(intrinsic, span)?;
+            Intrinsic::ChannelCount {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+            }
+        }
+        "ChannelCapacity" => {
+            let [element, channel] = operands(intrinsic, span)?;
+            Intrinsic::ChannelCapacity {
+                element: term(element, reader)?,
+                channel: term(channel, reader)?,
+            }
+        }
+        "IoType" => {
+            let [operand0] = operands(intrinsic, span)?;
+            Intrinsic::IoType(term(operand0, reader)?)
+        }
+        "IoPure" => {
+            let [result, value] = operands(intrinsic, span)?;
+            Intrinsic::IoPure {
+                result: term(result, reader)?,
+                value: term(value, reader)?,
+            }
+        }
+        "IoBind" => {
+            let [from, to, action, continuation] = operands(intrinsic, span)?;
+            Intrinsic::IoBind {
+                from: term(from, reader)?,
+                to: term(to, reader)?,
+                action: term(action, reader)?,
+                continuation: term(continuation, reader)?,
+            }
+        }
+        "IoSuspend" => {
+            let [result, on, filled, cancel, rest] = operands(intrinsic, span)?;
+            Intrinsic::IoSuspend {
+                result: term(result, reader)?,
+                on: term(on, reader)?,
+                filled: term(filled, reader)?,
+                cancel: term(cancel, reader)?,
+                rest: term(rest, reader)?,
+            }
+        }
+        "IoAdvance" => {
+            let [from, to, action, done, suspended] = operands(intrinsic, span)?;
+            Intrinsic::IoAdvance {
+                from: term(from, reader)?,
+                to: term(to, reader)?,
+                action: term(action, reader)?,
+                done: term(done, reader)?,
+                suspended: term(suspended, reader)?,
+            }
+        }
+
+        variant => {
+            return Err(ReadError::at(
+                Refusal::UnknownIntrinsic(variant.to_string()),
+                intrinsic.variant.span().or(span),
+            ));
+        }
+    };
+
+    Ok(Term::intrinsic(read))
+}
+
+/// The operands of `intrinsic`, as many as its variant takes: none written where it takes none, and a list of them otherwise.
+fn operands<'i, const N: usize>(
+    intrinsic: &'i CoreIntrinsic,
+    span: Option<&Span>,
+) -> Result<[&'i CoreValue; N], ReadError> {
+    let refused = || ReadError::at(Refusal::Malformed("the operands its variant takes"), span);
+    let written = match (&intrinsic.operands, N) {
+        (None, 0) => Vec::new(),
+        (Some(values), 1..) => values.iter().collect::<Vec<_>>(),
+        _ => return Err(refused()),
+    };
+
+    written.try_into().map_err(|_| refused())
+}
+
+/// An operand that is a term.
+fn term(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Term, ReadError> {
+    core_read(&value_term(value)?, reader)
+}
+
+/// An operand that is a list of terms, `[a, b]`.
+fn terms(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Vec<Term>, ReadError> {
+    value_unmarked(value)?
+        .into_iter()
+        .map(|entry| term(entry, reader))
+        .collect()
+}
+
+/// An operand that is a rounding, by its variant's name.
+fn rounding(value: &CoreValue) -> Result<Rounding, ReadError> {
+    let word = value_word(value)?;
+    Rounding::ALL
+        .into_iter()
+        .find(|rounding| format!("{rounding:?}") == word)
+        .ok_or_else(|| malformed("a rounding, as Core names it", value))
+}
+
+/// The unsigned numeral an operand is.
+fn unsigned(value: &CoreValue) -> Option<curios_num::Natural> {
+    match value_term(value).ok()?.as_subterm() {
+        crate::Subterm::NumLit(NumLit {
+            magnitude,
+            sign: Sign::Unmarked,
+            ..
+        }) => Some(magnitude.clone()),
+        _ => None,
+    }
+}
+
+/// A `Nat` over a term, `Succ(k, n)`: `n` offset by `k`.
+fn nat_read(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Nat, ReadError> {
+    let refused = || malformed("a `Nat` over a term, `Succ(k, n)`", value);
+    let operand = value_term(value)?;
+    let crate::Subterm::Apply(crate::Apply { head, arguments }) = operand.as_subterm() else {
+        return Err(refused());
+    };
+    if term_word(head) != Some("Succ") {
+        return Err(refused());
+    }
+    let [offset, tail] = arguments.as_slice() else {
+        return Err(refused());
+    };
+    let offset = unsigned(&CoreValue::Term(offset.term.clone())).ok_or_else(refused)?;
+
+    Ok(Nat::Succ(offset, core_read(&tail.term, reader)?))
+}
+
+/// An `Int`'s value, a numeral under its sign.
+fn int_read(value: &CoreValue) -> Result<Integer, ReadError> {
+    match value_term(value)?.as_subterm() {
+        crate::Subterm::NumLit(NumLit {
+            magnitude, sign, ..
+        }) => {
+            let integer = Integer::from(magnitude.clone());
+            Ok(match sign {
+                Sign::Negative => -integer,
+                Sign::Unmarked | Sign::Positive => integer,
+            })
+        }
+        _ => Err(malformed("an integer", value)),
+    }
+}
+
+/// A `Flt`'s value: the literal that reads back as it, or its bits as a hexadecimal numeral.
+fn flt_read(value: &CoreValue) -> Result<Floating, ReadError> {
+    match value_term(value)?.as_subterm() {
+        crate::Subterm::Literal(Literal::Flt(flt)) => Ok(*flt),
+        crate::Subterm::NumLit(NumLit {
+            magnitude,
+            sign: Sign::Unmarked,
+            ..
+        }) => u64::try_from(magnitude)
+            .map(Floating::from_bits)
+            .map_err(|_| malformed("a float's bits", value)),
+        _ => Err(malformed("a float", value)),
+    }
+}
+
+/// A packed literal, `x[0x01, 0x02]`: its bytes, each a numeral.
+pub fn packed_read(
+    segments: &[BytesSegment<CoreText>],
+    span: Option<&Span>,
+) -> Result<Term, ReadError> {
+    let bytes = segments
+        .iter()
+        .map(|segment| match segment {
+            BytesSegment::Atom(atom) => unsigned(&CoreValue::Term(atom.clone()))
+                .and_then(|byte| u8::try_from(&byte).ok())
+                .ok_or_else(|| malformed("a byte", &CoreValue::Term(atom.clone()))),
+            BytesSegment::Spread(_) => Err(ReadError::at(Refusal::ProgramForm("a spread"), span)),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(bytes))))
 }

@@ -511,10 +511,11 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
         mark()
             .and(parse_mark)
             .flat_map(move |(start, plicity)| match plicity {
-                // A witness binder Core text writes is the variable its body reads it by.
+                // A witness binder Core text writes is the variable its body reads it by, over its domain.
                 Plicity::Witness if D::NAMES_WITNESSES => bound
+                    .and(parse_annotation)
                     .and_drop(member_ends)
-                    .map(|binder| Ok((Plicity::Witness, binder, None)))
+                    .map(|(binder, annotation)| Ok((Plicity::Witness, binder, annotation)))
                     .boxed(),
                 Plicity::Witness => parse_place::<D>(start)
                     .map(move |read| read.map(|()| (Plicity::Witness, wildcard(), None)))

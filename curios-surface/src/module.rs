@@ -196,7 +196,9 @@ pub struct TopStruct<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConceptField<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`) through the wrapper it generates. `None` on a superclass edge, which is a `use` member: a type and no binder.
+    /// Plain for a method, `use` for a superclass edge, which is the field telescope's witness member.
+    pub plicity: Plicity,
+    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`). A superclass edge has none in a program, which reaches it by resolution, and the word a later field reads it by in Core text, where a binder is a variable.
     pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a superclass edge.
     pub func_params: Option<Vec<FuncTypeParam<D>>>,
@@ -206,7 +208,7 @@ pub struct ConceptField<D: Dialect = Program> {
 impl<D: Dialect> ConceptField<D> {
     /// Whether this field is a superclass edge rather than a method.
     pub fn is_super(&self) -> bool {
-        self.label.is_none()
+        self.plicity == Plicity::Witness
     }
 
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.

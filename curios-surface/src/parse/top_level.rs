@@ -4,8 +4,7 @@ use {
         PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument,
         parse_field_member, parse_func_sugar_param, parse_func_type_param, parse_identifier,
         parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_premise, parse_prop, parse_tuple_field_prefix, parse_type,
-        raised, refusing,
+        parse_named_premise, parse_prop, parse_tuple_field_prefix, parse_type, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -890,6 +889,7 @@ pub(super) fn parse_concept_field<'a, D: Grammar>(
         )
         .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
             doc: None,
+            plicity: Plicity::Explicit,
             label: Some(label),
             func_params,
             type_,
@@ -899,10 +899,11 @@ pub(super) fn parse_concept_field<'a, D: Grammar>(
     let field = mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
-            Plicity::Witness => raised(parse_premise(start))
-                .map(|type_| ConceptField {
+            Plicity::Witness => raised(parse_named_premise(start))
+                .map(|(label, type_)| ConceptField {
                     doc: None,
-                    label: None,
+                    plicity: Plicity::Witness,
+                    label: label.map(Label::from),
                     func_params: None,
                     type_,
                 })

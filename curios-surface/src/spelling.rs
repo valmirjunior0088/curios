@@ -13,7 +13,7 @@ use {
         Arity, Atom, Bind, Bound, ConceptDecl, Cursor, Definition, DefinitionKind, Definitions,
         Field, Free, Func, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon,
         Marks, Members, Mention, Nat, Nominal, Notation, Pattern, Program, Scope, Spellings,
-        StructDecl, Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey,
+        StructDecl, Subterm, Symbols, Telescope, Term, UniverseContext, UniverseError, WitnessKey,
         inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
@@ -80,6 +80,8 @@ pub struct Spelling {
     declined: Rc<Cell<bool>>,
     /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a kernel's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
     core_text: bool,
+    /// Whether a term is written whole, however far its tree outgrows its graph: Core text a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
+    whole: bool,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
     form_scope: Option<Rc<FormScope>>,
 }
@@ -88,6 +90,8 @@ pub struct Spelling {
 pub struct FormScope {
     pub syntax: SyntaxRegistry,
     pub entries: HashMap<Global, Rc<Nominal>>,
+    /// The foreign rows of the units it is read over, by the declarations that state them: what a call across the wire in the text is made through.
+    pub rows: HashMap<Global, Arc<ForeignFunction>>,
 }
 
 impl FormScope {
@@ -97,10 +101,16 @@ impl FormScope {
         units: impl IntoIterator<Item = &'d Definitions>,
     ) -> Self {
         let mut entries = HashMap::new();
+        let mut rows = HashMap::new();
         for item in units
             .into_iter()
             .flat_map(|definitions| definitions.items.iter())
         {
+            if let Item::Let(definition) = item
+                && let Some(row) = foreign_row(definition)
+            {
+                rows.insert(definition.name, row);
+            }
             let held = match item {
                 Item::Let(definition) => vec![(definition.name, &definition.kind)],
                 Item::Rec(rec) => rec
@@ -116,7 +126,11 @@ impl FormScope {
             }
         }
 
-        Self { syntax, entries }
+        Self {
+            syntax,
+            entries,
+            rows,
+        }
     }
 }
 
@@ -406,12 +420,23 @@ impl Spelling {
         self.core_text
     }
 
+    /// Whether a term is written whole, eliding nothing, as Core text a reader reads back is.
+    pub fn writes_whole(&self) -> bool {
+        self.whole
+    }
+
     /// The spelling Core text proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
     pub fn core_text() -> Self {
         Self {
             core_text: true,
             ..Self::default()
         }
+    }
+
+    /// This spelling writing every term whole, eliding nothing, as Core text a reader reads back is written: a dump is read about the compiler and bounded as a report is, since a term's tree can outgrow any print — a tower of sixty pairs is a type of 2⁶⁰ leaves.
+    pub fn written_whole(mut self) -> Self {
+        self.whole = true;
+        self
     }
 
     /// This spelling with `scope` to write a test's and a foreign row's forms against.
@@ -2238,7 +2263,7 @@ fn entry_fields(
                 universe_context_written(&concept.universe_context).unwrap_or_else(|| pure("{}"));
             own.push(("universe_context", context));
         }
-        if !concept_params_read_off(concept, record) {
+        if concept.params != concept_params_of(record) {
             own.push(("params", concept_params_written(concept, frame)));
         }
         if concept.supers != concept_supers_read_off(definition.name, record) {
@@ -2281,22 +2306,12 @@ fn module_written(module: &Qualifier, spelling: &Spelling) -> String {
     }
 }
 
-/// Whether a concept's parameters are its record's, each read as the concept holds it with no mark.
-fn concept_params_read_off(concept: &ConceptDecl, record: &StructDecl) -> bool {
-    let (mut own, mut read) = (concept.params.cursor(), record.arity.cursor());
-    let mut index = 0;
-    loop {
-        match (own.entry(), read.entry()) {
-            (None, None) => return true,
-            (Some((_, this)), Some((_, that))) if this == that => {
-                let variable = Term::free_var(&Free::local(index, None));
-                own.advance(variable.clone());
-                read.advance(variable);
-                index += 1;
-            }
-            _ => return false,
-        }
-    }
+/// A concept's parameters where they are its record's: each type as the record states it, under no mark, as a concept holds its parameters.
+pub(crate) fn concept_params_of(record: &StructDecl) -> Telescope<()> {
+    let params = record.arity.prefix();
+    let marks = vec![Plicity::Explicit; params.len()];
+
+    params.with_marks(&marks)
 }
 
 /// A concept's parameters as it holds them: each type, under the parameters before it by words of their own.
@@ -2308,7 +2323,7 @@ fn concept_params_written(concept: &ConceptDecl, frame: Frame) -> Printer {
 }
 
 /// The concepts a record's superclass edges reach, read off each edge's type, as a concept's are where its fields elaborate.
-fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global> {
+pub(crate) fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global> {
     let mut parameters = Vec::new();
     let mut cursor = record.arity.cursor();
     while cursor.entry().is_some() {

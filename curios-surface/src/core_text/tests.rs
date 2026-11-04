@@ -1,8 +1,11 @@
 //! Core text proper: each node in its form, under the decorator stating every field its form does not build.
 
 use {
-    crate::{Spellable, Spelling},
-    curios_common::Qualifier,
+    crate::{
+        CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term,
+        term_to_core, to_core,
+    },
+    curios_common::{Qualifier, Source},
     curios_core::{
         Atom, CalleeId, Cases, Definition, Definitions, Field, Free, Global, HeadKey, InductDecl,
         InductParam, Intrinsic, Item, Level, Match, MatchResult, MetavarId, MetavarOrigin, Nat,
@@ -16,6 +19,26 @@ use {
 /// `term` as Core text proper writes it.
 fn written(term: &Term) -> String {
     term.spelled(&Rc::new(Spelling::core_text())).to_string()
+}
+
+/// The term `term`'s Core text reads back as.
+fn read_back(term: &Term) -> Term {
+    let text = written(term);
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"))
+}
+
+/// The module `definitions`' Core text reads back as.
+fn module_read_back(definitions: &Definitions) -> Definitions {
+    let text = definitions.faithful().to_string();
+    let file = text
+        .parse::<CoreFile>()
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let (read, entry) = to_core(&file, None).unwrap_or_else(|error| panic!("{text}\n{error}"));
+    assert!(entry.is_none(), "{text}");
+
+    read
 }
 
 fn global(path: &[&str]) -> Global {
@@ -151,7 +174,10 @@ fn a_type_formers_eta_form_is_written_as_its_lambda() {
         Term::induct_type(global(&["Sign"]), Vec::<Term>::new(), [Term::free_var(&x)]),
     );
 
-    assert_eq!(written(&lambda), "(x) => #{node = InductType} /Sign()(x)");
+    assert_eq!(
+        written(&lambda),
+        "(x: %NatType) => #{node = InductType} /Sign()(x)"
+    );
     assert_eq!(lambda.faithful().to_string(), "/Sign");
 }
 
@@ -319,4 +345,206 @@ fn a_record_is_written_in_its_form() {
         definitions.faithful().to_string(),
         "struct /Pair(A: Type, B: Type): pub Type { fst: A, snd: B }\n"
     );
+}
+
+/// Every node a test above writes reads back as itself: closed under a function where it names a local, since a reader mints a local of its own for a word no binder binds.
+#[test]
+fn every_node_written_reads_back_as_itself() {
+    let n = Free::local(0, Some("n"));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    let one = || Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+    let over = |binder: Free, term: Term| Term::func([(binder, nat_type())], term);
+    let at = Universes {
+        levels: vec![Level::param(UniverseParam(0))],
+        qualities: vec![Quality::Type],
+    };
+    let instance = Term::instance(global(&["f"]), at);
+    let witness = Global::Witness(WitnessId::Spelled {
+        concept: Qualifier::from(["std", "Show"]),
+        key: WitnessKey::from([HeadKey::Nat]),
+        module: Qualifier::from(["std", "Nat"]),
+        place: 0,
+    });
+    let show = global(&["std", "Show", "Show"]);
+    let terms = [
+        Term::type_ground(),
+        Term::prop(),
+        Term::type_at(Level::zero().succ().expect("level zero has a successor")),
+        Term::from(Subterm::Sort(Sort {
+            quality: Quality::Param(QualityParam(1)),
+            level: Level::zero(),
+        })),
+        instance.clone(),
+        Term::apply(instance, [nat_type()]),
+        over(
+            n,
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), three.clone())),
+        ),
+        three,
+        Term::intrinsic(Intrinsic::Bool(true)),
+        Term::intrinsic(Intrinsic::Flt(Floating::infinite(true))),
+        Term::induct_type(global(&["Eq"]), [nat_type()], [one(), one()]),
+        Term::variant(global(&["Result"]), [nat_type()], "success", [one()]),
+        Term::var(Var::bound(2)),
+        Term::hole(7),
+        over(
+            n,
+            Term::from(Subterm::Proj(Proj {
+                head: Term::free_var(&n),
+                field: Field::Struct(global(&["Pair"]), 0),
+            })),
+        ),
+        over(
+            n,
+            Term::from(Subterm::Match(Match {
+                head: Term::free_var(&n),
+                result: MatchResult::Ambient(nat_type()),
+                cases: Cases::Bool {
+                    false_case: one(),
+                    true_case: one(),
+                },
+            })),
+        ),
+        over(
+            n,
+            Term::induct_type(global(&["Sign"]), Vec::<Term>::new(), [Term::free_var(&n)]),
+        ),
+        Term::instance(witness, Universes::default()),
+        Term::method(show, "show"),
+        Term::metavar_birthed(
+            MetavarId(3),
+            MetavarOrigin::Witness(WitnessOrigin {
+                func: CalleeId::Method {
+                    concept: show,
+                    field: "show".into(),
+                },
+                role: None,
+            }),
+            Vec::new(),
+        ),
+    ];
+
+    for term in terms {
+        assert_eq!(read_back(&term), term, "{}", written(&term));
+    }
+}
+
+/// Every module a test above writes reads back as itself: a family's constructors made where its form implies them, one it does not make standing in its place, one it lacks made nowhere, and a record from its form.
+#[test]
+fn every_module_written_reads_back_as_itself() {
+    let made = Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
+    let mut rewritten = made.clone();
+    rewritten[1].body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+    let mut lacking = made.clone();
+    lacking.truncate(1);
+    let (a, b) = (Free::local(0, Some("A")), Free::local(1, Some("B")));
+    let (fst, snd) = (Free::local(2, Some("fst")), Free::local(3, Some("snd")));
+    let record = Definition::former(
+        global(&["Pair"]),
+        Qualifier::empty(),
+        Nominal::Struct(StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::build(
+                [(a, Term::type_ground()), (b, Term::type_ground())],
+                Telescope::build([(fst, Term::free_var(&a)), (snd, Term::free_var(&b))], ()),
+            ),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        }),
+    );
+    let modules = [
+        module(bit(), made),
+        module(bit(), rewritten),
+        module(bit(), lacking),
+        Definitions {
+            items: vec![Item::Let(Box::new(record))].into(),
+        },
+    ];
+
+    for definitions in modules {
+        assert_eq!(
+            module_read_back(&definitions),
+            definitions,
+            "{}",
+            definitions.faithful()
+        );
+    }
+}
+
+/// What reading `text` as a term refuses, and where the refusal begins in it.
+fn refused(text: &str) -> (Refusal, Option<usize>) {
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let error = term_to_core(&parsed).expect_err(text);
+
+    (error.refusal, error.span.map(|span| span.start))
+}
+
+/// A form whose meaning needs typing or resolution is a program's, refused by name where it stands, and so is a place only a program holds.
+#[test]
+fn a_form_only_a_program_writes_is_refused_by_name_where_it_stands() {
+    for (text, form, at) in [
+        ("f(a + b)", "an operator", 2),
+        ("f(choose | _ => a end)", "a `choose`", 2),
+        ("f(\"text\")", "a string", 2),
+        ("f(?)", "a goal `?`", 2),
+        ("f(-1)", "a signed numeral", 2),
+    ] {
+        assert_eq!(
+            refused(text),
+            (Refusal::ProgramForm(form), Some(at)),
+            "{text}"
+        );
+    }
+}
+
+/// A lambda's parameter states its domain, which a program's leaves to the elaborator.
+#[test]
+fn a_lambda_states_each_domain() {
+    assert!(matches!(refused("(x) => x").0, Refusal::Malformed(_)));
+}
+
+/// A decorator states only fields its node holds, each once, and a node only a form of its shape fills.
+#[test]
+fn a_decorator_states_what_its_node_holds_once() {
+    assert_eq!(
+        refused("#{level = 1} /f").0,
+        Refusal::UnknownField("level".to_string())
+    );
+    assert_eq!(
+        refused("#{universes = {}, universes = {}} /f").0,
+        Refusal::RepeatedField("universes".to_string())
+    );
+    assert_eq!(
+        refused("#{node = Banana} /f(x)").0,
+        Refusal::UnknownNode("Banana".to_string())
+    );
+}
+
+/// A name is absolute or a binder's word, and an intrinsic one of Core's variants.
+#[test]
+fn a_name_is_absolute_and_an_intrinsic_one_of_cores() {
+    assert_eq!(refused("a/b").0, Refusal::RelativeName("/a/b".to_string()));
+    assert_eq!(
+        refused("%Banana").0,
+        Refusal::UnknownIntrinsic("Banana".to_string())
+    );
+}
+
+/// A test's form and a foreign row's are made against the scope a reader is handed, and none is refused.
+#[test]
+fn a_form_that_implies_a_definition_needs_a_scope() {
+    for text in ["test /t = 1;\n", "foreign /f(Bytes) -> Bytes;\n"] {
+        let file = text.parse::<CoreFile>().unwrap();
+        assert!(matches!(
+            to_core(&file, None).map(|_| ()),
+            Err(ReadError {
+                refusal: Refusal::NoScope(_),
+                ..
+            })
+        ));
+    }
 }

@@ -14,7 +14,7 @@ macro_rules! infix_ops {
 
         impl InfixOp {
             /// Every operator, in declaration order — the roster the reverse lookups derive from.
-            pub(crate) const ALL: [InfixOp; [$(InfixOp::$variant),+].len()] =
+            pub const ALL: [InfixOp; [$(InfixOp::$variant),+].len()] =
                 [$(InfixOp::$variant),+];
 
             /// The operator spelled `symbol`, if any — [`InfixOp::symbol`]'s reverse, for display folding. Precise because operator symbols and identifiers never overlap.

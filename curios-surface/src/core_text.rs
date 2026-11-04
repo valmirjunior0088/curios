@@ -10,13 +10,19 @@
 //!
 //! **What Core's equality does not read is not written.** A term's position, a constraint's origin and a binder's place among the written ones are left out, and a binder is written by its hint, renamed where it would capture or has none: two terms printed alike are one term to every judgment.
 //!
-//! **Each node kind's form and template live in a module of their own.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form.
+//! **Each node kind's form and template live in a module of their own, its reader beside its writer.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form. A reader builds what its form builds and sets what the decorator states, refusing a field its node does not hold; [`to_core`] reads a file's items, making the items a form implies where a reader puts them, and [`term_to_core`] a term on its own.
 
 #[cfg(test)]
 mod tests;
 
 mod frame;
 pub use frame::*;
+
+mod read;
+pub use read::*;
+
+mod item;
+pub use item::*;
 
 mod binding;
 use binding::*;

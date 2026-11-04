@@ -59,9 +59,9 @@ impl<'a> Frame<'a> {
 ///
 /// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: printing a term is a recursive function over a recursive structure, so building the document descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Running and freeing the finished document stay iterative in [`Printer`] itself, for the same reason at a different layer.
 ///
-/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a render builds a bounded number of child documents, the bound its [`Minting`] sets, and prints what is left as `…`: an elided report is still a report.
+/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a report builds a bounded number of child documents, the bound its [`Minting`] sets, and prints what is left as `…`: an elided report is still a report. Core text a reader reads back is written whole ([`Spelling::written_whole`](crate::Spelling::written_whole)), since an elided text reads back as no term.
 pub fn sub(term: Term, frame: Frame) -> Printer {
-    if frame.mint.elides(&term) {
+    if !frame.spelling.writes_whole() && frame.mint.elides(&term) {
         return pure(ELIDED);
     }
 
@@ -177,12 +177,13 @@ pub fn parameter_types(
     output
 }
 
-/// A lambda's parameters from `cursor` on, their spellings pushed onto `marked`, then its body indented under them — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing.
+/// A lambda's parameters from `cursor` on, their spellings pushed onto `marked`, then its body indented under them — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing. In Core text proper each parameter's domain is pushed onto `domains`, under the parameters before it: a reader leaves a lambda's domains to its type, and Core text leaves nothing to an elaborator.
 pub fn lambda_parameters(
     mut cursor: Cursor<'_, Term>,
     plicities: &[Plicity],
     minting: Frame,
     marked: &mut Vec<String>,
+    domains: &mut Vec<Printer>,
 ) -> Printer {
     if cursor.entry().is_none() {
         let body = cursor.body().expect("a cursor past every entry");
@@ -196,6 +197,11 @@ pub fn lambda_parameters(
     let label = minting.label(cursor.label());
     let plicity = plicities.get(cursor.args().len());
     let mark = plicity_mark(plicity);
+    if minting.core_text()
+        && let Some((_, domain)) = cursor.entry()
+    {
+        domains.push(sub(domain, minting));
+    }
     // Asked before the cursor moves past the binder it asks about.
     let used = cursor.binder_used();
     let named = label.hint().is_some() || used;
@@ -204,7 +210,7 @@ pub fn lambda_parameters(
     marked.push(String::new());
     cursor.advance(Term::free_var(&label));
 
-    let output = lambda_parameters(cursor, plicities, minting, marked);
+    let output = lambda_parameters(cursor, plicities, minting, marked, domains);
     let named = match plicity == Some(&Plicity::Witness) {
         true => used,
         false => named,

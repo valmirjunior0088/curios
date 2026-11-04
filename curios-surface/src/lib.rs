@@ -28,6 +28,7 @@ pub use spelling::*;
 
 mod core_text;
 use core_text::*;
+pub use core_text::{ReadError, Refusal, term_to_core, to_core};
 
 mod format;
 pub use format::*;

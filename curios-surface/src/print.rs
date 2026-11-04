@@ -1396,10 +1396,11 @@ fn print_struct_field(field: StructField) -> Printer {
 }
 
 fn print_concept_field(field: ConceptField) -> Printer {
+    let edge = field.is_super();
     let doc = print_doc(field.doc);
 
     // A superclass edge is a `use` member: the mark and its type, no label.
-    let Some(label) = field.label else {
+    let (false, Some(label)) = (edge, field.label) else {
         return flat([doc, pure("use "), print_term(field.type_)]);
     };
     let spelled = match field.func_params {
@@ -1705,7 +1706,7 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
 
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
 pub fn print_concept_field_head(field: &ConceptField) -> Printer {
-    let Some(label) = &field.label else {
+    let (false, Some(label)) = (field.is_super(), &field.label) else {
         return flat([pure("use "), print_term(field.type_.clone())]);
     };
     match &field.func_params {
