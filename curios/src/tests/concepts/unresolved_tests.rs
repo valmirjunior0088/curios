@@ -126,7 +126,7 @@ fn a_missing_premise_names_the_witness_that_needed_it() {
     assert!(
         report.contains(
             "no witness of Show(Foo) found\n  needed by the witness of 'Show' for head 'List' for its 1st 'use' premise"
-        ) && !report.contains("witness@"),
+        ) && !report.contains("witness~"),
         "{report}"
     );
 }

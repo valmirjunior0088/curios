@@ -61,7 +61,7 @@ fn shortens_global_names() {
     );
 }
 
-// A mismatch report deep-normalizes both sides: the arithmetic in an index position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which, once resolution picks the intrinsic `Nat` witness, would otherwise surface as the compiler-internal `(sys/witness@N).0(0, 1)`. Normalizing collapses the literal case to its value (`1`), leaving no witness machinery in the message.
+// A mismatch report deep-normalizes both sides: the arithmetic in an index position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which, once resolution picks the intrinsic `Nat` witness, would otherwise surface as the compiler-internal `(sys/witness~N).0(0, 1)`. Normalizing collapses the literal case to its value (`1`), leaving no witness machinery in the message.
 #[test]
 fn collapses_witness_dispatch_in_index() {
     let source = r#"

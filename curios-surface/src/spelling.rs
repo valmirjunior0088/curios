@@ -1,23 +1,20 @@
-//! How Core is written: the naming policy a term is spelled by for a reader ([`Spelling`]), and Core's own printer, which a dump, a kernel's refusal and a term the translation to the surface tree declines are printed by. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
+//! How Core is spelled: the naming policy a term is written by ([`Spelling`]), which the printer of Core text (`core_text`) writes every term through — as Core text proper for a dump and a kernel's refusal, and in its reader's spelling for every term a reader is shown, a term the translation to the surface tree declines among them. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
 
 use {
-    crate::{from_core, print_term, spell},
+    crate::{
+        Decoration, Frame, core_written, decorated, escape_character, from_core, level_spelled,
+        plicity_mark, print_term, spell, universe_context_written,
+    },
     curios_abi::stdio,
-    curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry, recurse},
+    curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor,
-        Definition, Definitions, Field, Foreign, FormerEta, Free, Func, FuncType, Global, HeadKey,
-        InductArm, InductType, Infix, Intrinsic, Item, Label, Let, Level, LevelHead, Lexicon,
-        Marks, Match, MatchResult, Matrix, Members, Mention, Nat, Notation, NumLit, Pattern,
-        Program, Proj, Quality, Rec, Row, Scope, Sort, Spellings, Struct, StructType, Subterm,
-        Symbols, Term, Three, Transient, Tuple, TupleType, Two, UniverseError, Universes, Var,
-        Variant, WitnessKey, former_eta, inconsistent_sort, suffixes_of,
+        Arity, Atom, Bind, Bound, Cursor, Definition, DefinitionKind, Definitions, Free, Global,
+        HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks, Members, Mention, Nat,
+        Notation, Pattern, Program, Scope, Spellings, Subterm, Symbols, Term, UniverseError,
+        WitnessKey, inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
-    curios_print::{
-        Printer, flat, group, hard_line, indent, line, pure, run_printer, run_printer_within,
-        sep_flat, soft_line,
-    },
+    curios_print::{Printer, flat, indent, pure, run_printer, run_printer_within},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
@@ -27,40 +24,6 @@ use {
     },
 };
 
-/// The word a sort of `quality` is spelled with: an open one by the word a program leaves one with.
-fn quality_word(quality: &Quality) -> &'static str {
-    match quality {
-        Quality::Type => "Type",
-        Quality::Prop => "Prop",
-        Quality::Param(_) | Quality::Meta(_) => "Sort",
-    }
-}
-
-/// An instance after the name it is of: the sorts it states, then its levels.
-fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
-    if universes.is_empty() || spelling.erase_universes {
-        return String::new();
-    }
-
-    let qualities = universes
-        .qualities
-        .iter()
-        .map(quality_word)
-        .collect::<Vec<_>>()
-        .join(",");
-    let levels = universes
-        .levels
-        .iter()
-        .map(level_text)
-        .collect::<Vec<_>>()
-        .join(",");
-    match (qualities.is_empty(), levels.is_empty()) {
-        (true, _) => format!(".{{{levels}}}"),
-        (false, true) => format!(".{{{qualities}}}"),
-        (false, false) => format!(".{{{qualities}; {levels}}}"),
-    }
-}
-
 // === Source-style names (diagnostics) ========================================
 //
 // Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so a faithful render ([`Spellable::faithful`]) leaves names untouched.
@@ -69,7 +32,7 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. Renders without a reader — a module's dump, `wonder stage`'s dumps, the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Definitions::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Definitions::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -112,6 +75,8 @@ pub struct Spelling {
     translated: bool,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
     declined: Rc<Cell<bool>>,
+    /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a kernel's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
+    core_text: bool,
 }
 
 /// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
@@ -223,13 +188,6 @@ impl Spelling {
         self
     }
 
-    /// A built-in type or operation, named by the path under `/sys` its printer spells it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise, as a dump reads it.
-    fn intrinsic_symbol(&self, path: &str) -> String {
-        self.read(&intrinsic_global(path))
-            .flatten()
-            .unwrap_or_else(|| path.to_string())
-    }
-
     /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set: spelling a name for a reader is resolution in reverse ([`spell()`]).
     fn read(&self, global: &Global) -> Option<Option<String>> {
         let names = self.names.as_ref()?;
@@ -322,6 +280,36 @@ impl Spelling {
             .map(|(_, marks)| marks.as_slice())
     }
 
+    /// A built-in type or operation, named by the path under `/sys` a reader's spelling writes it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise.
+    pub(crate) fn intrinsic_symbol(&self, path: &str) -> String {
+        self.read(&intrinsic_global(path))
+            .flatten()
+            .unwrap_or_else(|| path.to_string())
+    }
+
+    /// `name` as a binder is written where it binds: its spelling, or `_` for a hintless binder nothing reads, to which the rename gave no word.
+    pub(crate) fn word(&self, name: &Free) -> String {
+        let renamed = self
+            .pretty
+            .as_ref()
+            .is_some_and(|rename| rename.get(name).is_some());
+        match name.hint().is_none() && !renamed {
+            true => "_".to_string(),
+            false => self.label(name),
+        }
+    }
+
+    /// This spelling with every binder of `term` under a word of its own (axis (a)), where it was handed no rename: what a render with no reader writes binders by, so a binder minted with no hint is written as a word and never as the index it was minted under.
+    pub(crate) fn with_words(self: &Rc<Self>, term: &Term) -> Rc<Self> {
+        match self.pretty {
+            Some(_) => Rc::clone(self),
+            None => {
+                let rename = build_rename(&display_names(term), self);
+                Rc::new((**self).clone().with_pretty_names(Rc::new(rename)))
+            }
+        }
+    }
+
     /// The certified-string declaration (axis (f)), where one is set.
     pub fn string_declaration(&self) -> Option<&Global> {
         self.string_literal.as_ref()
@@ -337,7 +325,25 @@ impl Spelling {
         self.erase_universes
     }
 
-    /// How a kernel refusal of `definitions` is written for a reader: globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a kernel refusal is often about the universes.
+    /// Whether every metavariable is written as a bare `?` (axis (e)).
+    pub fn anonymizes_metavariables(&self) -> bool {
+        self.anonymous_metavars
+    }
+
+    /// Whether a term is written as Core text proper, every field it holds stated, rather than in its reader's spelling ([`Spelling::core_text`]).
+    pub fn writes_core_text(&self) -> bool {
+        self.core_text
+    }
+
+    /// The spelling Core text proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
+    pub fn core_text() -> Self {
+        Self {
+            core_text: true,
+            ..Self::default()
+        }
+    }
+
+    /// How a kernel refusal of `definitions` is written: as Core text proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a kernel refusal is often about the universes.
     pub fn for_refusal(
         definitions: &Definitions,
         scope: &[&Lexicon],
@@ -346,7 +352,7 @@ impl Spelling {
         // A module carries only its own declarations, so the spelling is told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
         let own = definitions.lexicon();
 
-        Self::default()
+        Self::core_text()
             .with_lexicons(&own, scope)
             .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
     }
@@ -356,49 +362,6 @@ impl Spelling {
         self.translated = true;
         self
     }
-}
-
-/// The prefix a plicity marks its binder or argument with — `@` for implicit, `use ` for witness, nothing for explicit.
-fn plicity_mark(plicity: Option<&Plicity>) -> &'static str {
-    match plicity {
-        Some(Plicity::Implicit) => "@",
-        Some(Plicity::Witness) => "use ",
-        _ => "",
-    }
-}
-
-/// One argument of an applied nominal family, marked as its declaration wrote it. Indices are always explicit, so only a parameter ever takes a mark.
-fn marked_argument(printer: Printer, plicity: Option<&Plicity>) -> Printer {
-    match plicity_mark(plicity) {
-        "" => printer,
-        mark => flat([pure(mark), printer]),
-    }
-}
-
-/// A call's arguments, each under its mark.
-fn call_arguments(arguments: Vec<Argument>, frame: Frame) -> Vec<Printer> {
-    arguments
-        .into_iter()
-        .map(|argument| marked_argument(sub(argument.term, frame), Some(&argument.plicity)))
-        .collect()
-}
-
-/// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it.
-fn nominal_arguments(
-    group: Vec<Term>,
-    marks: Option<&[Plicity]>,
-    offset: usize,
-    frame: Frame,
-) -> Vec<Printer> {
-    group
-        .into_iter()
-        .enumerate()
-        .map(|(index, argument)| {
-            let mark = marks.and_then(|marks| marks.get(offset + index));
-
-            marked_argument(sub(argument, frame), mark)
-        })
-        .collect()
 }
 
 /// A value paired with the [`Spelling`] it renders under — the parameter channel `Display::fmt` does not have. Produced by [`Spellable::spelled`] and [`Spellable::faithful`].
@@ -616,9 +579,6 @@ const RENDER_FLOOR: u64 = 5_000;
 /// Set above the largest ratio of tree to graph a definition of the standard library has (`curios-prelude`'s `printed_tree_measurements`), so nothing a reader was shown before is elided.
 const RENDER_PER_NODE: u64 = 64;
 
-/// What an elided subterm prints as: no token of the language, so no reader takes an elided print for the term.
-const ELIDED: &str = "…";
-
 /// How one render labels the binders it opens. A scope remembers a binder's hint, never its identity, so the render mints one: the `k`th binder it opens is `PRINTED + k` under its hint. A dry run over the same term under the same spelling opens the same binders in the same order, which is how [`build_rename`] spells them before the render that uses the spellings.
 #[derive(Default)]
 pub struct Minting {
@@ -690,7 +650,7 @@ impl Minting {
     }
 
     /// The label the next binder a render opens is printed under: the identity minted from where the render meets it and the hint its scope remembers — none for a `constant` scope, which never had binders written.
-    fn label(&self, label: Option<&Label>) -> Free {
+    pub(crate) fn label(&self, label: Option<&Label>) -> Free {
         let name = self.local(label.and_then(Label::hint_symbol));
         self.record(&name);
         name
@@ -774,170 +734,8 @@ impl Rename {
     }
 }
 
-fn label_terms(binders: &[Free]) -> Vec<Term> {
-    binders.iter().map(Term::free_var).collect()
-}
-
-/// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`].
-#[derive(Clone, Copy)]
-struct Frame<'a> {
-    spelling: &'a Rc<Spelling>,
-    mint: &'a Minting,
-}
-
-impl<'a> Frame<'a> {
-    /// The label the next binder this render opens is printed under ([`Minting::label`]).
-    fn label(&self, label: Option<&Label>) -> Free {
-        self.mint.label(label)
-    }
-
-    /// Every binder of a scope, labelled in order.
-    fn labels<'b>(&self, binders: impl Iterator<Item = Option<&'b Label>>) -> Vec<Free> {
-        binders.map(|label| self.label(label)).collect()
-    }
-
-    /// Open a two-binder scope under minted labels.
-    fn open_two(&self, scope: Scope<Two>) -> ((Free, Free), Term) {
-        let fst = self.label(scope.label(0));
-        let snd = self.label(scope.label(1));
-        let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
-
-        ((fst, snd), body)
-    }
-
-    /// The three-binder counterpart of [`Frame::open_two`].
-    fn open_three(&self, scope: Scope<Three>) -> ((Free, Free, Free), Term) {
-        let fst = self.label(scope.label(0));
-        let snd = self.label(scope.label(1));
-        let thd = self.label(scope.label(2));
-        let body = scope.open(&[
-            &Term::free_var(&fst),
-            &Term::free_var(&snd),
-            &Term::free_var(&thd),
-        ]);
-
-        ((fst, snd, thd), body)
-    }
-}
-
-fn print_var(var: Var, spelling: &Rc<Spelling>) -> Printer {
-    pure(spelling.label(var.unwrap()))
-}
-
-fn print_atom(atom: Atom) -> Printer {
-    flat([pure("'"), pure(atom.as_string())])
-}
-
-/// A `Flt` as what reads back as it, bit for bit: a finite value as its signed decimal, the four values no decimal spells as their literals — `+inf.0`, `-inf.0`, and the default NaN of either sign as `+nan.0` and `-nan.0` — and any other NaN, which no literal spells, as the call building it from its bytes, `Flt/of_le_bytes(x[…])`.
-fn print_flt(flt: Floating, frame: Frame) -> Printer {
-    if !flt.is_finite() {
-        let sign = match flt.abs().to_bits() == flt.to_bits() {
-            true => "+",
-            false => "-",
-        };
-        if !flt.is_nan() {
-            return pure(format!("{sign}inf.0"));
-        }
-        if flt.abs().to_bits() == Floating::nan().to_bits() {
-            return pure(format!("{sign}nan.0"));
-        }
-        let bytes = Term::intrinsic(Intrinsic::Bytes(flt.to_le_bytes()));
-        return print_call("Flt/of_le_bytes", vec![], vec![bytes], frame);
-    }
-
-    let mut string = format!("{:+}", f64::from(flt));
-
-    // string always starts with '+' or '-'; work on the digits after the sign
-    let after_sign = &string[1..];
-
-    if let Some(exp) = after_sign.find(['e', 'E']) {
-        if !after_sign[..exp].contains('.') {
-            string.insert_str(1 + exp, ".0");
-        }
-    } else if !after_sign.contains('.') {
-        string.push_str(".0");
-    }
-
-    pure(string)
-}
-
-/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. `path` is where `/sys` declares it, under its carrier's module; `/std` re-exports it under the same name, so for a reader the call is spelled as that declaration resolves from where they stand (`Spelling::intrinsic_symbol`) and a dump reads the path. It is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`intrinsic_form`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
-fn print_call(
-    path: impl AsRef<str>,
-    implicits: Vec<Term>,
-    explicits: Vec<Term>,
-    frame: Frame,
-) -> Printer {
-    let name = frame.spelling.intrinsic_symbol(path.as_ref());
-    let arguments = marked_arguments(implicits, explicits, frame);
-    // A row with no parameters is a constant in `/sys`, not a nullary function, and is named the way a constant is.
-    if arguments.is_empty() {
-        return pure(name);
-    }
-    flat([pure(name), listed("(".into(), false, arguments, ")")])
-}
-
-/// The arguments of a call as the surface writes them: the implicit ones under their mark, then the written ones.
-fn marked_arguments(implicits: Vec<Term>, explicits: Vec<Term>, frame: Frame) -> Vec<Printer> {
-    implicits
-        .into_iter()
-        .map(|term| marked_argument(sub(term, frame), Some(&Plicity::Implicit)))
-        .chain(explicits.into_iter().map(|term| sub(term, frame)))
-        .collect()
-}
-
-/// A bracketed literal from its already-rendered entries: `[` and its packed cousin `x[` opened by the caller, `]` closed here.
-fn print_entries(open: &'static str, entries: Vec<Printer>) -> Printer {
-    flat([pure(open), sep_flat(entries, || pure(", ")), pure("]")])
-}
-
-/// [`print_entries`] for a packed literal.
-fn print_packed(entries: Vec<Printer>) -> Printer {
-    print_entries("x[", entries)
-}
-
-/// A certified string as the literal it stands for — `"body"` in place of the struct over its bytes and the proof certifying them (axis (f)). `None` unless the spelling was told which declaration that is and the head is it, and `None` for a `Str` whose bytes are not one constant — a concatenation, a slice, a binder's — or are not text, each of which has nothing shorter to say than its own spelling.
-fn string_literal(name: &Global, fields: &[Term], spelling: &Rc<Spelling>) -> Option<String> {
-    if spelling.string_literal.as_ref() != Some(name) {
-        return None;
-    }
-
-    let Subterm::Intrinsic(Intrinsic::Bytes(packed)) = &**fields.first()? else {
-        return None;
-    };
-
-    let text = String::from_utf8(packed.to_bytes()).ok()?;
-
-    // A diagnostic quoting a page of text whole says nothing a prefix does not, and a report is where this spelling is read: the rest is counted rather than shown.
-    let shown = text.chars().count();
-    if shown > ELIDED_LITERAL_CHARACTERS {
-        let head: String = text.chars().take(ELIDED_LITERAL_CHARACTERS).collect();
-        return Some(format!(
-            "\"{}…\" ({} more characters)",
-            escaped(&head),
-            shown - ELIDED_LITERAL_CHARACTERS
-        ));
-    }
-
-    Some(format!("\"{}\"", escaped(&text)))
-}
-
 /// How much of a certified string a report spells before eliding the rest.
 pub const ELIDED_LITERAL_CHARACTERS: usize = 64;
-
-/// A string's characters under the surface's escapes, so a rendered literal reads back as the one it came from.
-fn escaped(text: &str) -> String {
-    text.chars()
-        .map(|character| match character {
-            '\\' => "\\\\".to_string(),
-            '"' => "\\\"".to_string(),
-            '\n' => "\\n".to_string(),
-            '\t' => "\\t".to_string(),
-            '\r' => "\\r".to_string(),
-            other => other.to_string(),
-        })
-        .collect()
-}
 
 /// One entry of a list or a packed literal as it is written: an element, a constant atom of a packed one, or a `..` spread of a whole run.
 #[derive(Debug, Clone)]
@@ -1050,144 +848,6 @@ fn flt_rounded(rounding: Rounding, operation: &str) -> String {
     match rounding {
         Rounding::TiesToEven => format!("Flt/{operation}"),
         rounding => format!("Flt/{}/{operation}", rounding.label()),
-    }
-}
-
-/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, `xor`, conversions, `min`/`max`. Exactly the operators the surface language spells infix (`InfixOp::symbol`), each of which dispatches through its concept, `&&` and `||` included. Read off the one table of how an intrinsic is written ([`intrinsic_form`]).
-fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
-    match intrinsic_form(intrinsic.clone(), false) {
-        IntrinsicForm::Infix(op, ..) => Some(op.symbol()),
-        _ => None,
-    }
-}
-
-/// Render an operator intrinsic as `left <symbol> right`, each operand parenthesized when it is itself an infix operator so nesting stays unambiguous — `(a + b) * c`, never `a + b * c`.
-fn print_infix(symbol: &'static str, left: Term, right: Term, frame: Frame) -> Printer {
-    flat([
-        print_operand(left, frame),
-        pure(format!(" {symbol} ")),
-        print_operand(right, frame),
-    ])
-}
-
-/// Print a recognized former: the name alone when the binders took every argument, the application to what they left otherwise, each argument marked as the declaration marks it — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
-fn former_doc(former: FormerEta, frame: Frame) -> Printer {
-    match former {
-        // Spelled as its carrier resolves from the reader, as the intrinsic's own type former is: `/std/Io` wherever `Io` is not in scope.
-        FormerEta::Intrinsic(name) => pure(frame.spelling.intrinsic_symbol(name)),
-        FormerEta::Nominal(name, prefix, arity) => {
-            let marks = frame.spelling.nominal_marks(&name, arity);
-            let reference = Term::instance(name, Universes::default());
-            let term = if prefix.is_empty() {
-                reference
-            } else {
-                Term::apply_marked(
-                    reference,
-                    prefix.into_iter().enumerate().map(|(index, argument)| {
-                        let mark = marks.and_then(|marks| marks.get(index)).copied();
-                        (mark.unwrap_or(Plicity::Explicit), argument)
-                    }),
-                )
-            };
-            sub(term, frame)
-        }
-    }
-}
-
-/// A function type's parameters from `cursor` on, each rendered into `printers` in order, then its output — every entry type under the binders before it, and a witness binder's node in scope for everything after it (axis (h)).
-fn parameter_types(
-    mut cursor: Cursor<'_, Term>,
-    plicities: &[Plicity],
-    frame: Frame,
-    printers: &mut Vec<Printer>,
-) -> Printer {
-    let Some((_, ty)) = cursor.entry() else {
-        return sub(cursor.body().expect("a cursor past every entry"), frame);
-    };
-    let raw = cursor.label();
-    let label = frame.label(raw);
-    let plicity = plicities.get(cursor.args().len());
-    let mark = plicity_mark(plicity);
-    // A hintless binder is compiler-minted (an anonymous parameter), so its label appears only when the rest of the telescope references it — `(B) -> C` renders as written, not `(#6577: B) -> C`.
-    let named = match raw {
-        Some(name) => name.hint().is_some() || cursor.binder_used(),
-        None => false,
-    };
-    let typed = sub(ty.clone(), frame);
-    let slot = printers.len();
-    printers.push(pure(""));
-    cursor.advance(Term::free_var(&label));
-
-    let output = parameter_types(cursor, plicities, frame, printers);
-
-    printers[slot] = if named {
-        flat([
-            pure(mark),
-            pure(frame.spelling.label(&label)),
-            pure(": "),
-            typed,
-        ])
-    } else {
-        flat([pure(mark), typed])
-    };
-    output
-}
-
-/// A lambda's parameters from `cursor` on, their spellings pushed onto `marked`, then its body indented under them — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing.
-fn lambda_parameters(
-    mut cursor: Cursor<'_, Term>,
-    plicities: &[Plicity],
-    minting: Frame,
-    marked: &mut Vec<String>,
-) -> Printer {
-    if cursor.entry().is_none() {
-        let body = cursor.body().expect("a cursor past every entry");
-        // The body sits on the arrow's line when it fits and indents on its own line when it does not. A body that is a multi-line form of its own takes the line unconditionally: those forms spell their breaks as literal newlines, which end the fits scan within budget rather than failing it, so a group would render the arrow's line flat and leave the form's first line trailing the arrow.
-        let separator = match &*body {
-            Subterm::Match(_) | Subterm::Let(_) | Subterm::Rec(_) => hard_line(),
-            _ => line(),
-        };
-        return indent(flat([separator, sub(body, minting)]));
-    }
-    let label = minting.label(cursor.label());
-    let plicity = plicities.get(cursor.args().len());
-    let mark = plicity_mark(plicity);
-    // Asked before the cursor moves past the binder it asks about.
-    let used = cursor.binder_used();
-    let named = label.hint().is_some() || used;
-    let spelled = minting.spelling.label(&label);
-    let slot = marked.len();
-    marked.push(String::new());
-    cursor.advance(Term::free_var(&label));
-
-    let output = lambda_parameters(cursor, plicities, minting, marked);
-    let named = match plicity == Some(&Plicity::Witness) {
-        true => used,
-        false => named,
-    };
-
-    marked[slot] = match named {
-        true => format!("{mark}{spelled}"),
-        false => format!("{mark}_"),
-    };
-    output
-}
-
-/// An operand of [`print_infix`], wrapped in parentheses when it too prints infix — a nested operator intrinsic, a residual `Infix` node, or a successor over a symbolic tail, which is how reduction stores `k + 1` and which prints as `k + 1` without being an operator intrinsic; self-delimiting operands (variables, literals, applications) print bare.
-fn print_operand(term: Term, frame: Frame) -> Printer {
-    let parenthesize = match &*term {
-        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(_, tail))) => {
-            !matches!(tail.as_ref(), Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
-        }
-        Subterm::Intrinsic(intrinsic) => infix_symbol(intrinsic).is_some(),
-        Subterm::Transient(Transient::Infix(_)) => true,
-        _ => false,
-    };
-
-    if parenthesize {
-        flat([pure("("), sub(term, frame), pure(")")])
-    } else {
-        sub(term, frame)
     }
 }
 
@@ -1866,73 +1526,6 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
     }
 }
 
-fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
-    // The constant atoms as the surface writes them: hexadecimal numerals for bytes.
-    let entry = |entry: LiteralEntry| match entry {
-        LiteralEntry::Byte(byte) => pure(format!("0x{byte:X}")),
-        LiteralEntry::Item(item) => sub(item, frame),
-        LiteralEntry::Spread(run) => flat([pure(".."), sub(run, frame)]),
-    };
-
-    match intrinsic_form(intrinsic, frame.spelling.grouped) {
-        IntrinsicForm::Named(path) => pure(frame.spelling.intrinsic_symbol(path)),
-        IntrinsicForm::Call {
-            path,
-            implicits,
-            explicits,
-        } => print_call(path, implicits, explicits, frame),
-        IntrinsicForm::Infix(op, left, right) => print_infix(op.symbol(), left, right, frame),
-        IntrinsicForm::Bool(false) => pure("false"),
-        IntrinsicForm::Bool(true) => pure("true"),
-        IntrinsicForm::Nat(value) => pure(value.to_string()),
-        // Spelled infix to match the operator intrinsics, its tail parenthesized when it too is an operator: `n + 1`, `(n + m) + 3`.
-        IntrinsicForm::NatAbove { tail, floor } => {
-            flat([print_operand(tail, frame), pure(format!(" + {floor}"))])
-        }
-        IntrinsicForm::Byte(value) => pure(format!("0x{value:02X}")),
-        IntrinsicForm::Int(value) => pure(format!("{value:+}")),
-        IntrinsicForm::Flt(value) => print_flt(value, frame),
-        IntrinsicForm::Bytes(entries) => print_packed(entries.into_iter().map(entry).collect()),
-        IntrinsicForm::List(entries) => {
-            print_entries("[", entries.into_iter().map(entry).collect())
-        }
-        // A token no source can spell, spelled rather than abort the diagnostic it is inside.
-        IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
-    }
-}
-
-/// A child document.
-///
-/// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: printing a term is a recursive function over a recursive structure, so building the document descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Running and freeing the finished document stay iterative in [`Printer`] itself, for the same reason at a different layer.
-///
-/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a render builds a bounded number of child documents ([`RENDER_PER_NODE`]) and prints what is left as `…`: an elided report is still a report.
-fn sub(term: Term, frame: Frame) -> Printer {
-    if frame.mint.elides(&term) {
-        return pure(ELIDED);
-    }
-
-    recurse(|| term_doc(term, frame))
-}
-
-/// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
-fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) -> Printer {
-    let lead = if spaced { line } else { soft_line };
-    group(flat([
-        pure(open),
-        indent(flat([
-            lead(),
-            sep_flat(items, || flat([pure(","), line()])),
-        ])),
-        lead(),
-        pure(close),
-    ]))
-}
-
-/// [`sub`] for an intrinsic's operands.
-fn sub_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
-    recurse(|| print_intrinsic(intrinsic, frame))
-}
-
 fn print_core(term: Term, spelling: &Rc<Spelling>) -> Printer {
     print_minting(term, spelling, &Minting::default())
 }
@@ -1950,560 +1543,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
     }
 
     mint.allow(&term);
-    term_doc(term, Frame { spelling, mint })
-}
-
-fn term_doc(term: Term, frame: Frame) -> Printer {
-    match Term::unwrap_or_clone(term) {
-        Subterm::Sort(Sort { quality, level }) => {
-            let word = quality_word(&quality);
-            if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
-            {
-                pure(word)
-            } else {
-                pure(format!("{word}.{{{}}}", level_text(&level)))
-            }
-        }
-        Subterm::Instance(instance) => flat([
-            pure(frame.spelling.symbol(&instance.name)),
-            pure(universe_suffix(&instance.universes, frame.spelling)),
-        ]),
-        Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
-        // A call across the wire reads as a call of its declaration, spelled as any name is, the type a row that does not return is handed under its mark. A row of no operand is still called.
-        Subterm::Foreign(Foreign {
-            function,
-            declared,
-            arguments: mut args,
-        }) => {
-            let explicits = args.split_off(usize::from(function.diverges()));
-
-            flat([
-                pure(frame.spelling.symbol(&declared)),
-                listed(
-                    "(".into(),
-                    false,
-                    marked_arguments(args, explicits, frame),
-                    ")",
-                ),
-            ])
-        }
-        Subterm::FuncType(FuncType { telescope }) => {
-            let plicities = telescope.marks();
-            let mut printers = Vec::with_capacity(telescope.len());
-            let output = parameter_types(telescope.cursor(), &plicities, frame, &mut printers);
-            flat([
-                listed("(".into(), false, printers, ")"),
-                pure(" -> "),
-                output,
-            ])
-        }
-        Subterm::Func(Func { telescope }) => {
-            let plicities = telescope.marks();
-            // A type former's η-form — the lambdas a former short of its application is spelled by, one to a call, and an imitation's `(x) => T(…, x)` — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
-            if let Some(former) = former_eta(&telescope) {
-                return former_doc(former, frame);
-            }
-            // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above. A parameter position cannot be elided, so an unnameable binder nothing references prints the way source spells it: `_`.
-            let mut marked = Vec::with_capacity(telescope.len());
-            let body = lambda_parameters(telescope.cursor(), &plicities, frame, &mut marked);
-            // Parenthesized whatever the count: a lambda's parameter list is always written in parentheses, and a bare `x => x` is a spelling the parser refuses.
-            let param_str = format!("({})", marked.join(", "));
-            group(flat([pure(param_str), pure(" =>"), body]))
-        }
-        Subterm::Apply(Apply { head, arguments }) => {
-            // A lambda applied where it stands is written in parentheses: bare, its body would take the arguments, and `(x) => f(x)(a)` reads back as a lambda. One printed as the type former it eta-expands is no lambda on the page.
-            let lambda = matches!(
-                &*head,
-                Subterm::Func(Func { telescope }) if former_eta(telescope).is_none()
-            );
-            let callee = match lambda {
-                true => flat([pure("("), sub(head, frame), pure(")")]),
-                false => sub(head, frame),
-            };
-            flat([
-                callee,
-                listed("(".into(), false, call_arguments(arguments, frame), ")"),
-            ])
-        }
-        Subterm::TupleType(TupleType { telescope, .. }) => {
-            let mut items = Vec::with_capacity(telescope.len());
-            let mut cursor = telescope.cursor();
-            while let Some((_, ty)) = cursor.entry() {
-                let raw = cursor.label();
-                let label = frame.label(raw);
-                frame.mint.note_tuple_label(&label);
-                // As in the `FuncType` printer: an unnameable label nothing references is elided, so the field renders the way source wrote it.
-                let named = match raw {
-                    Some(name) => name.hint().is_some() || cursor.binder_used(),
-                    None => false,
-                };
-                let typed = sub(ty, frame);
-                let printer = if named {
-                    flat([pure(frame.spelling.label(&label)), pure(": "), typed])
-                } else {
-                    typed
-                };
-                items.push(indent(printer));
-                cursor.advance(Term::free_var(&label));
-            }
-
-            // Through `listed` like every other sequence: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/syntax.md` spells. Unspaced for the same reason the surface printer is.
-            listed("{".into(), false, items, "}")
-        }
-        Subterm::Tuple(Tuple { fields, names }) => {
-            let mut names = names.into_iter().chain(std::iter::repeat(None));
-            listed(
-                "(".into(),
-                false,
-                fields
-                    .into_iter()
-                    .map(move |f| match names.next().flatten() {
-                        Some(name) => flat([pure(name), pure(" = "), sub(f, frame)]),
-                        None => sub(f, frame),
-                    })
-                    .collect(),
-                ")",
-            )
-        }
-        Subterm::Proj(Proj { head, field }) => {
-            let field = match field {
-                Field::Tuple(index) | Field::Struct(_, index) | Field::Position(index) => {
-                    format!(").{index}")
-                }
-                Field::Label(label) => format!(").{label}"),
-            };
-            flat([pure("("), sub(head, frame), pure(field)])
-        }
-        // The parameters, then the indices, one call each where the family has both — exactly how its type-constructor function is applied at use sites, `Sized(Nat)(1)`, and marked the same way. Without the marks this spells `Eq(Nat)(5, 5)`, an explicit argument where `Eq(@A : Type) : (A, A) -> Prop` takes an implicit one: a rendering no use site could reproduce.
-        Subterm::InductType(InductType {
-            name,
-            universes,
-            params,
-            indices,
-        }) => {
-            let arity = params.len() + indices.len();
-            let marks = frame.spelling.nominal_marks(&name, arity);
-            let label = format!(
-                "{}{}",
-                frame.spelling.symbol(&name),
-                universe_suffix(&universes, frame.spelling)
-            );
-            let arguments =
-                |group: Vec<Term>, offset: usize| nominal_arguments(group, marks, offset, frame);
-            match (params.is_empty(), indices.is_empty()) {
-                (true, true) => pure(label),
-                (false, false) => {
-                    let offset = params.len();
-                    flat([
-                        listed(format!("{label}("), false, arguments(params, 0), ")"),
-                        listed("(".into(), false, arguments(indices, offset), ")"),
-                    ])
-                }
-                (false, true) => listed(format!("{label}("), false, arguments(params, 0), ")"),
-                (true, false) => listed(format!("{label}("), false, arguments(indices, 0), ")"),
-            }
-        }
-        // Prints as the constructor-function call, instantiated type params hidden — `Result/success(42)`.
-        Subterm::Variant(Variant {
-            name,
-            universes,
-            tag,
-            payload,
-            ..
-        }) => {
-            let name = format!(
-                "{}{}",
-                frame.spelling.symbol(&name),
-                universe_suffix(&universes, frame.spelling)
-            );
-            if payload.is_empty() {
-                pure(format!("{name}/{tag}"))
-            } else {
-                listed(
-                    format!("{name}/{tag}("),
-                    false,
-                    payload.into_iter().map(|p| sub(p, frame)).collect(),
-                    ")",
-                )
-            }
-        }
-        // Like `InductType` but with no indices: `Pair(Nat, Bytes)`. Concepts are struct-shaped, so a concept application marks its parameters here too.
-        Subterm::StructType(StructType {
-            name,
-            universes,
-            params,
-        }) => {
-            let marks = frame.spelling.nominal_marks(&name, params.len());
-            let label = format!(
-                "{}{}",
-                frame.spelling.symbol(&name),
-                universe_suffix(&universes, frame.spelling)
-            );
-            if params.is_empty() {
-                pure(label)
-            } else {
-                listed(
-                    format!("{label}("),
-                    false,
-                    nominal_arguments(params, marks, 0, frame),
-                    ")",
-                )
-            }
-        }
-        // Prints as the brace literal, instantiated type params hidden — `Pair { 0, "" }` — except a certified string, which prints as the literal it stands for (axis (f)).
-        Subterm::Struct(Struct {
-            name,
-            universes,
-            fields,
-            ..
-        }) => match string_literal(&name, &fields, frame.spelling) {
-            Some(literal) => pure(literal),
-            None => listed(
-                format!(
-                    "{}{} {{",
-                    frame.spelling.symbol(&name),
-                    universe_suffix(&universes, frame.spelling)
-                ),
-                true,
-                fields.into_iter().map(|f| sub(f, frame)).collect(),
-                "}",
-            ),
-        },
-        Subterm::Match(Match {
-            head,
-            result,
-            cases,
-        }) => {
-            // A family spells as `: labels => body`, arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder; an ambient goal spells as `~ goal`, with no binder to name.
-            let result = match result {
-                MatchResult::Family(motive) => {
-                    let motive_labels = frame.labels(motive.label_iter());
-                    let motive_terms = label_terms(&motive_labels);
-                    let motive_refs = motive_terms.iter().collect::<Vec<_>>();
-                    let motive_label = motive_labels
-                        .iter()
-                        .map(|label| frame.spelling.label(label))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let motive = motive.open(&motive_refs);
-                    flat([
-                        pure(": "),
-                        pure(motive_label),
-                        pure(" => "),
-                        sub(motive, frame),
-                    ])
-                }
-                MatchResult::Ambient(goal) => flat([pure(" ~ "), sub(goal.clone(), frame)]),
-            };
-
-            // Shared `<keyword> head <result>;` prefix; the keyword and arm bodies depend on the case kind.
-            let keyword = match &cases {
-                Cases::Bool { .. } => "Bool.match ",
-                Cases::Switch { .. } => "Nat.match ",
-                Cases::Induct { .. } => "match ",
-                Cases::FreeMonoid { carrier } => match carrier {
-                    Carrier::Nat { .. } => "Nat.fold ",
-                    Carrier::Bytes { .. } => "Bytes.fold ",
-                    Carrier::List { .. } => "List.fold ",
-                },
-            };
-
-            // The instance a match states is part of the term, printed where it stands: `match p at Eq(@Nat)(a, b) …`.
-            let stated = match &cases {
-                Cases::Induct {
-                    stated: Some(stated),
-                    ..
-                } => flat([pure(" at "), sub(stated.clone(), frame)]),
-                _ => pure(""),
-            };
-            let prefix = flat([pure(keyword), sub(head, frame), stated, result, pure(";")]);
-
-            let arms = match cases {
-                Cases::Bool {
-                    false_case,
-                    true_case,
-                } => flat([
-                    pure("\n| false =>\n"),
-                    indent(flat([sub(false_case, frame), pure(";")])),
-                    pure("\n| true =>\n"),
-                    indent(flat([sub(true_case, frame), pure(";")])),
-                ]),
-                Cases::Switch { cases, default } => {
-                    let case_printers = flat(
-                        cases
-                            .into_iter()
-                            .map(|(n, body)| {
-                                flat([
-                                    pure(format!("\n| {n}n =>\n")),
-                                    indent(flat([sub(body, frame), pure(";")])),
-                                ])
-                            })
-                            .collect::<Vec<_>>(),
-                    );
-                    flat([
-                        case_printers,
-                        pure("\n| _ =>\n"),
-                        indent(flat([sub(default, frame), pure(";")])),
-                    ])
-                }
-                Cases::Induct { cases, default, .. } => {
-                    let case_printers = flat(
-                        cases
-                            .into_iter()
-                            .map(|(atom, arm)| {
-                                let labels = frame.labels(arm.label_iter());
-                                let label_terms = label_terms(&labels);
-                                let label_terms = label_terms.iter().collect::<Vec<_>>();
-                                let body = arm.open(&label_terms);
-
-                                let binders = if labels.is_empty() {
-                                    pure("")
-                                } else {
-                                    pure(format!(
-                                        "({})",
-                                        labels
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(idx, l)| {
-                                                let mark = plicity_mark(arm.plicities().get(idx));
-                                                format!("{mark}{}", frame.spelling.label(l))
-                                            })
-                                            .collect::<Vec<_>>()
-                                            .join(", ")
-                                    ))
-                                };
-
-                                flat([
-                                    pure("\n| "),
-                                    print_atom(atom),
-                                    binders,
-                                    pure(" =>\n"),
-                                    indent(flat([sub(body, frame), pure(";")])),
-                                ])
-                            })
-                            .collect::<Vec<_>>(),
-                    );
-                    match default {
-                        Some(default) => flat([
-                            case_printers,
-                            pure("\n| _ =>\n"),
-                            indent(flat([sub(default, frame), pure(";")])),
-                        ]),
-                        None => case_printers,
-                    }
-                }
-                Cases::FreeMonoid { carrier } => {
-                    // The cons arm mirrors each carrier's own literal delimiters: `x[head, ..tail]; ih` for `Bytes`, `[head, ..tail]; ih` for `List` — the same bracketed shape, told apart by the letter.
-                    let cons_bytes = |cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case) =
-                            frame.open_three(cons_case);
-                        flat([
-                            pure("\n| x["),
-                            pure(frame.spelling.label(&head_label)),
-                            pure(", .."),
-                            pure(frame.spelling.label(&tail_label)),
-                            pure("]; "),
-                            pure(frame.spelling.label(&ih_label)),
-                            pure(" =>\n"),
-                            indent(flat([sub(cons_case, frame), pure(";")])),
-                        ])
-                    };
-                    let cons_list = |cons_case: Scope<Three>| {
-                        let ((head_label, tail_label, ih_label), cons_case) =
-                            frame.open_three(cons_case);
-                        flat([
-                            pure("\n| ["),
-                            pure(frame.spelling.label(&head_label)),
-                            pure(", .."),
-                            pure(frame.spelling.label(&tail_label)),
-                            pure("]; "),
-                            pure(frame.spelling.label(&ih_label)),
-                            pure(" =>\n"),
-                            indent(flat([sub(cons_case, frame), pure(";")])),
-                        ])
-                    };
-
-                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bytes`/`List`.
-                    let (empty_lit, empty_case, cons_arm) = match carrier {
-                        Carrier::Nat {
-                            empty_case,
-                            cons_case,
-                        } => {
-                            let ((pred_label, ih_label), cons_case) = frame.open_two(cons_case);
-                            let cons_arm = flat([
-                                pure("\n| "),
-                                pure(frame.spelling.label(&pred_label)),
-                                pure(" "),
-                                pure(frame.spelling.label(&ih_label)),
-                                pure(" =>\n"),
-                                indent(flat([sub(cons_case, frame), pure(";")])),
-                            ]);
-                            ("\n| 0n =>\n", empty_case, cons_arm)
-                        }
-                        Carrier::Bytes {
-                            empty_case,
-                            cons_case,
-                        } => ("\n| x[] =>\n", empty_case, cons_bytes(cons_case)),
-                        Carrier::List {
-                            empty_case,
-                            cons_case,
-                            ..
-                        } => ("\n| [] =>\n", empty_case, cons_list(cons_case)),
-                    };
-                    flat([
-                        pure(empty_lit),
-                        indent(flat([sub(empty_case, frame), pure(";")])),
-                        cons_arm,
-                    ])
-                }
-            };
-
-            flat([prefix, arms])
-        }
-        Subterm::Let(Let { bindings, tail, .. }) => {
-            let labels = frame.labels(tail.label_iter());
-            let label_terms = label_terms(&labels);
-            let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-            let lines = bindings
-                .iter()
-                .enumerate()
-                .map(|(index, binding)| {
-                    let type_ = binding.type_().release(&label_terms[..index]);
-                    let value = binding.value().release(&label_terms[..index]);
-                    flat([
-                        pure("let "),
-                        pure(frame.spelling.label(&labels[index])),
-                        pure(": "),
-                        sub(type_, frame),
-                        pure(" =\n"),
-                        indent(flat([sub(value, frame), pure(";")])),
-                        pure("\n"),
-                    ])
-                })
-                .collect::<Vec<_>>();
-
-            flat([flat(lines), sub(tail.open(&label_terms), frame)])
-        }
-        Subterm::Rec(Rec { group, tail }) => {
-            let labels = frame.labels(tail.label_iter());
-            let label_terms = label_terms(&labels);
-            let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-            let bindings = group
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(index, member)| {
-                    let type_ = member.type_.open(&label_terms);
-                    let body = member.body.open(&label_terms);
-
-                    flat([
-                        pure(frame.spelling.label(&labels[index])),
-                        pure(": "),
-                        sub(type_, frame),
-                        pure(" =\n"),
-                        indent(sub(body, frame)),
-                    ])
-                })
-                .collect::<Vec<_>>();
-
-            let tail = tail.open(&label_terms);
-
-            flat([
-                pure("rec "),
-                sep_flat(bindings, || pure("\nand ")),
-                pure(";\n"),
-                sub(tail, frame),
-            ])
-        }
-        Subterm::Var(var) => print_var(var, frame.spelling),
-        Subterm::Transient(Transient::NumLit(NumLit::Number { magnitude, sign })) => {
-            pure(format!("{}{magnitude}", sign.symbol()))
-        }
-        Subterm::Transient(Transient::NumLit(NumLit::Character(character))) => {
-            pure(format!("'{}'", escape_character(character)))
-        }
-        // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the intrinsic operators; display folds (`denoise`) nest these nodes.
-        Subterm::Transient(Transient::Infix(Infix { op, left, right })) => {
-            print_infix(op.symbol(), left, right, frame)
-        }
-        // A `!` sequencing site prints as the written bang followed by its hoisted continuation, so a lowered-stage dump reads close to the source region.
-        Subterm::Transient(Transient::Bang(Bang {
-            action,
-            continuation,
-        })) => flat([sub(action, frame), pure("!; "), sub(continuation, frame)]),
-        // No surface form states a type beside a bare term, so the dump brackets the pair.
-        Subterm::Transient(Transient::Ascribed(Ascribed { term, type_ })) => flat([
-            pure("("),
-            sub(term, frame),
-            pure(": "),
-            sub(type_, frame),
-            pure(")"),
-        ]),
-        // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
-        Subterm::Transient(Transient::Derive) => pure("derive"),
-        Subterm::Transient(Transient::Name(name)) => pure(frame.spelling.symbol(&name)),
-        // A match as it is written, before its patterns are compiled: each arm as its pattern over the names its body binds.
-        Subterm::Transient(Transient::Matrix(Matrix { head, motive, rows })) => {
-            // The motive's binders are opened ahead of the scrutinee's, as a compiled match's are, and the arms' after both.
-            let motive = match motive {
-                Some(motive) => flat([pure(": "), sub(motive, frame)]),
-                None => pure(""),
-            };
-            let head = sub(head, frame);
-            let arms = rows
-                .into_iter()
-                .map(|Row { pattern, body }| {
-                    let Subterm::Func(Func { telescope }) = &*body else {
-                        unreachable!("a row's body is a function over its binders");
-                    };
-                    let mut names = Vec::with_capacity(telescope.len());
-                    let body = lambda_parameters(
-                        telescope.cursor(),
-                        &telescope.marks(),
-                        frame,
-                        &mut names,
-                    );
-
-                    flat([
-                        pure("\n| "),
-                        pure(written_pattern(&pattern, &mut names.into_iter())),
-                        pure(" =>"),
-                        body,
-                        pure(";"),
-                    ])
-                })
-                .collect::<Vec<_>>();
-            flat([pure("match "), head, motive, pure(";"), flat(arms)])
-        }
-        // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.
-        Subterm::Metavar(metavar) => {
-            if frame.spelling.anonymous_metavars {
-                pure("?")
-            } else if metavar.spine.is_identity()
-                || metavar
-                    .spine
-                    .iter()
-                    .all(|entry| matches!(&**entry, Subterm::Var(_)))
-            {
-                pure(format!("?{}", metavar.id))
-            } else {
-                flat([
-                    pure(format!("?{}[", metavar.id)),
-                    sep_flat(
-                        metavar
-                            .spine
-                            .iter()
-                            .map(|entry| sub(entry.clone(), frame))
-                            .collect::<Vec<_>>(),
-                        || pure(", "),
-                    ),
-                    pure("]"),
-                ])
-            }
-        }
-    }
+    core_written(term, Frame { spelling, mint })
 }
 
 /// A value of Core a report or a dump writes, under a spelling or faithfully.
@@ -2527,23 +1567,24 @@ impl Spellable for WitnessKey {}
 
 impl Spellable for UniverseError {}
 
-/// A module's dump is spelled by its own symbols alone, which a scope-wide table would blur: a qualified `/std/Str/concat` beside a bare `append` says which unit each came from.
+/// A module's dump is Core text proper.
 impl Spellable for Definitions {
     fn faithful(&self) -> Spelled<'_, Self> {
-        Spelled::new(self, &definitions_spelling(self))
+        Spelled::new(self, &Rc::new(Spelling::core_text()))
     }
 }
 
 /// A program's dump is spelled as its module's is.
 impl Spellable for Program {
     fn faithful(&self) -> Spelled<'_, Self> {
-        Spelled::new(self, &definitions_spelling(&self.definitions))
+        Spelled::new(self, &Rc::new(Spelling::core_text()))
     }
 }
 
 impl fmt::Display for Spelled<'_, Term> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let printer = print_core(self.value().clone(), self.spelling());
+        let spelling = self.spelling().with_words(self.value());
+        let printer = print_core(self.value().clone(), &spelling);
         match self.width() {
             // The width is a target, not a guarantee: content with no break point still overruns.
             Some(width) => run_printer_within(printer, formatter, 4, width),
@@ -2554,7 +1595,7 @@ impl fmt::Display for Spelled<'_, Term> {
 
 impl fmt::Display for Spelled<'_, Level> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&level_text(self.value()))
+        formatter.write_str(&level_spelled(self.value(), self.spelling()))
     }
 }
 
@@ -2612,8 +1653,8 @@ impl fmt::Display for Spelled<'_, UniverseError> {
                     formatter,
                     "this {} would need to be strictly below itself ({} ≤ {})",
                     inconsistent_sort(path),
-                    level_text(lower),
-                    level_text(upper),
+                    level_spelled(lower, self.spelling()),
+                    level_spelled(upper, self.spelling()),
                 )?;
                 for origin in path {
                     write!(formatter, "\n  required by {:?}", origin.kind)?;
@@ -2660,94 +1701,140 @@ impl Notation for Spelling {
     }
 
     fn level(&self, level: &Level) -> String {
-        level_text(level)
+        level_spelled(level, self)
     }
 }
 
-/// A level as Core writes it: a constant, a parameter (`u` through `z`, then numbered cycles) or a metavariable each under its offset, and their `max` where there are several.
-fn level_text(level: &Level) -> String {
-    if level.atoms.is_empty() {
-        return level.constant.to_string();
-    }
-
-    let mut parts = Vec::new();
-    if level.constant != 0 {
-        parts.push(level.constant.to_string());
-    }
-    for (head, offset) in &level.atoms {
-        let name = match head {
-            // Stepping 26 letters from `u` instead runs off the end of the alphabet at the seventh parameter and prints `{`, `|`, `}` as level names.
-            LevelHead::Param(param) => {
-                const LETTERS: usize = (b'z' - b'u' + 1) as usize;
-                let letter = char::from(b'u' + u8::try_from(param.0 % LETTERS).unwrap());
-                match param.0 / LETTERS {
-                    0 => letter.to_string(),
-                    cycle => format!("{letter}{cycle}"),
-                }
-            }
-            LevelHead::Meta(meta) => meta.to_string(),
-        };
-        parts.push(if *offset == 0 {
-            name
-        } else {
-            format!("{name}+{offset}")
-        });
-    }
-    match parts.as_slice() {
-        [single] => single.clone(),
-        _ => format!("max({})", parts.join(",")),
-    }
-}
-
-/// The spelling a module's dump prints its terms in.
-///
-/// Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope. Deliberate, on three grounds. A dump is handed no scope. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
-fn definitions_spelling(definitions: &Definitions) -> Rc<Spelling> {
-    Rc::new(Spelling::default().with_short_names(Rc::new(build_shorten(&definitions.symbols()))))
-}
-
-/// The items, one per line — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
+/// The items, one per declaration, each as Core text declares it — printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and never builds the nested term a deep module overflows on.
 fn print_items(
     definitions: &Definitions,
     formatter: &mut fmt::Formatter<'_>,
     spelling: &Rc<Spelling>,
 ) -> fmt::Result {
+    let write =
+        |formatter: &mut fmt::Formatter<'_>, printer: Printer| run_printer(printer, formatter, 4);
     for item in &definitions.items {
         match item {
             Item::Let(definition) => {
-                write!(formatter, "let ")?;
-                print_definition(definition, formatter, spelling)?;
-                writeln!(formatter, ";")?;
+                let fields = definition_fields(
+                    &definition.name,
+                    &definition.kind,
+                    &definition.island,
+                    definition.proof,
+                    definition.value_sort.as_ref(),
+                    universe_context_written(&definition.universe_context),
+                    spelling,
+                );
+                write(
+                    formatter,
+                    decorated(
+                        fields,
+                        flat([pure("let "), print_definition(definition, spelling)]),
+                        true,
+                    ),
+                )?;
             }
             Item::Rec(rec) => {
-                write!(formatter, "rec ")?;
-                for (index, definition) in rec.definitions().iter().enumerate() {
-                    if index > 0 {
-                        write!(formatter, "and ")?;
+                let mut context = universe_context_written(&rec.universe_context);
+                for (index, (definition, member)) in
+                    rec.definitions().iter().zip(&rec.definitions).enumerate()
+                {
+                    let fields = definition_fields(
+                        &member.name,
+                        &member.kind,
+                        &member.island,
+                        member.proof,
+                        None,
+                        context.take(),
+                        spelling,
+                    );
+                    let keyword = match index {
+                        0 => "let ",
+                        _ => "\nand ",
+                    };
+                    // A group of one member is written as a `let` is, so it says it is a group.
+                    let mut fields = fields;
+                    if rec.definitions.len() == 1 {
+                        fields.insert(0, ("node", pure("Rec")));
                     }
-                    print_definition(definition, formatter, spelling)?;
-                    write!(formatter, " ")?;
+                    write(
+                        formatter,
+                        decorated(
+                            fields,
+                            flat([pure(keyword), print_definition(definition, spelling)]),
+                            true,
+                        ),
+                    )?;
                 }
-                writeln!(formatter, ";")?;
             }
         }
+        writeln!(formatter, ";")?;
     }
 
     Ok(())
 }
 
-fn print_definition(
-    definition: &Definition,
-    formatter: &mut fmt::Formatter<'_>,
+/// The fields a declaration's decorator sets: its scheme where it has one, its kind where it is not one a declaration writes, its island where it is not its name's parent, its proof mark and the sort its value inhabits where it states them. A former's entry is no decorator's: it is the declaration's own form.
+fn definition_fields(
+    name: &Global,
+    kind: &DefinitionKind,
+    island: &Qualifier,
+    proof: bool,
+    value_sort: Option<&Term>,
+    universe_context: Option<Printer>,
     spelling: &Rc<Spelling>,
-) -> fmt::Result {
-    write!(
-        formatter,
-        "{} : {} = {}",
-        definition.name.faithful(),
-        definition.type_.spelled(spelling),
-        definition.body.spelled(spelling)
-    )
+) -> Vec<Decoration> {
+    let mut fields = Vec::<Decoration>::new();
+    if let Some(context) = universe_context {
+        fields.push(("universe_context", context));
+    }
+    let owned = |variant: &str, owner: &Qualifier, rest: String| {
+        pure(format!(
+            "{variant}({{owner = {}{rest}}})",
+            spelling.symbol(&Global::Authored(*owner))
+        ))
+    };
+    match kind {
+        DefinitionKind::Authored | DefinitionKind::Nominal(_) => {}
+        DefinitionKind::Witness => fields.push(("kind", pure("Witness"))),
+        DefinitionKind::Test => fields.push(("kind", pure("Test"))),
+        DefinitionKind::InductiveConstructor { owner, tag } => fields.push((
+            "kind",
+            owned(
+                "InductiveConstructor",
+                owner,
+                format!(", tag = {}", tag.as_string()),
+            ),
+        )),
+        DefinitionKind::ConceptMethod { owner } => {
+            fields.push(("kind", owned("ConceptMethod", owner, String::new())));
+        }
+    }
+    let parent = name.qualifier().map(Qualifier::without_last);
+    if parent.as_ref() != Some(island) {
+        fields.push(("island", pure(spelling.symbol(&Global::Authored(*island)))));
+    }
+    if proof {
+        fields.push(("proof", pure("true")));
+    }
+    if let Some(sort) = value_sort {
+        fields.push(("value_sort", print_core(sort.clone(), spelling)));
+    }
+
+    fields
+}
+
+/// A definition after its keyword: its name, its type and its body, each a term of its own whose binders are written by words of their own.
+fn print_definition(definition: &Definition, spelling: &Rc<Spelling>) -> Printer {
+    let written = |term: &Term| print_core(term.clone(), &spelling.with_words(term));
+
+    flat([
+        pure(spelling.symbol(&definition.name)),
+        pure(" : "),
+        written(&definition.type_),
+        pure(" =\n"),
+        indent(written(&definition.body)),
+    ])
 }
 
 #[cfg(test)]
@@ -2755,7 +1842,7 @@ mod form_tests;
 #[cfg(test)]
 mod spelling_tests;
 
-/// A pattern of a [`Matrix`]'s row as source writes it, each binder under the next of `names`: what a report names an arm by.
+/// A pattern of a [`Matrix`](curios_core::Matrix)'s row as source writes it, each binder under the next of `names`: what a report names an arm by.
 pub fn written_pattern(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> String {
     let fields = |fields: &[(Option<String>, Pattern)], names: &mut dyn Iterator<Item = String>| {
         fields
@@ -2849,17 +1936,5 @@ fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
                 _ => format!("({fields})"),
             }
         }
-    }
-}
-
-/// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
-fn escape_character(character: char) -> String {
-    match character {
-        '\n' => "\\n".to_string(),
-        '\t' => "\\t".to_string(),
-        '\r' => "\\r".to_string(),
-        '\\' => "\\\\".to_string(),
-        '\'' => "\\'".to_string(),
-        other => other.to_string(),
     }
 }

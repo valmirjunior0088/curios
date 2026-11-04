@@ -1,0 +1,130 @@
+//! Core text: Core written in the surface grammar with nothing left to an elaborator, and one decorator.
+//!
+//! **A form builds a node, its template, and a decorator sets what differs.** Each surface form a node is written in builds one node with every field it does not spell at a default stated once, for that kind of node, in its module here; `#{field = value, …}` before the form sets each field the node holds otherwise. A label is the field's Core name, a struct-valued field is written nested as a struct literal whose omitted fields keep the template's, and an enum-valued field takes its variant's Core name. One label is no field: `node` names the node a form fills where it is other than the one the form builds, as a constructor's value is written as the call of the constructor's definition under `#{node = Variant}`. So the shortest text is the canonical one, and a node prints with a decorator exactly where it is not what its form builds.
+//!
+//! **A decorator attaches to the next whole operand.** A primary — a name, a literal, a call — takes it as it stands; a larger form is parenthesized under it, and so is a decorated call's head, so `(#{universes = {levels = [0]}} /f)(@Nat, 2)` sets the instance of the name and not of the call.
+//!
+//! **Every name is written as the spelling handed in spells it.** Core text proper — a dump, a kernel's refusal, the round-trip — is written under a spelling that says so ([`Spelling::core_text`](crate::Spelling::core_text)), every global by its absolute path or by the shortening that spelling sets.
+//!
+//! **A reader's spelling writes the same forms as a reader writes them.** Under any other spelling — a diagnostic's, and every term a reader is shown — no decorator is written, an intrinsic is its surface name or operator (`Nat`, `2 + 3`), a sort's level and a name's instance follow the name as `.{…}`, a level metavariable is `?u1`, a type former's η-form is the former, a constructor's value and a record literal leave their family's parameters out, and a metavariable is `?7`. That spelling is for a reader, who cannot write most of what a decorator states, and reads back as no term.
+//!
+//! **What Core's equality does not read is not written.** A term's position, a constraint's origin and a binder's place among the written ones are left out, and a binder is written by its hint, renamed where it would capture or has none: two terms printed alike are one term to every judgment.
+//!
+//! **Each node kind's form and template live in a module of their own.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, and the forms only elaboration builds.
+
+#[cfg(test)]
+mod tests;
+
+mod frame;
+pub use frame::*;
+
+mod binding;
+use binding::*;
+
+mod family;
+use family::*;
+
+mod function;
+use function::*;
+
+mod intrinsic;
+use intrinsic::*;
+
+mod matching;
+use matching::*;
+
+mod name;
+use name::*;
+
+mod sort;
+use sort::*;
+pub use sort::{level_spelled, universe_context_written};
+
+mod transient;
+use transient::*;
+
+mod tuple;
+use tuple::*;
+
+use {
+    curios_core::{Subterm, Term},
+    curios_print::{Printer, flat, pure, sep_flat},
+};
+
+/// `term` written as Core text under `frame`, with no bound on its descent: [`sub`] is the guarded door every child goes through.
+pub fn core_written(term: Term, frame: Frame) -> Printer {
+    match Term::unwrap_or_clone(term) {
+        Subterm::Sort(sort) => sort_written(sort, frame),
+        Subterm::Intrinsic(intrinsic) => intrinsic_written(intrinsic, frame),
+        Subterm::Foreign(foreign) => foreign_written(foreign, frame),
+        Subterm::FuncType(function) => function_type_written(function, frame),
+        Subterm::Func(function) => function_written(function, frame),
+        Subterm::Apply(apply) => apply_written(apply, frame),
+        Subterm::TupleType(tuple) => tuple_type_written(tuple, frame),
+        Subterm::Tuple(tuple) => tuple_written(tuple, frame),
+        Subterm::Proj(projection) => projection_written(projection, frame),
+        Subterm::InductType(family) => family_written(family, frame),
+        Subterm::Variant(variant) => variant_written(variant, frame),
+        Subterm::StructType(record) => record_written(record, frame),
+        Subterm::Struct(literal) => literal_written(literal, frame),
+        Subterm::Match(elimination) => match_written(elimination, frame),
+        Subterm::Let(binding) => let_written(binding, frame),
+        Subterm::Rec(group) => rec_written(group, frame),
+        Subterm::Instance(instance) => instance_written(instance, frame),
+        Subterm::Var(var) => var_written(var, frame),
+        Subterm::Metavar(metavar) => metavar_written(metavar, frame),
+        Subterm::Transient(transient) => transient_written(transient, frame),
+    }
+}
+
+/// One field a decorator sets: its Core label and the value it is set to.
+pub type Decoration = (&'static str, Printer);
+
+impl Frame<'_> {
+    /// Whether this render writes Core text proper, every field stated, or its reader's spelling.
+    pub fn core_text(&self) -> bool {
+        self.spelling.writes_core_text()
+    }
+
+    /// [`decorated`] in Core text proper, and `node` as it stands in a reader's spelling, which writes no decorator.
+    pub fn decorated(&self, fields: Vec<Decoration>, node: Printer, primary: bool) -> Printer {
+        match self.core_text() {
+            true => decorated(fields, node, primary),
+            false => node,
+        }
+    }
+}
+
+/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it.
+pub fn decorated(fields: Vec<Decoration>, node: Printer, primary: bool) -> Printer {
+    if fields.is_empty() {
+        return node;
+    }
+    let node = match primary {
+        true => node,
+        false => flat([pure("("), node, pure(")")]),
+    };
+
+    flat([pure("#{"), decoration_fields(fields), pure("} "), node])
+}
+
+/// A decorator's fields, or a nested struct literal's, as `label = value`, a comma apart.
+pub fn decoration_fields(fields: Vec<Decoration>) -> Printer {
+    sep_flat(
+        fields
+            .into_iter()
+            .map(|(label, value)| flat([pure(label), pure(" = "), value]))
+            .collect::<Vec<_>>(),
+        || pure(", "),
+    )
+}
+
+/// A struct-valued field's value: the fields of it that differ from the template's, between braces.
+pub fn nested(fields: Vec<Decoration>) -> Printer {
+    flat([pure("{"), decoration_fields(fields), pure("}")])
+}
+
+/// A list-valued field's value: its entries between brackets.
+pub fn bracketed(entries: Vec<Printer>) -> Printer {
+    flat([pure("["), sep_flat(entries, || pure(", ")), pure("]")])
+}

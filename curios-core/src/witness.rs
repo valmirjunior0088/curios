@@ -310,7 +310,7 @@ impl fmt::Display for WitnessId {
                 module,
                 place,
             } => {
-                write!(formatter, "{}/witness@{}(", module.join(), concept.join())?;
+                write!(formatter, "{}/witness~{}(", module.join(), concept.join())?;
                 for (index, head) in key.heads().iter().enumerate() {
                     if index > 0 {
                         write!(formatter, ", ")?;
@@ -324,7 +324,7 @@ impl fmt::Display for WitnessId {
                 }
             }
             WitnessId::Unspelled { module, place } => {
-                write!(formatter, "{}/witness@{place}", module.join())
+                write!(formatter, "{}/witness~{place}", module.join())
             }
         }
     }

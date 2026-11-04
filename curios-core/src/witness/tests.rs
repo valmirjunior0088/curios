@@ -82,16 +82,16 @@ fn a_witness_is_displayed_by_its_module_concept_and_key() {
 
     assert_eq!(
         witness("Nat", "Show", WitnessKey::from([HeadKey::Nat]), 0).to_string(),
-        "/std/Nat/witness@/std/Show(Nat)"
+        "/std/Nat/witness~/std/Show(Nat)"
     );
     assert_eq!(
         witness("Option", "Lift", lift, 0).to_string(),
-        "/std/Option/witness@/std/Lift(/std/Option, Nat)"
+        "/std/Option/witness~/std/Lift(/std/Option, Nat)"
     );
     // A second witness of one module at one concept and key is the duplicate the elaborator refuses, and needs a name to be refused under.
     assert_eq!(
         witness("Nat", "Show", WitnessKey::from([HeadKey::Nat]), 1).to_string(),
-        "/std/Nat/witness@/std/Show(Nat)#1"
+        "/std/Nat/witness~/std/Show(Nat)#1"
     );
     assert_eq!(
         WitnessId::Unspelled {
@@ -99,7 +99,7 @@ fn a_witness_is_displayed_by_its_module_concept_and_key() {
             place: 3,
         }
         .to_string(),
-        "/std/Nat/witness@3"
+        "/std/Nat/witness~3"
     );
 }
 

@@ -9,7 +9,16 @@ use {
     curios_common::fill,
 };
 
+/// The line of `elaborated` declaring `name`, decorator and all: what says whether a witness is a definition or a group of one, a group of one being declared under `#{node = Rec}`.
+fn declaration<'a>(elaborated: &'a str, name: &str) -> &'a str {
+    elaborated
+        .lines()
+        .find(|line| line.contains(&format!("let {name} :")))
+        .unwrap_or_else(|| panic!("{name} is declared:\n{elaborated}"))
+}
+
 // A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.
+
 #[test]
 fn a_witness_reading_another_of_its_methods_is_no_group() {
     let source = r#"
@@ -26,8 +35,7 @@ fn a_witness_reading_another_of_its_methods_is_no_group() {
     assert_eq!(run(source), b"true");
     let elaborated = core_elab(source);
     assert!(
-        elaborated.contains("let /witness@/std/ops/Eql(/Box)")
-            && !elaborated.contains("rec /witness@/std/ops/Eql(/Box)"),
+        !declaration(&elaborated, "/witness~/std/ops/Eql(/Box)").contains("node = Rec"),
         "expected the witness as a definition, not a group of one:\n{elaborated}"
     );
 }
@@ -49,8 +57,7 @@ fn a_parameterized_witness_reading_another_of_its_methods_is_no_group() {
     assert_eq!(run(source), b"false");
     let elaborated = core_elab(source);
     assert!(
-        elaborated.contains("let /witness@/std/ops/Eql(/Wrap)")
-            && !elaborated.contains("rec /witness@/std/ops/Eql(/Wrap)"),
+        !declaration(&elaborated, "/witness~/std/ops/Eql(/Wrap)").contains("node = Rec"),
         "expected the witness as a definition, not a group of one:\n{elaborated}"
     );
 }
@@ -78,7 +85,7 @@ fn a_method_reading_one_that_recurses_stays_in_its_group() {
     assert_eq!(run(source), b"true");
     let elaborated = core_elab(source);
     assert!(
-        elaborated.contains("rec /witness@/std/ops/Eql(/Chain)"),
+        declaration(&elaborated, "/witness~/std/ops/Eql(/Chain)").contains("node = Rec"),
         "expected the witness as a group of one:\n{elaborated}"
     );
 }
@@ -137,7 +144,7 @@ fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
     assert_eq!(run(source), b"4");
 }
 
-// Two witnesses resolving each other have no order to elaborate in: each needs the other before it can finish. Refused once, at the first of them as written, naming both and the way out — where the kernel would have said `unbound name /witness@1` about an id the reader cannot find in their own program.
+// Two witnesses resolving each other have no order to elaborate in: each needs the other before it can finish. Refused once, at the first of them as written, naming both and the way out — where the kernel would have said `unbound name /witness~1` about an id the reader cannot find in their own program.
 #[test]
 fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     let source = r#"
@@ -164,7 +171,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     );
 }
 
-// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the kernel refused `/describe` for ``unbound name `/witness@0` ``.
+// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the kernel refused `/describe` for ``unbound name `/witness~0` ``.
 #[test]
 fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_order() {
     let describe = "let describe(b: Box) -> Str = Show/show(b);";

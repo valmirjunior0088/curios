@@ -12,9 +12,9 @@ fn the_stages_show_the_transient_and_its_expansion() {
         "#;
 
     let lowered = core(source);
-    assert!(lowered.contains("derive"), "{lowered}");
+    assert!(lowered.contains("#{node = Derive} ?"), "{lowered}");
     let elaborated = core_elab(source);
-    assert!(!elaborated.contains("derive"), "{elaborated}");
+    assert!(!elaborated.contains("node = Derive"), "{elaborated}");
     assert!(elaborated.contains("Spell/call"), "{elaborated}");
 }
 
@@ -51,7 +51,7 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     for source in [derived, written] {
         let report = error(source);
         assert!(
-            report.contains("a proof in '_apart' is a proof position but reaches '/witness@/std/ops/Eql(/Tree)', which is not known to terminate"),
+            report.contains("a proof in '_apart' is a proof position but reaches '/witness~/std/ops/Eql(/Tree)', which is not known to terminate"),
             "{report}"
         );
     }
@@ -184,7 +184,11 @@ fn a_derived_witness_lowers_to_the_derive_transient() {
         "#;
 
     let lowered = core(source);
-    assert_eq!(lowered.matches("derive").count(), 2, "{lowered}");
+    assert_eq!(
+        lowered.matches("#{node = Derive} ?").count(),
+        2,
+        "{lowered}"
+    );
 }
 
 // `Show` is deliberately underivable — the human-facing display is written by hand — so a standard concept refuses exactly as a user's own does, and a telescope changes nothing: the body is checked under it and refused there.

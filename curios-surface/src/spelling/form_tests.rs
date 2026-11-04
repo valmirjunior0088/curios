@@ -2,8 +2,9 @@
 
 use {
     super::*,
+    crate::ELIDED,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_core::{Telescope, UniverseMetaId, UniverseParam},
+    curios_core::{Telescope, TupleType, UniverseMetaId, UniverseParam},
     std::sync::Arc,
 };
 
@@ -432,7 +433,7 @@ fn a_match_with_a_default_prints_its_catch_all_last() {
 
     let printed = term.faithful().to_string();
     assert!(
-        printed.contains("| 'none =>") && printed.contains("| _ =>"),
+        printed.contains("| none() =>") && printed.contains("| _ =>"),
         "expected an enumerated arm and a catch-all, got:\n{printed}"
     );
 }

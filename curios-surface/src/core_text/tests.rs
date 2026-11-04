@@ -1,0 +1,171 @@
+//! Core text proper: each node in its form, under the decorator stating every field its form does not build.
+
+use {
+    crate::{Spellable, Spelling},
+    curios_common::Qualifier,
+    curios_core::{
+        Cases, Field, Free, Global, HeadKey, Intrinsic, Level, Match, MatchResult, Nat, Proj,
+        Quality, QualityParam, Sort, Subterm, Term, UniverseParam, Universes, Var, WitnessId,
+        WitnessKey,
+    },
+    curios_num::Floating,
+    std::rc::Rc,
+};
+
+/// `term` as Core text proper writes it.
+fn written(term: &Term) -> String {
+    term.spelled(&Rc::new(Spelling::core_text())).to_string()
+}
+
+fn global(path: &[&str]) -> Global {
+    Global::Authored(Qualifier::from(path.to_vec()))
+}
+
+fn nat_type() -> Term {
+    Term::intrinsic(Intrinsic::NatType)
+}
+
+/// A sort's word builds it at level 0 and at the quality the word names, and a decorator states any other.
+#[test]
+fn a_sort_states_the_level_and_the_quality_its_word_does_not() {
+    let one = Level::zero().succ().expect("level zero has a successor");
+
+    assert_eq!(written(&Term::type_ground()), "Type");
+    assert_eq!(written(&Term::prop()), "Prop");
+    assert_eq!(written(&Term::type_at(one)), "#{level = 1} Type");
+    assert_eq!(
+        written(&Term::from(Subterm::Sort(Sort {
+            quality: Quality::Param(QualityParam(1)),
+            level: Level::zero(),
+        }))),
+        "#{quality = Param(1)} Sort"
+    );
+}
+
+/// A path builds an instance at no universe, and a decorator states the one a name stands at; a call's head that takes one is parenthesized, so it states the head's and not the call's.
+#[test]
+fn a_name_states_its_instance_and_a_call_parenthesizes_a_decorated_head() {
+    let at = Universes {
+        levels: vec![Level::param(UniverseParam(0))],
+        qualities: vec![Quality::Type],
+    };
+    let instance = Term::instance(global(&["f"]), at);
+
+    assert_eq!(
+        written(&instance),
+        "#{universes = {levels = [u], qualities = [Type]}} /f"
+    );
+    assert_eq!(
+        written(&Term::apply(instance, [nat_type()])),
+        "(#{universes = {levels = [u], qualities = [Type]}} /f)(%NatType)"
+    );
+}
+
+/// An intrinsic is `%` and its variant's Core name over its operands, and a literal form builds its own node: a numeral its `Nat`, `true` its `Bool`, `x[…]` its `Bytes`.
+#[test]
+fn an_intrinsic_is_its_variant_and_a_literal_its_own_form() {
+    let n = Term::free_var(&Free::local(0, Some("n")));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+
+    assert_eq!(
+        written(&Term::intrinsic(Intrinsic::nat_add(n, three.clone()))),
+        "%NatAdd(n, 3)"
+    );
+    assert_eq!(written(&three), "3");
+    assert_eq!(written(&Term::intrinsic(Intrinsic::Bool(true))), "true");
+    assert_eq!(
+        written(&Term::intrinsic(Intrinsic::Flt(Floating::infinite(true)))),
+        "%Flt(-inf.0)"
+    );
+}
+
+/// A family applied as a node of its own is its former's call under the node it is, as a constructor's value is its constructor's call, the family's parameters under `@` ahead of its payload.
+#[test]
+fn a_family_and_a_constructors_value_state_the_node_they_are() {
+    let eq = global(&["Eq"]);
+    let one = || Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+
+    assert_eq!(
+        written(&Term::induct_type(eq, [nat_type()], [one(), one()])),
+        "#{node = InductType} /Eq(%NatType)(1, 1)"
+    );
+    assert_eq!(
+        written(&Term::variant(
+            global(&["Result"]),
+            [nat_type()],
+            "success",
+            [one()]
+        )),
+        "#{node = Variant} /Result/success(@%NatType, 1)"
+    );
+}
+
+/// A bound index no scope in the text binds states its binding, and a metavariable its id and its origin.
+#[test]
+fn a_loose_index_and_a_metavariable_state_what_their_forms_do_not() {
+    assert_eq!(
+        written(&Term::var(Var::bound(2))),
+        "#{binding = Bound(2)} _"
+    );
+    assert_eq!(written(&Term::hole(7)), "#{id = 7, origin = Hole} ?");
+}
+
+/// A projection out of a declared record states the record and the field's place.
+#[test]
+fn a_projection_out_of_a_record_states_the_record() {
+    let projection = Term::from(Subterm::Proj(Proj {
+        head: Term::free_var(&Free::local(0, Some("p"))),
+        field: Field::Struct(global(&["Pair"]), 0),
+    }));
+
+    assert_eq!(written(&projection), "#{field = Struct(/Pair, 0)} (p).0");
+}
+
+/// A match is written in the surface's spelling of its cases, and one with no motive states the goal its arms are checked against.
+#[test]
+fn a_match_states_the_goal_it_is_checked_against() {
+    let b = Free::local(0, Some("b"));
+    let number = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let matched = Term::from(Subterm::Match(Match {
+        head: Term::free_var(&b),
+        result: MatchResult::Ambient(nat_type()),
+        cases: Cases::Bool {
+            false_case: number(0),
+            true_case: number(1),
+        },
+    }));
+
+    assert_eq!(
+        written(&matched),
+        "#{result = Ambient(%NatType)} match b\n| false =>\n    0\n| true =>\n    1\nend"
+    );
+}
+
+/// A type former's η-form is written as the lambda it is, which a reader is shown as the former.
+#[test]
+fn a_type_formers_eta_form_is_written_as_its_lambda() {
+    let x = Free::local(0, Some("x"));
+    let lambda = Term::func(
+        [(x, nat_type())],
+        Term::induct_type(global(&["Sign"]), Vec::<Term>::new(), [Term::free_var(&x)]),
+    );
+
+    assert_eq!(written(&lambda), "(x) => #{node = InductType} /Sign(x)");
+    assert_eq!(lambda.faithful().to_string(), "/Sign");
+}
+
+/// A witness is named by what it witnesses, its concept and key after `~`.
+#[test]
+fn a_witness_is_named_by_its_concept_and_key() {
+    let witness = Global::Witness(WitnessId::Spelled {
+        concept: Qualifier::from(["std", "Show"]),
+        key: WitnessKey::from([HeadKey::Nat]),
+        module: Qualifier::from(["std", "Nat"]),
+        place: 0,
+    });
+
+    assert_eq!(
+        written(&Term::instance(witness, Universes::default())),
+        "/std/Nat/witness~/std/Show(Nat)"
+    );
+}

@@ -138,7 +138,7 @@ fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() 
         ) && report.contains(
             "decide the bound with a guard before the operation, or call /std/ops/Div/div(@T, a, b, @proof)"
         ) && !report.contains("/(@")
-            && !report.contains("witness@"),
+            && !report.contains("witness~"),
         "unexpected report:\n{report}"
     );
 }
@@ -161,7 +161,7 @@ fn a_witness_telescopes_undischarged_bound_names_the_witness() {
             "the implicit parameter 'ok' of the witness of 'Show' for head 'Small' was not inferred"
         ) && report.contains("a witness is never called")
             && !report.contains("supply it explicitly")
-            && !report.contains("witness@"),
+            && !report.contains("witness~"),
         "unexpected report:\n{report}"
     );
 }

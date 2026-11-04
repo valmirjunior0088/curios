@@ -38,8 +38,8 @@ fn one_place_under_two_modules_is_two_witnesses() {
     });
 
     assert_ne!(here, there);
-    assert_eq!(here.faithful().to_string(), "/std/Nat/witness@0");
-    assert_eq!(there.faithful().to_string(), "/json/Value/witness@0");
+    assert_eq!(here.faithful().to_string(), "/std/Nat/witness~0");
+    assert_eq!(there.faithful().to_string(), "/json/Value/witness~0");
 }
 
 // A declaration and a local are different kinds of thing, not two spellings — a distinction a test for a marker character would draw, and a marker collision break.

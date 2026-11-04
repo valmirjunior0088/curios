@@ -1541,7 +1541,7 @@ fn remember(context: &mut Context, declined: u64, entry: Term, result: &Term) {
 
 /// Reduce `term` to a deep normal form for **diagnostic display**: every position is taken to weak-head normal form and its sub-terms recursively normalized, opening the type-former binders (`FuncType`/`Func`/`TupleType`) under fresh variables.
 ///
-/// `reduce` alone stops at the head: an inductive type's indices are not sub-reduced, so a concept-method projection standing in an index position — `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness@0).0(0, 1))` once resolution has picked the intrinsic witness — survives verbatim into a type-mismatch message. Normalizing the index collapses it to the value it denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying operator intrinsic (`Vec(Nat, n + m)`) the printer spells infix.
+/// `reduce` alone stops at the head: an inductive type's indices are not sub-reduced, so a concept-method projection standing in an index position — `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness~0).0(0, 1))` once resolution has picked the intrinsic witness — survives verbatim into a type-mismatch message. Normalizing the index collapses it to the value it denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying operator intrinsic (`Vec(Nat, n + m)`) the printer spells infix.
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
 ///

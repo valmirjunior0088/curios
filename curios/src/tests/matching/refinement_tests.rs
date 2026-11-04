@@ -354,8 +354,8 @@ fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
     );
 
     assert!(
-        elaborated.contains("Bool.match false ~ Nat")
-            && elaborated.contains("Bool.match true ~ Nat"),
+        elaborated.contains("#{result = Ambient(%NatType)} match false")
+            && elaborated.contains("#{result = Ambient(%NatType)} match true"),
         "{elaborated}"
     );
 }
