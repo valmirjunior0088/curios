@@ -126,7 +126,7 @@ fn one_slot_serves_run_and_compile() {
 fn asking_for_a_stage_files_its_units_and_no_payload() {
     let root = project("asking");
 
-    let shown = curios(&root, &["wonder", "stage", "wasm"]);
+    let shown = curios(&root, &["wonder", "--stage", "wasm"]);
     assert!(
         shown.status.success(),
         "{}",
@@ -295,10 +295,10 @@ const COMMANDS: &[(&[&str], bool)] = &[
     (&["test"], false),
     (&["lint"], false),
     (&["document"], false),
-    (&["wonder", "diagnostics"], true),
-    (&["wonder", "tests"], false),
-    (&["wonder", "cost"], false),
-    (&["wonder", "stage", "wasm"], false),
+    (&["wonder"], true),
+    (&["wonder", "--tests"], false),
+    (&["wonder", "--cost"], false),
+    (&["wonder", "--stage", "wasm"], false),
 ];
 
 /// A store holds what every command filed of a package while its dependency let `f` check, and the dependency's edit leaves `f`'s text as it was and refuses it: every command is refused, none answered from what the store holds for the text it was filed for.

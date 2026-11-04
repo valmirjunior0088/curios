@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
-description = "The Zed extension for Curios: launches `curios wonder server` for the grammar the extension ships"
+description = "The Zed extension for Curios: launches `curios server` for the grammar the extension ships"
 
 # Its own root, not a member of the compiler's workspace: Zed builds an extension from its own directory, with its own lock file, for wasm32-wasip2, and nothing in the compiler depends on it or it on the compiler.
 [workspace]

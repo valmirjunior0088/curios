@@ -1,6 +1,6 @@
 //! What the extension adds beyond its grammar: which process answers as the language server, and where to find it.
 //!
-//! The server is the `curios` binary itself, `curios wonder server`, and the extension fetches nothing, as `README.md`'s "The server is the compiler, and the extension fetches nothing" decides: when it can find no binary at all it hands back the one-line installer rather than a path it made up.
+//! The server is the `curios` binary itself, `curios server`, and the extension fetches nothing, as `README.md`'s "The server is the compiler, and the extension fetches nothing" decides: when it can find no binary at all it hands back the one-line installer rather than a path it made up.
 //!
 //! Resolution has the three steps `README.md`'s "Where it looks for the compiler" lists: an explicit setting, then `PATH`, then the installer's own directory.
 
@@ -59,7 +59,7 @@ impl Curios {
             .and_then(|settings| settings.binary)
             .and_then(|binary| binary.path);
 
-        // A configured path, and one found on `PATH`, are handed on as written. The user named the first and the environment the second, so a binary that turns out to be wrong should fail as Zed's spawn error for that exact path — or, if it starts but is too old for `wonder server`, as the compiler's own report of an unknown subcommand. Neither is this extension's to paraphrase.
+        // A configured path, and one found on `PATH`, are handed on as written. The user named the first and the environment the second, so a binary that turns out to be wrong should fail as Zed's spawn error for that exact path — or, if it starts but is too old for `server`, as the compiler's own report of an unknown subcommand. Neither is this extension's to paraphrase.
         if let Some(path) = configured.or_else(|| worktree.which("curios")) {
             return Ok(path);
         }
@@ -106,7 +106,7 @@ impl Extension for Curios {
 
         Ok(Command {
             command,
-            args: vec!["wonder".to_string(), "server".to_string()],
+            args: vec!["server".to_string()],
             env: Vec::new(),
         })
     }

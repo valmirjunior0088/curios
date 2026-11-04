@@ -9,9 +9,11 @@ use {
         TESTS,
     },
     clap::{
-        ArgGroup, Args, Command, CommandFactory, Error, Parser, Subcommand, ValueEnum,
+        Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
+        Id, Parser, Subcommand, ValueEnum,
         builder::{PossibleValue, PossibleValuesParser},
         error::ErrorKind,
+        value_parser,
     },
     curios_package::Target,
     curios_pipeline::Stage,
@@ -36,7 +38,7 @@ impl ValueEnum for TargetValue {
     }
 }
 
-/// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
+/// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder --stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
 /// Which manifest governs, for a command that resolves against a package.
@@ -243,11 +245,26 @@ pub(crate) enum Mode {
         manifest: ManifestFlag,
     },
 
-    /// Questions about a program, answered by the compilation that would build it. The query is first and the subject last, so `wonder diagnostics app` and `wonder stage core app` read as the sentence they are; `server` sits in the query position because it is the same questions asked over a protocol.
-    #[command(about = "Ask what the compiler knows about a program")]
+    /// Questions about a program, answered by the compilation that would build it. The subject is the one argument, read by the rule every command's is, and the query an option, so no word is ever both: an executable may be named as a query is, and a query added later takes no executable's name. With no query, the check — every diagnostic, goal and lint ([`Query::Check`]).
+    #[command(about = "Ask what the compiler knows about a program; with no query, check it")]
     Wonder {
-        #[command(subcommand)]
+        #[command(flatten)]
         query: Query,
+
+        #[arg(value_name = "SUBJECT", help = DIAGNOSTICS.subject_help())]
+        subject: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
+    },
+
+    /// The questions `wonder` answers, asked over a protocol: an editor hands it its documents, so its grammar holds no subject, and a word after it is refused as any argument nothing reads is.
+    #[command(
+        about = "Answer an editor over the language server protocol on standard input and output"
+    )]
+    Server {
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     /// The reader of what `--profile` files, in the build that files it: the two halves of one format ship together, so neither can drift from the other.
@@ -387,95 +404,115 @@ pub(crate) struct CheckFlag {
     pub(crate) check: bool,
 }
 
-/// One question each, of fixed arity. A subject takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
-#[derive(Debug, Subcommand)]
+/// What `wonder` is asked of its subject: the check where no query is named, and otherwise the one its option names. At most one: the options form one group, so two are refused where the line is parsed, and this is the one value the parse leaves. A subject takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
+#[derive(Debug, Clone)]
 pub(crate) enum Query {
-    #[command(
-        about = "Every diagnostic and goal, located; exit 0 once answered, whatever the answer"
-    )]
-    Diagnostics {
-        #[arg(value_name = "SUBJECT", help = DIAGNOSTICS.subject_help())]
-        subject: Option<String>,
-
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
-
-    #[command(about = "Every test the subject declares, one path per line; nothing executes")]
-    Tests {
-        #[arg(value_name = "SUBJECT", help = TESTS.subject_help())]
-        subject: Option<String>,
-
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
-
-    /// What the optimizer did to each declaration, which is a question about the compilation and never about a run — so it sits here beside the other things the compiler already decided, rather than behind a flag on `run`.
-    #[command(
-        about = "What became of each declaration by the time the optimizer settled, one row per line"
-    )]
-    Cost {
-        #[arg(value_name = "SUBJECT", help = COST.subject_help())]
-        subject: Option<String>,
-
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
-
-    #[command(about = "The program's representation at one rung of the pipeline, reprinted")]
-    Stage {
-        // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden.
-        #[arg(
-            value_name = "STAGE",
-            help = format!("One of: {}", *NAMES),
-            value_parser = PossibleValuesParser::new(Stage::NAMES),
-            hide_possible_values = true
-        )]
-        name: String,
-
-        #[arg(value_name = "SUBJECT", help = STAGE.subject_help())]
-        subject: Option<String>,
-
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
-
+    /// Every diagnostic, goal and lint, located; exit 0 once answered, whatever the answer.
+    Check,
+    Tests,
+    Cost,
+    /// A rung of the pipeline, by its name ([`Stage::NAMES`]).
+    Stage(String),
     /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
-    #[command(
-        about = "The name written at a place of a file: its declaration, what it is declared as, and where"
-    )]
-    At {
-        #[arg(
-            value_name = "LINE:COLUMN",
-            help = "The place, as a diagnostic prints one: a line and a column, each from one"
-        )]
-        place: Place,
+    At(Place),
+    Declarations,
+}
 
-        #[arg(value_name = "SUBJECT", help = AT.subject_help())]
-        subject: Option<String>,
+impl Query {
+    /// The group the query options form, which holds them to one.
+    const GROUP: &str = "query";
+}
 
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
+impl Args for Query {
+    fn group_id() -> Option<Id> {
+        Some(Id::from(Self::GROUP))
+    }
 
-    #[command(
-        about = "Every definition a file declares, one row per line, in the order they are written"
-    )]
-    Declarations {
-        #[arg(value_name = "SUBJECT", help = DECLARATIONS.subject_help())]
-        subject: Option<String>,
+    fn augment_args(command: Command) -> Command {
+        let flag = |name: &'static str, about: String| {
+            Arg::new(name)
+                .long(name)
+                .action(ArgAction::SetTrue)
+                .help(about)
+        };
 
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
+        command
+            .next_help_heading("Queries")
+            .arg(flag(
+                "tests",
+                TESTS.query_help(
+                    "Every test the subject declares, one path per line; nothing executes",
+                ),
+            ))
+            .arg(flag(
+                "cost",
+                COST.query_help(
+                    "What became of each declaration by the time the optimizer settled, one row per line",
+                ),
+            ))
+            // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden.
+            .arg(
+                Arg::new("stage")
+                    .long("stage")
+                    .value_name("STAGE")
+                    .value_parser(PossibleValuesParser::new(Stage::NAMES))
+                    .hide_possible_values(true)
+                    .help(STAGE.query_help(&format!(
+                        "The program's representation at one rung of the pipeline, reprinted; one of: {}",
+                        *NAMES
+                    ))),
+            )
+            .arg(
+                Arg::new("at")
+                    .long("at")
+                    .value_name("LINE:COLUMN")
+                    .value_parser(value_parser!(Place))
+                    .help(AT.query_help(
+                        "The name written at a place of a file, the place as a diagnostic prints one, a line and a column each from one: its declaration, what it is declared as, and where",
+                    )),
+            )
+            .arg(flag(
+                "declarations",
+                DECLARATIONS.query_help(
+                    "Every definition a file declares, one row per line, in the order they are written",
+                ),
+            ))
+            .group(
+                ArgGroup::new(Self::GROUP)
+                    .args(["tests", "cost", "stage", "at", "declarations"])
+                    .multiple(false),
+            )
+            // The heading ends with the queries, so the flags flattened after them stand under the command's own.
+            .next_help_heading(None::<&str>)
+    }
 
-    #[command(
-        about = "Answer an editor over the language server protocol on standard input and output"
-    )]
-    Server {
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
+    fn augment_args_for_update(command: Command) -> Command {
+        Self::augment_args(command)
+    }
+}
+
+impl FromArgMatches for Query {
+    fn from_arg_matches(matches: &ArgMatches) -> Result<Self, Error> {
+        Ok(if matches.get_flag("tests") {
+            Query::Tests
+        } else if matches.get_flag("cost") {
+            Query::Cost
+        } else if let Some(name) = matches.get_one::<String>("stage") {
+            Query::Stage(name.clone())
+        } else if let Some(place) = matches.get_one::<Place>("at") {
+            Query::At(*place)
+        } else if matches.get_flag("declarations") {
+            Query::Declarations
+        } else {
+            Query::Check
+        })
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &ArgMatches) -> Result<(), Error> {
+        *self = Self::from_arg_matches(matches)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Parser)]

@@ -30,7 +30,7 @@ impl Editor {
     fn launch(root: &Path) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
             .current_dir(root)
-            .args(["wonder", "server"])
+            .args(["server"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -726,7 +726,7 @@ fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_o
 
     let answered = curios(
         module.parent().unwrap(),
-        &["wonder", "diagnostics", module.to_str().unwrap()],
+        &["wonder", module.to_str().unwrap()],
         "",
     );
 
@@ -744,7 +744,7 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
 
     let answered = curios(
         &root,
-        &["wonder", "diagnostics", "-"],
+        &["wonder", "-"],
         "let _a : /std/Nat = true;\nlet _b : /std/Nat = _a;\nlet _c : /std/Nat = false;\n/std/print(\"\")\n",
     );
 
@@ -851,11 +851,11 @@ fn a_loose_file_and_standard_input_leave_no_store() {
     write(&root, "scratch.crs", program);
 
     for arguments in [
-        ["wonder", "diagnostics", "scratch.crs"],
-        ["wonder", "diagnostics", "-"],
-        ["wonder", "cost", "scratch.crs"],
+        &["wonder", "scratch.crs"][..],
+        &["wonder", "-"],
+        &["wonder", "--cost", "scratch.crs"],
     ] {
-        let asked = curios(&root, &arguments, program);
+        let asked = curios(&root, arguments, program);
         assert_eq!(
             asked.status.code(),
             Some(0),

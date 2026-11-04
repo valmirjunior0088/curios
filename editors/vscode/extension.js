@@ -1,4 +1,4 @@
-// What the extension does beyond its grammar: launch `curios wonder server` for Curios documents and let the language client paint what it publishes. The server is the `curios` binary itself, so there is nothing to download and no version to pin — the compiler the user runs is the one whose diagnostics they see.
+// What the extension does beyond its grammar: launch `curios server` for Curios documents and let the language client paint what it publishes. The server is the `curios` binary itself, so there is nothing to download and no version to pin — the compiler the user runs is the one whose diagnostics they see.
 //
 // Two things it will not do. It will not start the server in an untrusted workspace: the server elaborates the workspace's own sources, which is running the workspace's code, and that is what the `limited` trust declaration in the manifest promises. It will not guess at a binary either — when the compiler is missing it says so, with the one-line installer and a button that copies it.
 const vscode = require("vscode");
@@ -30,7 +30,7 @@ const start = () => {
   client = new LanguageClient(
     "curios",
     "Curios",
-    { command: serverPath(), args: ["wonder", "server"] },
+    { command: serverPath(), args: ["server"] },
     { documentSelector: [{ scheme: "file", language: "curios" }] },
   );
 

@@ -187,7 +187,7 @@ pub(crate) const PROFILE: Contract = Contract {
 };
 
 pub(crate) const DIAGNOSTICS: Contract = Contract {
-    command: "wonder diagnostics",
+    command: "wonder",
     accepts: Accepts::Any,
     own_file_only: false,
     access: Access::Write,
@@ -195,7 +195,7 @@ pub(crate) const DIAGNOSTICS: Contract = Contract {
 };
 
 pub(crate) const TESTS: Contract = Contract {
-    command: "wonder tests",
+    command: "wonder --tests",
     accepts: Accepts::Any,
     own_file_only: false,
     access: Access::Write,
@@ -203,7 +203,7 @@ pub(crate) const TESTS: Contract = Contract {
 };
 
 pub(crate) const COST: Contract = Contract {
-    command: "wonder cost",
+    command: "wonder --cost",
     accepts: Accepts::Program,
     own_file_only: false,
     access: Access::Write,
@@ -211,16 +211,16 @@ pub(crate) const COST: Contract = Contract {
 };
 
 pub(crate) const STAGE: Contract = Contract {
-    command: "wonder stage",
+    command: "wonder --stage",
     accepts: Accepts::Program,
     own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
 };
 
-/// `wonder stage` at a rung a unit has ([`Stage::of_a_unit`]): a library's file is reprinted there as a program is, where every rung past them is a program's alone.
+/// `wonder --stage` at a rung a unit has ([`Stage::of_a_unit`]): a library's file is reprinted there as a program is, where every rung past them is a program's alone.
 pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
-    command: "wonder stage",
+    command: "wonder --stage",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
     access: Access::Write,
@@ -229,7 +229,7 @@ pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
 
 /// A question about one file: a program's, named by its own file or through one of its modules, or a library's.
 pub(crate) const AT: Contract = Contract {
-    command: "wonder at",
+    command: "wonder --at",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
     access: Access::Write,
@@ -238,7 +238,7 @@ pub(crate) const AT: Contract = Contract {
 
 /// A question about one file, as [`AT`] is.
 pub(crate) const DECLARATIONS: Contract = Contract {
-    command: "wonder declarations",
+    command: "wonder --declarations",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
     access: Access::Write,
@@ -246,7 +246,7 @@ pub(crate) const DECLARATIONS: Contract = Contract {
 };
 
 pub(crate) const SERVER: Contract = Contract {
-    command: "wonder server",
+    command: "server",
     accepts: Accepts::Nothing,
     own_file_only: false,
     access: Access::Write,
@@ -268,16 +268,16 @@ impl Mode {
             Mode::New { .. } => &NEW,
             Mode::Lint { .. } => &LINT,
             Mode::Format { .. } => &FORMAT,
-            Mode::Wonder { query } => match query {
-                Query::Diagnostics { .. } => &DIAGNOSTICS,
-                Query::Tests { .. } => &TESTS,
-                Query::Cost { .. } => &COST,
-                Query::Stage { name, .. } if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
-                Query::Stage { .. } => &STAGE,
-                Query::At { .. } => &AT,
-                Query::Declarations { .. } => &DECLARATIONS,
-                Query::Server { .. } => &SERVER,
+            Mode::Wonder { query, .. } => match query {
+                Query::Check => &DIAGNOSTICS,
+                Query::Tests => &TESTS,
+                Query::Cost => &COST,
+                Query::Stage(name) if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
+                Query::Stage(_) => &STAGE,
+                Query::At(_) => &AT,
+                Query::Declarations => &DECLARATIONS,
             },
+            Mode::Server { .. } => &SERVER,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => &PROFILE,
         }
@@ -290,17 +290,10 @@ impl Mode {
             | Mode::Compile { subject, .. }
             | Mode::Document { subject, .. }
             | Mode::Test { subject, .. }
-            | Mode::Lint { subject, .. } => subject.as_deref(),
+            | Mode::Lint { subject, .. }
+            | Mode::Wonder { subject, .. } => subject.as_deref(),
             Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
-            Mode::Wonder { query } => match query {
-                Query::Diagnostics { subject, .. }
-                | Query::Tests { subject, .. }
-                | Query::Cost { subject, .. }
-                | Query::Stage { subject, .. }
-                | Query::At { subject, .. }
-                | Query::Declarations { subject, .. } => subject.as_deref(),
-                Query::Server { .. } => None,
-            },
+            Mode::Server { .. } => None,
             // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
             #[cfg(feature = "profile")]
@@ -326,7 +319,8 @@ impl Mode {
             | Mode::Pin { .. }
             | Mode::Lint { .. }
             | Mode::Format { .. }
-            | Mode::Wonder { .. } => None,
+            | Mode::Wonder { .. }
+            | Mode::Server { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
@@ -352,16 +346,9 @@ impl Mode {
             | Mode::Compile { elaboration, .. }
             | Mode::Document { elaboration, .. }
             | Mode::Test { elaboration, .. }
-            | Mode::Lint { elaboration, .. } => Some(elaboration),
-            Mode::Wonder { query } => match query {
-                Query::Diagnostics { elaboration, .. }
-                | Query::Tests { elaboration, .. }
-                | Query::Cost { elaboration, .. }
-                | Query::Stage { elaboration, .. }
-                | Query::At { elaboration, .. }
-                | Query::Declarations { elaboration, .. }
-                | Query::Server { elaboration } => Some(elaboration),
-            },
+            | Mode::Lint { elaboration, .. }
+            | Mode::Wonder { elaboration, .. }
+            | Mode::Server { elaboration } => Some(elaboration),
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
@@ -378,6 +365,14 @@ pub(crate) enum Rewritten {
 }
 
 impl Contract {
+    /// A `wonder` query's help: what it answers, and what no subject is for it where that is not what it is for the check, whose contract ([`DIAGNOSTICS`]) the one SUBJECT's help is read off.
+    pub(crate) fn query_help(&self, answers: &str) -> String {
+        match self.no_subject() == DIAGNOSTICS.no_subject() {
+            true => answers.to_string(),
+            false => format!("{answers}; with no subject, {}", self.no_subject()),
+        }
+    }
+
     /// What a SUBJECT's help says for this command: the forms its argument takes, and what none means.
     pub(crate) fn subject_help(&self) -> String {
         let forms = match (self.accepts, self.own_file_only) {
@@ -389,7 +384,13 @@ impl Contract {
                 "A declared executable's name, a path to a .crs file, or `-` for standard input"
             }
         };
-        let none = match self.accepts {
+
+        format!("{forms} (default: {})", self.no_subject())
+    }
+
+    /// What no argument selects for this command.
+    fn no_subject(&self) -> &'static str {
+        match self.accepts {
             Accepts::Program | Accepts::ProgramOrLibrary => {
                 "the governing package's sole or `default` executable"
             }
@@ -397,9 +398,7 @@ impl Contract {
             Accepts::Any | Accepts::Entire => "the governing package entire",
             Accepts::Files => "every file the governing package declares",
             Accepts::Nothing => "nothing",
-        };
-
-        format!("{forms} (default: {none})")
+        }
     }
 
     /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks.

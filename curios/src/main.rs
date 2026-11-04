@@ -558,26 +558,26 @@ fn dispatch() -> Result<(), Failure> {
                 )));
             }
         }
-        Mode::Wonder { query } => match query {
-            Query::Diagnostics { elaboration, .. } => wonder_diagnostics(
+        Mode::Wonder {
+            query, elaboration, ..
+        } => match query {
+            Query::Check => wonder_diagnostics(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
                 unfiled,
             )?,
-            Query::Tests { elaboration, .. } => wonder_tests(
+            Query::Tests => wonder_tests(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
                 unfiled,
             )?,
-            Query::Cost { elaboration, .. } => wonder_cost(
+            Query::Cost => wonder_cost(
                 elaboration.budget,
                 contract.admit_program(subject, manifest, None, &here()?)?,
                 unfiled,
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
-            Query::Stage {
-                name, elaboration, ..
-            } => wonder_stage(
+            Query::Stage(name) => wonder_stage(
                 elaboration.budget,
                 &name,
                 // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
@@ -597,21 +597,19 @@ fn dispatch() -> Result<(), Failure> {
                 },
                 unfiled,
             )?,
-            Query::At {
-                place, elaboration, ..
-            } => wonder_at(
+            Query::At(place) => wonder_at(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 place,
                 unfiled,
             )?,
-            Query::Declarations { elaboration, .. } => wonder_declarations(
+            Query::Declarations => wonder_declarations(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 unfiled,
             )?,
-            Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },
+        Mode::Server { elaboration } => serve(elaboration.budget, manifest)?,
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         #[cfg(feature = "profile")]
         Mode::Profile { stream } => {

@@ -6,7 +6,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [What a package is made of](#what-a-package-is-made-of)
 - [Subjects](#subjects)
 - [The surface](#the-surface)
-- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`pin`](#pin) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`profile`](#profile)
+- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`pin`](#pin) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`server`](#server) · [`profile`](#profile)
 - [The manifest](#the-manifest)
 - [Exit codes](#exit-codes)
 - [Flags](#flags)
@@ -71,7 +71,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Ten commands, and `wonder`'s seven queries — eleven where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
+Eleven commands, and `wonder`'s six queries — twelve commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
@@ -84,13 +84,13 @@ Ten commands, and `wonder`'s seven queries — eleven where the compiler was bui
 | [`new`](#new) | — | `<DIR>` | a package | none |
 | [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
-| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`wonder tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`wonder cost`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
-| [`wonder stage`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | `<STAGE>`, before the subject | nothing | reads, files the units it compiled from disk |
-| [`wonder at`](#wonder) | a file of a program or of a library | `<LINE>:<COLUMN>`, before the subject | nothing | reads, files the units it compiled from disk |
-| [`wonder declarations`](#wonder) | a file of a program or of a library | — | nothing | reads, files the units it compiled from disk |
-| [`wonder server`](#wonder) | — | — | nothing | reads, files the units it compiled from disk |
+| [`wonder`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --cost`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --stage`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | `<STAGE>`, the option's value | nothing | reads, files the units it compiled from disk |
+| [`wonder --at`](#wonder) | a file of a program or of a library | `<LINE>:<COLUMN>`, the option's value | nothing | reads, files the units it compiled from disk |
+| [`wonder --declarations`](#wonder) | a file of a program or of a library | — | nothing | reads, files the units it compiled from disk |
+| [`server`](#server) | — | — | nothing | reads, files the units it compiled from disk |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
 `--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
@@ -291,7 +291,7 @@ curios lint app.crs      # one file, placed in its unit
 curios lint -            # the program on standard input
 ```
 
-A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder diagnostics` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are four, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
+A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are four, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
 
 | Lint | Reports | Kept by |
 | --- | --- | --- |
@@ -300,7 +300,7 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses, the declarations a `_` keeps unused and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | deleting it, `pub`, or naming it `_x` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
 
-Output is what `wonder diagnostics` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing but a note was. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal. Each unit is linted as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
+Output is what `wonder` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing but a note was. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal. Each unit is linted as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
 
 ## `format`
 
@@ -317,21 +317,20 @@ There is one canonical style and no options to configure it. Formatting is verif
 
 ## `wonder`
 
-`curios wonder <QUERY> [ARGS] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing. The answer goes to stdout and nothing else does, so it can be redirected; exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
+`curios wonder [QUERY] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing: with no query, the check. The subject is the one argument, read as every command reads its own, and a query is an option, one at most, so no word is ever both: `curios wonder tests` checks the executable named `tests`. The answer goes to stdout and nothing else does, so it can be redirected; exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
 
 | Query | Answers |
 | --- | --- |
-| `diagnostics [SUBJECT]` | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — a blank line between; nothing when the subject compiles clean. A unit is asked under its written tail, never the test program `test` synthesizes, since that tail raises nothing a test's own check did not |
-| `tests [SUBJECT]` | every test the subject declares, one path per line, in declaration order — the library's, then each executable's, for the package entire; nothing when it declares none, and nothing executes |
-| `cost [SUBJECT]` | what became of each declaration by the time the optimizer settled — `<name>`, a tab, then `survived`, `specialized <n>` or `absorbed` — one row per line, ordered by name. Nothing is judged: a row states the fate and stops |
-| `stage <STAGE> [SUBJECT]` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses, and is written where it is reached, so nothing a later stage does unmakes it: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 2 when written goals alone stopped it and 1 otherwise |
-| `at <LINE>:<COLUMN> [SUBJECT]` | the name written at a place of the subject's file, as one row: the path its declaration is declared at, what it is declared as — `definition`, `inductive`, `constructor`, `structure`, `concept`, `method`, `witness` or `test` — and where the declaration's name is written, as `<file>:<line>:<column>`, a tab between each. Beneath the row, a blank line before each, come the declaration's head as its author wrote it and the prose above it, where it has any. Nothing where no name stands. A place is written as a diagnostic prints one, a line and a column each counted from one |
-| `declarations [SUBJECT]` | every definition the subject's file declares, one such row per line, in the order they are written: a type's constructors after it, a concept's methods after it, and a witness under its head as it is written |
-| `server` | what an editor integration launches: the language server protocol, on standard input and output. It publishes a document's diagnostics as the document is edited, and every open document's when one is saved, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what that declaration states of it — its head and prose, as a hover — and what the document declares: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It takes no subject |
+| none | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — a blank line between; nothing when the subject compiles clean. A unit is asked under its written tail, never the test program `test` synthesizes, since that tail raises nothing a test's own check did not |
+| `--tests` | every test the subject declares, one path per line, in declaration order — the library's, then each executable's, for the package entire; nothing when it declares none, and nothing executes |
+| `--cost` | what became of each declaration by the time the optimizer settled — `<name>`, a tab, then `survived`, `specialized <n>` or `absorbed` — one row per line, ordered by name. Nothing is judged: a row states the fate and stops |
+| `--stage <STAGE>` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses, and is written where it is reached, so nothing a later stage does unmakes it: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 2 when written goals alone stopped it and 1 otherwise |
+| `--at <LINE>:<COLUMN>` | the name written at a place of the subject's file, as one row: the path its declaration is declared at, what it is declared as — `definition`, `inductive`, `constructor`, `structure`, `concept`, `method`, `witness` or `test` — and where the declaration's name is written, as `<file>:<line>:<column>`, a tab between each. Beneath the row, a blank line before each, come the declaration's head as its author wrote it and the prose above it, where it has any. Nothing where no name stands. A place is written as a diagnostic prints one, a line and a column each counted from one |
+| `--declarations` | every definition the subject's file declares, one such row per line, in the order they are written: a type's constructors after it, a concept's methods after it, and a witness under its head as it is written |
 
-No subject at all is the governing package entire for `diagnostics` and `tests`, and the sole or `default` executable for `stage` and `cost`, which both need a program and so refuse a file written as a module. For `at` and `declarations` it is that executable's entry file.
+No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--stage` and `--cost`, which both need a program and so refuse a file written as a module. For `--at` and `--declarations` it is that executable's entry file.
 
-`at` and `declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build. A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder. A declaration of the library the compiler was built with is placed where its source file still holds the text it was built from, and its row ends at what it is declared as where no file does, which is every such row under an installed compiler; its head and prose are read off the text the compiler holds of it, and are answered either way.
+`--at` and `--declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build. A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder. A declaration of the library the compiler was built with is placed where its source file still holds the text it was built from, and its row ends at what it is declared as where no file does, which is every such row under an installed compiler; its head and prose are read off the text the compiler holds of it, and are answered either way.
 
 `stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, lowered again in the asking process with no store, and `core-elab` its elaborated declarations, compiled over the store as a build compiles them. From `anf` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
 
@@ -352,6 +351,10 @@ The stages, in the order the compiler passes them:
 | `cps-optm` | the program in continuation-passing style, after optimization |
 | `wasm` | the emitted WebAssembly module |
 | `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
+
+## `server`
+
+`curios server` is what an editor integration launches: the language server protocol, on standard input and output. It publishes a document's diagnostics as the document is edited, and every open document's when one is saved, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what that declaration states of it — its head and prose, as a hover — and what the document declares: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It answers the questions [`wonder`](#wonder) answers, asked over a protocol, so its grammar holds no subject: an editor hands it its documents, and a word after the command is refused as any argument nothing reads is.
 
 ## `profile`
 
@@ -476,9 +479,9 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | --- | --- |
 | `0` | compiled, and for `run`, the program itself exited 0 |
 | `1` | a hard error, alone or beside written goals; a command line that does not parse; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
-| `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder stage`, `cost` and `tests` too, when goals alone kept them from answering |
+| `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder --stage`, `--cost` and `--tests` too, when goals alone kept them from answering |
 
-A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder diagnostics`](#wonder), or runs the executable [`compile`](#compile) wrote.
+A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder`](#wonder), or runs the executable [`compile`](#compile) wrote.
 
 `run --target browser` serves until it is stopped, so it ends by the signal that stops it, or with `1` before it serves: a page that cannot be built, a port that is taken. `test --target browser` serves until every selected test has a verdict, then exits as `test` exits, and ends with `1` before it serves for the same reasons.
 
@@ -486,7 +489,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 
 ## Flags
 
-`--budget` and `--manifest` belong to the commands that read them, so they follow the command: `curios run --budget 200000000 serve`, `curios wonder diagnostics --manifest ../app/curios.toml`.
+`--budget` and `--manifest` belong to the commands that read them, so they follow the command: `curios run --budget 200000000 serve`, `curios wonder --manifest ../app/curios.toml`.
 
 | Flag | Taken by | Effect |
 | --- | --- | --- |
@@ -514,7 +517,7 @@ Standard input is asked for rather than assumed. A bare `curios run` already mea
 
 One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 
-Text written as a module — items with no final term — is checked as one, as a file written as a module is: `wonder diagnostics`, `wonder tests`, `lint` and `test` answer it as a unit of its own mounted at `/stdin`, since standard input has no stem to mount it at, and `run`, `compile`, `wonder stage` and `wonder cost`, which need a program, refuse it as written as a module.
+Text written as a module — items with no final term — is checked as one, as a file written as a module is: `wonder`, `wonder --tests`, `lint` and `test` answer it as a unit of its own mounted at `/stdin`, since standard input has no stem to mount it at, and `run`, `compile`, `wonder --stage` and `wonder --cost`, which need a program, refuse it as written as a module.
 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 
@@ -554,7 +557,7 @@ An edit anywhere the program was built from is a miss, and so is a damaged or ha
 
 A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
-A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`wonder server`](#wonder) says it once a session, in a log message to its client.
+A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`server`](#server) says it once a session, in a log message to its client.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

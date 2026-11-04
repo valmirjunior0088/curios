@@ -13,7 +13,7 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
 
     let answered = curios(
         &root,
-        &["wonder", "diagnostics", "-"],
+        &["wonder", "-"],
         "let m : /std/Nat = ?;\n/std/print(\"\")\n",
     );
 
@@ -33,11 +33,7 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
 fn a_bare_manifest_override_names_the_working_directory() {
     let root = project("manifest-override");
 
-    let answered = curios(
-        &root,
-        &["wonder", "diagnostics", "--manifest", "curios.toml"],
-        "",
-    );
+    let answered = curios(&root, &["wonder", "--manifest", "curios.toml"], "");
 
     assert!(
         answered.status.success(),
@@ -52,12 +48,12 @@ fn a_bare_manifest_override_names_the_working_directory() {
 fn a_file_is_placed_in_its_unit() {
     let root = project("placed");
 
-    let executable = curios(&root, &["wonder", "diagnostics", "app.crs"], "");
+    let executable = curios(&root, &["wonder", "app.crs"], "");
     assert!(executable.status.success());
     assert_eq!(stdout(&executable), "", "the executable sees its library");
 
     write(&root, "util.crs", "pub let word : /std/Str = 1;\n");
-    let module = curios(&root, &["wonder", "diagnostics", "util.crs"], "");
+    let module = curios(&root, &["wonder", "util.crs"], "");
     assert!(module.status.success(), "an error is still an answer");
     let text = stdout(&module);
     assert!(text.contains("type mismatch"), "{text}");
@@ -85,7 +81,7 @@ fn every_question_about_a_file_no_unit_declares_names_what_its_form_is_declared_
             )
         };
 
-        for question in [&["wonder", "diagnostics", file][..], &["lint", file]] {
+        for question in [&["wonder", file][..], &["lint", file]] {
             let answered = stdout(&curios(&root, question, ""));
             assert!(
                 answered.starts_with(&said("was checked")),
@@ -93,12 +89,12 @@ fn every_question_about_a_file_no_unit_declares_names_what_its_form_is_declared_
             );
         }
 
-        let listed = stderr(&curios(&root, &["wonder", "tests", file], ""));
+        let listed = stderr(&curios(&root, &["wonder", "--tests", file], ""));
         assert!(listed.starts_with(&said("was checked")), "{listed}");
 
         for question in [
-            &["wonder", "stage", "text", file][..],
-            &["wonder", "cost", file],
+            &["wonder", "--stage", "text", file][..],
+            &["wonder", "--cost", file],
         ] {
             let answered = stderr(&curios(&root, question, ""));
             assert!(
@@ -115,7 +111,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     let root = project("undeclared");
     write(&root, "stray.crs", "pub let w : /std/Str = 1;\n");
 
-    let cold = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    let cold = curios(&root, &["wonder", "stray.crs"], "");
     assert!(cold.status.success());
     let text = stdout(&cold);
     assert!(
@@ -139,7 +135,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let warm = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    let warm = curios(&root, &["wonder", "stray.crs"], "");
     assert!(
         stdout(&warm).contains("is in no unit of `/app`"),
         "{}",
@@ -147,7 +143,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     );
 
     write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
-    let declared = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    let declared = curios(&root, &["wonder", "stray.crs"], "");
     let text = stdout(&declared);
     assert!(!text.contains("is in no unit"), "{text}");
     assert!(
@@ -163,13 +159,13 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     fs::create_dir_all(&root).unwrap();
     let module = "pub let w : /std/Str = 1;\n";
 
-    let answered = curios(&root, &["wonder", "diagnostics", "-"], module);
+    let answered = curios(&root, &["wonder", "-"], module);
     assert!(answered.status.success());
     let text = stdout(&answered);
     assert!(text.contains("while elaborating w"), "{text}");
     assert!(text.contains("--> <stdin>:1:24"), "{text}");
 
-    let staged = curios(&root, &["wonder", "stage", "core", "-"], module);
+    let staged = curios(&root, &["wonder", "--stage", "core", "-"], module);
     let refusal = String::from_utf8_lossy(&staged.stderr);
     assert_eq!(staged.status.code(), Some(1), "{refusal}");
     assert!(staged.stdout.is_empty());
@@ -190,11 +186,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     write(&root, "my-file.crs", module);
     write(&root, "myfile.crs", module);
 
-    let refused = stdout(&curios(
-        &root,
-        &["wonder", "diagnostics", "my-file.crs"],
-        "",
-    ));
+    let refused = stdout(&curios(&root, &["wonder", "my-file.crs"], ""));
     assert!(
         refused.contains(
             "my-file.crs is written as a module, with no final term, and its stem `my-file` is no name a module can take"
@@ -203,7 +195,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     );
     assert!(!refused.contains("expected a term"), "{refused}");
 
-    let named = stdout(&curios(&root, &["wonder", "diagnostics", "myfile.crs"], ""));
+    let named = stdout(&curios(&root, &["wonder", "myfile.crs"], ""));
     assert_eq!(named, "");
 }
 
@@ -217,7 +209,7 @@ fn a_place_answers_the_name_written_there() {
         "--- The word a run prints.\npub let word : /std/Str = \"placed\";\n",
     );
 
-    let answered = curios(&root, &["wonder", "at", "1:20", "app.crs"], "");
+    let answered = curios(&root, &["wonder", "--at", "1:20", "app.crs"], "");
 
     assert!(
         answered.status.success(),
@@ -238,7 +230,7 @@ fn a_place_answers_the_name_written_there() {
     );
 
     // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
-    let again = curios(&root, &["wonder", "at", "1:20", "app.crs"], "");
+    let again = curios(&root, &["wonder", "--at", "1:20", "app.crs"], "");
     assert_eq!(stdout(&again), answer);
 }
 
@@ -247,7 +239,7 @@ fn a_place_answers_the_name_written_there() {
 fn a_files_declarations_are_listed_and_a_place_naming_nothing_answers_nothing() {
     let root = project("declarations");
 
-    let listed = curios(&root, &["wonder", "declarations", "util.crs"], "");
+    let listed = curios(&root, &["wonder", "--declarations", "util.crs"], "");
     assert!(
         listed.status.success(),
         "{}",
@@ -261,7 +253,7 @@ fn a_files_declarations_are_listed_and_a_place_naming_nothing_answers_nothing() 
     assert_eq!(rows.lines().count(), 1, "{rows}");
 
     // The `pub` a declaration opens with names nothing.
-    let nothing = curios(&root, &["wonder", "at", "1:1", "util.crs"], "");
+    let nothing = curios(&root, &["wonder", "--at", "1:1", "util.crs"], "");
     assert!(nothing.status.success());
     assert_eq!(stdout(&nothing), "");
 }
@@ -274,7 +266,7 @@ fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
 
     let answered = curios(
         &root,
-        &["wonder", "at", "2:21", "-"],
+        &["wonder", "--at", "2:21", "-"],
         "let one: /std/Nat = true;\nlet two: /std/Nat = one;\n/std/print(\"\")\n",
     );
 
@@ -297,7 +289,7 @@ fn an_unreached_stage_leaves_stdout_empty() {
 
     let refused = curios(
         &root,
-        &["wonder", "stage", "wasm", "-"],
+        &["wonder", "--stage", "wasm", "-"],
         "let m : /std/Nat = true;\n/std/print(\"\")\n",
     );
 
@@ -314,9 +306,9 @@ fn a_question_stopped_by_goals_alone_exits_two() {
     let program = "let n : /std/Nat = ?;\n/std/print(\"\")\n";
 
     for query in [
-        &["wonder", "stage", "wasm", "-"][..],
-        &["wonder", "cost", "-"],
-        &["wonder", "tests", "-"],
+        &["wonder", "--stage", "wasm", "-"][..],
+        &["wonder", "--cost", "-"],
+        &["wonder", "--tests", "-"],
     ] {
         let stopped = curios(&root, query, program);
         assert_eq!(
@@ -329,6 +321,6 @@ fn a_question_stopped_by_goals_alone_exits_two() {
         assert!(stopped.stdout.is_empty(), "{}", query.join(" "));
     }
 
-    let answered = curios(&root, &["wonder", "diagnostics", "-"], program);
+    let answered = curios(&root, &["wonder", "-"], program);
     assert_eq!(answered.status.code(), Some(0));
 }

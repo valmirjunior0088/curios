@@ -404,7 +404,7 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     );
 
     // The package entire: the library's tests, then each executable's, in declaration order — and nothing executes, so the authored entry never prints.
-    let whole = curios(&root, &["wonder", "tests"]);
+    let whole = curios(&root, &["wonder", "--tests"]);
     assert_eq!(
         stdout(&whole),
         "/app/lib_first\n/app/lib_second\n/app_holds\n",
@@ -414,12 +414,12 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     assert_eq!(whole.status.code(), Some(0));
 
     // An executable by name lists its own alone.
-    let executable = curios(&root, &["wonder", "tests", "app"]);
+    let executable = curios(&root, &["wonder", "--tests", "app"]);
     assert_eq!(stdout(&executable), "/app_holds\n");
     assert_eq!(executable.status.code(), Some(0));
 
     // A file is placed in the unit that declares it, so the library header answers as the library.
-    let file = curios(&root, &["wonder", "tests", "lib.crs"]);
+    let file = curios(&root, &["wonder", "--tests", "lib.crs"]);
     assert_eq!(stdout(&file), "/app/lib_first\n/app/lib_second\n");
     assert_eq!(file.status.code(), Some(0));
 }
@@ -435,7 +435,7 @@ fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
     write(&root, "lib.crs", "pub let zero: /std/Nat = 0;\n");
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
 
-    let output = curios(&root, &["wonder", "tests"]);
+    let output = curios(&root, &["wonder", "--tests"]);
     assert_eq!(stdout(&output), "", "stderr: {}", stderr(&output));
     assert_eq!(output.status.code(), Some(0));
 }

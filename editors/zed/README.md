@@ -10,7 +10,7 @@ The extension does not ship a compiler. It runs the one you have:
 curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
 ```
 
-That installs `curios` into `~/.local/bin`. The language server is `curios wonder server`, so the compiler you build with is the compiler whose diagnostics you see, and updating the compiler updates the server.
+That installs `curios` into `~/.local/bin`. The language server is `curios server`, so the compiler you build with is the compiler whose diagnostics you see, and updating the compiler updates the server.
 
 ## Where it looks for the compiler
 
@@ -54,7 +54,7 @@ The grammar is fetched from the `rev` named in `extension.toml`, not from your w
 
 ### The server is the compiler, and the extension fetches nothing
 
-**Decision.** The language server is the `curios` binary itself, `curios wonder server`, found as "Where it looks for the compiler" states. The extension downloads nothing and pins no version, and where it finds no binary it hands back the one-line installer.
+**Decision.** The language server is the `curios` binary itself, `curios server`, found as "Where it looks for the compiler" states. The extension downloads nothing and pins no version, and where it finds no binary it hands back the one-line installer.
 
 **Rationale.** The compiler on the user's `PATH` is then the one whose diagnostics they see, and installing Curios installs the server.
 
