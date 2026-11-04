@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Subterm, Term, UniverseMetaId},
+    curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Sort, Subterm, Term, UniverseMetaId},
 };
 
 /// A pair of `base` with itself, sixty levels deep: a value no reduction looks inside.
@@ -122,7 +122,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         ),
         (
             "the sort of a type",
-            Sort::of(
+            sort_of(
                 &mut context,
                 &doubled_record(Term::intrinsic(Intrinsic::NatType)),
             )

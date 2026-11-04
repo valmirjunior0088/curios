@@ -1,13 +1,14 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, Mode, Occurrence, Sort, check, check_is_sort, elaborate, expect, pending,
+        Context, Error, Mode, Occurrence, check, check_is_sort, elaborate, expect, pending,
         reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_common::Plicity,
     curios_core::{
-        Bound, Extent, Field, InductType, Level, Proj, Quality, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, Variant, instantiate_universes, stamp_declaration_instance,
+        Bound, Extent, Field, InductType, Level, Proj, Quality, Sort, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Variant, instantiate_universes,
+        stamp_declaration_instance,
     },
     std::collections::BTreeSet,
 };
@@ -113,7 +114,7 @@ pub fn elaborate_tuple(
         }
         _ => {
             // `()` where a universe is expected is the unit value written for the unit type.
-            let unit_for_a_type = fields.is_empty() && matches!(&*reduced, Subterm::Sort(..));
+            let unit_for_a_type = fields.is_empty() && matches!(&*reduced, Subterm::Sort(_));
             return Err(Error::not_a_tuple_type(expected.clone(), unit_for_a_type));
         }
     };

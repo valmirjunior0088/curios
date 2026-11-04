@@ -289,7 +289,7 @@ fn checked_type_positions(
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
         let type_ = zonked(context, cache, &type_)?;
         // The term *is* a type exactly when its own type is a sort. An instance head is a variable or a projection, never a sort, so a wrapped type is not one.
-        let sort = matches!(&*type_, Subterm::Sort(..));
+        let sort = matches!(&*type_, Subterm::Sort(_));
         if sort {
             positions.push(Position {
                 term: zonked(context, cache, &term)?,
@@ -467,7 +467,7 @@ fn locally_partial(
             ControlFlow::Continue(Enter::Descend)
         },
         |state, term, mut children| {
-            let partial = matches!(&**term, Subterm::Foreign(function, _, _) if function.diverges())
+            let partial = matches!(&**term, Subterm::Foreign(curios_core::Foreign { function, .. }) if function.diverges())
                 || children.any(|child| child);
             state.1.insert(term.clone(), partial);
             partial

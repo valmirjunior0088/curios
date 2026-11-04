@@ -185,7 +185,10 @@ impl<'s> Eraser<'s> {
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
             &*reduced(context, &induct_decl.result_sort)?,
-            curios_core::Subterm::Sort(curios_core::Quality::Prop, _)
+            curios_core::Subterm::Sort(curios_core::Sort {
+                quality: curios_core::Quality::Prop,
+                level: _
+            })
         );
         let mut constructors = Vec::new();
         // In declaration order, which is runtime-tag order, each constructor read where the walk stands rather than looked up by its tag again.

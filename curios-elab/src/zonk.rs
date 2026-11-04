@@ -12,7 +12,7 @@ use {
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
         Extent, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic,
         Item, Let, LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec,
-        RecItem, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        RecItem, Sort, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
         Universes, Var, Variant, Visit, project_erased_universes,
     },
     std::{
@@ -353,13 +353,19 @@ impl<'a> Zonk<'a> {
 
     fn zonk_subterm(&self, term: &Term) -> Result<Subterm, Error> {
         Ok(match &**term {
-            Subterm::Sort(quality, level) => Subterm::Sort(
-                self.universes().quality(*quality),
-                self.universes().zonk(level).map_err(Error::from)?,
-            ),
-            Subterm::Foreign(function, declared, args) => {
-                Subterm::Foreign(Arc::clone(function), *declared, self.zonk_terms(args)?)
-            }
+            Subterm::Sort(Sort { quality, level }) => Subterm::Sort(Sort {
+                quality: self.universes().quality(*quality),
+                level: self.universes().zonk(level).map_err(Error::from)?,
+            }),
+            Subterm::Foreign(curios_core::Foreign {
+                function,
+                declared,
+                arguments: args,
+            }) => Subterm::Foreign(curios_core::Foreign {
+                function: Arc::clone(function),
+                declared: *declared,
+                arguments: self.zonk_terms(args)?,
+            }),
             Subterm::Var(var) => Subterm::Var(var.clone()),
             Subterm::Instance(instance) => Subterm::Instance(Instance {
                 // A name holds nothing to zonk.

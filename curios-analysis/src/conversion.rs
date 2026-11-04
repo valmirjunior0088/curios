@@ -24,8 +24,8 @@ use {
     curios_algebra::{Carrier, Conclusion},
     curios_common::SyntaxRegistry,
     curios_core::{
-        Aligned, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm, Term,
-        Universes, Var, Visit, align_comparisons, decide_bool, foreign_operands,
+        Aligned, Foreign, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
+        Term, Universes, Var, Visit, align_comparisons, decide_bool, foreign_operands,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
         peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
@@ -87,8 +87,16 @@ pub fn foreign_congruence(
     syntax: &SyntaxRegistry,
 ) -> Option<Vec<Obligation>> {
     let (
-        Subterm::Foreign(function, this_declared, this_operands),
-        Subterm::Foreign(_, that_declared, that_operands),
+        Subterm::Foreign(Foreign {
+            function,
+            declared: this_declared,
+            arguments: this_operands,
+        }),
+        Subterm::Foreign(Foreign {
+            declared: that_declared,
+            arguments: that_operands,
+            ..
+        }),
     ) = (&**this, &**that)
     else {
         return None;

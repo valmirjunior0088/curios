@@ -11,7 +11,7 @@ use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
     curios_common::recurse,
-    curios_core::{Free, Names, Quality, Subterm, Telescope, Term, peel_intrinsic},
+    curios_core::{Free, Names, Quality, Sort, Subterm, Telescope, Term, peel_intrinsic},
     std::collections::{BTreeSet, HashMap},
 };
 
@@ -178,7 +178,7 @@ fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Resu
     let forced = judge.force(&type_)?;
 
     match &*forced {
-        Subterm::Sort(..) => judge.sort_below(value, &forced),
+        Subterm::Sort(_) => judge.sort_below(value, &forced),
         _ => Ok(true),
     }
 }
@@ -372,7 +372,13 @@ impl<'f> Unifier<'f> {
                 let Some(declaration) = judge.induct_decl(&a.name) else {
                     return Ok(Step::Refuse);
                 };
-                if matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
+                if matches!(
+                    &*declaration.result_sort,
+                    Subterm::Sort(Sort {
+                        quality: Quality::Prop,
+                        level: _
+                    })
+                ) {
                     return Ok(Step::Ok);
                 }
                 if a.tag != t.tag {

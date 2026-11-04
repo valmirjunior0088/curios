@@ -3,7 +3,7 @@
 use {
     crate::convert::test_support::*,
     crate::*,
-    curios_core::{Level, MetavarId, Quality, Subterm, Term},
+    curios_core::{Level, MetavarId, Quality, Sort, Subterm, Term},
     std::collections::BTreeSet,
 };
 
@@ -117,7 +117,10 @@ fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of
         context
             .metavar_solution(MetavarId(0))
             .map(|solution| &**solution),
-        Some(Subterm::Sort(Quality::Prop, _))
+        Some(Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level: _
+        }))
     ));
     assert!(matches!(
         subsume_outcome(&mut context, &large, &Term::hole(0), None),

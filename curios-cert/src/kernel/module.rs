@@ -351,15 +351,19 @@ pub(crate) fn check_induct_decl(
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
 ///
-/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Sort(Quality::Prop, _)` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
+/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Sort(curios_core::Sort { quality: Quality::Prop, level: _ })` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
 ///
 /// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
 fn check_declared_sort(result_sort: &Term) -> Result<(), Error> {
     match &**result_sort {
-        Subterm::Sort(Quality::Prop | Quality::Type, _) => Ok(()),
-        Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
-            Err(Error::OpenSort(result_sort.clone()))
-        }
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Prop | Quality::Type,
+            level: _,
+        }) => Ok(()),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Param(_) | Quality::Meta(_),
+            level: _,
+        }) => Err(Error::OpenSort(result_sort.clone())),
         _ => Err(Error::NotASort(result_sort.clone())),
     }
 }
@@ -535,7 +539,10 @@ pub(crate) fn check_struct_decl(
 fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), Error> {
     if !matches!(
         &*kernel.reduce_forced(declaration.result_sort.clone())?,
-        Subterm::Sort(Quality::Prop, _)
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Prop,
+            level: _
+        })
     ) {
         return Ok(());
     }
@@ -570,7 +577,10 @@ fn check_signature<B: Bound + Clone>(
         let result = kernel.reduce_forced(result_sort.clone())?;
         // A result that is no sort imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result is.
         let sized = match &*result {
-            Subterm::Sort(_, bound) => Some((bound.clone(), bound.checked_add(1)?)),
+            Subterm::Sort(curios_core::Sort {
+                quality: _,
+                level: bound,
+            }) => Some((bound.clone(), bound.checked_add(1)?)),
             _ => None,
         };
 

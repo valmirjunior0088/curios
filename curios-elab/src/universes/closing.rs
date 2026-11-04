@@ -84,7 +84,7 @@ pub fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<Unive
 
     let mut domains = Vec::new();
     let terminal = peel(type_, &mut domains);
-    if !matches!(&**terminal, Subterm::Sort(..)) {
+    if !matches!(&**terminal, Subterm::Sort(_)) {
         return BTreeSet::new();
     }
     let mut result = context.universe_metas_in(terminal);

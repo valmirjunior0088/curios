@@ -269,7 +269,7 @@ fn holds_a_host_call(term: &Term) -> bool {
     term.try_walk(
         &mut seen,
         |seen: &mut HashSet<Term>, term| match &**term {
-            Subterm::Foreign(..) => ControlFlow::Break(()),
+            Subterm::Foreign(_) => ControlFlow::Break(()),
             _ if !seen.insert(term.clone()) => ControlFlow::Continue(Enter::Skip(())),
             _ => ControlFlow::Continue(Enter::Descend),
         },
@@ -866,7 +866,7 @@ fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
                     while let Telescope::Cons(_, type_, rest, ..) = telescope {
                         if rest.binds_proof(0) {
                             counter.set(counter.get() + 1);
-                            if matches!(&**type_, Subterm::Sort(..)) {
+                            if matches!(&**type_, Subterm::Sort(_)) {
                                 sink.borrow_mut().push(term.clone());
                             }
                         }

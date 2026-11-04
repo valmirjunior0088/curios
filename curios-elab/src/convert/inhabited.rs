@@ -1,8 +1,8 @@
 //! Whether a type has one inhabitant by its shape, which conversion reads where eta cannot be fired: between two neutrals at a nominal struct, and at the type a lookup gives two sides their position handed none.
 
 use {
-    super::{Binders, Opened, Sort, instantiate_bound_at},
-    crate::{Context, reduce_forced},
+    super::{Binders, Opened, instantiate_bound_at},
+    crate::{Context, is_prop_to, reduce_forced, sort_of_under},
     curios_analysis::struct_reaches_itself,
     curios_common::recurse,
     curios_core::{
@@ -44,11 +44,13 @@ fn inhabited_once(
         context.spend(Cost::STEP)?;
 
         let at = reduce_forced(context, type_.clone())?;
-        let proposition =
-            |context: &mut Context, opened: &mut Opened| {
-                Ok(Sort::of_under(context, binders, opened, &at)?
-                    .is_prop_to(context, "one_inhabitant"))
-            };
+        let proposition = |context: &mut Context, opened: &mut Opened| {
+            Ok(is_prop_to(
+                &sort_of_under(context, binders, opened, &at)?,
+                context,
+                "one_inhabitant",
+            ))
+        };
 
         match &*at {
             Subterm::FuncType(FuncType { telescope, .. }) => {

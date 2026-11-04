@@ -204,7 +204,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
     Some(match curios_core::Term::unwrap_or_clone(term) {
         // A level is implicit in the surface and settles by where the word stands, so a sort is its word.
-        Core::Sort(quality, _) => match quality {
+        Core::Sort(curios_core::Sort { quality, .. }) => match quality {
             curios_core::Quality::Type => Subterm::Type.into(),
             curios_core::Quality::Prop => Subterm::Prop.into(),
             curios_core::Quality::Param(_) | curios_core::Quality::Meta(_) => Subterm::Sort.into(),
@@ -218,7 +218,11 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             recurse(|| written_intrinsic(form, &frame))?
         }
         // A call across the wire reads as a call of its declaration, the type a row that does not return is handed under its mark. A row of no operand is still called.
-        Core::Foreign(function, declared, mut arguments) => {
+        Core::Foreign(curios_core::Foreign {
+            function,
+            declared,
+            mut arguments,
+        }) => {
             let explicits = arguments.split_off(usize::from(function.diverges()));
 
             apply(

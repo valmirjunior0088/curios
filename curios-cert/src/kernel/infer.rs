@@ -31,9 +31,10 @@ use {
     crate::{foreign_signature, hold_proof, spine},
     curios_common::recurse,
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
-        LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer, Scope,
-        Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
+        Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
+        Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer,
+        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
+        Variant,
     },
     curios_num::{Binary, Natural},
     std::convert::Infallible,
@@ -94,15 +95,23 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
     match &**term {
         // `Type u : Type (u + 1)`, and `Prop : Type 0`. The hierarchy is what makes `Type : Type` — and Girard's paradox with it — unstatable.
-        Subterm::Sort(Quality::Type | Quality::Prop, level) => Ok(Term::type_at(level.succ()?)),
-        Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
-            Err(Error::OpenSort(term.clone()))
-        }
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Type | Quality::Prop,
+            level,
+        }) => Ok(Term::type_at(level.succ()?)),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Param(_) | Quality::Meta(_),
+            level: _,
+        }) => Err(Error::OpenSort(term.clone())),
 
         Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
         // A host call described by its ABI row, typed through the same walk an intrinsic is: each operand checks against what `foreign_signature` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — is read off the same row. The row, not this crate, states the signature.
-        Subterm::Foreign(function, _, args) => {
+        Subterm::Foreign(Foreign {
+            function,
+            arguments: args,
+            ..
+        }) => {
             let syntax = kernel.syntax();
             let signature =
                 foreign_signature(function, args, &syntax, |label| kernel.fresh(Some(label)));
@@ -1090,7 +1099,16 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
 
     match (&*lower, &*upper) {
         // Each sort is cumulative in its own levels, and neither stands for the other.
-        (Subterm::Sort(below, lower), Subterm::Sort(above, upper)) if below == above => {
+        (
+            Subterm::Sort(curios_core::Sort {
+                quality: below,
+                level: lower,
+            }),
+            Subterm::Sort(curios_core::Sort {
+                quality: above,
+                level: upper,
+            }),
+        ) if below == above => {
             return Ok(kernel.level_leq(lower, upper));
         }
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.

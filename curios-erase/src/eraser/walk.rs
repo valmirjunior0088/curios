@@ -286,7 +286,11 @@ impl<'s> Eraser<'s> {
                 self.erase_intrinsic(context, intrinsic, hint)
             }
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
-            curios_core::Subterm::Foreign(function, _, arguments) => {
+            curios_core::Subterm::Foreign(curios_core::Foreign {
+                function,
+                arguments,
+                ..
+            }) => {
                 let signature = function.signature();
                 let results = signature.returns.types();
                 // An option crosses as its element's list would, so one the row takes or answers is converted beside the call, at the instance the row states for it.
@@ -341,7 +345,7 @@ impl<'s> Eraser<'s> {
                 )))
             }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
-            curios_core::Subterm::Sort(..)
+            curios_core::Subterm::Sort(_)
             | curios_core::Subterm::FuncType(_)
             | curios_core::Subterm::TupleType(_)
             | curios_core::Subterm::InductType(_)

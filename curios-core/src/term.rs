@@ -293,7 +293,10 @@ impl Term {
                 if !seen.insert(Rc::as_ptr(&term.inner)) || !term.has_universe_meta() {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
-                if let Subterm::Sort(Quality::Meta(meta), _) = term.look()
+                if let Subterm::Sort(Sort {
+                    quality: Quality::Meta(meta),
+                    level: _,
+                }) = term.look()
                     && pred(*meta)
                 {
                     return ControlFlow::Break(());
@@ -452,7 +455,10 @@ impl Term {
             // Swapped out rather than moved out: [`Node`] dismantles itself on drop, and a type with a `Drop` impl cannot have a field moved away. The husk left behind is childless, so dropping it is free.
             Ok(mut node) => mem::replace(
                 &mut node.subterm,
-                Subterm::Sort(Quality::Prop, Level::zero()),
+                Subterm::Sort(Sort {
+                    quality: Quality::Prop,
+                    level: Level::zero(),
+                }),
             ),
             Err(shared) => shared.subterm.clone(),
         }
@@ -762,7 +768,10 @@ impl Term {
 
     /// `Type` at a known internal level.
     pub fn type_at(level: Level) -> Self {
-        Self::from(Subterm::Sort(Quality::Type, level))
+        Self::from(Subterm::Sort(Sort {
+            quality: Quality::Type,
+            level,
+        }))
     }
 
     /// Ground `Prop 0`, the level of a decided proposition.
@@ -772,12 +781,15 @@ impl Term {
 
     /// `Prop` at a known internal level.
     pub fn prop_at(level: Level) -> Self {
-        Self::from(Subterm::Sort(Quality::Prop, level))
+        Self::from(Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level,
+        }))
     }
 
     /// The sort of `quality` at a known internal level: [`Term::type_at`] and [`Term::prop_at`] for the two a program writes, and the one spelling of a sort whose quality is open.
     pub fn sort_at(quality: Quality, level: Level) -> Self {
-        Self::from(Subterm::Sort(quality, level))
+        Self::from(Subterm::Sort(Sort { quality, level }))
     }
 
     /// An intrinsic term — any literal or intrinsic operation that converts into [`Intrinsic`].
@@ -787,7 +799,11 @@ impl Term {
 
     /// A host call against the ABI row `function` describes, which the `foreign` declaration `declared` states.
     pub fn foreign(function: Arc<ForeignFunction>, declared: Global, args: Vec<Term>) -> Self {
-        Self::from(Subterm::Foreign(function, declared, args))
+        Self::from(Subterm::Foreign(Foreign {
+            function,
+            declared,
+            arguments: args,
+        }))
     }
 
     /// A variable occurrence. External callers can only build free variables ([`Var::free`]); bound ones are the scope machinery's business.
@@ -1430,7 +1446,13 @@ impl Term {
 ///
 /// Every child is cloned into `work` *before* the old value is released, so releasing it can only decrement — the reference `work` now holds is what stops the drop cascading. What is left behind is `Prop`: no children, and no allocation, because it is a variant with no payload.
 fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
-    let detached = mem::replace(subterm, Subterm::Sort(Quality::Prop, Level::zero()));
+    let detached = mem::replace(
+        subterm,
+        Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level: Level::zero(),
+        }),
+    );
     // A spine is persistent and shared between the occurrences born under one scope: dropped whole, it lowers one count, and releases its entries itself where it held the last, each entry's own drop being this walk. Handed on entry by entry, it would cost every dropped occurrence the scope it was born in.
     if let Subterm::Metavar(_) = detached {
         return;
@@ -2214,8 +2236,14 @@ impl Term {
 
             match (this.look(), that.look()) {
                 (
-                    Subterm::Sort(this_quality, this_level),
-                    Subterm::Sort(that_quality, that_level),
+                    Subterm::Sort(Sort {
+                        quality: this_quality,
+                        level: this_level,
+                    }),
+                    Subterm::Sort(Sort {
+                        quality: that_quality,
+                        level: that_level,
+                    }),
                 ) => {
                     if !renaming.qualities_equal(*this_quality, *that_quality)
                         || !renaming.levels_equal(this_level, that_level)

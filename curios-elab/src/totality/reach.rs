@@ -134,7 +134,7 @@ fn ends_in_sort(type_: &Term) -> bool {
     let mut current = type_.clone();
     loop {
         let next = match &*current {
-            Subterm::Sort(..) => return true,
+            Subterm::Sort(_) => return true,
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut telescope = telescope;
                 loop {

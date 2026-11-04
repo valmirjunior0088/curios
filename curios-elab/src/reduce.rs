@@ -23,7 +23,7 @@ use {
     super::{
         Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
     },
-    crate::{Error, Sort, classing, convert_at, is_prop, reduce_with, same_uncommitted},
+    crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted, sort_of},
     curios_analysis::{
         Answered, Classes, Driver, ScrutineeRead, Within, answers, answers_classed,
         apart_in_instance, atoms_within, case_target_indices, could_reduce_to, holds_no_type,
@@ -35,11 +35,11 @@ use {
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
         Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
         Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Quality,
-        Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Var,
-        Variant, Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
-        project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
-        weak_head_value,
+        Rec, RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        Universes, Var, Variant, Visit, accelerable, eta_head, instantiate_universes,
+        probe_spellings, project_erased_universes, project_literal, reduce_closed,
+        reduce_intrinsic, weak_head_value,
     },
     std::{
         cell::OnceCell,
@@ -203,12 +203,16 @@ impl curios_analysis::Judge for Context<'_> {
 
     /// Classified as the kernel's lookup classifies it, the two sorts held to one quality: a quality left to a caller or to inference fits only itself, which is what the kernel finds at each assignment it judges the declaration at. The levels are this checker's to infer: the relation the answer needs is recorded where the store stays consistent with it (`UniverseSolver::settle_leq`), so the declaration's scheme states it and the kernel, which decides under that scheme, answers alike.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error> {
-        let Subterm::Sort(quality, upper) = &*reduce_with(self, universe)? else {
+        let Subterm::Sort(Sort {
+            quality,
+            level: upper,
+        }) = &*reduce_with(self, universe)?
+        else {
             return Ok(false);
         };
         let above = self.universes().quality(*quality);
         let upper = upper.clone();
-        let below = Sort::of(self, type_).map_err(|error| {
+        let below = sort_of(self, type_).map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)
             })
@@ -571,7 +575,13 @@ fn stated(context: &mut Context, instance: &Term, tag: &Atom) -> Result<Said, Re
     else {
         return Ok(Said::Silent);
     };
-    if !matches!(&*result_sort, Subterm::Sort(Quality::Prop, _)) {
+    if !matches!(
+        &*result_sort,
+        Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level: _
+        })
+    ) {
         return Ok(Said::Silent);
     }
     // Left to the ordinary rule, such a match would have its proof reduced to a constructor, which no judgment reads.

@@ -29,8 +29,8 @@ use {
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, Definitions, Entrypoint, Free,
         FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Names,
-        Nominal, Order, Places, Quality, RecItem, Revised, StructDecl, Subterm, Telescope, Term,
-        Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
+        Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
         stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
@@ -48,7 +48,11 @@ fn size_domains(
     result_sort: &Term,
     kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
-    let Subterm::Sort(_, result_level) = &*reduce_with(context, result_sort)? else {
+    let Subterm::Sort(Sort {
+        quality: _,
+        level: result_level,
+    }) = &*reduce_with(context, result_sort)?
+    else {
         return Ok(());
     };
     let result_level = result_level.clone();
@@ -319,7 +323,10 @@ fn elaborate_struct(
 
     let declared_prop = matches!(
         &*reduce_with(context, &struct_decl.result_sort)?,
-        Subterm::Sort(Quality::Prop, _)
+        Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level: _
+        })
     );
 
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.

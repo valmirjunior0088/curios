@@ -7,7 +7,7 @@
 //! **A name the item declares is the one binder its terms do not hold.** It is asked here with them, at its declared type, and the answer is kept on its definition ([`curios_core::Definition::proof`]): a proof a declaration wrote is bound, from its publication on, to a body no judgment unfolds it to. That mark does decide a judgment, which a binder's never does, since a name that does not unfold is a constant to conversion. It refuses nothing a body unfolded would admit, because conversion holds two proofs of one proposition equal before it reduces either.
 
 use {
-    crate::{Context, Error, Opened, Published, Sort, is_proof_in},
+    crate::{Context, Error, Opened, Published, is_proof_in, sort_of},
     curios_core::{
         Advance, Bound, Definition, DefinitionKind, Free, Item, ProofBinders, Quality, Subterm,
         Telescope, Term,
@@ -87,10 +87,10 @@ fn proves(context: &mut Context, kind: &DefinitionKind, type_: &Term) -> Result<
 ///
 /// The type is read as written, never reduced: every definition is asked, and running each type to learn it is no sort would spend on all of them what only a type alias reads back.
 fn value_sort(context: &mut Context, definition: &Definition) -> Result<Option<Term>, Error> {
-    if definition.proof || !matches!(&*definition.type_, Subterm::Sort(..)) {
+    if definition.proof || !matches!(&*definition.type_, Subterm::Sort(_)) {
         return Ok(None);
     }
-    let sort = Sort::of(context, &definition.body).map_err(|error| {
+    let sort = sort_of(context, &definition.body).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(definition.body.clone(), refusal)
         })

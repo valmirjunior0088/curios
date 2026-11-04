@@ -62,9 +62,9 @@ fn former(parent: &Subterm) -> Option<Former> {
         // Written as a call of its constructor, which reduction rebuilds as this node: the contexts under an application are the ones that reach it.
         Subterm::Variant(_) => None,
         // A local recursive group and a host call: `tests::recursion` and `tests::host` hold what conversion makes of them.
-        Subterm::Rec(_) | Subterm::Foreign(..) => None,
+        Subterm::Rec(_) | Subterm::Foreign(_) => None,
         // No term beneath it.
-        Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) => None,
+        Subterm::Sort(_) | Subterm::Var(_) | Subterm::Instance(_) => None,
         // No part of a finished term.
         Subterm::Metavar(_) | Subterm::Transient(_) => None,
     }

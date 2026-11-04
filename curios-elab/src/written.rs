@@ -51,7 +51,7 @@ impl Writing {
     fn term(&mut self, context: &mut Context, term: &Term) -> Term {
         if matches!(
             &**term,
-            Subterm::Var(_) | Subterm::Instance(_) | Subterm::Sort(..)
+            Subterm::Var(_) | Subterm::Instance(_) | Subterm::Sort(_)
         ) {
             return term.clone();
         }

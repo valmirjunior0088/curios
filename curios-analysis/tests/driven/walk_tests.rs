@@ -146,7 +146,7 @@ const FORMS: &[&str] = &[
 /// The forms a specimen stands for. Wildcard-free at every level a child can hang from, so a new former — a `Subterm` variant, a `Cases` kind, a carrier, a match result, an instance head, a transient — is a compile error here, and the arm it forces is where its specimen is owed.
 fn forms(term: &Term) -> Vec<&'static str> {
     match &**term {
-        Subterm::Sort(..) | Subterm::Var(_) => vec!["a leaf"],
+        Subterm::Sort(_) | Subterm::Var(_) => vec!["a leaf"],
         Subterm::Metavar(_) => vec!["a metavariable"],
         Subterm::Instance(_) => vec!["an instance of a declaration"],
         Subterm::Transient(transient) => vec![match transient {
@@ -157,7 +157,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
             Transient::NumLit(_) | Transient::Derive | Transient::Name(_) => "a leaf",
         }],
         Subterm::Intrinsic(_) => vec!["an intrinsic"],
-        Subterm::Foreign(..) => vec!["a foreign call"],
+        Subterm::Foreign(_) => vec!["a foreign call"],
         Subterm::Func(_) => vec!["a lambda"],
         Subterm::FuncType(_) => vec!["a function type"],
         Subterm::Apply(_) => vec!["an application"],

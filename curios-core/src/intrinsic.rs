@@ -7,6 +7,7 @@ pub use signature::*;
 use {
     super::{Bound, Free, Nat, Subterm, Term, Universes, Var, Visit},
     crate::Global,
+    crate::Sort,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireReturn, WireType},
     curios_common::SyntaxRegistry,
     curios_num::{Binary, Floating, Integer, Rounding},
@@ -31,7 +32,7 @@ pub fn wire_term(wire_type: &WireType, syntax: &SyntaxRegistry) -> Term {
             let universes = match &*element {
                 Subterm::Intrinsic(carrier) => match carrier.signature(syntax).produced {
                     Produced::Fixed(sort) => match &*sort {
-                        Subterm::Sort(quality, level) => Universes {
+                        Subterm::Sort(Sort { quality, level }) => Universes {
                             levels: vec![level.clone()],
                             qualities: vec![*quality],
                         },

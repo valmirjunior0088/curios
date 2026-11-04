@@ -144,7 +144,7 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
     let refused = fixture_verdicts(&lying, 1_000_000, &Globals::default(), SYNTAX);
     let held_to_the_parameters_sort = refused.iter().any(|verdict| match &verdict.error {
         Error::Mismatch { expected, .. } => {
-            verdict.name == Some(eta_former_held()) && matches!(&***expected, Subterm::Sort(..))
+            verdict.name == Some(eta_former_held()) && matches!(&***expected, Subterm::Sort(_))
         }
         _ => false,
     });

@@ -17,7 +17,7 @@ use {
     },
     curios_core::{
         Apply, Bound, Global, ImplicitOrigin, Intrinsic, Mention, Metavar, MetavarOrigin, Quality,
-        Subterm, Term, Visit,
+        Sort, Subterm, Term, Visit,
     },
     std::{
         collections::BTreeMap,
@@ -307,7 +307,17 @@ fn rejected_candidate(reporting: &mut Reporting, rejected: Rejected) -> Error {
 fn sort_decided_twice(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
     let inferred = reduce_forced(context, this.clone()).ok()?;
     let expected = reduce_forced(context, that.clone()).ok()?;
-    let (Subterm::Sort(inferred, _), Subterm::Sort(expected, _)) = (&*inferred, &*expected) else {
+    let (
+        Subterm::Sort(Sort {
+            quality: inferred,
+            level: _,
+        }),
+        Subterm::Sort(Sort {
+            quality: expected,
+            level: _,
+        }),
+    ) = (&*inferred, &*expected)
+    else {
         return None;
     };
     let universes = context.universes();
@@ -345,7 +355,11 @@ fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Op
     }
     let declared = context.metavar_entry(*id)?.result().clone();
     let declared = reduce_forced(context, declared).ok()?;
-    let Subterm::Sort(declared, _) = &*declared else {
+    let Subterm::Sort(Sort {
+        quality: declared,
+        level: _,
+    }) = &*declared
+    else {
         return None;
     };
     let declared = context.universes().quality(*declared);

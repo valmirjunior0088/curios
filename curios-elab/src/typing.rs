@@ -4,13 +4,14 @@ mod tests;
 use {
     super::{
         AwaitId, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames, Mode,
-        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort,
+        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
         Spines, Watched, answer_witness, answers_differ, callee, convert, elaborate,
         elaborate_func_settle, hold_spines, mismatch, no_witness_error, numeral_default,
         obligation_shown, pending, probe_open_sort, problem_outcome, reduce_forced, region_flex,
         resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
         synth_neutral, terms_differ, waits_as_reference, zonk_solved_term_metas,
     },
+    crate::{declared_quality, is_prop_to, sort_of, sort_of_in},
     curios_analysis::{
         Invert, RESOLVED_SPELLING_LAYERS, another_case, records_case_equation, scrutinee_solution,
         solve_indices,
@@ -18,7 +19,7 @@ use {
     curios_core::{
         Advance, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
         Many, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Names, Produced, Proj, Quality,
-        ReduceError, Scope, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
+        ReduceError, Scope, Sort, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -60,21 +61,21 @@ pub fn convert_at(
     })
 }
 
-/// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports as its type-of-a-type, so a proposition checks against `Prop`. Wraps `Sort::of`, mapping an exhausted budget to an error like the helpers above.
+/// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports as its type-of-a-type, so a proposition checks against `Prop`. Wraps `sort_of`, mapping an exhausted budget to an error like the helpers above.
 pub fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
-    Sort::of(context, type_).map(Sort::term).map_err(|error| {
+    sort_of(context, type_).map(Sort::term).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(type_.clone(), refusal)
         })
     })
 }
 
-/// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
+/// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `sort_of`, mapping an exhausted budget like the helpers above.
 pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     is_prop_in(context, &mut Opened::default(), type_, "is_prop")
 }
 
-/// [`is_prop`] under the binders a surrounding walk has opened, asked by the reader named `reader` ([`Sort::is_prop_to`]).
+/// [`is_prop`] under the binders a surrounding walk has opened, asked by the reader named `reader` ([`is_prop_to`]).
 ///
 /// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches. A seeding walk that assumed instead would invalidate them at every binder it descended through.
 fn is_prop_in(
@@ -83,8 +84,8 @@ fn is_prop_in(
     type_: &Term,
     reader: &'static str,
 ) -> Result<bool, Error> {
-    Sort::of_in(context, opened, type_)
-        .map(|sort| sort.is_prop_to(context, reader))
+    sort_of_in(context, opened, type_)
+        .map(|sort| is_prop_to(&sort, context, reader))
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)
@@ -92,12 +93,12 @@ fn is_prop_in(
         })
 }
 
-/// The quality of the sort `type_` inhabits, as far as it is solved: the one its head's declaration settles where it settles one ([`Sort::declared_quality`]), read before anything is run, and otherwise `Sort::of`'s, mapping an exhausted budget like the helpers above.
+/// The quality of the sort `type_` inhabits, as far as it is solved: the one its head's declaration settles where it settles one ([`declared_quality`]), read before anything is run, and otherwise `sort_of`'s, mapping an exhausted budget like the helpers above.
 pub fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality, Error> {
-    Sort::declared_quality(context, &Binders::default(), &Opened::default(), type_)
+    declared_quality(context, &Binders::default(), &Opened::default(), type_)
         .and_then(|declared| match declared {
             Some(quality) => Ok(quality),
-            None => Sort::of(context, type_).map(|sort| sort.quality),
+            None => sort_of(context, type_).map(|sort| sort.quality),
         })
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
@@ -146,13 +147,13 @@ pub fn is_proof_in(
     verdict
 }
 
-/// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`. A function type takes its codomain's quality, so a type whose head's declaration settles its quality ([`Sort::declared_quality`]) answers by it, a function-type alias by the sort it publishes, its domains unopened.
+/// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`. A function type takes its codomain's quality, so a type whose head's declaration settles its quality ([`declared_quality`]) answers by it, a function-type alias by the sort it publishes, its domains unopened.
 fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result<bool, Error> {
     let mut type_ = type_.clone();
     loop {
         // A proposition known by its head is one, and a type known by its head none, with nothing run to read it.
-        let declared = Sort::declared_quality(context, &Binders::default(), opened, &type_)
-            .map_err(|error| {
+        let declared =
+            declared_quality(context, &Binders::default(), opened, &type_).map_err(|error| {
                 Error::from_reduce(error, |refusal| {
                     Error::reduce_exhausted(type_.clone(), refusal)
                 })
@@ -190,7 +191,7 @@ pub fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort),
     };
 
     match &*reduce_with(context, &inferred)? {
-        Subterm::Sort(quality, level) => Ok((
+        Subterm::Sort(Sort { quality, level }) => Ok((
             rebuilt,
             Sort {
                 quality: context.universes().quality(*quality),
@@ -216,7 +217,7 @@ pub fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Ext
     let sort = synth_neutral(context, &Binders::default(), &Opened::default(), &reduced).ok()??;
 
     match &*reduce_forced(context, sort).ok()? {
-        Subterm::Sort(quality, _) => context.universes().written_decision(*quality),
+        Subterm::Sort(Sort { quality, .. }) => context.universes().written_decision(*quality),
         _ => None,
     }
 }
@@ -659,7 +660,7 @@ impl Context<'_> {
 
         let (product, parts, checked, declared) = self.standing_on(&choice.frames, |context| {
             let declared = match &*reduce_with(context, &sort)? {
-                Subterm::Sort(quality, _) => Some(context.universes().quality(*quality)),
+                Subterm::Sort(Sort { quality, .. }) => Some(context.universes().quality(*quality)),
                 _ => None,
             };
             let mut fields = Vec::with_capacity(tuple.fields.len());
@@ -1221,7 +1222,7 @@ fn retry_work(
                 // Held here, standing on the problem's frames: the sides are read through whatever solutions have landed, so the report names the actual disagreement rather than the metavariables it arrived wrapped in, and it is built standing on these frames where it is reported. A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.
                 Outcome::Mismatch(beside) => Retry::Mismatch(match &*goal.type_ {
-                    Subterm::Sort(..)
+                    Subterm::Sort(_)
                         if !(intrinsic_value(context, &goal.this)
                             || intrinsic_value(context, &goal.that)) =>
                     {

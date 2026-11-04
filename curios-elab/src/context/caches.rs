@@ -17,12 +17,12 @@ mod test_support;
 
 use {
     super::{SolutionPrefix, Solutions},
-    crate::{EveryPosition, Sort, UniverseSolver, UniverseStateToken},
+    crate::{EveryPosition, UniverseSolver, UniverseStateToken},
     curios_analysis::Classification,
     curios_common::{Entropy, Keyed},
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Free, Global, Level, LevelHead, Mention, Quality,
-        QualityMetaId, RecGroup, Sharing, Term, UniverseMetaId, lasting,
+        QualityMetaId, RecGroup, Sharing, Sort, Term, UniverseMetaId, lasting,
         rewrite_universe_qualities, substitute_universe_metas,
     },
     std::{
@@ -122,9 +122,9 @@ pub struct Caches {
     /// What classifying each stuck operation found (`curios_analysis::Classification`), by the operation as reduction left it, for the stuck fold above it to extend rather than walk the operation again. One no conversion class entered reads the operation alone — its walk reduces nothing and asks nothing — so it stands for the declaration and goes with every table at [`Caches::begin_declaration`]; one the elaborator's conversion classed rests on what that question read, as a judgment's reduct does, and goes wherever the reducts go. Only a judgment's reduction takes a stuck fold again, so there is no table for plain reduction.
     classifications: HashMap<Term, Rc<Classification>>,
     classified: HashMap<Term, Rc<Classification>>,
-    /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
+    /// The sort of each type classified since the context was last written to — `sort_of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
     ///
-    /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
+    /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `sort_of_in` threads them, and it is the classification that is per path without the table.
     ///
     /// **Filed by the reduction that read it**, a table for each as the reducts have: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
     sorts: [HashMap<Term, Sort>; 2],

@@ -1,7 +1,7 @@
 use {
     super::{Misaligned, align, park_checking, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork, Sort,
+        ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
         elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
         stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
@@ -9,7 +9,7 @@ use {
     curios_common::Plicity,
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, One,
-        Probe, Scope, Subterm, Telescope, Term, WitnessOrigin,
+        Probe, Scope, Sort, Subterm, Telescope, Term, WitnessOrigin,
     },
     std::collections::BTreeSet,
 };

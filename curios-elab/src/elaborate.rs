@@ -41,7 +41,7 @@ use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_common::{Plicity, recurse},
     curios_core::{
-        Ascribed, Extent, Func, FuncType, Global, Subterm, Term, Transient, Universes,
+        Ascribed, Extent, Func, FuncType, Global, Sort, Subterm, Term, Transient, Universes,
         foreign_operands, foreign_produced, former_spelling, instantiate_universes,
     },
     curios_surface::intrinsic_former,
@@ -150,12 +150,16 @@ fn elaborate_subterm(
 
     // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved.
     let (rebuilt, type_) = match &**term {
-        Subterm::Sort(_, level) => (
+        Subterm::Sort(Sort { level, .. }) => (
             term.clone(),
             Term::type_at(level.succ().map_err(Error::from)?),
         ),
         // A host call, elaborated through the same walk an intrinsic is: each operand against what `foreign_operands` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — read off the same row. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
-        Subterm::Foreign(function, declared, args) => {
+        Subterm::Foreign(curios_core::Foreign {
+            function,
+            declared,
+            arguments: args,
+        }) => {
             let syntax = context.syntax();
             let demands = foreign_operands(function, &syntax);
 
@@ -349,7 +353,7 @@ fn spelled_former(
     let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
         return Ok(None);
     };
-    if telescope.len() != 1 || !matches!(&**telescope.terminal(), Subterm::Sort(..)) {
+    if telescope.len() != 1 || !matches!(&**telescope.terminal(), Subterm::Sort(_)) {
         return Ok(None);
     }
     let Some((hint, domain)) = telescope.cursor().entry() else {

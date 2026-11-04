@@ -16,7 +16,7 @@ use {
     super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
     curios_analysis::Erased,
     curios_core::{
-        Enter, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
+        Enter, Foreign, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -41,7 +41,7 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
             None => Enter::Descend,
         },
         |memo, term, mut children| {
-            let diverges = matches!(&**term, Subterm::Foreign(function, _, _) if function.diverges())
+            let diverges = matches!(&**term, Subterm::Foreign(Foreign { function, .. }) if function.diverges())
                 || children.any(|child| child);
             memo.insert(term.clone(), diverges);
             diverges
@@ -239,7 +239,7 @@ pub(crate) fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Er
 
     let reduced = kernel.reduce_forced(type_.clone())?;
     // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
-    if matches!(&*reduced, Subterm::Sort(..)) {
+    if matches!(&*reduced, Subterm::Sort(_)) {
         return Ok(Some(Erased::Type));
     }
 

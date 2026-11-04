@@ -344,7 +344,7 @@ pub fn compared_levels(context: &mut Context, type_: &Term) -> BTreeSet<Universe
             None => break,
         }
     }
-    if !matches!(&*terminal, Subterm::Sort(..)) {
+    if !matches!(&*terminal, Subterm::Sort(_)) {
         parts.push(terminal);
     }
 
@@ -408,7 +408,7 @@ fn answers_a_type(type_: &Term) -> bool {
         terminal = telescope.terminal();
     }
 
-    matches!(&**terminal, Subterm::Sort(..))
+    matches!(&**terminal, Subterm::Sort(_))
 }
 
 /// Recompute the vector of each entry `published` declares over its zonked telescopes and hold the one the entry carries to it.

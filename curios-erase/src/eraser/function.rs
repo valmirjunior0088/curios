@@ -251,7 +251,7 @@ fn reduces_to_no_function(
 ) -> Result<bool, Error> {
     let reduct = reduced(context, term)?;
     Ok(match &*reduct {
-        curios_core::Subterm::Sort(..)
+        curios_core::Subterm::Sort(_)
         | curios_core::Subterm::InductType(_)
         | curios_core::Subterm::StructType(_)
         | curios_core::Subterm::TupleType(_) => true,
@@ -349,7 +349,10 @@ impl Eraser<'_> {
 
         Ok(matches!(
             &*reduced(context, &result_sort)?,
-            curios_core::Subterm::Sort(curios_core::Quality::Prop, _)
+            curios_core::Subterm::Sort(curios_core::Sort {
+                quality: curios_core::Quality::Prop,
+                level: _
+            })
         ))
     }
 }

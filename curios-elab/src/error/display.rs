@@ -14,7 +14,7 @@ use {
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{LINE_WIDTH, Plicity, Qualifier},
     curios_core::{
-        Anchors, CalleeId, Global, Level, Mention, Quality, ReduceError, Subterm, Term,
+        Anchors, CalleeId, Global, Level, Mention, Quality, ReduceError, Sort, Subterm, Term,
         UniverseMetaId, WitnessKey,
     },
     curios_surface::{ReaderPosition, Spellable, Spelling},
@@ -444,11 +444,14 @@ impl fmt::Display for Displayed<'_> {
                     )?,
                 }
                 // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
-                let inferred_is_sort = matches!(&***inferred, Subterm::Sort(..));
-                let expected_is_sort = matches!(&***expected, Subterm::Sort(..));
+                let inferred_is_sort = matches!(&***inferred, Subterm::Sort(_));
+                let expected_is_sort = matches!(&***expected, Subterm::Sort(_));
                 if !terms && inferred_is_sort && !expected_is_sort {
                     let (what, held) = match &***inferred {
-                        Subterm::Sort(Quality::Prop, _) => ("a proposition", "a proof of it"),
+                        Subterm::Sort(Sort {
+                            quality: Quality::Prop,
+                            level: _,
+                        }) => ("a proposition", "a proof of it"),
                         _ => ("a type", "a value of it"),
                     };
                     write!(f, "\n  {what} was given where {held} was expected")?;

@@ -62,7 +62,7 @@ fn check_is_type(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
     let inferred = infer(kernel, term)?;
 
     match &*kernel.reduce_forced(inferred.clone())? {
-        Subterm::Sort(..) => Ok(term.clone()),
+        Subterm::Sort(_) => Ok(term.clone()),
         _ => Err(Error::NotASort(inferred)),
     }
 }

@@ -39,6 +39,7 @@ use {
         Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term,
         Universes, eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
+    crate::Foreign,
     curios_common::Plicity,
     std::{collections::HashMap, mem},
 };
@@ -221,7 +222,7 @@ pub fn weak_head_value(term: &Term) -> bool {
     accelerable(term)
         && matches!(
             &**term,
-            Subterm::Sort(..)
+            Subterm::Sort(_)
                 | Subterm::FuncType(_)
                 | Subterm::TupleType(_)
                 | Subterm::Tuple(_)
@@ -633,9 +634,15 @@ impl Machine {
             }
 
             // A host call is its declaration and its operands, and reduction leaves both as they were posed — which is how conversion reads one and how the recursive strategy leaves it, its loop having no arm for this node. Running the operands here reduced terms the strategy stands on, so one closed term had two spellings; the confluence this module argues eager evaluation from is about a position a value is *substituted* into, and a node reduction stops on is not one, nothing being substituted and both terms being the final answer.
-            Subterm::Foreign(function, declared, operands) => Ok(Step::Value(Term::from(
-                Subterm::Foreign(function, declared, operands),
-            ))),
+            Subterm::Foreign(Foreign {
+                function,
+                declared,
+                arguments: operands,
+            }) => Ok(Step::Value(Term::from(Subterm::Foreign(Foreign {
+                function,
+                declared,
+                arguments: operands,
+            })))),
 
             Subterm::Instance(instance) => {
                 let universes = instance.universes;

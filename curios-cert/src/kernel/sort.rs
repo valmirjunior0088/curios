@@ -75,11 +75,18 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Erro
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
-        Subterm::Sort(Quality::Prop, level) => Ok(Sort::Prop(level.clone())),
-        Subterm::Sort(Quality::Type, level) => Ok(Sort::Type(level.clone())),
-        Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
-            Err(Error::OpenSort(reduced.clone()))
-        }
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Prop,
+            level,
+        }) => Ok(Sort::Prop(level.clone())),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Type,
+            level,
+        }) => Ok(Sort::Type(level.clone())),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Param(_) | Quality::Meta(_),
+            level: _,
+        }) => Err(Error::OpenSort(reduced.clone())),
         _ => Err(Error::NotASort(reduced.clone())),
     }
 }
@@ -173,10 +180,14 @@ impl Sort {
             Subterm::Rec(_) if reduced.as_rec_proj().is_some() => sort_of_neutral(kernel, &reduced),
 
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
-            Subterm::Sort(Quality::Type | Quality::Prop, level) => Ok(Sort::Type(level.succ()?)),
-            Subterm::Sort(Quality::Param(_) | Quality::Meta(_), _) => {
-                Err(Error::OpenSort(reduced.clone()))
-            }
+            Subterm::Sort(curios_core::Sort {
+                quality: Quality::Type | Quality::Prop,
+                level,
+            }) => Ok(Sort::Type(level.succ()?)),
+            Subterm::Sort(curios_core::Sort {
+                quality: Quality::Param(_) | Quality::Meta(_),
+                level: _,
+            }) => Err(Error::OpenSort(reduced.clone())),
 
             _ => Err(Error::Unclassified(reduced.clone())),
         }
@@ -205,7 +216,10 @@ pub(crate) fn declared_into_prop(
     };
 
     Ok(match &*whnf(kernel, declared)? {
-        Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Prop,
+            level,
+        }) => Some(level.clone()),
         _ => None,
     })
 }

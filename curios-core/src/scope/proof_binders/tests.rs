@@ -19,15 +19,21 @@ impl ProofBinders for Sorts {
             .entered
             .iter()
             .filter(|(_, type_)| {
-                type_
-                    .as_ref()
-                    .is_some_and(|type_| matches!(&**type_, Subterm::Sort(Quality::Prop, _)))
+                type_.as_ref().is_some_and(|type_| {
+                    matches!(
+                        &**type_,
+                        Subterm::Sort(Sort {
+                            quality: Quality::Prop,
+                            level: _
+                        })
+                    )
+                })
             })
             .map(|(binder, _)| (*binder, ()))
             .collect::<BTreeMap<_, _>>();
 
         Ok(match &**type_ {
-            Subterm::Sort(..) => true,
+            Subterm::Sort(_) => true,
             Subterm::Var(var) => var
                 .as_free()
                 .is_some_and(|free| propositions.contains_key(free)),

@@ -15,7 +15,7 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
-        Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
+        Sort, Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
         Variance, Variant, universe_metas, universe_params,
     },
     std::{
@@ -388,7 +388,7 @@ impl<E: Env> Walk<'_, E> {
         };
 
         match &*term {
-            Subterm::Sort(_, level) => self.level(level),
+            Subterm::Sort(Sort { level, .. }) => self.level(level),
             // A parameter, a local or a monomorphic name carries no level.
             Subterm::Var(_) => {}
 
@@ -475,7 +475,7 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Match(_)
             | Subterm::Proj(_)
             | Subterm::Let(_)
-            | Subterm::Foreign(..)
+            | Subterm::Foreign(_)
             | Subterm::Transient(_) => self.children(&term),
         }
 

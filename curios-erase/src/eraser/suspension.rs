@@ -188,7 +188,9 @@ impl Eraser<'_> {
     pub fn suspended_poll(&mut self, context: &mut Reader) -> Result<Polled, Error> {
         let unit = curios_core::Term::tuple_type_unit();
         let sort = inferred(context, &unit)?;
-        let curios_core::Subterm::Sort(quality, level) = &*reduced(context, &sort)? else {
+        let curios_core::Subterm::Sort(curios_core::Sort { quality, level }) =
+            &*reduced(context, &sort)?
+        else {
             unreachable!("erase: a type's type is a sort")
         };
         let option = curios_core::Term::induct_type_at(

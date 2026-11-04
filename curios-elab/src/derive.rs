@@ -15,7 +15,8 @@
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
-    super::{Context, Error, Mode, Opened, Sort, Underivable, elaborate, reduce_with},
+    super::{Context, Error, Mode, Opened, Underivable, elaborate, reduce_with},
+    crate::{is_prop_to, sort_of_in},
     curios_common::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
         Qualifier, Sign, SpellDerivation, StringSyntax, SyntaxRegistry,
@@ -284,19 +285,19 @@ fn classify(
     type_: &Term,
 ) -> Result<Classified, Error> {
     let reduced = reduce_with(context, type_)?;
-    if matches!(&*reduced, Subterm::Sort(..)) {
+    if matches!(&*reduced, Subterm::Sort(_)) {
         return Err(site.refuse(Underivable::TypeValued {
             constructor: payload.constructor,
             payload: payload.described,
         }));
     }
 
-    let sort = Sort::of_in(context, opened, type_).map_err(|error| {
+    let sort = sort_of_in(context, opened, type_).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(type_.clone(), refusal)
         })
     })?;
-    if sort.is_prop_to(context, "derive::classify") {
+    if is_prop_to(&sort, context, "derive::classify") {
         return Ok(Classified {
             position,
             payload,
@@ -332,7 +333,7 @@ fn member(
     if mark == Plicity::Explicit {
         return classify(context, site, opened, position, payload, type_).map(Some);
     }
-    if matches!(&*reduce_with(context, type_)?, Subterm::Sort(..)) {
+    if matches!(&*reduce_with(context, type_)?, Subterm::Sort(_)) {
         return Ok(None);
     }
     let classified = classify(context, site, opened, position, payload, type_)?;

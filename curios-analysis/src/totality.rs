@@ -37,9 +37,9 @@ use {
     crate::Env,
     curios_common::recurse,
     curios_core::{
-        Advance, Arity, Bound, Carrier, Cases, Free, Func, FuncType, InductType, Intrinsic, Let,
-        Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Advance, Arity, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, InductType,
+        Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     std::collections::{HashMap, hash_map::Entry},
@@ -421,7 +421,7 @@ impl<E: Env> Walk<'_, E> {
 
         match &**term {
             // Nothing here can contain a call.
-            Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) | Subterm::Metavar(_) => {
+            Subterm::Sort(_) | Subterm::Var(_) | Subterm::Instance(_) | Subterm::Metavar(_) => {
                 Ok(())
             }
 
@@ -500,7 +500,9 @@ impl<E: Env> Walk<'_, E> {
                 self.walks(&terms)
             }
 
-            Subterm::Foreign(_, _, args) => self.walks(args),
+            Subterm::Foreign(Foreign {
+                arguments: args, ..
+            }) => self.walks(args),
 
             // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the kernel checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
             Subterm::Let(Let { bindings, tail }) => {
@@ -595,7 +597,7 @@ pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error
         };
 
         match &*reduced {
-            Subterm::Sort(..) => return Ok(true),
+            Subterm::Sort(_) => return Ok(true),
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while !cursor.is_done() {

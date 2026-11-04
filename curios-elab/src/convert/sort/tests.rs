@@ -4,7 +4,9 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
-    curios_core::{DefinitionKind, Free, Global, Intrinsic, Level, Nat, Quality, Term, Universes},
+    curios_core::{
+        DefinitionKind, Free, Global, Intrinsic, Level, Nat, Quality, Sort, Term, Universes,
+    },
 };
 
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
@@ -26,14 +28,14 @@ fn a_shared_type_is_classified_once_per_node() {
     let mut context = Context::with_default_budget(SYNTAX);
     let nat = Term::intrinsic(Intrinsic::NatType);
     assert_eq!(
-        Sort::of(&mut context, &doubled(nat, 60)).expect("classifies"),
+        sort_of(&mut context, &doubled(nat, 60)).expect("classifies"),
         ground,
     );
 
     let hypothesis = Free::local(0, Some("A"));
     context.assume(&hypothesis, &Term::type_ground());
     assert_eq!(
-        Sort::of(&mut context, &doubled(Term::free_var(&hypothesis), 60)).expect("classifies"),
+        sort_of(&mut context, &doubled(Term::free_var(&hypothesis), 60)).expect("classifies"),
         ground,
     );
 }
@@ -48,12 +50,12 @@ fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
     let type_ = Term::free_var(&hypothesis);
 
     context.assume(&hypothesis, &Term::type_ground());
-    let before = Sort::of(&mut context, &type_).expect("classifies");
+    let before = sort_of(&mut context, &type_).expect("classifies");
     let shadowed = context.with_frame(|context| {
         context.assume(&hypothesis, &Term::prop());
-        Sort::of(context, &type_).expect("classifies")
+        sort_of(context, &type_).expect("classifies")
     });
-    let after = Sort::of(&mut context, &type_).expect("classifies");
+    let after = sort_of(&mut context, &type_).expect("classifies");
 
     assert_eq!(before, Sort::type_at(Level::zero()));
     assert_eq!(shadowed, Sort::prop_at(Level::zero()));
@@ -71,9 +73,9 @@ fn a_remembered_sort_does_not_outlive_a_definition_landing() {
     context.assume(&proposition, &Term::prop());
     let type_ = Term::free_var(&alias);
 
-    let stuck = Sort::of(&mut context, &type_).expect("classifies");
+    let stuck = sort_of(&mut context, &type_).expect("classifies");
     context.define(&alias, &Term::free_var(&proposition), None);
-    let unfolded = Sort::of(&mut context, &type_).expect("classifies");
+    let unfolded = sort_of(&mut context, &type_).expect("classifies");
 
     assert_eq!(stuck, Sort::type_at(Level::zero()));
     assert_eq!(unfolded, Sort::prop_at(Level::zero()));
@@ -91,12 +93,12 @@ fn restoring_the_budget_forgets_a_remembered_sort() {
         [Term::intrinsic(Intrinsic::NatType)],
     );
 
-    Sort::of(&mut context, &type_).expect("classifies");
+    sort_of(&mut context, &type_).expect("classifies");
     let first = context.consumed().units();
-    Sort::of(&mut context, &type_).expect("classifies");
+    sort_of(&mut context, &type_).expect("classifies");
     let second = context.consumed().units() - first;
     context.restore_budget();
-    Sort::of(&mut context, &type_).expect("classifies");
+    sort_of(&mut context, &type_).expect("classifies");
     let after_boundary = context.consumed().units();
 
     assert!(first > 0, "classifying it reduces it");
@@ -119,9 +121,9 @@ fn a_type_naming_a_binder_its_walk_opened_is_not_remembered() {
     };
 
     let at_a_type =
-        Sort::of_in(&mut context, &mut opened_at(Term::type_ground()), &type_).expect("classifies");
+        sort_of_in(&mut context, &mut opened_at(Term::type_ground()), &type_).expect("classifies");
     let at_a_proposition =
-        Sort::of_in(&mut context, &mut opened_at(Term::prop()), &type_).expect("classifies");
+        sort_of_in(&mut context, &mut opened_at(Term::prop()), &type_).expect("classifies");
 
     assert_eq!(at_a_type, Sort::type_at(Level::zero()));
     assert_eq!(at_a_proposition, Sort::prop_at(Level::zero()));
@@ -164,7 +166,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     ));
 
     assert_eq!(
-        Sort::of(
+        sort_of(
             &mut context,
             &Term::apply(into_prop.clone(), [unaffordable.clone()])
         )
@@ -172,7 +174,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
         Sort::prop_at(Level::zero()),
     );
     assert!(
-        Sort::of(
+        sort_of(
             &mut context,
             &Term::apply(into_type.clone(), [unaffordable])
         )
@@ -193,11 +195,11 @@ fn an_application_of_an_unsolved_metavariable_is_classified_by_its_birth_type() 
     let family = context.fresh_hole_metavar(into(Term::type_ground()), None);
 
     assert_eq!(
-        Sort::of(&mut context, &Term::apply(proposition, [three.clone()])).expect("classifies"),
+        sort_of(&mut context, &Term::apply(proposition, [three.clone()])).expect("classifies"),
         Sort::prop_at(Level::zero()),
     );
     assert_eq!(
-        Sort::of(&mut context, &Term::apply(family, [three])).expect("classifies"),
+        sort_of(&mut context, &Term::apply(family, [three])).expect("classifies"),
         Sort::type_at(Level::zero()),
     );
 }
@@ -210,11 +212,11 @@ fn an_unsolved_metavariable_is_classified_at_the_level_its_sort_states() {
     let element = context.fresh_hole_metavar(Term::sort_at(Quality::Type, one.clone()), None);
 
     assert_eq!(
-        Sort::of(&mut context, &element).expect("classifies"),
+        sort_of(&mut context, &element).expect("classifies"),
         Sort::type_at(one.clone()),
     );
     assert_eq!(
-        Sort::of(&mut context, &Term::intrinsic(Intrinsic::ListType(element))).expect("classifies"),
+        sort_of(&mut context, &Term::intrinsic(Intrinsic::ListType(element))).expect("classifies"),
         Sort::type_at(one),
     );
 }

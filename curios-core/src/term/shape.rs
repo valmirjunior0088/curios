@@ -4,15 +4,18 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, MetavarSpine, Scope,
-        Subterm, Telescope, Term, Three, Two, Universes, Var, Visit, project_erased_universes,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix, MetavarSpine,
+        Quality, Scope, Subterm, Telescope, Term, Three, Two, Universes, Var, Visit,
+        project_erased_universes,
     },
+    curios_abi::ForeignFunction,
     curios_common::{InfixOp, Mint, Plicity, Sign},
     curios_num::Natural,
     std::{
         fmt,
         hash::{Hash, Hasher},
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -911,6 +914,65 @@ impl Metavar {
     pub fn is_hole(&self) -> bool {
         matches!(self.origin, MetavarOrigin::Hole)
     }
+}
+
+/// A sort: a universe of a quality, at its level. `Type u` and `Prop u` are the two a program writes, and both are typed `Type (u + 1)`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Sort {
+    pub quality: Quality,
+    pub level: Level,
+}
+
+impl Sort {
+    /// `Type` at `level`.
+    pub fn type_at(level: Level) -> Sort {
+        Sort {
+            quality: Quality::Type,
+            level,
+        }
+    }
+
+    /// `Prop` at `level`.
+    pub fn prop_at(level: Level) -> Sort {
+        Sort {
+            quality: Quality::Prop,
+            level,
+        }
+    }
+
+    /// The quality of a record of fields at `this` and at `that`: a type's where either is one, a proposition's where both are, and an open one where it is the only one that is not a proposition's. Two open qualities apart have no join a sort can state, and are read as a type's, which is what a quality nothing decides closes as.
+    pub fn join(this: Quality, that: Quality) -> Quality {
+        match (this, that) {
+            (Quality::Type, _) | (_, Quality::Type) => Quality::Type,
+            (Quality::Prop, other) | (other, Quality::Prop) => other,
+            (this, that) if this == that => this,
+            _ => Quality::Type,
+        }
+    }
+
+    /// Whether this is a sort of propositions. One whose quality is open is not: irrelevance is taken where a type is known a proposition, and a sort not decided yet, or left to a caller, is not known one.
+    pub fn is_prop(&self) -> bool {
+        self.quality.is_prop()
+    }
+
+    /// The universe term this sort denotes: what a type former reports as its own type.
+    pub fn term(self) -> Term {
+        Term::from(Subterm::Sort(self))
+    }
+}
+
+/// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
+///
+/// A term former rather than a [`Intrinsic`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every intrinsic has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Foreign {
+    /// The row the call is made through.
+    pub function: Arc<ForeignFunction>,
+    /// The `foreign` declaration that states the row: what a report spells the call by, as it spells any name, where the row itself holds only the name it imports under.
+    pub declared: Global,
+    pub arguments: Vec<Term>,
 }
 
 /// A reference to a declaration at the levels, and the qualities, this occurrence chose: none where the declaration is monomorphic, so every reference to a declaration an elaborated term holds is one.

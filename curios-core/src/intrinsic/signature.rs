@@ -62,7 +62,7 @@ impl Intrinsic {
         match signature.produced {
             Produced::Sort => true,
             Produced::Fixed(produced) => {
-                signature.operands.is_empty() && matches!(&*produced, Subterm::Sort(..))
+                signature.operands.is_empty() && matches!(&*produced, Subterm::Sort(_))
             }
         }
     }
@@ -72,7 +72,7 @@ impl Intrinsic {
         match self.signature(syntax).produced {
             Produced::Sort => true,
             Produced::Fixed(produced) => match &*produced {
-                Subterm::Sort(..) => true,
+                Subterm::Sort(_) => true,
                 Subterm::Intrinsic(carrier) => carrier.is_type_former(syntax),
                 _ => false,
             },

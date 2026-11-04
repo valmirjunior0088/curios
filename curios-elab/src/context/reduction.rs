@@ -2,9 +2,9 @@
 
 use {
     super::{ElabProbe, ElaborationStamp, Footing},
-    crate::{AskedAt, Context, Settled, Sort, UniverseStateToken},
+    crate::{AskedAt, Context, Settled, UniverseStateToken},
     curios_analysis::Classification,
-    curios_core::{Bound, ClosedMemo, Free, Level, ReduceError, Term},
+    curios_core::{Bound, ClosedMemo, Free, Level, ReduceError, Sort, Term},
     std::rc::Rc,
 };
 

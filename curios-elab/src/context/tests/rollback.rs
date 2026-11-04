@@ -357,7 +357,7 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
     let judged = Term::prop();
 
     context
-        .plainly(|context| Sort::of(context, &read))
+        .plainly(|context| sort_of(context, &read))
         .expect("classifies");
     assert!(context.cached_sort(&read).is_none());
     assert!(
@@ -366,7 +366,7 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
             .is_some()
     );
 
-    Sort::of(&mut context, &judged).expect("classifies");
+    sort_of(&mut context, &judged).expect("classifies");
     assert!(
         context
             .plainly(|context| context.cached_sort(&judged))

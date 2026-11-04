@@ -6,12 +6,12 @@ use {
     curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry, recurse},
     curios_core::{
         Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor,
-        Definition, Definitions, Field, FormerEta, Free, Func, FuncType, Global, HeadKey,
+        Definition, Definitions, Field, Foreign, FormerEta, Free, Func, FuncType, Global, HeadKey,
         InductArm, InductType, Infix, Intrinsic, Item, Label, Let, Level, LevelHead, Lexicon,
         Marks, Match, MatchResult, Matrix, Members, Mention, Nat, Notation, NumLit, Pattern,
-        Program, Proj, Quality, Rec, Row, Scope, Spellings, Struct, StructType, Subterm, Symbols,
-        Term, Three, Transient, Tuple, TupleType, Two, UniverseError, Universes, Var, Variant,
-        WitnessKey, former_eta, inconsistent_sort, suffixes_of,
+        Program, Proj, Quality, Rec, Row, Scope, Sort, Spellings, Struct, StructType, Subterm,
+        Symbols, Term, Three, Transient, Tuple, TupleType, Two, UniverseError, Universes, Var,
+        Variant, WitnessKey, former_eta, inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{
@@ -1955,7 +1955,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
 
 fn term_doc(term: Term, frame: Frame) -> Printer {
     match Term::unwrap_or_clone(term) {
-        Subterm::Sort(quality, level) => {
+        Subterm::Sort(Sort { quality, level }) => {
             let word = quality_word(&quality);
             if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
             {
@@ -1970,7 +1970,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
         // A call across the wire reads as a call of its declaration, spelled as any name is, the type a row that does not return is handed under its mark. A row of no operand is still called.
-        Subterm::Foreign(function, declared, mut args) => {
+        Subterm::Foreign(Foreign {
+            function,
+            declared,
+            arguments: mut args,
+        }) => {
             let explicits = args.split_off(usize::from(function.diverges()));
 
             flat([

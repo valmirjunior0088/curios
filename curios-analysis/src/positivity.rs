@@ -703,7 +703,7 @@ impl<E: Env> Walk<'_, E> {
 
         match &*term {
             // Sorts name nothing, and an instance names a declaration, which no parameter is.
-            Subterm::Sort(..) | Subterm::Instance(_) => {}
+            Subterm::Sort(_) | Subterm::Instance(_) => {}
 
             // A variable is the occurrence itself, and the one place `opaque` cannot serve: `any_child_term` reports no child here, a `Var`'s identity being the node's own data, so the descent would find nothing and a parameter named this way would keep the `Unused` the fixpoint seeds it at.
             Subterm::Var(var) => {
@@ -740,7 +740,7 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Intrinsic(intrinsic) => self.intrinsic(intrinsic, polarity, &term),
 
             // A host call is opaque for the same reason an effectful intrinsic is: its result comes from outside the program, so nothing about the declaration being checked can be read out of it.
-            Subterm::Foreign(..) => self.opaque(&term),
+            Subterm::Foreign(_) => self.opaque(&term),
 
             Subterm::Apply(_)
             | Subterm::Func(_)

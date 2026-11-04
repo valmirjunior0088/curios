@@ -43,7 +43,7 @@ use {
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
         Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level, Lockstep,
         Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
-        Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
+        Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseError, Universes, Variance, Variant,
     },
@@ -841,7 +841,16 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (Subterm::Sort(below, lower), Subterm::Sort(above, upper)) => {
+            (
+                Subterm::Sort(Sort {
+                    quality: below,
+                    level: lower,
+                }),
+                Subterm::Sort(Sort {
+                    quality: above,
+                    level: upper,
+                }),
+            ) => {
                 // No proposition stands where a type is wanted: two sorts are related where they are one quality, which solves one still open, and each is cumulative in its own levels.
                 if !context.same_quality_at(*below, *above, self.extent) {
                     return Ok(false);
@@ -2479,7 +2488,7 @@ impl Convert {
         };
 
         match &*forced {
-            Subterm::Sort(quality, level) => {
+            Subterm::Sort(Sort { quality, level }) => {
                 // What is put below is named for the report, as the relation's own rule names it.
                 let kind = match context.universes().quality(*quality) {
                     Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
@@ -2770,8 +2779,11 @@ impl Convert {
             // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
-                && Sort::of_under(context, &posed, &mut Opened::default(), &type_)?
-                    .is_prop_to(context, "Convert::drain")
+                && is_prop_to(
+                    &sort_of_under(context, &posed, &mut Opened::default(), &type_)?,
+                    context,
+                    "Convert::drain",
+                )
             {
                 continue;
             }
@@ -2929,9 +2941,11 @@ impl Convert {
             }
 
             // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
-            if Sort::of_under(context, &posed, &mut Opened::default(), &type_)?
-                .is_prop_to(context, "Convert::drain")
-            {
+            if is_prop_to(
+                &sort_of_under(context, &posed, &mut Opened::default(), &type_)?,
+                context,
+                "Convert::drain",
+            ) {
                 continue;
             }
 
@@ -2941,7 +2955,7 @@ impl Convert {
             }
 
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
-            if matches!(&*type_, Subterm::Sort(..))
+            if matches!(&*type_, Subterm::Sort(_))
                 && by_their_own_type(context, &posed, &posed_pairs, &this, &that)?
             {
                 continue;
@@ -3017,7 +3031,7 @@ impl Convert {
                     self.convert_intrinsic(context, this, that)?
                 }
                 // A host call is its declaration and its operands, each compared at the type its row demands of it, as the kernel compares two.
-                (this @ Subterm::Foreign(..), that @ Subterm::Foreign(..)) => {
+                (this @ Subterm::Foreign(_), that @ Subterm::Foreign(_)) => {
                     match foreign_congruence(&this.into(), &that.into(), &context.syntax()) {
                         Some(operands) => {
                             for operand in operands {
@@ -3029,7 +3043,16 @@ impl Convert {
                         None => false,
                     }
                 }
-                (Subterm::Sort(this_quality, this), Subterm::Sort(that_quality, that)) => {
+                (
+                    Subterm::Sort(Sort {
+                        quality: this_quality,
+                        level: this,
+                    }),
+                    Subterm::Sort(Sort {
+                        quality: that_quality,
+                        level: that,
+                    }),
+                ) => {
                     context.same_quality_at(this_quality, that_quality, self.extent)
                         && Self::join_levels(context, &this, &that)?
                 }

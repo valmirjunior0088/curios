@@ -17,7 +17,7 @@ use {
 
 /// A declared result sort that merely *reduces* to `Prop` silences the index guard that reads it syntactically.
 ///
-/// `Sort::of` decides irrelevance by reducing `result_sort`, and so do `check_signature` and `check_non_informative`. Index inversion does not: its `Prop`-valued guard — the rule that stops a proposition's constructors from being told apart, because irrelevance says they are the same value — matches `Subterm::Sort(Quality::Prop, _)` on the nose. A family declared at `((s : Type 0) => s)(Prop)` is therefore a proposition to every consumer except the one whose silence is unsound.
+/// `Sort::of` decides irrelevance by reducing `result_sort`, and so do `check_signature` and `check_non_informative`. Index inversion does not: its `Prop`-valued guard — the rule that stops a proposition's constructors from being told apart, because irrelevance says they are the same value — matches `Subterm::Sort(curios_core::Sort { quality: Quality::Prop, level: _ })` on the nose. A family declared at `((s : Type 0) => s)(Prop)` is therefore a proposition to every consumer except the one whose silence is unsound.
 ///
 /// The consequence below is the vacuous-elimination route. `Two` is that family, with constructors `a` and `b`; `Held(t : Two)` has one constructor targeting `Two/a()`. Irrelevance makes `Two/a()` and `Two/b()` convertible, so `Held/mk()` inhabits `Held(Two/b())` — and then eliminating that value with *no arms at all* is accepted, because inversion clashes `Two/b()` against `Two/a()` and reports the only constructor impossible. The motive is `False`.
 ///
@@ -325,8 +325,8 @@ fn no_type_position_admits_a_lying_motive() {
             verdicts.iter().any(|verdict| matches!(
                 &verdict.error,
                 Error::Mismatch { inferred, expected }
-                    if matches!(&***inferred, Subterm::Sort(Quality::Type, _))
-                        && matches!(&***expected, Subterm::Sort(Quality::Prop, _))
+                    if matches!(&***inferred, Subterm::Sort(curios_core::Sort { quality: Quality::Type, level: _ }))
+                        && matches!(&***expected, Subterm::Sort(curios_core::Sort { quality: Quality::Prop, level: _ }))
             )),
             "{position} classified a lying motive instead of typing it: {verdicts:?}",
         );

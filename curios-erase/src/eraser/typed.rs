@@ -173,7 +173,11 @@ impl Eraser<'_> {
                     curios_core::Produced::Sort => inferred(context, term),
                 }
             }
-            curios_core::Subterm::Foreign(function, _, arguments) => {
+            curios_core::Subterm::Foreign(curios_core::Foreign {
+                function,
+                arguments,
+                ..
+            }) => {
                 let syntax = context.syntax();
                 let signature =
                     curios_core::foreign_signature(function, arguments, &syntax, |label| {
@@ -185,7 +189,7 @@ impl Eraser<'_> {
 
                 Ok(type_)
             }
-            curios_core::Subterm::Sort(..)
+            curios_core::Subterm::Sort(_)
             | curios_core::Subterm::FuncType(_)
             | curios_core::Subterm::TupleType(_)
             | curios_core::Subterm::InductType(_)

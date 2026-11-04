@@ -72,7 +72,7 @@ struct Marking<'a, E> {
 
 impl<E: ProofBinders> Marking<'_, E> {
     fn term(&mut self, term: &Term) -> Result<Term, E::Refusal> {
-        if matches!(&**term, Subterm::Var(_) | Subterm::Sort(..)) {
+        if matches!(&**term, Subterm::Var(_) | Subterm::Sort(_)) {
             return Ok(term.clone());
         }
         let closed = term.reach() == 0;

@@ -106,9 +106,10 @@ impl Arity for Many {
 
 // === Var =====================================================================
 
+/// How a variable is bound: free, by its identity, or bound, by its de Bruijn index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-enum VarType {
+enum Binding {
     Free(Free),
     Bound(usize),
 }
@@ -117,35 +118,35 @@ enum VarType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Var {
-    type_: VarType,
+    binding: Binding,
 }
 
 impl Var {
     /// A free occurrence of `name` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
     pub fn free(name: Free) -> Self {
         Self {
-            type_: VarType::Free(name),
+            binding: Binding::Free(name),
         }
     }
 
     /// This occurrence's identity, if it is free.
     pub fn as_free(&self) -> Option<&Free> {
-        match &self.type_ {
-            VarType::Free(free) => Some(free),
-            VarType::Bound(_) => None,
+        match &self.binding {
+            Binding::Free(free) => Some(free),
+            Binding::Bound(_) => None,
         }
     }
 
     pub fn bound(index: usize) -> Self {
         Self {
-            type_: VarType::Bound(index),
+            binding: Binding::Bound(index),
         }
     }
 
     pub fn as_bound(&self) -> Option<usize> {
-        match &self.type_ {
-            VarType::Free(_) => None,
-            &VarType::Bound(index) => Some(index),
+        match &self.binding {
+            Binding::Free(_) => None,
+            &Binding::Bound(index) => Some(index),
         }
     }
 

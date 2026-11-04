@@ -248,9 +248,9 @@ pub enum Curried {
     Compared,
 }
 
-/// Binders opened locally by `Sort::of` while walking a telescope, innermost last, each found by its name.
+/// Binders opened locally by `sort_of` while walking a telescope, innermost last, each found by its name.
 ///
-/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only: a label minted here is among no problem's `Binders`, so it must never reach one. It cannot, because `Sort::of` returns a `Sort`.
+/// These deliberately do *not* go into the [`Context`]. `sort_of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `sort_of` observationally read-only: a label minted here is among no problem's `Binders`, so it must never reach one. It cannot, because `sort_of` returns a `Sort`.
 ///
 /// **A binder is found by its name, and a type asked which it names by the names it holds.** A record's fields are each opened beside the ones before it, and each field's type is asked whether it names any of them: read off a list, field by field, that is the square of the fields.
 #[derive(Debug, Clone, Default)]

@@ -119,7 +119,7 @@ fn compare(
         let apart = pairs.apart;
 
         // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
-        let untyped = matches!(&**type_, Subterm::Sort(..));
+        let untyped = matches!(&**type_, Subterm::Sort(_));
         if untyped && by_their_own_type(kernel, pairs, this, that)? {
             return Ok(true);
         }
@@ -209,7 +209,7 @@ fn forced(
     }
 
     // A side that was a redex as posed is a neutral a lookup types only now.
-    if matches!(&**at, Subterm::Sort(..))
+    if matches!(&**at, Subterm::Sort(_))
         && (forced_this != *this || forced_that != *that)
         && by_their_own_type(kernel, pairs, &forced_this, &forced_that)?
     {
@@ -543,16 +543,23 @@ fn structural(
 ) -> Result<bool, Error> {
     match (&**this, &**that) {
         // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
-        (Subterm::Sort(this, left), Subterm::Sort(that, right)) => {
-            Ok(this == that && kernel.level_eq(left, right))
-        }
+        (
+            Subterm::Sort(curios_core::Sort {
+                quality: this,
+                level: left,
+            }),
+            Subterm::Sort(curios_core::Sort {
+                quality: that,
+                level: right,
+            }),
+        ) => Ok(this == that && kernel.level_eq(left, right)),
 
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
             convert_intrinsic(kernel, pairs, left, right)
         }
 
         // A host call is its declaration and its operands, and reduction leaves both as they were posed.
-        (Subterm::Foreign(..), Subterm::Foreign(..)) => convert_foreign(kernel, pairs, this, that),
+        (Subterm::Foreign(_), Subterm::Foreign(_)) => convert_foreign(kernel, pairs, this, that),
 
         (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 
@@ -1670,7 +1677,13 @@ fn stated(kernel: &mut Kernel, stated: &Term, tag: &Atom) -> Result<Option<State
     let Ok(at) = kernel.induct_at(family) else {
         return Ok(None);
     };
-    if !matches!(&**at.result_sort(), Subterm::Sort(Quality::Prop, _)) {
+    if !matches!(
+        &**at.result_sort(),
+        Subterm::Sort(curios_core::Sort {
+            quality: Quality::Prop,
+            level: _
+        })
+    ) {
         return Ok(None);
     }
     let Ok(Some(signature)) = at.signature(kernel, tag) else {

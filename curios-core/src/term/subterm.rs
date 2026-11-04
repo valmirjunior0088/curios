@@ -5,12 +5,11 @@
 use {
     super::{Mentions, Union},
     crate::{
-        Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
-        Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Nat, Proj,
-        Quality, Rec, RecGroup, Struct, StructType, Term, Transient, Tuple, TupleType,
+        Apply, Argument, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, Global, InductType,
+        Instance, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Nat,
+        Proj, Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple, TupleType,
         UniverseMetaId, Universes, Var, Variant, Visit,
     },
-    curios_abi::ForeignFunction,
     curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
     std::{collections::BTreeSet, sync::Arc},
@@ -20,15 +19,9 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Subterm {
-    /// A sort: a universe of the quality `Quality`, at its level. `Type u` and `Prop u` are the two a program writes, and both are typed `Type (u + 1)`.
-    Sort(Quality, Level),
+    Sort(Sort),
     Intrinsic(Intrinsic),
-    /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
-    ///
-    /// A term former rather than a [`Intrinsic`] variant, because it is the one construct here whose meaning is *not* fixed by the enum that holds it: every intrinsic has a signature this crate spells, while a foreign call reads its own off the ABI row it carries. Nothing about it is closed, so it does not belong in a closed set.
-    ///
-    /// The [`Global`] is the `foreign` declaration that states the row: what a report spells the call by, as it spells any name, where the row itself holds only the name it imports under.
-    Foreign(Arc<ForeignFunction>, Global, Vec<Term>),
+    Foreign(Foreign),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -98,7 +91,7 @@ impl Subterm {
     ) -> bool {
         let mut level_matches = |level: &Level| level.metas().any(&mut *pred);
         match self {
-            Subterm::Sort(_, level) => level_matches(level),
+            Subterm::Sort(Sort { level, .. }) => level_matches(level),
             Subterm::Intrinsic(intrinsic) => intrinsic
                 .result_universes()
                 .is_some_and(|universes| universes.levels.iter().any(level_matches)),
@@ -158,7 +151,7 @@ impl Subterm {
 
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
-            Subterm::Sort(..) | Subterm::Var(_) | Subterm::Instance(_) => {}
+            Subterm::Sort(_) | Subterm::Var(_) | Subterm::Instance(_) => {}
             Subterm::Transient(transient) => {
                 transient
                     .subterms()
@@ -170,7 +163,9 @@ impl Subterm {
                     .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Intrinsic(intrinsic) => intrinsic.collect_construction_names(names),
-            Subterm::Foreign(_, _, args) => args
+            Subterm::Foreign(Foreign {
+                arguments: args, ..
+            }) => args
                 .iter()
                 .for_each(|arg| arg.collect_construction_names(names)),
             Subterm::Func(Func { telescope, .. }) => telescope.collect_construction_names(names),
@@ -327,7 +322,7 @@ impl Subterm {
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
-            Subterm::Sort(..) | Subterm::Var(_) => false,
+            Subterm::Sort(_) | Subterm::Var(_) => false,
             // A head is this node's own data, as `Var`'s identity is, so an instance has no child term for a predicate to reach.
             Subterm::Instance(_) => false,
             Subterm::Transient(transient) => {
@@ -335,7 +330,9 @@ impl Subterm {
                 children.any(&mut *pred)
             }
             Subterm::Intrinsic(intrinsic) => intrinsic.any_term(pred),
-            Subterm::Foreign(_, _, args) => args.iter().any(&mut *pred),
+            Subterm::Foreign(Foreign {
+                arguments: args, ..
+            }) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Apply(apply) => pred(&apply.head) || apply.params().any(&mut *pred),
@@ -461,8 +458,8 @@ impl Subterm {
     /// Both checkers read it to say which terms a literal's eta is taken against.
     pub fn shows_its_type(&self, syntax: &SyntaxRegistry) -> bool {
         match self {
-            Subterm::Sort(..)
-            | Subterm::Foreign(..)
+            Subterm::Sort(_)
+            | Subterm::Foreign(_)
             | Subterm::FuncType(_)
             | Subterm::Func(_)
             | Subterm::TupleType(_)
@@ -505,7 +502,7 @@ impl Subterm {
     pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
-            Subterm::Sort(quality, level) => {
+            Subterm::Sort(Sort { quality, level }) => {
                 level_has_meta(level) || matches!(quality, Quality::Meta(_))
             }
             Subterm::Intrinsic(intrinsic) => {
@@ -529,7 +526,9 @@ impl Subterm {
     pub(crate) fn has_universe_data(&self) -> bool {
         match self {
             // An open quality is universe data as a level is: a walk that instantiates or solves one visits the node.
-            Subterm::Sort(quality, level) => level != &Level::zero() || !quality.is_ground(),
+            Subterm::Sort(Sort { quality, level }) => {
+                level != &Level::zero() || !quality.is_ground()
+            }
             Subterm::Intrinsic(intrinsic) => {
                 intrinsic
                     .result_universes()
@@ -579,15 +578,20 @@ impl Bound for Subterm {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
-            Subterm::Sort(quality, level) => {
-                Subterm::Sort(visit.visit_quality(quality), visit.visit_level(level))
-            }
+            Subterm::Sort(Sort { quality, level }) => Subterm::Sort(Sort {
+                quality: visit.visit_quality(quality),
+                level: visit.visit_level(level),
+            }),
             Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(intrinsic.traverse(visit)),
-            Subterm::Foreign(function, declared, args) => Subterm::Foreign(
-                Arc::clone(function),
-                *declared,
-                args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
-            ),
+            Subterm::Foreign(Foreign {
+                function,
+                declared,
+                arguments: args,
+            }) => Subterm::Foreign(Foreign {
+                function: Arc::clone(function),
+                declared: *declared,
+                arguments: args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
+            }),
             Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
             }),
@@ -797,7 +801,7 @@ impl Bound for Subterm {
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Sort(..) => 0,
+            Subterm::Sort(_) => 0,
             Subterm::Transient(transient) => transient
                 .subterms()
                 .map(|child| child.reach())
@@ -810,7 +814,9 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Intrinsic(intrinsic) => intrinsic.reach(),
-            Subterm::Foreign(_, _, args) => max_reach(args),
+            Subterm::Foreign(Foreign {
+                arguments: args, ..
+            }) => max_reach(args),
             Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
             Subterm::Apply(apply) => apply.head.reach().max(max_reach(apply.params())),
