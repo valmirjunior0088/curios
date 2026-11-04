@@ -50,3 +50,21 @@ fn a_run_of_steps_that_pass_passes() {
 
     assert_eq!(perform(&tree, &group(), &Given::new()), Ok(()));
 }
+
+#[test]
+fn a_write_leaves_its_file_holding_its_contents() {
+    let written = std::env::temp_dir()
+        .join(format!("curios-xtask-write-{}", std::process::id()))
+        .join("written");
+    let tree = tree(&format!(
+        "[writer]\ndescription = \"W\"\nrun = [{{ write = \"{}\", contents = \"held\" }}]\n",
+        written.display()
+    ));
+
+    let performed = perform(&tree, &group(), &Given::new());
+    let held = std::fs::read_to_string(&written);
+    let _ = std::fs::remove_dir_all(written.parent().expect("the file is in a directory"));
+
+    assert_eq!(performed, Ok(()));
+    assert_eq!(held.expect("the file is written"), "held");
+}

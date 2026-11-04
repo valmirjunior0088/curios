@@ -5,8 +5,11 @@
 //! **A run reports every failure rather than the first.** [`perform`] takes the schedule and runs each step to its end whatever the one before it did: a step's commands run in order, the first that fails failing the step, and a step whose produced files are not there afterwards fails too. A step behind one that did not pass is not run, since what it reads is not there; the steps that read nothing of the failure go on, and the end names what failed and what was not run.
 
 use {
-    crate::{Given, Name, Tree, Values, check_version, launch, launch_in, root, schedule, spelled},
-    std::{collections::BTreeSet, time::Instant},
+    crate::{
+        Given, Instruction, Name, Tree, Values, check_version, launch, launch_in, root, schedule,
+        spelled,
+    },
+    std::{collections::BTreeSet, fs, time::Instant},
 };
 
 #[cfg(test)]
@@ -67,7 +70,7 @@ pub(crate) fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), St
     }
 }
 
-/// Run one step's commands in order, each pinned program held to its pin the first time the run launches it, then hold the step to what it produces.
+/// Run one step's instructions in order — each command's pinned program held to its pin the first time the run launches it, each write's file written whole, its directory made where it is not — then hold the step to what it produces.
 fn run(
     tree: &Tree,
     values: &Values<'_>,
@@ -77,7 +80,19 @@ fn run(
     let step = &tree.steps[step];
     let directory = root().join(step.dir.as_deref().unwrap_or(""));
 
-    for command in &step.run {
+    for instruction in &step.run {
+        let command = match instruction {
+            Instruction::Command(command) => command,
+            Instruction::Write { path, contents } => {
+                let path = directory.join(values.text(path)?);
+                let failed = |error: std::io::Error| format!("{}: {error}", path.display());
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).map_err(failed)?;
+                }
+                fs::write(&path, values.text(contents)?).map_err(failed)?;
+                continue;
+            }
+        };
         let Some(words) = values.command(command)? else {
             continue;
         };

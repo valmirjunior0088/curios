@@ -26,9 +26,11 @@ fn words(tree: &Tree, given: &[(&str, &str)]) -> Option<Vec<String>> {
         })
         .collect::<Given>();
 
-    Values::new(tree, &given)
-        .command(&tree.steps[0].run[0])
-        .unwrap()
+    let Instruction::Command(command) = &tree.steps[0].run[0] else {
+        panic!("the step runs a command");
+    };
+
+    Values::new(tree, &given).command(command).unwrap()
 }
 
 #[test]

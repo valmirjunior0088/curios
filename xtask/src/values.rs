@@ -81,7 +81,7 @@ impl<'a> Values<'a> {
     }
 
     /// The one string `word` stands for: its text, and each value it holds as the one word that value is.
-    fn text(&self, word: &Word) -> Result<String, String> {
+    pub(crate) fn text(&self, word: &Word) -> Result<String, String> {
         let mut text = String::new();
         for piece in &word.0 {
             match piece {

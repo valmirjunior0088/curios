@@ -1,10 +1,13 @@
 description = "The workspace's Rust documentation"
 
+# The page `target/doc/` opens on, which sends a reader to the compiler's crate.
+variables.landing = '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=curios/index.html">'
+
 [build]
 description = "Build the workspace's Rust documentation, over private items and every feature; alone runs rustdoc, where a broken intra-doc link fails"
-# Private items, because these crates state their invariants on `pub(crate)` ones; past a crate that fails, so one run reports every crate's broken links. `target/doc/` has no landing page of its own, and the redirect copied there is what makes it a site.
+# Private items, because these crates state their invariants on `pub(crate)` ones; past a crate that fails, so one run reports every crate's broken links. `target/doc/` has no landing page of its own, and the redirect written there is what makes it a site.
 consumes = ["launcher.binary"]
 run = [
     ["cargo", "doc", "--workspace", "--no-deps", "--document-private-items", "--all-features", "--keep-going"],
-    ["cp", "xtask/doc-index.html", "{target}/doc/index.html"],
+    { write = "{target}/doc/index.html", contents = "{landing}" },
 ]

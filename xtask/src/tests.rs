@@ -25,23 +25,29 @@ fn commands_of<'a>(tree: &'a Tree, group: &str) -> Vec<(&'a Step, Vec<String>)> 
         .into_iter()
         .flat_map(|step| {
             let step = &tree.steps[step];
-            step.run.iter().map(move |command| {
-                (
-                    step,
-                    command
-                        .iter()
-                        .map(|word| {
-                            word.0
-                                .iter()
-                                .map(|piece| match piece {
-                                    Piece::Text(text) => text.clone(),
-                                    Piece::Value(_) => "{}".to_string(),
-                                })
-                                .collect::<String>()
-                        })
-                        .collect(),
-                )
-            })
+            step.run
+                .iter()
+                .filter_map(move |instruction| match instruction {
+                    Instruction::Command(command) => Some(command),
+                    Instruction::Write { .. } => None,
+                })
+                .map(move |command| {
+                    (
+                        step,
+                        command
+                            .iter()
+                            .map(|word| {
+                                word.0
+                                    .iter()
+                                    .map(|piece| match piece {
+                                        Piece::Text(text) => text.clone(),
+                                        Piece::Value(_) => "{}".to_string(),
+                                    })
+                                    .collect::<String>()
+                            })
+                            .collect(),
+                    )
+                })
         })
         .collect()
 }

@@ -18,6 +18,8 @@ use {
 mod test_support;
 
 #[cfg(test)]
+mod instruction_tests;
+#[cfg(test)]
 mod layout_tests;
 #[cfg(test)]
 mod name_tests;
@@ -92,11 +94,34 @@ pub(crate) struct Step {
     pub(crate) consumes: Vec<Name>,
     /// The files this step makes, by their names.
     pub(crate) produces: Vec<Name>,
-    /// The commands, in order.
-    pub(crate) run: Vec<Vec<Word>>,
+    /// What it runs, in order.
+    pub(crate) run: Vec<Instruction>,
     /// Where the commands run, from the repository's root.
     pub(crate) dir: Option<String>,
 }
+
+/// One thing a step runs.
+#[derive(Debug)]
+pub(crate) enum Instruction {
+    /// A command: the words a person would type, the program first.
+    Command(Vec<Word>),
+    /// A file written whole: where, from where the step runs, and what it holds.
+    Write { path: Word, contents: Word },
+}
+
+impl Instruction {
+    /// Every word the instruction holds.
+    pub(crate) fn words(&self) -> impl Iterator<Item = &Word> {
+        match self {
+            Instruction::Command(words) => words.iter().collect::<Vec<_>>(),
+            Instruction::Write { path, contents } => vec![path, contents],
+        }
+        .into_iter()
+    }
+}
+
+/// The keys a write holds, besides which it holds none.
+const WRITE_KEYS: [&str; 2] = ["write", "contents"];
 
 /// A file a step makes: where it is, and which step makes it.
 #[derive(Debug)]
@@ -556,38 +581,53 @@ impl Tree {
                 }
             }
 
+            // A word of what the step runs, held to reading only the produced files the step is ordered after.
+            let word = |word: &toml_edit::Value| -> Result<Word, Refusal> {
+                let text = word
+                    .as_str()
+                    .ok_or_else(|| file.refuse(word.span(), "a word is a string".to_string()))?;
+                let word_value = word_of(file, text, word.span(), &kinds, &tree.variables)?;
+                for fill in word_value.fills() {
+                    if let Fill::Produced(name) = fill
+                        && !consumes.contains(name)
+                        && !produces.contains(name)
+                    {
+                        return Err(file.refuse(
+                            word.span(),
+                            format!("`{}` is a file this step neither consumes nor produces, so nothing orders it after the step that makes it", dotted(name)),
+                        ));
+                    }
+                }
+                Ok(word_value)
+            };
             let mut run = Vec::new();
             if let Some(item) = step.table.get("run") {
-                let commands = item.as_array().ok_or_else(|| {
-                    file.refuse(item.span(), "`run` is a list of commands".to_string())
+                let instructions = item.as_array().ok_or_else(|| {
+                    file.refuse(item.span(), "`run` is a list of instructions".to_string())
                 })?;
-                for command in commands.iter() {
-                    let words = command
+                for instruction in instructions.iter() {
+                    if let Some(table) = instruction.as_inline_table() {
+                        run.push(write_of(
+                            file,
+                            table,
+                            instruction.span(),
+                            &tree.variables,
+                            &word,
+                        )?);
+                        continue;
+                    }
+                    let words = instruction
                         .as_array()
                         .filter(|words| !words.is_empty())
                         .ok_or_else(|| {
-                            file.refuse(command.span(), "a command is a list of words".to_string())
+                            file.refuse(
+                                instruction.span(),
+                                "an instruction is a command, a list of words, or a write, `{ write = path, contents = text }`".to_string(),
+                            )
                         })?;
-                    let mut written_words = Vec::new();
-                    for word in words.iter() {
-                        let text = word.as_str().ok_or_else(|| {
-                            file.refuse(word.span(), "a word is a string".to_string())
-                        })?;
-                        let word_value = word_of(file, text, word.span(), &kinds, &tree.variables)?;
-                        for fill in word_value.fills() {
-                            if let Fill::Produced(name) = fill
-                                && !consumes.contains(name)
-                                && !produces.contains(name)
-                            {
-                                return Err(file.refuse(
-                                    word.span(),
-                                    format!("`{}` is a file this step neither consumes nor produces, so nothing orders it after the step that makes it", dotted(name)),
-                                ));
-                            }
-                        }
-                        written_words.push(word_value);
-                    }
-                    run.push(written_words);
+                    run.push(Instruction::Command(
+                        words.iter().map(&word).collect::<Result<_, _>>()?,
+                    ));
                 }
             }
 
@@ -665,12 +705,12 @@ impl Tree {
         after
     }
 
-    /// The command-line variables a step's commands use.
+    /// The command-line variables a step's instructions use.
     pub(crate) fn given_to(&self, step: usize) -> BTreeSet<Name> {
         self.steps[step]
             .run
             .iter()
-            .flatten()
+            .flat_map(Instruction::words)
             .flat_map(Word::fills)
             .filter_map(|fill| match fill {
                 Fill::Variable(name)
@@ -1028,6 +1068,51 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
 }
 
 /// The word `text` writes, its braces resolved in `file`'s scope.
+/// The write `table` states: the file its `write` names and the `contents` it holds, each one string, so neither may be a value that stands for several words or none.
+fn write_of(
+    file: &File<'_>,
+    table: &toml_edit::InlineTable,
+    span: Option<Range<usize>>,
+    variables: &BTreeMap<Name, Variable>,
+    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
+) -> Result<Instruction, Refusal> {
+    if let Some((key, _)) = table.iter().find(|(key, _)| !WRITE_KEYS.contains(key)) {
+        return Err(file.refuse(
+            span,
+            format!("a write holds `write` and `contents`, and `{key}` is neither"),
+        ));
+    }
+    let one = |key: &str| -> Result<Word, Refusal> {
+        let value = table.get(key).ok_or_else(|| {
+            file.refuse(
+                span.clone(),
+                format!("a write names the file it writes, `write`, and what it holds, `contents`, and this one lacks `{key}`"),
+            )
+        })?;
+        let written = word(value)?;
+        if let Some(Fill::Variable(name)) = written.alone()
+            && matches!(
+                variables.get(name),
+                Some(Variable::Output(_) | Variable::Flag { .. })
+            )
+        {
+            return Err(file.refuse(
+                value.span(),
+                format!(
+                    "a write's `{key}` is one string, and `{}` may stand for several words or none",
+                    dotted(name)
+                ),
+            ));
+        }
+        Ok(written)
+    };
+
+    Ok(Instruction::Write {
+        path: one("write")?,
+        contents: one("contents")?,
+    })
+}
+
 fn word_of(
     file: &File<'_>,
     text: &str,
