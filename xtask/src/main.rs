@@ -12,7 +12,7 @@
 //!
 //! **The test runner is a tool a contributor installs.** A test step launches `cargo-nextest` before anything is built, and a launch that finds no such program is refused with the command that installs it, as every tool's is; why nextest is the README's decision.
 //!
-//! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
+//! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes the build products git ignores, keeping untracked work and the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
 //!
 //! **A dependency of nothing, beside the compiler.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of the compiler, so it is a member the compiler's checks leave out of their selection, as they leave out the bench and the board, and its dependencies' features unify into no build of the compiler. Why is the README's decision.
 
@@ -132,7 +132,7 @@ enum Asked {
     ProfilePrelude,
 
     #[command(
-        about = "Remove everything git does not track, including the build products, except the worktrees under .claude/worktrees"
+        about = "Remove the build products git ignores, keeping untracked work and the worktrees under .claude/worktrees"
     )]
     Clean,
 }

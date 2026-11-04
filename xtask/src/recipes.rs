@@ -512,10 +512,10 @@ pub(crate) fn profile_prelude() -> Result<(), String> {
 }
 
 pub(crate) fn clean() -> Result<(), String> {
-    // A worktree under `.claude/worktrees` is a nested checkout `-ff` would delete with whatever another session has not committed in it.
+    // `-X` removes what the ignore rules mark as a build product and nothing else: an untracked file is work no commit holds yet. A worktree under `.claude/worktrees` is ignored, and a nested checkout `-ff` would delete with whatever another session has not committed in it, so the negated pattern un-ignores it, which leaves it to `-X`.
     run(
         Command::new("git"),
-        &["clean", "-xffd", "--exclude", ".claude/worktrees"],
+        &["clean", "-Xffd", "--exclude", "!/.claude/worktrees"],
     )?;
 
     Ok(())
