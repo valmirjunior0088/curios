@@ -54,7 +54,7 @@ fn embedded_archives_validate() {
 #[test]
 fn the_stored_prelude_declares_no_tests() {
     with_prelude(|prelude| {
-        assert!(prelude.iter().all(|root| root.core().tests.is_empty()));
+        assert!(prelude.iter().all(|root| root.core().tests().is_empty()));
     });
 }
 
@@ -399,7 +399,7 @@ fn every_root_restores_the_record_its_establishing_walk_filed() {
     with_prelude(|prelude| {
         for root in prelude {
             let (core, certification) = (root.core(), root.certification());
-            curios_core::validate_stored_identities(core)
+            curios_core::validate_stored_identities(core, root.mounts())
                 .unwrap_or_else(|found| panic!("a restored root carries {found}"));
             assert!(
                 certification.covers(core),
@@ -733,8 +733,8 @@ fn stored_prelude_measurements() {
 
         for (index, root) in prelude.iter().enumerate() {
             let core = root.core();
-            let name = core
-                .mounts
+            let name = root
+                .mounts()
                 .first()
                 .map(|mount| mount.prefix.join())
                 .unwrap_or_else(|| "?".to_string());
@@ -783,7 +783,7 @@ fn stored_prelude_measurements() {
             println!("  definitions                  {definitions:>10}");
             println!(
                 "  witnesses                    {:>10}",
-                core.witnesses.len()
+                core.witnesses().len()
             );
             println!(
                 "  inductives                   {:>10}",

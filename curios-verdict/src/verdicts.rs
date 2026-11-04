@@ -607,7 +607,7 @@ impl Verdicts {
         };
 
         // The rule a stored unit is checked against, at the second seam a unit is written — the first being the prelude's build script. An identity meaningful only in the compilation that made it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently rather than failing, which admits. Storing nothing is always safe, so a unit that would carry one is dropped rather than refused: the compilation it came from is correct, and only the record is withheld.
-        if curios_core::validate_stored_identities(unit.core()).is_err() {
+        if curios_core::validate_stored_identities(unit.core(), unit.mounts()).is_err() {
             return None;
         }
 

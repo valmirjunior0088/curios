@@ -26,9 +26,6 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
 fn over(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -181,10 +178,7 @@ impl Held {
             .order
             .revised(&self.definitions, &self.places, &made, &dropped)
             .expect("a revision of a module whose items reach no cycle");
-        let definitions = Definitions {
-            items,
-            ..over(Vec::new())
-        };
+        let definitions = Definitions { items };
 
         let whole = Held::whole(now);
         assert_eq!(

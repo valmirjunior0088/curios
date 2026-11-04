@@ -1,4 +1,4 @@
-//! The `tests` query: every test a subject declares, as `{ path }` records — read off `Module::tests` by the compilation that would build the subject, executing nothing. A rung is a constructor the body builds at run time, so a record deliberately does not name one.
+//! The `tests` query: every test a subject declares, as `{ path }` records — read off its lowered module's tests (`curios_core::Definitions::tests`) by the compilation that would build the subject, executing nothing. A rung is a constructor the body builds at run time, so a record deliberately does not name one.
 
 use {
     crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},

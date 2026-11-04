@@ -15,10 +15,7 @@ use {
         Telescope, Term, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::Arc,
-    },
+    std::{collections::BTreeMap, sync::Arc},
 };
 
 /// A top-level definition, as `recheck_definitions_verdicts` binds one.
@@ -288,10 +285,7 @@ pub(super) fn forgery() -> Program {
     Program {
         definitions: declaring(
             Definitions {
-                mounts: Vec::new(),
                 items: vec![unbox, boxes_equal, types_equal, cast, forged].into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             BTreeMap::from([
                 (false_name, proposition(Vec::new())),
@@ -325,15 +319,12 @@ pub(super) fn selection_module(body: Term) -> Program {
     Program {
         definitions: declaring(
             Definitions {
-                mounts: Vec::new(),
                 items: vec![authored(
                     &Global::Authored(Qualifier::from(["bad"])),
                     absurd.clone(),
                     Term::rec_proj(group, 0),
                 )]
                 .into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             BTreeMap::from([(name, proposition(Vec::new()))]),
             [],
@@ -377,10 +368,7 @@ pub(super) fn indexed_definitions(target: Term) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -407,10 +395,7 @@ pub(super) fn sorted_definition(sort: Term) -> Definitions {
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -435,10 +420,7 @@ pub(super) fn sorted_registry(sort: Term) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -486,10 +468,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(held_name, proposition(vec![qed])), (family, declaration)]),
         [],
@@ -610,10 +589,7 @@ pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
     Program {
         definitions: declaring(
             Definitions {
-                mounts: Vec::new(),
                 items: vec![held, forged].into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             decls,
             [],
@@ -713,7 +689,6 @@ pub(super) fn sole_arm_forgery() -> Program {
         definitions: declaring(
             Definitions {
                 items: vec![forged].into(),
-                ..Definitions::default()
             },
             decls,
             [],
@@ -772,7 +747,6 @@ pub(super) fn sole_arm_control() -> Definitions {
     declaring(
         Definitions {
             items: vec![cast].into(),
-            ..Definitions::default()
         },
         decls,
         [],
@@ -821,10 +795,7 @@ pub(super) fn relevant_index_control() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![vacuous].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         decls,
         [],
@@ -899,10 +870,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![vacuous].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([
             (two_name, two_decl),
@@ -932,10 +900,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Defini
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -959,10 +924,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Definiti
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1008,10 +970,7 @@ pub(super) fn instance_of_width(width: usize) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(definition))].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1043,7 +1002,6 @@ pub(super) fn family_instance_at(instance: u32, expected: u32) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["held"])),
                 Term::type_at(Level::constant(expected)),
@@ -1055,8 +1013,6 @@ pub(super) fn family_instance_at(instance: u32, expected: u32) -> Definitions {
                 ),
             )]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1084,7 +1040,6 @@ pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             Item::Let(Box::new(scheme)),
             authored(
@@ -1094,8 +1049,6 @@ pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1135,10 +1088,7 @@ pub(super) fn foreign_held_at(
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(definition))].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(*false_name, proposition(Vec::new()))]),
         [],
@@ -1188,10 +1138,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Definit
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(former))].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1280,10 +1227,7 @@ fn extraction(sort: Term, instance: Option<Level>, tags: &[&str]) -> Definitions
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![extract].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1362,10 +1306,7 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![all_zero].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(equality, equality_declaration())]),
         [],
@@ -1434,10 +1375,7 @@ pub(super) fn occurrence_definitions(params: Vec<Term>, indices: Vec<Term>) -> D
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1504,10 +1442,7 @@ pub(super) fn struct_value_definitions(params: Vec<Term>) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         [],
         BTreeMap::from([(name, declaration)]),
@@ -1560,10 +1495,7 @@ pub(super) fn variant_value_definitions(params: Vec<Term>) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1580,10 +1512,7 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Definitions)> {
 
     let two_binder = |result: Term| Telescope::build([(a, nat.clone()), (b, nat.clone())], result);
     let definitions_of = |items: Vec<Item>| Definitions {
-        mounts: Vec::new(),
         items: items.into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
@@ -1671,15 +1600,12 @@ pub(super) fn arm_definitions(binders: Vec<(Plicity, Free)>) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["held"])),
                 declared,
                 three,
             )]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1695,7 +1621,6 @@ pub(super) fn marked_apply_definitions(mark: Plicity) -> Definitions {
     let former = Global::Authored(Qualifier::from(["f"]));
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(
                 &former,
@@ -1712,8 +1637,6 @@ pub(super) fn marked_apply_definitions(mark: Plicity) -> Definitions {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1765,10 +1688,7 @@ pub(super) fn eta_former_definitions(lying: bool) -> (Definitions, Term) {
 
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         [],
         BTreeMap::from([(name, declaration)]),
@@ -1808,7 +1728,6 @@ pub(super) fn forwarding_definitions(declared: Plicity) -> Definitions {
     let [by_name, by_literal] = forwarding_items();
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(&g, typed(Plicity::Implicit, 950), lambda(951, 952)),
             authored(
@@ -1819,8 +1738,6 @@ pub(super) fn forwarding_definitions(declared: Plicity) -> Definitions {
             authored(&by_literal, typed(declared, 954), lambda(955, 956)),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1847,15 +1764,12 @@ pub(super) fn rec_apply_definitions() -> Definitions {
     let selection = Term::rec([(f, member_type, member_body)], Term::free_var(&f));
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["held"])),
             Term::apply(selection, [three.clone()]),
             three,
         )]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1931,10 +1845,7 @@ pub(super) fn proof_at_an_argument_definitions(reaching: bool) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![diverging_sink(), reaching_definition(), held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(vouched_name, declaration)]),
         [],
@@ -1950,7 +1861,6 @@ pub(super) fn proof_typed_nullary_group() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Rec(RecItem::new(vec![(
                 member,
                 Definition {
@@ -1965,8 +1875,6 @@ pub(super) fn proof_typed_nullary_group() -> Definitions {
                 },
             )]))]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(vouched_name, declaration)]),
         [],
@@ -2008,10 +1916,7 @@ pub(super) fn two_sinks_definitions(first: &str, second: &str) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![diverging(first), diverging(second), held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(vouched_name, declaration)]),
         [],
@@ -2109,10 +2014,7 @@ pub(super) fn reaching_library(with_proof: bool) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         induct_decls,
         [],
@@ -2126,10 +2028,7 @@ pub(super) fn carried_proof_definitions() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held_proof()].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(vouched_name, declaration)]),
         [],
@@ -2210,15 +2109,12 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["bad"])),
                 held,
                 Term::variant(held_name, Vec::<Term>::new(), "qed", [payload]),
             )]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         induct_decls,
         [],
@@ -2268,15 +2164,12 @@ pub(super) fn plicity_definitions(honest: bool, payload_count: usize) -> Definit
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![authored(
                 &Global::Authored(Qualifier::from(["value"])),
                 held,
                 Term::variant(held_name, Vec::<Term>::new(), "mk", payload),
             )]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         induct_decls,
         [],
@@ -2412,10 +2305,7 @@ pub(super) fn index_forgery() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![forged, cast, held_value, boom].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([
             (true_name, true_decl),
@@ -2455,15 +2345,12 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Definitions)> {
     let lie = lying_type(&b);
 
     let probe_module = |body: Term, type_: Term| Definitions {
-        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["probe"])),
             type_,
             body,
         )]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     vec![
@@ -2684,10 +2571,7 @@ pub(super) fn computed_field_forgery() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![forged, cast, held_value, boom].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([
             (false_name, false_decl),
@@ -2760,10 +2644,7 @@ pub(super) fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>)
     }
 
     Definitions {
-        mounts: Vec::new(),
         items: items.into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -2922,10 +2803,7 @@ pub(super) fn universe_refinement_definitions(target: Level, route: Route) -> De
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![f_item, coerce].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(e_name, e_decl), (q_name, q_decl)]),
         [],
@@ -2971,10 +2849,7 @@ pub(super) fn collision_definitions(
 ) -> Definitions {
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         induct_decls,
         [],
@@ -3565,10 +3440,7 @@ fn definitions_of(
 ) -> Definitions {
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         induct_decls,
         struct_decls,

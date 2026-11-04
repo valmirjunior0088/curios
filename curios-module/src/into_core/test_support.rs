@@ -195,7 +195,7 @@ pub(super) fn fixture_loader() -> RootSource {
 
 /// The entry's body as the lowering writes it, the module it closes over left aside.
 pub(super) fn run(src: &str) -> curios_core::Term {
-    let (program, _, _) = super::into_core(
+    let (program, _, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -207,7 +207,7 @@ pub(super) fn run(src: &str) -> curios_core::Term {
 
 /// What `src` lowers to as a suite reads it: each definition's name, type and body in the module's order, beside the entry's body.
 pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
-    let (program, _, _) = super::into_core(
+    let (program, _, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -228,7 +228,7 @@ pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
 pub(super) type Lowered = (curios_core::Global, curios_core::Term, curios_core::Term);
 
 pub(super) fn lowered_definitions(src: &str) -> curios_core::Definitions {
-    let (program, _, _) = super::into_core(
+    let (program, _, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -275,7 +275,7 @@ fn elaborate_program(
     src: &str,
     established: &curios_elab::Established<'_>,
 ) -> curios_core::Program {
-    let (program, minted, _) = super::into_core(
+    let (program, minted, _, mounts) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -285,6 +285,7 @@ fn elaborate_program(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         established,
         &program.definitions,
+        &mounts,
         &minted,
         curios_elab::Tail::Entry(&program.entrypoint),
     )
@@ -307,7 +308,7 @@ pub(super) fn elaborate_source(src: &str) -> curios_core::Definitions {
 }
 
 pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
-    let (lowered, minted, _) = super::into_core(
+    let (lowered, minted, _, mounts) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -317,19 +318,21 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
 
     let mut lowered_prefix = lowered.definitions.clone();
     lowered_prefix.items = lowered_prefix.items.iter().take(1).cloned().collect();
-    lowered_prefix.witnesses.clear();
-    lowered_prefix.tests.clear();
     let nothing = curios_elab::Established::nothing();
     let (prelude, traces) = curios_elab::elaborate_and_zonk_unit(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &nothing,
         &lowered_prefix,
+        &mounts,
         &minted,
     )
     .unwrap();
 
     let full = elaborate_program(src, &nothing);
-    let cached = elaborate_program(src, &curios_elab::Established::over(&[(&prelude, &traces)]));
+    let cached = elaborate_program(
+        src,
+        &curios_elab::Established::over(&[(&prelude, &mounts, &traces)]),
+    );
     (full, cached)
 }
 

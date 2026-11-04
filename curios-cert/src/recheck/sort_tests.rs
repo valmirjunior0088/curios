@@ -11,7 +11,6 @@ use {
         UniverseContext, UniverseParam, Universes, test_support::*,
     },
     curios_surface::Spelling,
-    std::collections::BTreeSet,
 };
 
 /// A context that leaves `sorts` sorts to its caller and binds no level.
@@ -61,10 +60,7 @@ fn definitions(
 ) -> Definitions {
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         families,
         [],
@@ -704,10 +700,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
     };
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         [],
         [(named("W"), declaration)],

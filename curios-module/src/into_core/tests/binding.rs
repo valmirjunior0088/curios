@@ -207,11 +207,11 @@ fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
 
 #[test]
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
-    // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
+    // A lowered module's tests keep declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
     let definitions =
         lowered_definitions("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
     assert_eq!(
-        definitions.tests,
+        definitions.tests(),
         vec![global_name("Inner/inner_holds"), global_name("outer_holds")],
     );
     let kinds: Vec<_> = definitions
@@ -283,12 +283,12 @@ fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
     let is_test = |item: &curios_core::Item| matches!(item, curios_core::Item::Let(def) if def.kind == curios_core::DefinitionKind::Test);
 
     let built = lowered(&crate::RootSource::none());
-    assert!(built.tests.is_empty());
+    assert!(built.tests().is_empty());
     assert!(!built.items.iter().any(is_test));
 
     let tested = lowered(&fixture_loader());
     assert_eq!(
-        tested.tests,
+        tested.tests(),
         vec![global_name("outer"), global_name("Inner/inner")]
     );
     assert_eq!(tested.items.iter().filter(|item| is_test(item)).count(), 2);

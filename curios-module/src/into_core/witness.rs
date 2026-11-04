@@ -14,7 +14,7 @@ use {
     curios_common::{Plicity, Qualifier},
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, HashSet},
     },
 };
 
@@ -158,7 +158,6 @@ fn module_of(witness: &FlatLet) -> Qualifier {
 /// The tables a unit's lowering keys by a declaration's name, each as it stands once every item is lowered.
 pub(super) struct Named<'a> {
     pub items: &'a mut [FlatItem],
-    pub witnesses: &'a mut BTreeSet<curios_core::Global>,
     pub minted: &'a mut curios_core::Minted,
     pub imports: &'a mut curios_core::Imports,
     pub lints: &'a mut BTreeMap<Qualifier, Vec<Lint>>,
@@ -177,10 +176,6 @@ pub(super) fn rename_witnesses(
     for let_ in named.items.iter_mut().flat_map(FlatItem::lets_mut) {
         let_.name = renamed(let_.name);
     }
-    *named.witnesses = std::mem::take(named.witnesses)
-        .into_iter()
-        .map(renamed)
-        .collect();
     // One witness may take the name another held, its place among its module's moved: every entry is taken under the name it was held by before any is placed under the one it takes.
     let held = names
         .keys()

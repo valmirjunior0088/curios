@@ -45,7 +45,6 @@ fn method(owner: &str, label: &str) -> Item {
 fn definitions(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        ..Definitions::default()
     }
 }
 

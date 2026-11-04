@@ -107,7 +107,7 @@ pub(crate) fn compile_lowered_over(
     };
 
     // A mount says how every name of the unit is spelled, so a unit whose mounts moved keeps nothing.
-    let relowered = match baseline.core().mounts == lowered.core().mounts {
+    let relowered = match baseline.mounts() == lowered.mounts() {
         true => lowered
             .lowered_anew()
             .expect("a unit lowered over its baseline")
@@ -144,6 +144,7 @@ pub(crate) fn compile_lowered_over(
             &established,
             recompile,
             lowered.core(),
+            lowered.mounts(),
             lowered.minted(),
             tail,
         ),
@@ -152,6 +153,7 @@ pub(crate) fn compile_lowered_over(
             &established,
             recompile,
             lowered.core(),
+            lowered.mounts(),
             lowered.minted(),
         )
         .map(|recompiled| (recompiled, None)),

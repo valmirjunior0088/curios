@@ -119,6 +119,7 @@ fn elaborated_over(
             candidates: None,
         },
         lowered.core(),
+        lowered.mounts(),
         lowered.minted(),
     )
 }
@@ -681,7 +682,6 @@ fn std_image_division() {
                 let sharing = Sharing::new();
                 let definitions = Definitions {
                     items: vec![item.clone()].into(),
-                    ..Definitions::default()
                 };
                 definitions.shared(&sharing);
 
@@ -1433,8 +1433,8 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         };
         // A term as a report raised in `owner` prints it, settled where its reader stands and read back as the tree it parses to: `None` where the translation declines it.
         let established = Established::placed(&[
-            (sys.core(), sys.places(), sys.traces()),
-            (std.core(), std.places(), std.traces()),
+            (sys.core(), sys.places(), sys.mounts(), sys.traces()),
+            (std.core(), std.places(), std.mounts(), std.traces()),
         ]);
         let written = |term: &Term, owner: Global| {
             let term = &written_for_reader(&established, SYNTAX, term);

@@ -193,7 +193,6 @@ fn curry_through_a_list_is_refused_at_the_family_alone() {
             |payload| payload,
         )]
         .into(),
-        ..Definitions::default()
     };
 
     let verdicts = verdicts(definitions, curried(|payload| payload, |list| list));
@@ -247,7 +246,6 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
                 Nominal::Struct(declaration),
             )))]
             .into(),
-            ..Definitions::default()
         };
         let verdicts = verdicts(definitions, false_type());
 

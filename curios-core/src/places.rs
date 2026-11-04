@@ -2,7 +2,7 @@
 //!
 //! A finished module is read by name: a later unit's elaboration asks for a definition's type, the certifier for what a name unfolds to, erasure for how one is bound. [`Places`] says where a name is held — the item that declares it and, for a group's member, which member — and is made once for a module and kept with whatever holds the module, so no reader keys a module again.
 //!
-//! **Looked up, never walked.** The table is a hash's, and nothing reads its order. It is persistent, so the places of a version of a module are its module's with the names of what the version changed placed again ([`Places::place_item`], [`Places::forget`]).
+//! **Looked up, never walked.** The table is a hash's, and nothing reads its order. It is persistent, so the places of a version of a module are its module's with the names of what the version changed placed again ([`Places::place_item`], [`Places::forget`]). Beside it the module's witnesses are kept in the order of their names, which state a witness's concept and key first, so the ones at one key are neighbours and are read with no other ([`Places::witnesses_at`]).
 //!
 //! **One place for a name.** A finished module declares each name once: lowering refuses a second declaration and the certifier a module that carries one. A table made of a module that did would hold the later declaration and say nothing of the earlier, to every reader alike, so such a module is its builder's fault and has no places — asserted, where a walk reports.
 
@@ -10,8 +10,10 @@
 mod tests;
 
 use {
-    super::{Definitions, Global, Item, Items, RecGroup, RecItem, Term},
-    curios_common::{Keyed, Persistent},
+    super::{
+        Declared, Definitions, Global, Item, Items, RecGroup, RecItem, Term, WitnessId, WitnessKey,
+    },
+    curios_common::{Keyed, Persistent, Qualifier, Sorted},
     std::{cell::OnceCell, collections::HashMap, rc::Rc},
 };
 
@@ -44,6 +46,8 @@ struct Held {
 #[derive(Debug, Clone, Default)]
 pub struct Places {
     places: Persistent<Global, Held>,
+    /// The names the module declares as witnesses, in their order.
+    witnesses: Sorted<Global, ()>,
     /// The item each of the module's groups is, made the first time a report asks which names a group's members go by.
     groups: OnceCell<HashMap<Keyed<RecGroup>, usize>>,
 }
@@ -65,6 +69,11 @@ impl Places {
         const TWICE: &str = "a module declares one name twice";
         let item = u64::try_from(place).expect("a place is counted in a u64");
         let group = items.is_group(place);
+        for (name, declared) in items.names(place).into_iter().zip(items.declared(place)) {
+            if declared == Declared::Witness {
+                self.witnesses.insert(*name, ());
+            }
+        }
         for (member, name) in items.names(place).into_iter().enumerate() {
             let held = match group {
                 false => Held {
@@ -90,7 +99,41 @@ impl Places {
     /// Hold `name` nowhere: a version of a module that no longer declares it, or declares it elsewhere.
     pub fn forget(&mut self, name: &Global) {
         self.places.remove(name);
+        self.witnesses.remove(name);
         self.groups = OnceCell::new();
+    }
+
+    /// Whether the module declares `name` as a witness.
+    pub fn is_witness(&self, name: &Global) -> bool {
+        self.witnesses.contains_key(name)
+    }
+
+    /// The names the module declares as witnesses, in the order of their names: by concept, then by key.
+    pub fn witnesses(&self) -> impl Iterator<Item = &Global> {
+        self.witnesses.iter().map(|(name, ())| name)
+    }
+
+    /// The witnesses the module declares at `concept` and `key`, in the order of their names: a witness's name states its concept and its key first ([`WitnessId`]), so the ones declared at one key are neighbours, and reading them reads no other.
+    pub fn witnesses_at(
+        &self,
+        concept: &Qualifier,
+        key: &WitnessKey,
+    ) -> impl Iterator<Item = &Global> {
+        let from = Global::Witness(WitnessId::Spelled {
+            concept: *concept,
+            key: *key,
+            module: Qualifier::empty(),
+            place: 0,
+        });
+        let at = (Global::Authored(*concept), *key);
+
+        self.witnesses
+            .iter_from(&from)
+            .map(|(name, ())| name)
+            .take_while(move |name| match name {
+                Global::Witness(id) => id.spelled() == Some(at),
+                Global::Authored(_) => false,
+            })
     }
 
     /// Where the module holds `name`, where it defines it.

@@ -152,7 +152,6 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Definitions, Term) {
 
     let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Definitions::default()
     };
 
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
@@ -266,7 +265,6 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Definitions, Term) {
 
     let definitions = Definitions {
         items: vec![declared(two, Nominal::Inductive(declaration))].into(),
-        ..Definitions::default()
     };
 
     a_guard_settled_where_its_operands_are_one(definitions, &|| {

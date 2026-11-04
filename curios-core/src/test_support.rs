@@ -133,7 +133,6 @@ pub fn declaring(
 
     Definitions {
         items: stored.into(),
-        ..definitions
     }
 }
 

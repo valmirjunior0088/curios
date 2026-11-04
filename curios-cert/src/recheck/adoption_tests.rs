@@ -32,7 +32,6 @@ fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definit
     let x = Free::local(10, Some("x"));
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(&global("alias"), Term::type_ground(), alias),
             authored(
@@ -55,8 +54,6 @@ fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definit
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -172,7 +169,6 @@ fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_chan
 fn versioned(definitions: Definitions) -> Definitions {
     Definitions {
         items: definitions.items.version(),
-        ..definitions
     }
 }
 
@@ -185,10 +181,7 @@ fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definitions {
     let mut items = definitions.items.clone();
     items.replace(place, item);
 
-    Definitions {
-        items,
-        ..definitions.clone()
-    }
+    Definitions { items }
 }
 
 /// Over a baseline the walked module is a version of, the walk compares the two by what they do not share, judges the item that changed and asks what read it, and files the record a walk over every declaration of the module files: `identity` returns `7`.
@@ -382,7 +375,6 @@ fn chained_definitions(partial: bool) -> Definitions {
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             base,
             defined(
@@ -401,8 +393,6 @@ fn chained_definitions(partial: bool) -> Definitions {
             authored(&global("apart"), nat(), literal(7)),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -767,7 +757,6 @@ fn value_sort_definitions(h_body: Term, h_value_sort: Term, g_value_sort: Term) 
     let g = Term::instance(global("G"), Universes::default());
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             aliased(&global("H"), type_at(5), h_body, h_value_sort),
             aliased(
@@ -783,8 +772,6 @@ fn value_sort_definitions(h_body: Term, h_value_sort: Term, g_value_sort: Term) 
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -867,10 +854,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
     );
     let reader = || Program {
         definitions: Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         entrypoint: Entrypoint {
             body: Term::instance(loop_name, Universes::default()),
@@ -924,7 +908,6 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
 /// The walk states `L`'s value sort by `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so what it states of `L` is a function of what it stated of `K` and of nothing else about `K`, and nothing the module says of a sort.
 fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             aliased(&global("H"), type_at(5), h_body, h),
             aliased(
@@ -941,8 +924,6 @@ fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definiti
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1004,7 +985,6 @@ fn walked_whole(definitions: &Definitions) -> Rechecked {
 /// `M : Type 5 = L` stating `sort`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
 fn later_alias(sort: Term) -> Definitions {
     Definitions {
-        mounts: Vec::new(),
         items: vec![aliased(
             &global("M"),
             type_at(5),
@@ -1012,8 +992,6 @@ fn later_alias(sort: Term) -> Definitions {
             sort,
         )]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1090,10 +1068,7 @@ fn refining_definitions_assumed(target: Term, assumed: Term, body: Term) -> Defi
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![item].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1173,10 +1148,7 @@ fn applying_definitions() -> Definitions {
         ),
     ));
 
-    Definitions {
-        items,
-        ..definitions
-    }
+    Definitions { items }
 }
 
 /// One question, one answer: the digest a stage outside the certifier asks a part by ([`part_digest`]) reads a unit's classification where the certifier's own ([`read_digest`]) reads one, off a record that covers its unit and nowhere else, as [`Globals::partial`] does.
@@ -1256,10 +1228,7 @@ fn varied_family(variances: Vec<Variance>) -> Definitions {
     };
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],
@@ -1324,7 +1293,6 @@ fn grouped_scheme(universe_context: curios_core::UniverseContext) -> Item {
 fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_it() {
     let baseline = versioned(Definitions {
         items: vec![grouped_scheme(scheme_context())].into(),
-        ..Definitions::default()
     });
     let certification = walked(&baseline).certification;
     let edited = replaced(&baseline, "A", grouped_scheme(open_context()));
@@ -1760,7 +1728,6 @@ fn paradox_module() -> Program {
         definitions: declaring(
             Definitions {
                 items: vec![paradox].into(),
-                ..Definitions::default()
             },
             BTreeMap::from([(false_name, proposition(Vec::new()))]),
             BTreeMap::from([(boxed_name, boxed_decl)]),
@@ -1778,7 +1745,6 @@ fn paradox_module() -> Program {
 fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
     let baseline = versioned(Definitions {
         items: vec![carrier_group(carrier_context())].into(),
-        ..Definitions::default()
     });
     let certification = walked(&baseline).certification;
     let offered = replaced(&baseline, "carrier", carrier_group(open_carrier_context()));

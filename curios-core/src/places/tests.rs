@@ -22,7 +22,6 @@ fn definition(name: &str) -> Definition {
 fn definitions(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        ..Definitions::default()
     }
 }
 
@@ -72,7 +71,6 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
     ]);
     let mut version = Definitions {
         items: definitions.items.version(),
-        ..definitions.clone()
     };
     let first = version.items.places().next().expect("an item");
     let between = version
@@ -100,7 +98,6 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
 
     let mut later = Definitions {
         items: version.items.version(),
-        ..version.clone()
     };
     let second = held.place(&name("second")).expect("placed").item();
     later.items.remove(second);
@@ -158,4 +155,47 @@ fn a_version_says_what_it_changed_of_its_items() {
     assert_eq!(changes.inserted, [between]);
     assert_eq!(changes.removed, [places[2]]);
     assert_eq!(definitions.items.changed_since(&earlier), None);
+}
+
+/// A witness the module declares at `concept` and `key`, under `module` at `place`.
+fn witness(concept: &str, key: HeadKey, module: &str, place: u32) -> Definition {
+    Definition {
+        name: Global::Witness(WitnessId::Spelled {
+            concept: Qualifier::from([concept]),
+            key: WitnessKey::from([key]),
+            module: Qualifier::from([module]),
+            place,
+        }),
+        kind: DefinitionKind::Witness,
+        ..definition("witness")
+    }
+}
+
+/// The witnesses at one key are found among the module's by their concept and key, the others passed over, and a name a version forgets is no witness of it after.
+#[test]
+fn a_witness_is_found_at_its_key_until_the_module_forgets_it() {
+    let shown = witness("Show", HeadKey::Nat, "first", 0);
+    let shown_again = witness("Show", HeadKey::Nat, "second", 0);
+    let added = witness("Add", HeadKey::Nat, "first", 0);
+    let mut places = Places::of(&definitions(vec![
+        Item::Let(Box::new(definition("plain"))),
+        Item::Let(Box::new(shown.clone())),
+        Item::Let(Box::new(added.clone())),
+        Item::Let(Box::new(shown_again.clone())),
+    ]));
+    let at = |places: &Places| {
+        places
+            .witnesses_at(
+                &Qualifier::from(["Show"]),
+                &WitnessKey::from([HeadKey::Nat]),
+            )
+            .copied()
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(at(&places), [shown.name, shown_again.name]);
+    assert_eq!(places.witnesses().count(), 3);
+
+    places.forget(&shown.name);
+    assert_eq!(at(&places), [shown_again.name]);
 }

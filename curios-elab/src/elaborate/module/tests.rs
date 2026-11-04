@@ -51,15 +51,12 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
 fn definitions(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
 /// Every refusal one elaboration reports, rendered.
 fn refusals(context: &mut Context, definitions: &Definitions) -> Vec<String> {
-    match elaborate_and_zonk_definitions(context, definitions, &Rc::default()) {
+    match elaborate_and_zonk_definitions(context, definitions, &[], &Rc::default()) {
         Ok(_) => Vec::new(),
         Err(error) => error.each().map(Error::to_string).collect(),
     }
@@ -115,8 +112,9 @@ fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_s
         let_item("c", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
-        .expect("nothing was refused");
+    let elaborated =
+        elaborate_and_zonk_definitions(&mut context, &definitions, &[], &Rc::default())
+            .expect("nothing was refused");
 
     assert_eq!(
         elaborated
@@ -150,8 +148,9 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     };
     let definitions = declaring(definitions, [(nominal("T"), entry)], [], []);
 
-    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
-        .expect("nothing was refused");
+    let elaborated =
+        elaborate_and_zonk_definitions(&mut context, &definitions, &[], &Rc::default())
+            .expect("nothing was refused");
 
     assert!(elaborated.items.is_empty());
     assert!(elaborated.induct_decls().is_empty());
@@ -166,8 +165,9 @@ fn an_item_written_before_what_it_reads_elaborates_and_is_stored_after_it() {
         let_item("a", nat(), nat_lit(1)),
     ]);
 
-    let elaborated = elaborate_and_zonk_definitions(&mut context(), &definitions, &Rc::default())
-        .expect("nothing was refused");
+    let elaborated =
+        elaborate_and_zonk_definitions(&mut context(), &definitions, &[], &Rc::default())
+            .expect("nothing was refused");
 
     assert_eq!(
         elaborated
@@ -203,7 +203,7 @@ fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     let mut context = context();
     let definitions = definitions(vec![let_item("a", nat(), boolean(true))]);
 
-    elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
+    elaborate_and_zonk_definitions(&mut context, &definitions, &[], &Rc::default())
         .expect_err("refused");
 
     assert!(context.declared_type(&nominal("a")).is_none());
@@ -231,8 +231,9 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
         let_item("two", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_definitions(&mut context, &definitions, &Rc::default())
-        .expect("nothing was refused");
+    let elaborated =
+        elaborate_and_zonk_definitions(&mut context, &definitions, &[], &Rc::default())
+            .expect("nothing was refused");
 
     let marked = elaborated
         .items
@@ -249,7 +250,7 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
     assert!(context.declaration_body(&two).is_some());
 
     let traces = Traces::default();
-    let scope = Established::over(&[(&elaborated, &traces)]);
+    let scope = Established::over(&[(&elaborated, &[], &traces)]);
     let unfolds = |path| {
         scope
             .definition(&nominal(path))

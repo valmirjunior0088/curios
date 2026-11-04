@@ -13,7 +13,6 @@ use {
         Universes, test_support::*,
     },
     curios_surface::Spelling,
-    std::collections::BTreeSet,
 };
 
 /// A declaration's universe context is *assumed* while checking it, so an unsatisfiable one is a hypothesis set that proves anything.
@@ -46,10 +45,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
 
     let definitions = Definitions {
-        mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert!(
@@ -86,10 +82,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
 
     let definitions = Definitions {
-        mounts: Vec::new(),
         items: vec![Item::Let(Box::new(definition))].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert!(
@@ -176,10 +169,7 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let program = |items: Vec<Item>, body: Term| Program {
         definitions: Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         entrypoint: Entrypoint {
             body,
@@ -533,7 +523,6 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
 
     let zero = Global::Authored(Qualifier::from(["zero"]));
     let monomorphic = Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(
                 &zero,
@@ -547,8 +536,6 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert_eq!(
@@ -644,7 +631,6 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
         }],
     };
     let definitions = |claimed: Level| Definitions {
-        mounts: Vec::new(),
         items: vec![
             definition(
                 carrier,
@@ -664,8 +650,6 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     let verdicts = fixture_verdicts(
@@ -729,7 +713,6 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
             body,
         };
     let definitions = |claimed: Level| Definitions {
-        mounts: Vec::new(),
         items: vec![
             Item::Rec(RecItem::new(vec![(
                 fresh(None),
@@ -748,8 +731,6 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
             ))),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     let verdicts = fixture_verdicts(
@@ -826,7 +807,6 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
         }],
     };
     let definitions = |inhabitant: Level| Definitions {
-        mounts: Vec::new(),
         items: vec![
             definition(
                 carrier,
@@ -846,8 +826,6 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     let verdicts = fixture_verdicts(
@@ -930,7 +908,6 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
         }],
     };
     let definitions = |stated: Level| Definitions {
-        mounts: Vec::new(),
         items: vec![
             definition(
                 carrier,
@@ -952,8 +929,6 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
             ),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     for said in [Level::constant(2), Level::constant(7)] {
@@ -1025,7 +1000,6 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
     let definitions = |claimed: Level| {
         declaring(
             Definitions {
-                mounts: Vec::new(),
                 items: vec![Item::Let(Box::new(Definition {
                     name: reads,
                     kind: DefinitionKind::Authored,
@@ -1046,8 +1020,6 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
                     ),
                 }))]
                 .into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             [],
             [(record, declaration.clone())],
@@ -1122,7 +1094,6 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
         }],
     };
     let definitions = |parameters: usize, instance: Vec<Level>, claimed: Level| Definitions {
-        mounts: Vec::new(),
         items: vec![
             Item::Rec(RecItem::new(vec![(fresh(None), member(parameters))])),
             Item::Let(Box::new(Definition {
@@ -1137,8 +1108,6 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
             })),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     let verdicts = fixture_verdicts(
@@ -1190,7 +1159,6 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
     let held = Global::Authored(Qualifier::from(["held"]));
     let definitions =
         |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(Definition {
                 name: held,
                 kind: DefinitionKind::Authored,
@@ -1206,8 +1174,6 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
                 body,
             }))]
             .into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         };
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));

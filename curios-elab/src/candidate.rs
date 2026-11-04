@@ -13,7 +13,7 @@ use {
         Answered, HeldTrace, Made, Question, Read, TraceRecord, TraceTable, Traces, part_digest,
     },
     curios_common::{Candidates, Digest, Facet, Object},
-    curios_core::{Declarations, Definitions, Global, Item, ItemRun, Places},
+    curios_core::{Declarations, Declared, Definitions, Global, Item, ItemRun, Places},
     std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
 
@@ -109,10 +109,12 @@ impl<'a> Candidating<'a> {
             .flat_map(|position| self.lowered.items.names(*position))
             .copied()
             .collect::<Vec<_>>();
-        if names
-            .iter()
-            .any(|name| self.definitions.witnesses.contains(name))
-        {
+        if positions.iter().any(|position| {
+            self.lowered
+                .items
+                .declared(*position)
+                .contains(&Declared::Witness)
+        }) {
             return Ok(None);
         }
         let mut outputs = Vec::with_capacity(positions.len());

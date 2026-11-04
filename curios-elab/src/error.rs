@@ -2433,7 +2433,6 @@ impl Reading<'_> {
             Some((_, places)) => {
                 let definitions = Definitions {
                     items: self.definitions.items.clone(),
-                    ..Definitions::default()
                 };
                 let places = places.clone();
                 Box::new(move |name| definitions.island_of(&places, name))

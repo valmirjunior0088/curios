@@ -196,7 +196,6 @@ fn a_bare_group_read_under_the_readers_constraints() -> (Definitions, Term) {
             paradox_item,
         ]
         .into(),
-        ..Definitions::default()
     };
 
     (

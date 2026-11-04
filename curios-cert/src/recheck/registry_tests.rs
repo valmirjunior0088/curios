@@ -10,7 +10,7 @@ use {
         Telescope, Term, UniverseContext, UniverseParam, test_support::*,
     },
     curios_surface::Spelling,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// A constructor's *index target* is registry data, which the walk checks rather than believes.
@@ -176,10 +176,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
 
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(definition))].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(family, declaration)]),
         [],

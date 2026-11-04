@@ -5,7 +5,7 @@ use {
     curios_core::{Extent, Global, Intrinsic, Term, str_literal, syn_call},
 };
 
-/// One registered test as the synthesized tail schedules it: its name, and the extent of its authored body. Read off the lowered definition by `curios-pipeline`, since `Module::tests` records names alone.
+/// One registered test as the synthesized tail schedules it: its name, and the extent of its authored body. Read off the lowered definition by `curios-pipeline`, since a module names its tests and holds nothing else of them (`curios_core::Definitions::tests`).
 #[derive(Debug, Clone)]
 pub struct ScheduledTest {
     pub name: Global,

@@ -15,11 +15,11 @@
 use {
     crate::{ArchivedItemRun, Declared, Definitions, Global, Item, ItemRun},
     curios_archive::{Bytes, Pooled, Proxy, Via},
-    curios_common::{Mount, Object, Ordered},
+    curios_common::{Object, Ordered},
     std::{
         borrow::Borrow,
         cell::{OnceCell, RefCell},
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeMap,
         fmt,
         ops::{Index, IndexMut, Range},
         rc::Rc,
@@ -127,18 +127,6 @@ fn generated_by(item: &Item) -> Option<Global> {
     };
 
     kind.generated_from().map(Global::Authored)
-}
-
-/// What `item` declares each of its names as, in the order it declares them.
-fn declared_by(item: &Item) -> Vec<Declared> {
-    match item {
-        Item::Let(definition) => vec![definition.kind.declared()],
-        Item::Rec(rec) => rec
-            .definitions
-            .iter()
-            .map(|definition| definition.kind.declared())
-            .collect(),
-    }
 }
 
 /// A stored module's items: a cell for each, what each declares, and the object each was stored as.
@@ -258,7 +246,7 @@ impl Entry {
 
     fn declared(&self) -> Vec<Declared> {
         match self {
-            Entry::Made(item) => declared_by(item),
+            Entry::Made(item) => item.declared(),
             Entry::Stored(stored, index) => stored.outlines.declared(*index).to_vec(),
         }
     }
@@ -616,7 +604,7 @@ impl Items {
     /// What the item at `place` declares each of its names as, in the order of [`Items::names`], with nothing restored.
     pub fn declared(&self, place: usize) -> Vec<Declared> {
         match &self.0 {
-            Held::Made(items) => declared_by(&items[place]),
+            Held::Made(items) => items[place].declared(),
             Held::Stored(stored) => stored.outlines.declared(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).declared(),
         }
@@ -822,34 +810,25 @@ impl fmt::Debug for Items {
     }
 }
 
-/// A module archived without its items: what each item declares, its mounts, its witnesses and its tests, which is what every unit after it reads of it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Definitions::with_items`]).
+/// A module archived without its items: what each item declares, which is what every unit after it reads of it, its witnesses and its tests among it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Definitions::with_items`]).
 pub struct Itemless;
 
 /// A module as [`Itemless`] archives it.
 #[curios_archive::archived]
 pub struct ItemlessModule {
     outlines: Outlines,
-    mounts: Vec<Mount>,
-    witnesses: BTreeSet<Global>,
-    tests: Vec<Global>,
 }
 
 impl ItemlessModule {
     fn of(definitions: &Definitions) -> Self {
         Self {
             outlines: Outlines::of(&definitions.items),
-            mounts: definitions.mounts.clone(),
-            witnesses: definitions.witnesses.clone(),
-            tests: definitions.tests.clone(),
         }
     }
 
     fn definitions(self) -> Result<Definitions, String> {
         Ok(Definitions {
             items: Items::parted(self.outlines, Vec::new())?,
-            mounts: self.mounts,
-            witnesses: self.witnesses,
-            tests: self.tests,
         })
     }
 }

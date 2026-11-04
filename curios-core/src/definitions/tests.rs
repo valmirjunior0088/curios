@@ -99,9 +99,6 @@ fn every_local_a_term_mentions_is_found() {
 
     let definitions = Definitions {
         items: vec![Item::Let(Box::new(definition))].into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert_eq!(
@@ -125,10 +122,23 @@ fn stored(body: Term) -> Definitions {
             body,
         }))]
         .into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
+}
+
+/// `definitions` declaring `witness`, a definition introduced as a witness.
+fn declaring_witness(mut definitions: Definitions, witness: Global) -> Definitions {
+    definitions.items.push(Item::Let(Box::new(Definition {
+        name: witness,
+        kind: DefinitionKind::Witness,
+        ..definition("witness", UniverseContext::empty())
+    })));
+
+    definitions
+}
+
+/// The mounts of a unit that claims `/mine`.
+fn mine() -> Vec<Mount> {
+    vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)]
 }
 
 /// The refusals are the whole of the check's value: one that only ever meets conforming input asserts nothing about what it would do with the other kind.
@@ -139,7 +149,7 @@ fn a_stored_unit_may_not_carry_a_free_local() {
     let definitions = stored(Term::free_var(&Free::local(7, Some("y"))));
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &[]),
         Err(Positional::FreeLocal {
             owner: Some(Global::Authored(Qualifier::from(["held"]))),
             index: 7,
@@ -152,7 +162,7 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
     let definitions = stored(Term::hole(crate::MetavarId::from(3)));
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &[]),
         Err(Positional::Metavar {
             owner: Some(Global::Authored(Qualifier::from(["held"]))),
         })
@@ -167,7 +177,7 @@ fn a_stored_unit_may_not_carry_a_loose_bound_variable() {
     let definitions = stored(Term::var(Var::bound(2)));
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &[]),
         Err(Positional::LooseIndex {
             owner: Some(Global::Authored(Qualifier::from(["held"]))),
             reach: 3,
@@ -184,7 +194,7 @@ fn a_stored_unit_may_carry_a_scope_whose_body_names_its_binders() {
         Term::free_var(&binder),
     ));
 
-    assert_eq!(validate_stored_identities(&definitions), Ok(()));
+    assert_eq!(validate_stored_identities(&definitions, &[]), Ok(()));
 }
 
 /// A witness declared here, scoped to a mount this module does not own.
@@ -192,16 +202,15 @@ fn a_stored_unit_may_carry_a_scope_whose_body_names_its_binders() {
 /// A witness's name holds the module that declares it, so a module declaring a witness under somebody else's mount is claiming a name in a space it does not own, which two units could both declare.
 #[test]
 fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
-    let mut definitions = stored(Term::intrinsic(crate::Intrinsic::NatType));
-    definitions.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
     let witness = Global::Witness(WitnessId::Unspelled {
         module: Qualifier::from(["theirs", "Shape"]),
         place: 0,
     });
-    definitions.witnesses.insert(witness);
+    let definitions =
+        declaring_witness(stored(Term::intrinsic(crate::Intrinsic::NatType)), witness);
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &mine()),
         Err(Positional::UnscopedWitness { witness })
     );
 }
@@ -209,16 +218,15 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
 /// A witness declared here under its place among its module's witnesses: the name a signature that spells no key is lowered under, which the same text written in another order gives to another declaration.
 #[test]
 fn a_stored_unit_may_not_declare_a_witness_under_its_place() {
-    let mut definitions = stored(Term::intrinsic(crate::Intrinsic::NatType));
-    definitions.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
     let witness = Global::Witness(WitnessId::Unspelled {
         module: Qualifier::from(["mine", "Shape"]),
         place: 0,
     });
-    definitions.witnesses.insert(witness);
+    let definitions =
+        declaring_witness(stored(Term::intrinsic(crate::Intrinsic::NatType)), witness);
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &mine()),
         Err(Positional::PlacedWitness { witness })
     );
 
@@ -228,9 +236,10 @@ fn a_stored_unit_may_not_declare_a_witness_under_its_place() {
         module: Qualifier::from(["mine", "Shape"]),
         place: 0,
     });
-    definitions.witnesses = BTreeSet::from([spelled]);
+    let definitions =
+        declaring_witness(stored(Term::intrinsic(crate::Intrinsic::NatType)), spelled);
 
-    assert_eq!(validate_stored_identities(&definitions), Ok(()));
+    assert_eq!(validate_stored_identities(&definitions, &mine()), Ok(()));
 }
 
 /// A `rec` group whose member scopes bind other than one binder per member is refused at the store seam, which is the one door that can carry one.
@@ -255,9 +264,6 @@ fn a_stored_unit_may_not_carry_a_group_whose_scopes_miscount_its_members() {
             },
         )]))]
         .into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
     let Item::Rec(item) = &mut definitions.items.to_vec()[0] else {
         unreachable!("built as a rec item")
@@ -276,13 +282,10 @@ fn a_stored_unit_may_not_carry_a_group_whose_scopes_miscount_its_members() {
     }]);
     let definitions = Definitions {
         items: vec![Item::Rec(item.clone())].into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert_eq!(
-        validate_stored_identities(&definitions),
+        validate_stored_identities(&definitions, &[]),
         Err(Positional::MiscountedGroup {
             owner: Some(Global::Authored(Qualifier::from(["spun"]))),
             stated: 1,
@@ -292,19 +295,18 @@ fn a_stored_unit_may_not_carry_a_group_whose_scopes_miscount_its_members() {
 
 /// The control that keeps the refusal about *declaring*, not about mentioning.
 ///
-/// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Definitions::witnesses` and deliberately not through the position walk.
+/// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over [`Definitions::witnesses`], the names the module declares as witnesses, and deliberately not through the position walk.
 #[test]
 fn a_stored_unit_may_name_a_witness_another_mount_declared() {
-    let mut definitions = stored(Term::instance(
+    let definitions = stored(Term::instance(
         Global::Witness(WitnessId::Unspelled {
             module: Qualifier::from(["theirs", "Shape"]),
             place: 3,
         }),
         Universes::default(),
     ));
-    definitions.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
 
-    assert_eq!(validate_stored_identities(&definitions), Ok(()));
+    assert_eq!(validate_stored_identities(&definitions, &mine()), Ok(()));
 }
 
 /// The control. A free *global* is how one definition names another and is in every stored unit there has ever been, so a check that refused it would refuse the prelude — which is what makes this the test that the refusals above are aimed at something narrower than "a free variable".
@@ -315,7 +317,7 @@ fn a_stored_unit_may_carry_a_global_it_names() {
         Universes::default(),
     ));
 
-    assert_eq!(validate_stored_identities(&definitions), Ok(()));
+    assert_eq!(validate_stored_identities(&definitions, &[]), Ok(()));
 }
 
 #[test]
@@ -326,9 +328,6 @@ fn a_meta_free_module_projects_as_zonked() {
             UniverseContext::empty(),
         )))]
         .into(),
-        mounts: Vec::new(),
-        witnesses: Default::default(),
-        tests: Default::default(),
     };
 
     assert!(Zonked::project(&definitions).is_ok());
@@ -340,9 +339,6 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
     holed.body = Term::hole(0);
     let definitions = Definitions {
         items: vec![Item::Let(Box::new(holed))].into(),
-        mounts: Vec::new(),
-        witnesses: Default::default(),
-        tests: Default::default(),
     };
 
     let refusal = Zonked::project(&definitions).expect_err("the hole must refuse the projection");
@@ -356,9 +352,6 @@ fn a_loose_bound_variable_refuses_the_zonked_projection() {
     adrift.body = Term::var(Var::bound(0));
     let definitions = Definitions {
         items: vec![Item::Let(Box::new(adrift))].into(),
-        mounts: Vec::new(),
-        witnesses: Default::default(),
-        tests: Default::default(),
     };
 
     let refusal =
@@ -375,9 +368,6 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
     })));
     let definitions = Definitions {
         items: vec![Item::Let(Box::new(infixed))].into(),
-        mounts: Vec::new(),
-        witnesses: Default::default(),
-        tests: Default::default(),
     };
 
     let refusal =
@@ -438,9 +428,6 @@ fn a_revised_module_is_asked_of_its_items_made() {
 fn over(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 

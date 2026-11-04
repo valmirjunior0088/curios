@@ -2,6 +2,7 @@
 
 use {
     crate::Unit,
+    curios_common::Mount,
     curios_core::{Anchors, Certification, Definitions, Lexicon, Places},
     curios_elab::Traces,
     curios_erase::ErasedUnit,
@@ -38,16 +39,21 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.text()).collect()
     }
 
+    /// The lowered module of each predecessor: the items its sources declare, in the order they declare them, which is the order a test program runs its tests in.
+    pub fn lowered(&self) -> Vec<&'a Definitions> {
+        self.units.iter().map(|unit| unit.text().core()).collect()
+    }
+
     /// The elaborated module of each predecessor, for the kernel's environment and for a report that spells a predecessor's name.
     pub fn cores(&self) -> Vec<&'a Definitions> {
         self.units.iter().map(|unit| unit.core()).collect()
     }
 
-    /// The elaborated module of each predecessor beside the places its unit keeps for it and the traces its elaboration filed, for `curios-elab`'s `Established`: a scope read by name, with nothing keyed for the compile.
-    pub fn placed(&self) -> Vec<(&'a Definitions, &'a Places, &'a Traces)> {
+    /// The elaborated module of each predecessor beside the places its unit keeps for it, the prefixes it claims and the traces its elaboration filed, for `curios-elab`'s `Established`: a scope read by name, with nothing keyed for the compile.
+    pub fn placed(&self) -> Vec<(&'a Definitions, &'a Places, &'a [Mount], &'a Traces)> {
         self.units
             .iter()
-            .map(|unit| (unit.core(), unit.places(), unit.traces()))
+            .map(|unit| (unit.core(), unit.places(), unit.mounts(), unit.traces()))
             .collect()
     }
 

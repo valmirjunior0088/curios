@@ -11,7 +11,7 @@ use {
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
         Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, Scope,
         Sharing, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId, WitnessKey,
+        UniverseError, Variance, WitnessId,
     },
     curios_common::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
@@ -1087,6 +1087,18 @@ impl Item {
         }
     }
 
+    /// What this item declares each of its names as, in the order of [`Item::declared_names`].
+    pub fn declared(&self) -> Vec<Declared> {
+        match self {
+            Item::Let(definition) => vec![definition.kind.declared()],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .map(|definition| definition.kind.declared())
+                .collect(),
+        }
+    }
+
     /// The entries this item's formers carry, each under the name that declares it, in declaration order.
     pub fn nominals(&self) -> Vec<(&Global, &Nominal)> {
         match self {
@@ -1173,21 +1185,13 @@ pub struct Program {
 ///
 /// Flat rather than one N-deep nested `Subterm::Let`/`Rec` term: folding a unit into one would make its construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine O(N) in stack, overflowing at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 ///
-/// The default is the empty unit: no item and no mount. Every field is a collection, so it states nothing, and a module built by hand names only what it holds.
+/// **The module holds its definitions and nothing beside them.** Which of them are witnesses and which are tests is what each is declared as, read off its place with no item restored ([`Definitions::witnesses`], [`Definitions::tests`]), so no table can say otherwise; and the prefixes its unit claims are the unit's, held beside it ([`Mount`]). The default is the empty unit, and a module built by hand names only what it holds.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Definitions {
     /// The module's items, in the order it stores them: every one in hand where the module was made in this process, and each restored the first time it is read where the module was stored ([`Items`]).
     #[archived_with(crate::AsVector)]
     pub items: Items,
-    /// The prefixes this module's compilation unit claims, each with whether it is a root only the compiler supplies.
-    ///
-    /// Carried here, once, rather than stamped onto every declaration. Which mount owns a declaration is [`Mount::owning`] over the declaration's own name, so a stamp beside the name would only restate the name's leading segment — and, archived, mean something solely in the compilation that wrote it. A later stage that needs a mount's kind reads it out of this list; nothing derives one from a string.
-    pub mounts: Vec<Mount>,
-    /// The definition names that are witness declarations. Elaboration registers each into the witness table when its signature elaborates — carried as names (not keys) because the table key needs the *elaborated* head, which only exists once elaboration runs.
-    pub witnesses: BTreeSet<Global>,
-    /// The definition names that are `test` declarations, in declaration order — the order the synthesized test tail schedules them and the runner reports them, so a `Vec` rather than a set.
-    pub tests: Vec<Global>,
 }
 
 impl Definitions {
@@ -1239,26 +1243,14 @@ impl Definitions {
         self.items.iter().flat_map(Item::nominals)
     }
 
-    /// The witnesses the module declares at `concept` and `key`, in the order of their names: a witness's name states its concept and its key first ([`WitnessId`]), so the ones declared at one key are neighbours among the module's witnesses, and reading them reads no other.
-    pub fn witnesses_at(
-        &self,
-        concept: &Qualifier,
-        key: &WitnessKey,
-    ) -> impl Iterator<Item = &Global> {
-        let from = Global::Witness(WitnessId::Spelled {
-            concept: *concept,
-            key: *key,
-            module: Qualifier::empty(),
-            place: 0,
-        });
-        let at = (Global::Authored(*concept), *key);
+    /// The names the module declares as witnesses, in the order it stores them. A unit in scope is asked for its witnesses at a key by the places it is read by ([`Places::witnesses_at`]).
+    pub fn witnesses(&self) -> Vec<Global> {
+        self.declared_as(|declared| declared == Declared::Witness)
+    }
 
-        self.witnesses
-            .range(from..)
-            .take_while(move |name| match name {
-                Global::Witness(id) => id.spelled() == Some(at),
-                Global::Authored(_) => false,
-            })
+    /// The names the module declares as tests, in the order it stores them: a unit's lowered module stores its items in the order its sources declare them, so read off it this is the order a test program schedules its tests in and the runner reports them.
+    pub fn tests(&self) -> Vec<Global> {
+        self.declared_as(|declared| declared == Declared::Test)
     }
 
     /// Every inductive family the module declares, by name — see [`Definitions::nominals`].
@@ -1290,9 +1282,6 @@ impl Definitions {
     pub fn shared(&self, sharing: &Sharing) -> Definitions {
         Definitions {
             items: self.items.iter().map(|item| item.shared(sharing)).collect(),
-            mounts: self.mounts.clone(),
-            witnesses: self.witnesses.clone(),
-            tests: self.tests.clone(),
         }
     }
 
@@ -1814,7 +1803,10 @@ impl fmt::Display for Positional {
 /// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
 /// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
-pub fn validate_stored_identities(definitions: &Definitions) -> Result<(), Positional> {
+pub fn validate_stored_identities(
+    definitions: &Definitions,
+    mounts: &[Mount],
+) -> Result<(), Positional> {
     // First, because the position walk below cannot run over a group whose counts disagree: it reads an item through `RecItem::definitions`, whose `opened` opens every member scope over one term per definition, so such a group aborts the walk that would have reported it. Every constructor makes the counts agree and a restored archive's fields do not, which is why the one door that can carry one reads it, as `check_group` reads it where a walk meets one.
     if let Some((owner, stated)) = definitions.items.iter().find_map(|item| match item {
         Item::Rec(rec) if !rec.group.counted() || rec.definitions.len() != rec.group.length() => {
@@ -1859,15 +1851,15 @@ pub fn validate_stored_identities(definitions: &Definitions) -> Result<(), Posit
         }
     });
 
-    if let Some(witness) = definitions.witnesses.iter().find(|witness| match witness {
+    let witnesses = definitions.witnesses();
+    if let Some(witness) = witnesses.iter().find(|witness| match witness {
         // Containment rather than equality: the identity names the *module* that declares it, which lies within one of this unit's mounts rather than being one.
-        Global::Witness(id) => Mount::owning(&definitions.mounts, id.module()).is_none(),
+        Global::Witness(id) => Mount::owning(mounts, id.module()).is_none(),
         Global::Authored(_) => false,
     }) {
         return Err(Positional::UnscopedWitness { witness: *witness });
     }
-    if let Some(witness) = definitions
-        .witnesses
+    if let Some(witness) = witnesses
         .iter()
         .find(|witness| matches!(witness, Global::Witness(WitnessId::Unspelled { .. })))
     {

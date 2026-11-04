@@ -243,7 +243,7 @@ pub let measured: Nat = Measured/measure(2);
         "a declaration that resolves through a witness was elaborated again when another was written ahead of it"
     );
     assert_eq!(
-        incremental.core().witnesses.len(),
+        incremental.core().witnesses().len(),
         2,
         "the unit declares both witnesses"
     );

@@ -110,6 +110,8 @@ struct Reached {
 /// The walk over one unit's declarations.
 pub struct Demand<'a> {
     definitions: &'a Definitions,
+    /// The names `module` declares as witnesses, read off its items once for every question the walk asks of one.
+    witnesses: BTreeSet<Global>,
     /// The declarations `module`'s items make, by which a name is asked for.
     declarations: &'a Declarations,
     /// The declarations the walk holds, by their written items' places: every one for a unit compiled whole, and for one compiled over a baseline whose edit reached the prover's vocabulary; over a baseline otherwise, the ones the edit could reach. A declaration of the unit the walk does not hold is kept as the baseline holds it, and stands finished from the start.
@@ -175,6 +177,7 @@ impl<'a> Demand<'a> {
 
         Self {
             definitions,
+            witnesses: definitions.witnesses().into_iter().collect(),
             declarations,
             held,
             demanded: Vec::new(),
@@ -479,11 +482,11 @@ impl<'a> Demand<'a> {
         // A key at which the unit declares other witnesses than the baseline did: a witness's name states its key, so a key moved where a witness was gained or dropped there. Every witness the unit declares there is attempted, so the one registered first is the one a whole compile registers.
         let moved = gained
             .iter()
-            .filter(|name| self.definitions.witnesses.contains(*name))
+            .filter(|name| self.witnesses.contains(*name))
             .chain(
                 over.dropped
                     .iter()
-                    .filter(|name| over.baseline.witnesses.contains(*name)),
+                    .filter(|name| over.places.is_witness(name)),
             )
             .filter_map(Global::witness_key)
             .collect::<BTreeSet<_>>();
@@ -491,12 +494,12 @@ impl<'a> Demand<'a> {
             for reader in over.readers.at_key(*concept, *key).to_vec() {
                 self.flag(&reader);
             }
-            let witnesses = concept.qualifier().map_or_else(Vec::new, |concept| {
-                self.definitions
-                    .witnesses_at(concept, key)
-                    .copied()
-                    .collect::<Vec<_>>()
-            });
+            let witnesses = self
+                .witnesses
+                .iter()
+                .filter(|name| name.witness_key() == Some((*concept, *key)))
+                .copied()
+                .collect::<Vec<_>>();
             for witness in witnesses {
                 self.flag(&witness);
             }
@@ -530,7 +533,6 @@ impl<'a> Demand<'a> {
             }
             // A witness the units in scope now hold at a key the unit declares one at collides with it.
             let now = self
-                .definitions
                 .witnesses
                 .iter()
                 .filter_map(|name| Some((name.witness_key()?, *name)))
@@ -1062,9 +1064,7 @@ impl<'a> Demand<'a> {
         let definitions = self.definitions;
         let positions = Rc::clone(self.declarations.items(declaration));
         let names = self.names(declaration);
-        if names
-            .iter()
-            .any(|name| definitions.witnesses.contains(*name))
+        if names.iter().any(|name| self.witnesses.contains(*name))
             || positions.iter().any(|position| {
                 self.poison
                     .reaches(definitions, &definitions.items[*position])

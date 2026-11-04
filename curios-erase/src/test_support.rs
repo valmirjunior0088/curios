@@ -13,7 +13,6 @@ use {
     curios_common::Qualifier,
     curios_core::Zonkable,
     curios_elab::DEFAULT_BUDGET,
-    std::collections::BTreeSet,
 };
 
 /// The digest of every part of every declaration `module` holds where `places` keeps it, under the record `certification` its walk filed: each signature, body and kind, how an item naming each name reads `erased`'s forms of it, and those forms whole, each beside the name and part it is of. What a unit records of a read: a unit held in hand and the same unit restored from a store are read alike by a unit compiled over either only where these agree.
@@ -129,10 +128,7 @@ pub fn definition(
 pub fn module(items: Vec<curios_core::Item>, body: curios_core::Term) -> curios_core::Program {
     curios_core::Program {
         definitions: curios_core::Definitions {
-            mounts: Vec::new(),
             items: items.into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         entrypoint: curios_core::Entrypoint { body, type_: None },
     }

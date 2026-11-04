@@ -11,7 +11,7 @@
 use {
     super::{Defined, Error, InScope, Question, part_digest},
     crate::{DefinedGroup, Traces},
-    curios_common::Qualifier,
+    curios_common::{Mount, Qualifier},
     curios_core::{
         ConceptDecl, Definitions, Global, InductDecl, Item, Place, Places, RecGroup, RecItem,
         StructDecl, Totality, WitnessKey,
@@ -166,16 +166,13 @@ impl<'a> Standing<'a> {
     }
 
     /// The witnesses this unit answers for, in the order of their names: by concept, then by key.
-    fn witnesses(&self) -> impl Iterator<Item = &'a Global> + '_ {
-        self.definitions
-            .witnesses
-            .iter()
-            .filter(|name| self.answers(name))
+    fn witnesses(&self) -> impl Iterator<Item = &Global> + '_ {
+        self.places().witnesses().filter(|name| self.answers(name))
     }
 
-    /// The first witness this unit answers for at `(concept, key)` ([`Definitions::witnesses_at`]).
+    /// The first witness this unit answers for at `(concept, key)` ([`Places::witnesses_at`]).
     fn witness(&self, concept: &Qualifier, key: &WitnessKey) -> Option<Global> {
-        self.definitions
+        self.places()
             .witnesses_at(concept, key)
             .find(|name| self.answers(name))
             .copied()
@@ -227,6 +224,8 @@ pub struct Established<'a> {
     units: Vec<Standing<'a>>,
     /// The units in scope, in dependency order: never the baseline, which is the unit being compiled.
     modules: Vec<&'a Definitions>,
+    /// The prefixes each unit in scope claims, in the order of `modules`: what a privilege question is answered out of.
+    mounts: Vec<&'a [Mount]>,
     /// Whether any unit in scope is other than the one the baseline was compiled after.
     moved: bool,
 }
@@ -237,12 +236,12 @@ impl<'a> Established<'a> {
         Self::default()
     }
 
-    /// Everything `modules` established, in dependency order, as scope, each beside the traces its elaboration filed: each read by places made here, for a module no unit holds.
-    pub fn over(modules: &[(&'a Definitions, &'a Traces)]) -> Self {
+    /// Everything `modules` established, in dependency order, as scope, each beside the prefixes its unit claims and the traces its elaboration filed: each read by places made here, for a module no unit holds.
+    pub fn over(modules: &[(&'a Definitions, &'a [Mount], &'a Traces)]) -> Self {
         Self {
             units: modules
                 .iter()
-                .map(|(definitions, traces)| Standing {
+                .map(|(definitions, _, traces)| Standing {
                     definitions,
                     places: Placed::Made(Places::of(definitions)),
                     traces,
@@ -253,18 +252,19 @@ impl<'a> Established<'a> {
                 .collect(),
             modules: modules
                 .iter()
-                .map(|(definitions, _)| *definitions)
+                .map(|(definitions, ..)| *definitions)
                 .collect(),
+            mounts: modules.iter().map(|(_, mounts, _)| *mounts).collect(),
             moved: false,
         }
     }
 
-    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it, beside the traces its elaboration filed.
-    pub fn placed(units: &[(&'a Definitions, &'a Places, &'a Traces)]) -> Self {
+    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it, beside the prefixes its unit claims and the traces its elaboration filed.
+    pub fn placed(units: &[(&'a Definitions, &'a Places, &'a [Mount], &'a Traces)]) -> Self {
         Self {
             units: units
                 .iter()
-                .map(|(definitions, places, traces)| Standing {
+                .map(|(definitions, places, _, traces)| Standing {
                     definitions,
                     places: Placed::Kept(places),
                     traces,
@@ -274,6 +274,7 @@ impl<'a> Established<'a> {
                 })
                 .collect(),
             modules: units.iter().map(|(definitions, ..)| *definitions).collect(),
+            mounts: units.iter().map(|(_, _, mounts, _)| *mounts).collect(),
             moved: false,
         }
     }
@@ -357,6 +358,11 @@ impl<'a> Established<'a> {
     /// The modules in scope, in dependency order.
     pub fn definitions(&self) -> &[&'a Definitions] {
         &self.modules
+    }
+
+    /// The prefixes each unit in scope claims, in dependency order.
+    pub fn mounts(&self) -> &[&'a [Mount]] {
+        &self.mounts
     }
 
     /// The unit in scope that declares `name`: never the baseline, which is the unit being compiled.

@@ -61,7 +61,6 @@ pub fn declarations(names: &[Global]) -> Declarations {
 
     Declarations::of(&Definitions {
         items: items.into(),
-        ..Definitions::default()
     })
 }
 

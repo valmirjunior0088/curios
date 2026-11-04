@@ -25,13 +25,13 @@ use {
         zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
-    curios_common::{Candidates, Plicity, Qualifier, grown},
+    curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
-        Advance, Bound, ConceptDecl, Declarations, Definition, Definitions, Entrypoint, Free,
-        FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Names,
-        Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
-        stamp_declaration_instance,
+        Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
+        Entrypoint, Free, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level,
+        Minted, Names, Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl,
+        Subterm, Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        Universes, Visit, stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -1289,9 +1289,6 @@ fn settle_published(
     context.restore_budget();
     let alone = Definitions {
         items: vec![carrying(context, published.item.clone())].into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
     let mut zonked = Zonked::default();
@@ -1321,9 +1318,6 @@ enum Elaborated {
 fn alone(context: &Context, item: &Item) -> Definitions {
     Definitions {
         items: vec![carrying(context, item.clone())].into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -1341,16 +1335,12 @@ fn carrying(context: &Context, item: Item) -> Item {
     })
 }
 
-/// Each witness `module` declares among `items`, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `declarations` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
-fn declared_witnesses(
-    definitions: &Definitions,
-    items: &[&Item],
-    declarations: &Declarations,
-) -> Vec<(Global, Declared)> {
+/// Each witness declared among `items`, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `declarations` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
+fn declared_witnesses(items: &[&Item], declarations: &Declarations) -> Vec<(Global, Declared)> {
     items
         .iter()
         .flat_map(|item| item.definitions())
-        .filter(|definition| definitions.witnesses.contains(&definition.name))
+        .filter(|definition| matches!(definition.kind, DefinitionKind::Witness))
         .map(|definition| {
             let declared = Declared {
                 spelled: definition.name.witness_key(),
@@ -1396,7 +1386,7 @@ fn elaborate_definitions_suffix<'s>(
     context: &mut Context<'s>,
     established: Option<&'s Established<'_>>,
     over: Option<Over<'_>>,
-    definitions: &Definitions,
+    (definitions, mounts): (&Definitions, &[Mount]),
     declarations: &Declarations,
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
@@ -1406,12 +1396,12 @@ fn elaborate_definitions_suffix<'s>(
     if let Some(established) = established {
         established.coherent()?;
         context.read_through(established);
-        for unit in established.definitions() {
-            context.mount(&unit.mounts);
+        for unit in established.mounts() {
+            context.mount(unit);
         }
     }
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
-    context.mount(&definitions.mounts);
+    context.mount(mounts);
 
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
@@ -1456,15 +1446,17 @@ fn elaborate_definitions_suffix<'s>(
             context.register_concept(name, concept.clone())?;
         }
     }
-    for name in held_items.iter().flat_map(|item| item.declared_names()) {
-        if definitions.witnesses.contains(name) {
-            context.mark_witness_declaration(name);
+    for item in &held_items {
+        for (name, declared) in item.declared_names().into_iter().zip(item.declared()) {
+            if declared == curios_core::Declared::Witness {
+                context.mark_witness_declaration(name);
+            }
         }
     }
     check_concept_registry(context)?;
 
     // Where each name of the unit is written, and which of them the walk holds: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its name states, which is what a question about its concept is answered by until it elaborates.
-    for (name, declared) in declared_witnesses(definitions, &held_items, declarations) {
+    for (name, declared) in declared_witnesses(&held_items, declarations) {
         context.declare_witness(name, declared);
     }
     context.begin_unit(declarations.clone(), demand.held_names());
@@ -1543,18 +1535,6 @@ fn elaborate_definitions_suffix<'s>(
     );
 
     // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
-    let names = survivors.names();
-    let witnesses = names
-        .iter()
-        .filter(|name| definitions.witnesses.contains(*name))
-        .copied()
-        .collect();
-    let tests = definitions
-        .tests
-        .iter()
-        .filter(|name| names.contains(*name))
-        .cloned()
-        .collect();
     let Survived {
         items,
         refusals,
@@ -1569,9 +1549,6 @@ fn elaborate_definitions_suffix<'s>(
         .collect::<Vec<_>>();
     let definitions = Definitions {
         items: items.into(),
-        mounts: definitions.mounts.clone(),
-        witnesses,
-        tests,
     };
 
     Ok(ElaboratedSuffix {
@@ -1668,9 +1645,6 @@ fn finalize_and_check(
 
     let nothing = Definitions {
         items: Vec::new().into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
     // Written goals report as one complete batch before zonking: the items', each found as its item finished (`held`), then the entry's, whose collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`goal_sites`).
     let sites = goal_sites(context, &nothing, entry.as_ref());
@@ -1791,6 +1765,7 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
 pub fn elaborate_and_zonk_definitions(
     context: &mut Context,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
 ) -> Result<Definitions, Error> {
     curios_profile::profile!("elaborate_and_zonk_definitions");
@@ -1800,7 +1775,7 @@ pub fn elaborate_and_zonk_definitions(
             context,
             None,
             None,
-            definitions,
+            (definitions, mounts),
             &declarations,
             minted,
             None,
@@ -1842,9 +1817,11 @@ pub fn elaborate_and_zonk_unit<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
 ) -> Result<(Definitions, Traces), Error> {
-    let (finalized, traces) = elaborate_and_zonk(context, established, definitions, minted, None)?;
+    let (finalized, traces) =
+        elaborate_and_zonk(context, established, (definitions, mounts), minted, None)?;
     raise(finalized).map(|(definitions, _)| (definitions, traces))
 }
 
@@ -1855,10 +1832,11 @@ pub fn elaborate_and_zonk_program<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Definitions, Option<Entrypoint>), Error> {
-    elaborate_and_zonk_entry(context, established, definitions, minted, tail)
+    elaborate_and_zonk_entry(context, established, definitions, mounts, minted, tail)
         .map(|(definitions, entry, _)| (definitions, entry))
 }
 
@@ -1869,11 +1847,17 @@ pub fn elaborate_and_zonk_entry<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Definitions, Option<Entrypoint>, Traces), Error> {
-    let (finalized, traces) =
-        elaborate_and_zonk(context, established, definitions, minted, Some(tail))?;
+    let (finalized, traces) = elaborate_and_zonk(
+        context,
+        established,
+        (definitions, mounts),
+        minted,
+        Some(tail),
+    )?;
     raise(finalized).map(|(definitions, entry)| (definitions, entry, traces))
 }
 
@@ -1884,6 +1868,7 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
@@ -1895,7 +1880,13 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
             ..
         },
         _,
-    ) = elaborate_and_zonk(context, established, definitions, minted, Some(tail))?;
+    ) = elaborate_and_zonk(
+        context,
+        established,
+        (definitions, mounts),
+        minted,
+        Some(tail),
+    )?;
 
     Ok(FinalizedProgram {
         definitions,
@@ -1908,7 +1899,7 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
 fn elaborate_and_zonk<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    definitions: &Definitions,
+    (definitions, mounts): (&Definitions, &[Mount]),
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Finalized, Traces), Error> {
@@ -1919,7 +1910,7 @@ fn elaborate_and_zonk<'s>(
             context,
             Some(established),
             None,
-            definitions,
+            (definitions, mounts),
             &declarations,
             minted,
             tail,
@@ -1980,10 +1971,18 @@ pub fn elaborate_and_zonk_unit_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
 ) -> Result<Recompiled, Error> {
-    elaborate_and_zonk_over(context, established, recompile, definitions, minted, None)
-        .map(|(recompiled, _)| recompiled)
+    elaborate_and_zonk_over(
+        context,
+        established,
+        recompile,
+        (definitions, mounts),
+        minted,
+        None,
+    )
+    .map(|(recompiled, _)| recompiled)
 }
 
 /// [`elaborate_and_zonk_entry`] for a program's declarations compiled over a baseline: the walk [`elaborate_and_zonk_unit_over`] makes, with the term `tail` closes the program with elaborated at its end, as it is where nothing is kept. The entry is elaborated on every compile: it has no name to be kept under.
@@ -1992,6 +1991,7 @@ pub fn elaborate_and_zonk_entry_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     definitions: &Definitions,
+    mounts: &[Mount],
     minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
@@ -1999,7 +1999,7 @@ pub fn elaborate_and_zonk_entry_over<'s>(
         context,
         established,
         recompile,
-        definitions,
+        (definitions, mounts),
         minted,
         Some(tail),
     )
@@ -2010,7 +2010,7 @@ fn elaborate_and_zonk_over<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
-    definitions: &Definitions,
+    (definitions, mounts): (&Definitions, &[Mount]),
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
@@ -2030,7 +2030,7 @@ fn elaborate_and_zonk_over<'s>(
             context,
             Some(established),
             Some(over),
-            definitions,
+            (definitions, mounts),
             recompile.declarations,
             minted,
             tail,
@@ -2059,7 +2059,7 @@ fn elaborate_and_zonk_over<'s>(
             order,
         } = {
             curios_profile::profile!("assemble_unit_over");
-            recompile.assembled(definitions, &made_names, made)
+            recompile.assembled(&made_names, made)
         };
         traces.ordered(order.clone());
 
@@ -2097,22 +2097,10 @@ struct Assembled {
 }
 
 impl Recompile<'_> {
-    /// The declarations elaborated and the ones kept as one module, in the order a module is stored in: `made`, the items of the declarations named in `made_names`, with the baseline's own item and registry entries for every other declaration of `lowered`, and no item of a name the recompile dropped. The order is the baseline's revised by what was made, every item it does not move standing where the baseline holds it ([`Order::revised`]); where no revision resolves it, the module is put in order whole.
-    ///
-    /// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
-    fn assembled(
-        &self,
-        lowered: &Definitions,
-        made_names: &BTreeSet<Global>,
-        made: Definitions,
-    ) -> Assembled {
+    /// The declarations elaborated and the ones kept as one module, in the order a module is stored in: `made`, the items of the declarations named in `made_names`, with the baseline's own item and registry entries for every other declaration of the lowered module, and no item of a name the recompile dropped. The order is the baseline's revised by what was made, every item it does not move standing where the baseline holds it ([`Order::revised`]); where no revision resolves it, the module is put in order whole.
+    fn assembled(&self, made_names: &BTreeSet<Global>, made: Definitions) -> Assembled {
         let made = made.items.into_iter().collect::<Vec<_>>();
-        let definitions = |items| Definitions {
-            items,
-            mounts: lowered.mounts.clone(),
-            witnesses: lowered.witnesses.clone(),
-            tests: lowered.tests.clone(),
-        };
+        let definitions = |items| Definitions { items };
         if let Some(Revised {
             items,
             places,

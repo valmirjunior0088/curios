@@ -9,7 +9,6 @@ use {
         Definitions, Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Nat,
         Program, Scope, Subterm, Term, UniverseParam, Var,
     },
-    std::collections::BTreeSet,
 };
 
 /// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
@@ -55,9 +54,6 @@ fn sorted(stated: Term) -> Definitions {
 fn holding(items: Vec<curios_core::Item>) -> Definitions {
     Definitions {
         items: items.into(),
-        mounts: Vec::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 

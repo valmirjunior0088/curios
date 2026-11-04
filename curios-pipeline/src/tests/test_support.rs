@@ -310,9 +310,15 @@ fn elaborated(
         false => curios_elab::Context::new(DEFAULT_BUDGET, SYNTAX),
     };
     context.set_imports(lowered.imports().clone());
-    curios_elab::elaborate_and_zonk_unit(&mut context, &established, lowered.core(), &minted)
-        .map(|(definitions, _)| definitions)
-        .expect("the unit elaborates")
+    curios_elab::elaborate_and_zonk_unit(
+        &mut context,
+        &established,
+        lowered.core(),
+        lowered.mounts(),
+        &minted,
+    )
+    .map(|(definitions, _)| definitions)
+    .expect("the unit elaborates")
 }
 
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
@@ -435,7 +441,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
     .map_err(String::from)
 }
 
-/// The differential predicate: the two elaborated modules agree item by item in order, on every registry entry, marker and the entry.
+/// The differential predicate: the two elaborated modules agree item by item in order, and on every registry entry.
 pub(super) fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) {
     assert_eq!(
         whole.items.len(),
@@ -450,12 +456,9 @@ pub(super) fn assert_definitions_agree(whole: &Definitions, incremental: &Defini
         );
         assert_eq!(expected, actual, "{} differs", expected.describe());
     }
-    assert_eq!(whole.mounts, incremental.mounts);
     assert_eq!(whole.induct_decls(), incremental.induct_decls());
     assert_eq!(whole.struct_decls(), incremental.struct_decls());
     assert_eq!(whole.concepts(), incremental.concepts());
-    assert_eq!(whole.witnesses, incremental.witnesses);
-    assert_eq!(whole.tests, incremental.tests);
 }
 
 /// What a unit stores of the lowering's baseline half `text` holds: its own part, then each record and scan, each stored alone.

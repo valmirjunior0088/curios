@@ -89,7 +89,6 @@ fn a_recursion_on_a_refined_proof_index() -> (Definitions, Term) {
             declared(family, Nominal::Inductive(q_decl)),
         ]
         .into(),
-        ..Definitions::default()
     };
 
     let member = Free::local(983, Some("f"));

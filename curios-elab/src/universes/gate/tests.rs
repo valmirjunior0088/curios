@@ -15,7 +15,6 @@ fn nat() -> Term {
 fn lowered_definitions(body: Term) -> Definitions {
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![Item::Let(Box::new(Definition {
                 name: Global::Authored(Qualifier::from(["held"])),
                 kind: DefinitionKind::Authored,
@@ -27,8 +26,6 @@ fn lowered_definitions(body: Term) -> Definitions {
                 body,
             }))]
             .into(),
-            witnesses: Default::default(),
-            tests: Default::default(),
         },
         [],
         [],

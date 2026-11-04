@@ -12,7 +12,7 @@ use {
         UniverseParam, test_support::*,
     },
     curios_surface::Spellable,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// A declared result sort that merely *reduces* to `Prop` silences the index guard that reads it syntactically.
@@ -285,10 +285,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
 
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![vacuous].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(two_name, two_decl), (held_name, held_decl)]),
         [],
@@ -506,7 +503,6 @@ fn pinned_sole_arm_definitions(over: Option<Free>, binders: Vec<(Plicity, Free)>
                 body,
             )]
             .into(),
-            ..Definitions::default()
         },
         BTreeMap::from([(pinned, declaration), (falsehood, proposition(Vec::new()))]),
         [],
@@ -652,7 +648,6 @@ fn refined_variable_definitions(own: Level) -> Definitions {
                 Term::func(binders(own), read),
             )]
             .into(),
-            ..Definitions::default()
         },
         [(family, declaration)],
         [],
@@ -789,7 +784,6 @@ fn refined_at(variable: impl Fn(&Level) -> Term) -> Definitions {
                 ),
             ]
             .into(),
-            ..Definitions::default()
         },
         [(family, declaration)],
         [],

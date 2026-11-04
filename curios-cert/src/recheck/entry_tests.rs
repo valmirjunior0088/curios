@@ -5,17 +5,13 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Program, Term},
-    std::collections::BTreeSet,
 };
 
 /// A program of nothing but `entry`.
 fn entry_module(entry: Entrypoint) -> Program {
     Program {
         definitions: Definitions {
-            mounts: Vec::new(),
             items: Vec::new().into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         entrypoint: entry,
     }

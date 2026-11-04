@@ -207,15 +207,6 @@ impl Survivors {
         self.declaring.get(name).map(|kept| &self.kept[*kept].1)
     }
 
-    /// Every name the kept items declare.
-    pub fn names(&self) -> BTreeSet<Global> {
-        self.kept
-            .iter()
-            .flat_map(|(_, item)| item.declared_names())
-            .cloned()
-            .collect()
-    }
-
     /// The kept items, the refusals and the broken obligations, each in item order — the entry's refusal after every item's — with the declarations that wrote goals, whose reports are ordered where they are made. Items elaborate when they are asked for, so the order they were kept in is not the module's.
     pub fn into_parts(mut self) -> Survived {
         self.kept.sort_by_key(|(stamp, _)| *stamp);

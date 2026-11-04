@@ -518,7 +518,7 @@ pub enum EntryTail {
 }
 
 impl EntryTail {
-    /// Which tests the tail schedules: those `own`, the entry's unit, and `scope` hold that it selects, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
+    /// Which tests the tail schedules: those `own`, the entry's unit, and `scope` hold that it selects, each a lowered module, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
     ///
     /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     fn scheduled(
@@ -537,10 +537,9 @@ impl EntryTail {
             .chain([own])
             .flat_map(|definitions| {
                 let tests = definitions
-                    .tests
-                    .iter()
-                    .filter(selected)
-                    .copied()
+                    .tests()
+                    .into_iter()
+                    .filter(|test| selected(&test))
                     .collect::<Vec<_>>();
                 scheduled_tests(&tests, &definitions.items)
             })
@@ -561,10 +560,9 @@ impl EntryTail {
                 .chain([own])
                 .flat_map(|definitions| {
                     definitions
-                        .tests
-                        .iter()
-                        .filter_map(Global::qualifier)
-                        .copied()
+                        .tests()
+                        .into_iter()
+                        .filter_map(|test| test.qualifier().copied())
                 })
                 .collect(),
         }
@@ -590,10 +588,10 @@ pub struct TestRecord {
     pub body: String,
 }
 
-/// The declaration-ordered paths of a module's registered tests — how `curios test` and `wonder tests` name them, read off [`Module::tests`](curios_core::Definitions) so the two cannot disagree with the schedule.
+/// The declaration-ordered paths of a lowered module's tests — how `curios test` and `wonder tests` name them, read off [`Definitions::tests`](curios_core::Definitions::tests) so the two cannot disagree with the schedule.
 pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String> {
     definitions
-        .tests
+        .tests()
         .iter()
         .map(curios_core::Global::path)
         .collect()
@@ -703,7 +701,6 @@ fn elaborate_entry<'s, O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let cores = established.definitions();
     let scope = predecessors.text();
     // The registry the context was made with, which is the one its elaboration synthesizes names from.
     let syntax = &context.syntax();
@@ -728,7 +725,7 @@ where
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
     let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
 
-    let scheduled = tail.scheduled(&lowered.definitions, cores);
+    let scheduled = tail.scheduled(&lowered.definitions, &predecessors.lowered());
     let records = match scheduled.is_empty() {
         true => Vec::new(),
         false => test_records(&scheduled, &anchors),
@@ -748,6 +745,7 @@ where
         context,
         established,
         &lowered.definitions,
+        names.mounts(),
         &minted,
         elab_tail,
     )
@@ -847,10 +845,7 @@ pub(crate) fn check_entrypoint_reading(
 /// A module of nothing, mounted nowhere: what a program's final term is elaborated, judged and erased beside where its declarations are a unit in scope.
 fn nothing() -> curios_core::Definitions {
     curios_core::Definitions {
-        mounts: Vec::new(),
         items: Vec::new().into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -932,12 +927,12 @@ where
         read(predecessors.units(), &lowered, Some(&written));
     }
 
-    let scheduled = tail.scheduled(lowered.core(), &predecessors.cores());
+    let scheduled = tail.scheduled(lowered.core(), &predecessors.lowered());
     let records = match scheduled.is_empty() {
         true => Vec::new(),
         false => test_records(&scheduled, &anchors_of(&lowered, predecessors)),
     };
-    let declared = tail.declared(lowered.core(), &predecessors.cores());
+    let declared = tail.declared(lowered.core(), &predecessors.lowered());
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);
@@ -1082,25 +1077,31 @@ fn close_over(
     context.set_imports(lowered.imports().clone());
 
     let own = nothing();
-    let closed =
-        elaborate_and_zonk_program(&mut context, &established, &own, lowered.minted(), closing)
-            .and_then(|(_, entry)| {
-                let entry = entry.expect(WITHHELD_ONLY_WHEN_BROKEN);
-                // Held to the schemes of the declarations it names, which the module it was elaborated beside holds none of.
-                validate_entry_universes(unit.core(), &entry)?;
+    let closed = elaborate_and_zonk_program(
+        &mut context,
+        &established,
+        &own,
+        &[],
+        lowered.minted(),
+        closing,
+    )
+    .and_then(|(_, entry)| {
+        let entry = entry.expect(WITHHELD_ONLY_WHEN_BROKEN);
+        // Held to the schemes of the declarations it names, which the module it was elaborated beside holds none of.
+        validate_entry_universes(unit.core(), &entry)?;
 
-                Ok(entry)
-            })
-            .map_err(|error| {
-                elaborator_refusal(
-                    &error,
-                    &own,
-                    &scope.lexicons(),
-                    lowered,
-                    predecessors,
-                    syntax,
-                )
-            });
+        Ok(entry)
+    })
+    .map_err(|error| {
+        elaborator_refusal(
+            &error,
+            &own,
+            &scope.lexicons(),
+            lowered,
+            predecessors,
+            syntax,
+        )
+    });
     findings.credit(&context.credited());
 
     closed
@@ -1323,13 +1324,18 @@ pub(crate) fn compile_lowered(
             &mut context,
             &established,
             lowered.core(),
+            lowered.mounts(),
             lowered.minted(),
             tail,
         ),
-        None => {
-            elaborate_and_zonk_unit(&mut context, &established, lowered.core(), lowered.minted())
-                .map(|(core, traces)| (core, None, traces))
-        }
+        None => elaborate_and_zonk_unit(
+            &mut context,
+            &established,
+            lowered.core(),
+            lowered.mounts(),
+            lowered.minted(),
+        )
+        .map(|(core, traces)| (core, None, traces)),
     };
     let walked = with_broken(
         lowered.broken(),

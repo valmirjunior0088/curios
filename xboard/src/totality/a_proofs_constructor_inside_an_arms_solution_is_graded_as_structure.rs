@@ -114,7 +114,6 @@ fn a_recursion_through_a_proofs_constructor() -> (Definitions, Term) {
             )])),
         ]
         .into(),
-        ..Definitions::default()
     };
 
     let member = Free::local(994, Some("f"));

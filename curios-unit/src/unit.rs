@@ -68,7 +68,7 @@ impl Produced {
 
     /// See [`Unit::mounts`].
     pub fn mounts(&self) -> &[Mount] {
-        &self.core.mounts
+        self.text.mounts()
     }
 
     /// See [`Unit::text`].

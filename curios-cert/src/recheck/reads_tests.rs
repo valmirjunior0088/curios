@@ -20,7 +20,6 @@ fn reading_definitions() -> Definitions {
     let x = Free::local(10, Some("x"));
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(&global("alias"), Term::type_ground(), nat()),
             authored(
@@ -44,8 +43,6 @@ fn reading_definitions() -> Definitions {
             authored(&global("four"), nat(), literal(4)),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 

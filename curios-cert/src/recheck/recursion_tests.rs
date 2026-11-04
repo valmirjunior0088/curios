@@ -11,7 +11,7 @@ use {
         test_support::*,
     },
     curios_surface::Spelling,
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// `rec f : Absurd = f` reached as a member selection, which must be refused by the same rule the block spelling is refused by.
@@ -75,15 +75,12 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     )]);
 
     let definitions = Definitions {
-        mounts: Vec::new(),
         items: vec![authored(
             &Global::Authored(Qualifier::from(["ok"])),
             Term::func_type([(n, nat.clone())], nat),
             Term::rec_proj(group, 0),
         )]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert_eq!(
@@ -137,7 +134,6 @@ fn bad_definitions(body: Term) -> Definitions {
             body,
         )]
         .into(),
-        ..Definitions::default()
     }
 }
 
@@ -258,7 +254,6 @@ fn surviving_projection_definitions() -> Definitions {
             Term::func([(opaque, opaque_type)], group),
         )]
         .into(),
-        ..Definitions::default()
     }
 }
 
@@ -320,10 +315,7 @@ fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
     Program {
         definitions: declaring(
             Definitions {
-                mounts: Vec::new(),
                 items: vec![Item::Rec(RecItem::new(vec![(local, *definition)]))].into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             BTreeMap::from([(family, proposition(Vec::new()))]),
             [],

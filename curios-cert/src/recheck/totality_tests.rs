@@ -8,7 +8,7 @@ use {
     curios_core::{
         Certification, Certified, Definitions, Global, Term, Totality, Universes, test_support::*,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// Partiality is a classification: a definition reaching a partial one is accepted, and a rule refusing every mention of a partial definition would break the language.
@@ -194,10 +194,7 @@ fn carried_proof_and_its_reader() -> Definitions {
 
     declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held_proof(), again].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(vouched_name, declaration)]),
         [],

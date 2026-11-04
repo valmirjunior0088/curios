@@ -27,10 +27,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
 
 fn definitions(items: Vec<Item>) -> Definitions {
     Definitions {
-        mounts: Vec::new(),
         items: items.into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -79,7 +76,7 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
     let module = definitions(vec![caller.clone()]);
     let mut traces = Traces::default();
     let read = |traces: &Traces| {
-        Established::over(&[(&module, traces)])
+        Established::over(&[(&module, &[], traces)])
             .definition(&name("caller"))
             .expect("the unit declares it")
             .totality

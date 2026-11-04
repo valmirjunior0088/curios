@@ -9,7 +9,7 @@ use {
         Atom, Definitions, Global, InductParam, Intrinsic, Item, Nat, Telescope, Term, Universes,
         test_support::*,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// The derivation a `Prop` carrying a type made possible, as a whole module.
@@ -142,10 +142,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![wrapped_at_true(&wrap_name, qed)].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(true_name, true_decl)]),
         BTreeMap::from([(

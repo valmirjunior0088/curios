@@ -71,7 +71,6 @@ fn a_registry_entry_under_the_preludes_false() -> (Definitions, Term) {
             Nominal::Inductive(family(Term::prop(), &["mk"])),
         )]
         .into(),
-        ..Definitions::default()
     };
 
     (
@@ -109,7 +108,6 @@ fn a_statement_declared_twice() -> (Definitions, Term) {
             ),
         ]
         .into(),
-        ..Definitions::default()
     };
 
     (definitions, named(&theorem))

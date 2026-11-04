@@ -31,7 +31,6 @@ fn a_declaration_admitted_on_a_refused_declarations_definition_leaves_the_module
                 authored(&truth, absurd(), Term::instance(lie, Universes::default())),
             ]
             .into(),
-            ..Definitions::default()
         },
         BTreeMap::from([(family, proposition(Vec::new()))]),
         [],

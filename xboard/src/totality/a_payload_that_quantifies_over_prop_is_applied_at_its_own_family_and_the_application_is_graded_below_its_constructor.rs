@@ -87,7 +87,6 @@ fn a_payload_applied_at_its_own_family() -> (Definitions, Term) {
 
     let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Definitions::default()
     };
 
     let member = Free::local(923, Some("bad"));

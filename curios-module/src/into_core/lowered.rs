@@ -10,8 +10,7 @@
 
 use {
     super::{
-        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step,
-        TESTED_ONLY, Table,
+        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
     curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
@@ -833,13 +832,6 @@ fn keep_entries(
             lowered.concepts.insert(name, concept.clone());
         }
         None => {}
-    }
-    match kind {
-        curios_core::DefinitionKind::Witness => {
-            lowered.witnesses.insert(name);
-        }
-        curios_core::DefinitionKind::Test => lowered.tests.as_mut().expect(TESTED_ONLY).push(name),
-        _ => {}
     }
 }
 

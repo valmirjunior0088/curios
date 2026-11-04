@@ -328,7 +328,6 @@ impl LexiconCell {
         Self {
             module: curios_core::Definitions {
                 items: items.clone(),
-                ..curios_core::Definitions::default()
             },
             places: unit.places().clone(),
             earlier: RefCell::new(None),
@@ -743,6 +742,11 @@ impl PreparedText {
 
     pub fn reached(&self) -> &BTreeSet<Qualifier> {
         &self.reached
+    }
+
+    /// The prefixes this unit claims, and whether each is a root only the compiler supplies: the unit's own, never a definition's, so they are held here beside its modules.
+    pub fn mounts(&self) -> &[Mount] {
+        &self.mounts
     }
 
     /// The lowered module: what its elaboration reads, each item of a restored unit read out of its bytes where it is first asked for.
@@ -1317,8 +1321,6 @@ fn anchored(head: &Head, context: &Context) -> Option<curios_core::Anchored> {
 }
 
 /// Why a walk that reaches a test, lowering it or keeping it, holds a list to put it in: one with no list passes every test before anything of it is lowered or kept.
-const TESTED_ONLY: &str = "a test is reached only by a walk that collects tests";
-
 /// What a unit's declarations lower to, as the walk over its modules gathers it.
 ///
 /// This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than to own.
@@ -1332,9 +1334,8 @@ struct Lowering<'a> {
     induct_decls: BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: BTreeMap<curios_core::Global, curios_core::StructDecl>,
     concepts: BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
-    witnesses: BTreeSet<curios_core::Global>,
-    /// The tests lowered, in the walk's order — `None` where the unit is built ([`UnitSource::compiled`]), and the walk passes every `test` declaration as if it were not written.
-    tests: Option<Vec<curios_core::Global>>,
+    /// Whether the unit is lowered with its tests ([`UnitSource::compiled`]): where it is built, the walk passes every `test` declaration as if it were not written.
+    tested: bool,
     foreigns: ForeignStore,
     broken: Vec<BrokenItem>,
     /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]): over a baseline, the baseline's, with each body whose scope does not stand recorded again.
@@ -1475,7 +1476,7 @@ fn process_items(
 
     for (index, headed) in heads.iter().enumerate() {
         // A build holds no test: nothing of one is begun, anchored or asked of a baseline.
-        if matches!(headed.head, Head::Test(_)) && lowered.tests.is_none() {
+        if matches!(headed.head, Head::Test(_)) && !lowered.tested {
             continue;
         }
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
@@ -1666,7 +1667,6 @@ fn process_items(
                     None => body,
                 };
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
-                lowered.tests.as_mut().expect(TESTED_ONLY).push(name);
                 lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
                     span: test.label.span().cloned(),
@@ -2395,7 +2395,6 @@ fn process_items(
                             type_: lower.signature_type(&signature, declared.as_ref())?,
                             body: lower.signature_value(&signature, |body| lower.value(body))?,
                         };
-                        lowered.witnesses.insert(name);
                         Ok(item)
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -2854,10 +2853,7 @@ fn into_core_unit_within(
             .as_ref()
             .map(|baseline| baseline.unit().half().uses.clone())
             .unwrap_or_default(),
-        tests: match source.compiled() {
-            Compiled::Built => None,
-            Compiled::Tested => Some(Vec::new()),
-        },
+        tested: source.compiled() == Compiled::Tested,
         ..Lowering::default()
     };
 
@@ -2898,8 +2894,7 @@ fn into_core_unit_within(
         induct_decls,
         struct_decls,
         concepts,
-        mut witnesses,
-        tests,
+        tested: _,
         foreigns,
         broken,
         mut uses,
@@ -3033,7 +3028,6 @@ fn into_core_unit_within(
     rename_witnesses(
         Named {
             items: &mut flat_items,
-            witnesses: &mut witnesses,
             minted: &mut shared.minted.borrow_mut(),
             imports: &mut shared.imports.borrow_mut(),
             lints: &mut shared.lints.borrow_mut(),
@@ -3475,41 +3469,6 @@ fn into_core_unit_within(
         }
     }
 
-    // Over a baseline, the witnesses and the tests are the baseline's with what the walk changed, the tests in the order their items stand.
-    let (witnesses, tests) = match &baseline {
-        Some(baseline) => {
-            let earlier = baseline.unit().core();
-            let mut held = earlier
-                .witnesses
-                .iter()
-                .filter(|name| !gone_names.contains(*name) && !renames.contains_key(*name))
-                .copied()
-                .collect::<BTreeSet<_>>();
-            held.extend(renames.values().copied());
-            held.extend(witnesses);
-            let places = places
-                .get()
-                .expect("a version holds where it places each name");
-            // A built unit holds no test, whatever the baseline it was lowered over held.
-            let tested = tests.map(|tests| {
-                let mut tested = earlier
-                    .tests
-                    .iter()
-                    .filter(|name| !gone_names.contains(*name))
-                    .copied()
-                    .chain(tests)
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .filter_map(|name| Some((places.place(&name)?.item(), name)))
-                    .collect::<Vec<_>>();
-                tested.sort_by_key(|(place, _)| *place);
-                tested.into_iter().map(|(_, name)| name).collect()
-            });
-            (held, tested)
-        }
-        None => (witnesses, tests),
-    };
-
     // The audit, over the unit made: what an edit could have made fail over a baseline, and every definition and re-export otherwise.
     {
         let view = places.get().map(|places| reachability::Items {
@@ -3638,7 +3597,6 @@ fn into_core_unit_within(
                 revision.anew.union(&revision.dropped).copied().collect(),
                 curios_core::Definitions {
                     items: items.clone(),
-                    ..curios_core::Definitions::default()
                 },
                 places
                     .get()
@@ -3664,12 +3622,7 @@ fn into_core_unit_within(
         bodies,
         by_text: texts,
         revision,
-        core: curios_core::Definitions {
-            items,
-            mounts: own,
-            witnesses,
-            tests: tests.unwrap_or_default(),
-        },
+        core: curios_core::Definitions { items },
         minted: Rc::new({
             let mut minted = shared.minted.into_inner();
             minted.entry = entry_mints;
@@ -3704,12 +3657,20 @@ fn into_core_unit_within(
     Ok((unit, entry))
 }
 
-/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-module`'s own stage tests do.
+/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-module`'s own stage tests do: the program, the counters its lowering minted from, its `foreign` rows and the prefixes its unit claims.
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Program, Rc<curios_core::Minted>, ForeignStore), Error> {
+) -> Result<
+    (
+        curios_core::Program,
+        Rc<curios_core::Minted>,
+        ForeignStore,
+        Vec<Mount>,
+    ),
+    Error,
+> {
     let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax, None)?;
 
     Ok((
@@ -3719,6 +3680,7 @@ pub fn into_core(
         },
         unit.minted,
         unit.foreigns,
+        unit.mounts,
     ))
 }
 
@@ -3845,6 +3807,11 @@ pub struct EntryNames {
 }
 
 impl EntryNames {
+    /// The prefixes the program's own unit claims.
+    pub fn mounts(&self) -> &[Mount] {
+        &self.mounts
+    }
+
     /// See [`PreparedText::imports`].
     pub fn imports(&self) -> &curios_core::Imports {
         &self.imports

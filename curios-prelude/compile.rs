@@ -47,7 +47,8 @@ pub(crate) fn compile(out: &Path) -> Vec<PathBuf> {
         "std",
         std_text,
         // Every root before this one is the compiler's own, of which no read is recorded.
-        &Established::placed(&[(sys.core(), sys.places(), sys.traces())]).fixed(&[true]),
+        &Established::placed(&[(sys.core(), sys.places(), sys.mounts(), sys.traces())])
+            .fixed(&[true]),
         &[&sys],
     );
 
@@ -133,8 +134,13 @@ fn unit(
     let mut context = Context::with_default_budget(SYNTAX);
     // An item the parser could not read is absent from `lowered`, so what names it is withheld as a refused item's dependent is, rather than reported unbound once per mention: the seeding the compile pipeline does before it elaborates a unit.
     context.set_broken(prepared.broken_names());
-    let elaborated =
-        elaborate_and_zonk_unit(&mut context, established, &lowered, prepared.minted());
+    let elaborated = elaborate_and_zonk_unit(
+        &mut context,
+        established,
+        &lowered,
+        prepared.mounts(),
+        prepared.minted(),
+    );
     // A broken item refuses the root whatever elaboration said of the rest, and its parse report comes first, with elaboration's beside it in the same build — the pipeline's `with_broken`, for the one unit it does not compile.
     let broken = prepared.broken();
     if !broken.is_empty() {
@@ -174,7 +180,7 @@ fn unit(
         .unwrap_or_else(|error| panic!("elaborated /{root} universes are invalid: {error}"));
 
     // This is the seam a unit is stored at, so it is where the rule about what a stored unit may carry is enforced: no identity meaningful only in the compilation that assigned it. Two calls rather than one, because the universe half of that rule is what the line above already refuses — an unsolved universe metavariable, named as such — and a rule stated twice is a copy rather than a second opinion.
-    validate_stored_identities(&core).unwrap_or_else(|found| {
+    validate_stored_identities(&core, prepared.mounts()).unwrap_or_else(|found| {
         panic!("elaborated /{root} carries a positional identity: {found}")
     });
 

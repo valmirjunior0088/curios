@@ -3,7 +3,7 @@
 use {
     crate::{test_support::*, *},
     curios_common::{Plicity, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// The recorded payload row — field hint and carrier shape — of the one constructor of the single-constructor family whose debug name ends in `name`. The arena is what erasure wrote; the header the printer renders from it is a second spelling, and a test that scraped that spelling would pass by matching nothing if it moved.
@@ -92,10 +92,7 @@ fn a_variant_constructs_with_its_registered_schema() {
     let fixture = curios_core::Program {
         definitions: curios_core::test_support::declaring(
             curios_core::Definitions {
-                mounts: Vec::new(),
                 items: Vec::new().into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             induct_decls,
             [],
@@ -170,10 +167,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     let fixture = curios_core::Program {
         definitions: curios_core::test_support::declaring(
             curios_core::Definitions {
-                mounts: Vec::new(),
                 items: vec![former, six].into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             induct_decls,
             [],
@@ -498,10 +492,7 @@ fn a_variant_match_binds_payload_without_projections() {
     let fixture = curios_core::Program {
         definitions: curios_core::test_support::declaring(
             curios_core::Definitions {
-                mounts: Vec::new(),
                 items: Vec::new().into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             induct_decls,
             [],
@@ -690,10 +681,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let fixture = curios_core::Program {
         definitions: curios_core::test_support::declaring(
             curios_core::Definitions {
-                mounts: Vec::new(),
                 items: Vec::new().into(),
-                witnesses: BTreeSet::new(),
-                tests: Vec::new(),
             },
             induct_decls,
             struct_decls,

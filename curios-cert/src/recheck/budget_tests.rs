@@ -10,7 +10,6 @@ use {
         Level, Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term, UniverseContext,
         UniverseParam, Universes, Variance, test_support::*,
     },
-    std::collections::BTreeSet,
 };
 
 fn good() -> Global {
@@ -54,7 +53,6 @@ fn spent_item_beside_an_aliased_payload() -> Definitions {
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             authored(
                 &alias,
@@ -78,8 +76,6 @@ fn spent_item_beside_an_aliased_payload() -> Definitions {
             )])),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 
@@ -182,7 +178,6 @@ fn held_at_a_counted_index(unfolding: usize) -> Definitions {
     };
 
     Definitions {
-        mounts: Vec::new(),
         items: vec![
             alias,
             Item::Rec(RecItem::new(vec![(
@@ -195,8 +190,6 @@ fn held_at_a_counted_index(unfolding: usize) -> Definitions {
             )])),
         ]
         .into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     }
 }
 

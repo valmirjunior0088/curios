@@ -12,7 +12,7 @@ use {
     },
     curios_surface::Spelling,
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeMap,
         panic::{AssertUnwindSafe, catch_unwind},
         rc::Rc,
     },
@@ -214,10 +214,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     );
 
     let definitions = Definitions {
-        mounts: Vec::new(),
         items: vec![former_def, held].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     assert_eq!(
@@ -310,10 +307,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
 
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![held].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(held_name, held_decl)]),
         [],
@@ -357,10 +351,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
     let definitions = declaring(
         Definitions {
-            mounts: Vec::new(),
             items: vec![wrapped].into(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
         },
         BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
         [],
@@ -413,10 +404,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     let definitions = Definitions {
-        mounts: Vec::new(),
         items: vec![Item::Let(Box::new(constructor))].into(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
     };
 
     let applied: Term = Subterm::StructType(StructType {

@@ -52,7 +52,6 @@ fn a_reduct_read_under_an_arms_retyping() -> (Definitions, Term) {
 
     let definitions = Definitions {
         items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-        ..Definitions::default()
     };
 
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());

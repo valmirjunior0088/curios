@@ -148,7 +148,6 @@ fn definition_coercion() -> Definitions {
             ),
         ]
         .into(),
-        ..Definitions::default()
     }
 }
 
