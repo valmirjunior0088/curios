@@ -475,7 +475,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | Code | Meaning |
 | --- | --- |
 | `0` | compiled, and for `run`, the program itself exited 0 |
-| `1` | a hard error, alone or beside written goals; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
+| `1` | a hard error, alone or beside written goals; a command line that does not parse; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
 | `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder stage`, `cost` and `tests` too, when goals alone kept them from answering |
 
 A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder diagnostics`](#wonder), or runs the executable [`compile`](#compile) wrote.

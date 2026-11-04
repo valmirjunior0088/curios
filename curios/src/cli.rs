@@ -528,9 +528,9 @@ impl CommandFactory for Cli {
 }
 
 impl Cli {
-    /// Read the process's arguments, answering clap's help and failures before dispatch.
-    pub(crate) fn parse() -> Self {
-        Self::try_parse_from(env::args_os()).unwrap_or_else(|error| error.exit())
+    /// Read the process's arguments: the command they name, or what clap answered instead — help and the version, which are answers, or a line that does not parse. The caller prints it, and the process exits from `main` alone.
+    pub(crate) fn parse() -> Result<Self, Error> {
+        Self::try_parse_from(env::args_os())
     }
 
     /// Parse once with clap, preserving the original OS words so a consumed leading separator can be distinguished from a subject.

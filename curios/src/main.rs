@@ -151,7 +151,17 @@ fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
 }
 
 fn dispatch() -> Result<(), Failure> {
-    let cli = Cli::parse();
+    let cli = match Cli::parse() {
+        Ok(cli) => cli,
+        // Help and the version are answers, printed to standard output; anything else is a line that does not parse, printed to standard error and failed as a command that could not run is.
+        Err(error) => {
+            let _ = error.print();
+            return match error.use_stderr() {
+                true => Err(Failure::Concluded(Concluded::Failed)),
+                false => Ok(()),
+            };
+        }
+    };
 
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
     #[cfg(feature = "profile")]
