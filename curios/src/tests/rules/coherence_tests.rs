@@ -1,6 +1,8 @@
 //! One witness per key: duplicates, orphans, and the standard library's witnesses that a user program may not shadow.
 
-use crate::test_support::*;
+use {
+    super::test_support::*, crate::test_support::*, curios_common::Qualifier, curios_elab::Error,
+};
 
 // Registering two witnesses for the same `(concept, head)` key is a coherence error (global uniqueness) — independent of, and checked alongside, the orphan rule below.
 #[test]
@@ -21,17 +23,9 @@ fn duplicate_witness_is_an_error() {
         "#;
 
     // Both the concept and the declaring module are pinned, not just the word "witness". The module is the *coarse* coordinate the report gives, and it comes from each definition's `island` rather than from the witness's identity; the caret below is what locates the declaration itself, which a module cannot when it holds several. Matched on the message body, since the `while elaborating …` prefix names the witness only by its module.
-    let rendered = error(source);
-    assert!(
-        rendered.contains(
-            "duplicate witness of 'Show' for head 'Nat'\n  \
-             both are declared in the entry module\n  \
-             every concept-head pair has at most one witness, program-wide"
-        ),
-        "{rendered}"
-    );
-    // Located at the second declaration's written concept application, which is the only thing in an anonymous declaration a caret can point at.
-    assert!(rendered.contains("satisfy Show(Nat) {"), "{rendered}");
+    refused(source).by_elaborator_in("/witness~/Show(Nat)#1", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/Show") && pinned_key(key) == "Nat" && *first == Qualifier::empty() && *second == Qualifier::empty())
+    });
 }
 
 // The declaring module of a nested-module witness renders as that module, which the entry-module cases above cannot distinguish from a bug that always reports the root.
@@ -55,15 +49,9 @@ fn duplicate_witness_reports_its_declaring_module() {
         /std/Io/pure(())
         "#;
 
-    let rendered = error(source);
-    assert!(
-        rendered.contains(
-            "duplicate witness of 'C' for head 'T'\n  \
-             both are declared in module '/M'\n  \
-             every concept-head pair has at most one witness, program-wide"
-        ),
-        "{rendered}"
-    );
+    refused(source).by_elaborator_in("/M/witness~/M/C(/M/T)#1", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/M/C") && pinned_key(key) == "/M/T" && *first == Qualifier::from(["M"]) && *second == Qualifier::from(["M"]))
+    });
 }
 
 // Two *different* declaring modules, the branch the same-module collapse above must not swallow: with one witness in each, the report names both. `/B` owns neither the concept nor the type, so the orphan rule would refuse it too — the duplicate insert is reached first only because `/A` declared the pair, and the fixture keeps `/B` importing them rather than declaring its own.
@@ -90,15 +78,9 @@ fn a_duplicate_across_two_modules_names_both() {
         /std/Io/pure(())
         "#;
 
-    let rendered = error(source);
-    assert!(
-        rendered.contains(
-            "duplicate witness of 'C' for head 'T'\n  \
-             one is declared in module '/A', another in module '/B'\n  \
-             every concept-head pair has at most one witness, program-wide"
-        ),
-        "{rendered}"
-    );
+    refused(source).by_elaborator_in("/B/witness~/A/C(/A/T)", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/A/C") && pinned_key(key) == "/A/T" && *first == Qualifier::from(["A"]) && *second == Qualifier::from(["B"]))
+    });
 }
 
 // The orphan rule: a witness may be declared only where the concept it witnesses, or a type in its key, is already declared. `Ord` and `Bool` are both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bool)` (not already witnessed anywhere in the standard library) is rejected.
@@ -113,15 +95,9 @@ fn orphan_witness_is_rejected() {
         n
         "#;
 
-    let rendered = error(source);
-    assert!(
-        rendered.contains(
-            "orphan witness of 'Ord' for head 'Bool', declared in the entry module\n  \
-             a witness may only be declared where the concept or a type in its head is already declared"
-        ),
-        "{rendered}"
-    );
-    assert!(rendered.contains("satisfy Ord(Bool) {"), "{rendered}");
+    refused(source).by_elaborator_in("/witness~/std/Ord/Ord(Bool)", |error| {
+        matches!(error, Error::OrphanWitness { concept, key, witness } if *concept == global("/std/Ord/Ord") && pinned_key(key) == "Bool" && *witness == Qualifier::empty())
+    });
 }
 
 // The user's most natural attempt at incoherence, and the one the fixtures above leave out. `orphan_witness_is_rejected` deliberately picks `Ord(Bool)`, a pair the standard library does *not* witness, which leaves out an entry program re-declaring a witness the prelude already holds. `/std/Bool` witnesses `Show(Bool)`, and the answer must be a refusal — otherwise a program could silently replace a standard-library instance at every site that resolves it, which is exactly the incoherence "one witness per key, program-wide" exists to exclude.
@@ -137,14 +113,9 @@ fn a_standard_library_witness_cannot_be_shadowed() {
         /std/print(Show/show(true))
         "#;
 
-    let rendered = error(source);
-    assert!(
-        rendered.contains(
-            "orphan witness of 'Show' for head 'Bool', declared in the entry module\n  \
-             a witness may only be declared where the concept or a type in its head is already declared"
-        ),
-        "{rendered}"
-    );
+    refused(source).by_elaborator_in("/witness~/std/Show/Show(Bool)", |error| {
+        matches!(error, Error::OrphanWitness { concept, key, witness } if *concept == global("/std/Show/Show") && pinned_key(key) == "Bool" && *witness == Qualifier::empty())
+    });
 }
 
 // The sanctioned counterpart: a user's own type is legal to `satisfy` a standard-library concept for, since the declaring root (the entry program) owns the key's type even though it doesn't own the concept.
@@ -188,11 +159,9 @@ fn parametric_witnesses_over_one_family_still_collide() {
         /std/print("unreachable")
         "#;
 
-    let message = error(source);
-    assert!(
-        message.contains("duplicate witness"),
-        "expected the key collision, got: {message}"
-    );
+    refused(source).by_elaborator_in("/witness~/std/Monad/Monad(/Box)#1", |error| {
+        matches!(error, Error::DuplicateWitness { .. })
+    });
 }
 
 // A name for a type is read through to the type before it keys a witness, so a second witness spelled through the name meets the first at the type's own key: were the name a key of its own, one goal at `Nat` would have two witnesses answering it, and which ran would follow which spelling resolution met.
@@ -207,11 +176,9 @@ fn a_witness_spelled_through_a_name_for_a_type_collides_with_the_types_own() {
         /std/print(Named/name(@Nat))
         "#;
 
-    let report = error(source);
-    assert!(
-        report.contains("duplicate witness of 'Named' for head 'Nat'"),
-        "expected the witness spelled through the name refused at the type's key:\n{report}"
-    );
+    refused(source).by_elaborator_in("/witness~/Named(Nat)#1", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Named") && pinned_key(key) == "Nat")
+    });
 }
 
 // A group's members register on their signatures before any body elaborates, so a member whose key another member already holds is refused as any duplicate is.
@@ -228,11 +195,9 @@ fn a_group_member_with_a_taken_key_is_a_duplicate() {
         /std/print("unreachable")
         "#;
 
-    let report = error(source);
-    assert!(
-        report.contains("duplicate witness of 'Show' for head 'A'"),
-        "expected the member refused as a duplicate:\n{report}"
-    );
+    refused(source).by_elaborator_in("/witness~/Show(/A)", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Show") && pinned_key(key) == "/A")
+    });
 }
 
 // A shape is a key like any other, so two witnesses of one shape collide exactly as two of one name do — and the report spells the key by its shape, field types elided, because the key does not carry them.
@@ -252,11 +217,9 @@ fn a_duplicate_tuple_shape_is_refused() {
         /std/print("unreachable")
         "#;
 
-    let report = error(source);
-    assert!(
-        report.contains("duplicate witness of 'Tag' for head '{_, _}'"),
-        "expected the shape refused as a duplicate:\n{report}"
-    );
+    refused(source).by_elaborator_in("/witness~/Tag({_, _})#1", |error| {
+        matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Tag") && pinned_key(key) == "{_, _}")
+    });
 }
 
 // A tuple shape is owned by no module, as an intrinsic former is, so it contributes nothing to ownership: an entry program may not key a witness on one for a concept `/std` declares. Two independent packages each declaring `Show({Nat, Bool})` would otherwise collide at link with neither in the wrong.
@@ -270,11 +233,9 @@ fn a_tuple_witness_for_a_standard_concept_is_an_orphan() {
         /std/print("unreachable")
         "#;
 
-    let report = error(source);
-    assert!(
-        report.contains("orphan witness of 'Show' for head '{_, _}'"),
-        "expected the shape refused as an orphan:\n{report}"
-    );
+    refused(source).by_elaborator_in("/witness~/std/Show/Show({_, _})", |error| {
+        matches!(error, Error::OrphanWitness { concept, key, .. } if *concept == global("/std/Show/Show") && pinned_key(key) == "{_, _}")
+    });
 }
 
 // The other half of the rule: the shape contributes nothing, but a concept the entry root declares does, so a program writes tuple witnesses for its own concepts freely. `a_concept_resolves_on_a_tuple_value` in `shape_tests` is the same admission seen from the resolution side.
@@ -304,9 +265,14 @@ fn a_witness_head_with_nothing_written_is_the_application() {
         satisfy Show() { show(n : Nat) = "" }
         /std/print("no")
         "#;
-    let report = error(source);
-    assert!(
-        report.contains("wrong number of arguments: expected 1, got 0"),
-        "{report}"
-    );
+    refused(source).by_elaborator_in("/witness~0", |error| {
+        matches!(
+            error,
+            Error::WrongNumberOfArguments {
+                expected: 1,
+                got: 0,
+                ..
+            }
+        )
+    });
 }

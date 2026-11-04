@@ -61,7 +61,7 @@ fn a_proposition_may_not_carry_a_type_field() {
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     refused(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION).by_elaborator_in("/bad", |error| {
-        matches!(error, Error::ImplicitAtOtherSort { .. })
+        matches!(error, Error::ImplicitAtOtherSort { binder: Some(binder), proposition: false, .. } if binder == "P")
     });
 }
 

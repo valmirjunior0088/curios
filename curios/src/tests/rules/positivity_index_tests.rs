@@ -56,9 +56,10 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
         /std/print("unreachable")
         "#,
     )
-    .by_elaborator_in("/Foo", |error| {
-        matches!(error, Error::UnboundVariable { .. })
-    });
+    .by_elaborator_in(
+        "/Foo",
+        |error| matches!(error, Error::UnboundVariable { term, .. } if pinned(term) == "/Foo"),
+    );
 }
 
 // The way *around* that kinding refusal, and the reason it closes too. A second declaration can carry the negative occurrence in its index domain — `B : (f : (A) -> False) -> Type` is well-kinded, because `A` is already a type — so the position the walk skips does name a declaration in the group, and the occurrence relation never records the `B → A` edge.

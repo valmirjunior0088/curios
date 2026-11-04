@@ -6,7 +6,7 @@ use {
     crate::test_support::*,
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
-    curios_core::{Global, Term},
+    curios_core::{Global, Term, WitnessKey},
     curios_module::RootSource,
     curios_native::MockHost,
     curios_pipeline::{DEFAULT_BUDGET, EntryTail, Examined, Refused, test_support::*},
@@ -72,6 +72,11 @@ pub(super) fn global(path: &str) -> Global {
 /// `term`, a term an elaborator's error holds, as a rule's test pins it: every global by its absolute path, an intrinsic by its surface name, no universe instance and no metavariable's number, so the pin reads the term and not the order elaboration met its levels in, and on one line, each run of whitespace a space.
 pub(super) fn pinned(term: &Term) -> String {
     on_one_line(term, Spelling::default().with_erased_universes())
+}
+
+/// `key`, the key a coherence refusal holds, as a rule's test pins it.
+pub(super) fn pinned_key(key: &WitnessKey) -> String {
+    key.faithful().to_string()
 }
 
 /// `term` as [`pinned`] writes it with its universe instances shown, each level metavariable a bare `?u`: for a test whose claim is the instance a term stands at.
@@ -158,6 +163,34 @@ impl fmt::Display for Refusals {
                 error.raised().variant_name(),
                 place(error.declared_in())
             )?;
+            match error.raised() {
+                curios_elab::Error::DuplicateWitness {
+                    concept,
+                    key,
+                    standing,
+                    ..
+                } => write!(
+                    formatter,
+                    "\n  concept: {}\n  key: {}\n  standing: {}",
+                    concept.faithful(),
+                    pinned_key(key),
+                    standing.faithful()
+                )?,
+                curios_elab::Error::NotBoolType { head_type }
+                | curios_elab::Error::NotNatType { head_type } => {
+                    write!(formatter, "\n  head type: {}", pinned(head_type))?
+                }
+                curios_elab::Error::UnboundVariable { term, .. } => {
+                    write!(formatter, "\n  term: {}", pinned(term))?
+                }
+                curios_elab::Error::OrphanWitness { concept, key, .. } => write!(
+                    formatter,
+                    "\n  concept: {}\n  key: {}",
+                    concept.faithful(),
+                    pinned_key(key)
+                )?,
+                _ => {}
+            }
             if let curios_elab::Error::UninferredImplicit { bound, .. } = error.raised() {
                 write!(formatter, "\n  bound: {}", pinned(bound))?;
             }

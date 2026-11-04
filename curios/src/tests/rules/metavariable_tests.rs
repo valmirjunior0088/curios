@@ -1,6 +1,6 @@
 //! No metavariable survives zonking into a position a checker reads.
 
-use {super::test_support::*, crate::test_support::*};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // **A solution keeps the universe instance its spelling had.** `k`'s `@x` is born at the call, outside the arm whose scrutinee, `h(Eq()(0, 0))`, is refined to the case, and solved inside it against `w`'s type — with that refinement suppressed, since it was not born under it, so its solution holds outside the arm. Born inside, it would be solved under the refinement and never reach the suppressed spelling this pins. Under suppression the elaborator's reducer keeps the probe as spelled rather than the refinement's key, which erases universe instances by design, being a spelling to look up by: a value committed from the key would hold a bare `/std/Eq/Eq`, which the kernel refuses as an occurrence stating no instance.
 #[test]
@@ -18,34 +18,42 @@ fn an_inferred_value_under_a_refined_proof_keeps_its_universe_instance() {
 // Each fixture plants one unconstrained implicit in one of the four places, and all four are refused; the control is what keeps the row from being read as "declarations may not mention implicits" — it supplies the same argument in all four positions and requires the program to run.
 #[test]
 fn a_metavariable_does_not_survive_into_an_induct_telescope() {
-    rejected_by(
-        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE}"),
-        "was not inferred",
-    );
+    refused(&format!(
+        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE}"
+    ))
+    .by_elaborator_in("/Bad", |error| {
+        matches!(error, Error::UninferredImplicit { .. })
+    });
 }
 
 #[test]
 fn a_metavariable_does_not_survive_into_a_struct_field() {
-    rejected_by(
-        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_STRUCT_FIELD}"),
-        "was not inferred",
-    );
+    refused(&format!(
+        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_STRUCT_FIELD}"
+    ))
+    .by_elaborator_in("/Bad", |error| {
+        matches!(error, Error::UninferredImplicit { .. })
+    });
 }
 
 #[test]
 fn a_metavariable_does_not_survive_a_definitions_type() {
-    rejected_by(
-        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_DEFINITIONS_TYPE}"),
-        "was not inferred",
-    );
+    refused(&format!(
+        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_DEFINITIONS_TYPE}"
+    ))
+    .by_elaborator_in("/f", |error| {
+        matches!(error, Error::UninferredImplicit { .. })
+    });
 }
 
 #[test]
 fn a_metavariable_does_not_survive_the_entrypoint_body() {
-    rejected_by(
-        &format!("{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY}"),
-        "was not inferred",
-    );
+    refused(&format!(
+        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY}"
+    ))
+    .by_elaborator_in("entry", |error| {
+        matches!(error, Error::UninferredImplicit { .. })
+    });
 }
 
 #[test]

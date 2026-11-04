@@ -429,7 +429,7 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
         "#;
 
     refused(source).by_elaborator_in("/F", |error| {
-        matches!(error, Error::SortDecidedTwice { .. })
+        matches!(error, Error::SortDecidedTwice { prop: true, .. })
     });
 }
 
@@ -491,7 +491,15 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
         /std/print("")
         "#;
 
-    refused(source).by_elaborator_in("/pick", |error| matches!(error, Error::SortDecided { .. }));
+    refused(source).by_elaborator_in("/pick", |error| {
+        matches!(
+            error,
+            Error::SortDecided {
+                prop: true,
+                at_decider: true
+            }
+        )
+    });
 }
 
 // A proposition carries only proofs, so a field at a sort left to a caller is one the structure decides: at `Type` two of its values would be one with their fields apart. The elaborator refuses the structure for deciding its sort; `curios-cert`'s `recheck::sort_tests` refuses it at the assignment that states `Type`, under this name.
@@ -505,7 +513,15 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
         /std/print("")
         "#;
 
-    refused(source).by_elaborator_in("/W", |error| matches!(error, Error::SortDecided { .. }));
+    refused(source).by_elaborator_in("/W", |error| {
+        matches!(
+            error,
+            Error::SortDecided {
+                prop: true,
+                at_decider: true
+            }
+        )
+    });
 }
 
 // Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the kernel under this name.

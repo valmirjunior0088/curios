@@ -162,5 +162,8 @@ fn a_literal_dispatch_reads_no_float() {
         /std/print(Nat/to_str(tag(-0.0)))
         "#,
     )
-    .by_elaborator_in("/tag", |error| matches!(error, Error::NotNatType { .. }));
+    .by_elaborator_in(
+        "/tag",
+        |error| matches!(error, Error::NotNatType { head_type } if pinned(head_type) == "Flt"),
+    );
 }

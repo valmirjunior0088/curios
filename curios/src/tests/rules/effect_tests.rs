@@ -1,6 +1,6 @@
 //! An effect is not a value: what may be a scrutinee, an argument, or inhabit a pure arrow, and what may take a description apart.
 
-use {super::test_support::*, crate::test_support::*};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // The arm rule at its one arm with no case value of its own. A `| _ =>` catch-all binds nothing and refines no index, so the only instance it can be checked at is the scrutinee's — which is the instance the elimination then hands its caller.
 //
@@ -15,7 +15,10 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
 // The purity premise every refinement rests on: an arm is reached only when its scrutinee *equals* the case's value, which a term of non-`Io` type does because it denotes one value. An effectful read does not — two occurrences of `Cell/fill(c, true)` around a `Cell/fill(c, false)` would denote two values, refining both would re-read `p : Eq()(Cell/fill(c, true), true)` at `Eq()(false, true)` in the inner arm, and `/std/Bool/false_neq_true` would turn that into `/std/Bool/False` in an arm the run reaches. Its type is `Io(Bool)`, opaque and with no cases, so nothing lets the program treat it as a `Bool`, and the refusal names `Io`.
 #[test]
 fn an_effectful_scrutinee_is_not_a_value() {
-    rejected_by(AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE, "Io");
+    refused(AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE).by_elaborator_in(
+        "/entry",
+        |error| matches!(error, Error::NotBoolType { head_type } if pinned(head_type) == "Io(Bool)"),
+    );
 }
 
 #[test]
@@ -26,7 +29,9 @@ fn a_match_on_a_forced_cell_read_still_compiles() {
 /// Asserted on the *argument*: the fixture uses `Cell/fill(c, true) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all.
 #[test]
 fn an_effect_behind_a_stuck_head_is_not_an_argument() {
-    rejected_by(AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT, "Io");
+    refused(AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT).by_elaborator_in("/entry", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")
+    });
 }
 
 #[test]
@@ -37,7 +42,9 @@ fn a_stuck_application_scrutinee_still_refines() {
 /// Asserted on the offending *argument*: the refusal is that `(b) => Cell/fill(c, true)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic.
 #[test]
 fn an_effect_cannot_inhabit_a_pure_arrow() {
-    rejected_by(AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW, "Io");
+    refused(AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW).by_elaborator_in("/entry", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")
+    });
 }
 
 #[test]
@@ -54,32 +61,30 @@ fn a_description_of_a_contradiction_still_compiles() {
 // No match case. The carrier has no constructors, which is exactly the shape the zero-arm match eliminates — so the one rule that takes a type apart without naming a case is the first thing to try on a description, and `Io(Empty)` would hand `False` out of the fixture above. The refusal names the head's type, so it is the carrier that is refused and not the arity.
 #[test]
 fn a_description_is_no_empty_type() {
-    rejected_by(
-        A_DESCRIPTION_IS_NO_EMPTY_TYPE,
-        "a match with no arms eliminates only a type with no constructors",
-    );
+    refused(A_DESCRIPTION_IS_NO_EMPTY_TYPE).by_elaborator_in("/boom", |error| {
+        matches!(error, Error::NotAInductType { no_arms: true, .. })
+    });
 }
 
 // No projection, which is the elimination that meets no guard at all: a field read answers whatever the record holds, so a description that read as a record of its payload would release it with nothing to check.
 #[test]
 fn a_description_is_no_record() {
-    rejected_by(A_DESCRIPTION_IS_NO_RECORD, "projected from a non-tuple");
+    refused(A_DESCRIPTION_IS_NO_RECORD)
+        .by_elaborator_in("/boom", |error| matches!(error, Error::NotATuple { .. }));
 }
 
 // An eliminator in any spelling, and the one spelling a program may declare for itself: `Monad/Lift(M, N)`'s `lift` carries an action from one monad into another, and `N` is the caller's to choose. Chosen as a nominal wrapper, the embedding is `(Io(A)) -> Box(A)`, whose only honest body needs the `A` — so the whole discipline reduces to there being no term of `(Io(A)) -> A`, and the refusal stands in the witness where the author would write one. A lambda-shaped identity monad cannot even be keyed, which is why this is stated over a struct.
 #[test]
 fn a_description_cannot_be_carried_out_of_its_monad() {
-    rejected_by(
-        A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD,
-        "the witness of 'Monad/Lift' for key '(Io, Box)'",
-    );
+    refused(A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD)
+        .by_elaborator_in("/witness~/std/Monad/Lift(Io, /Box)", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(x)" && pinned(expected) == "x")
+    });
 }
 
 // The carrier is opaque to conversion as well, which is the eliminator a transport would need: held one with what it yields, `Eq/refl()` would inhabit the identification and `Eq/subst` would do the rest, with no elimination of a description written anywhere. It is asserted here rather than in the law grid because it is this rule that rests on it.
 #[test]
 fn a_description_is_not_what_it_yields() {
-    rejected_by(
-        A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS,
-        "Eq(@Type)(Io(Empty), Empty)",
-    );
+    refused(A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS)
+        .by_elaborator_in("/_one", |error| matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Type)(Io(/Empty), Io(/Empty))" && pinned(expected) == "/std/Eq/Eq(Type)(Io(/Empty), /Empty)"));
 }

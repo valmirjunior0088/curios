@@ -128,7 +128,13 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
         "#,
     )
     .by_elaborator_in("/Stuck", |error| {
-        matches!(error, Error::NotStrictlyPositive { .. })
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Mixed,
+                ..
+            }
+        )
     });
 }
 
@@ -145,9 +151,10 @@ fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
 
         /std/print("")
         "#;
-    refused(source).by_elaborator_in("/Bad", |error| {
-        matches!(error, Error::NotStrictlyPositive { .. })
-    });
+    refused(source).by_elaborator_in(
+        "/Bad",
+        |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/Bad")),
+    );
 }
 
 // A field whose type a self-calling type-level `rec` computes. The walk forces the `rec` head, cannot see through the stuck `match` it exposes, descends into the arm holding the recursive call, opens that arm against a fresh binder — and forces the same node again, one level deeper, forever. `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so each unfolding hands the walk a structurally identical group; nothing but a guard keyed on that group stops the descent, and `unfolded` cannot be it because an inline group has no name to key on.

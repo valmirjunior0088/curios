@@ -434,7 +434,13 @@ fn a_negative_occurrence_in_the_dictionary_a_premise_takes_is_rejected() {
         "#,
     )
     .by_elaborator_in("/Bad", |error| {
-        matches!(error, Error::NotStrictlyPositive { .. })
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Mixed,
+                ..
+            }
+        )
     });
 }
 
