@@ -1,12 +1,12 @@
 use {
     super::{
-        Argument, DecoratorField, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label,
-        LetSignature, Name, Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments,
-        parse_file_head, parse_optional_term, parse_program_end, parse_term, parse_top_item,
-        print_module_items, print_term, take_comments,
+        Argument, Dialect, FieldSugarParam, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic,
+        Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
+        clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
+        parse_top_item, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
-    curios_common::{Plicity, Qualifier, Report, Source, Span},
+    curios_common::{Plicity, Report, Source, Span},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
@@ -28,22 +28,6 @@ pub struct Doc {
 impl PartialEq for Doc {
     fn eq(&self, other: &Self) -> bool {
         self.lines == other.lines
-    }
-}
-
-/// What Core text writes in a declaration's head and a program never does: the decorator before it, and the module its absolute name lies under. Empty in a program, whose lowering refuses either.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct CoreHead {
-    /// What the decorator before the declaration states of it: before `let` or another declaring word for a group's first member, before `and` for a later one.
-    pub fields: Vec<DecoratorField>,
-    /// The module the declaration's absolute name lies under: `/std/Nat` for `let /std/Nat/add`, the root for `/Read`, and `None` for the label a program declares.
-    pub path: Option<Qualifier>,
-}
-
-impl CoreHead {
-    /// Whether the head writes nothing a program does not.
-    pub fn is_empty(&self) -> bool {
-        self.fields.is_empty() && self.path.is_none()
     }
 }
 
@@ -128,19 +112,19 @@ impl PartialEq for TopUse {
 
 /// One member of a top-level `let` item — a lone definition, or one member of a `let … and …;` group (see `TopItem::Let`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopLet {
+pub struct TopLet<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    pub core: CoreHead,
+    pub core: D::Head,
     pub vis_pub: bool,
     pub label: Label,
-    pub signature: LetSignature,
+    pub signature: LetSignature<D>,
 }
 
 /// A `foreign` declaration: a function with no body, answered where the program is linked rather than by a Curios definition. It is written as one, `foreign frobnicate(Nat, Bytes) -> Nat;`, its operands and its result read by the wire's own grammar — a closed vocabulary, not ordinary Curios types — so there is no name resolution to do. No colon stands between the name and the list: what follows a colon is a name's type, and a row's signature is not its type, whose result is an `Io`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopForeign {
+pub struct TopForeign<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    pub core: CoreHead,
+    pub core: D::Head,
     pub vis_pub: bool,
     pub label: Label,
     pub signature: WireSignature,
@@ -148,83 +132,85 @@ pub struct TopForeign {
 
 /// One payload binder of an `induct` case. The name is optional (`success(A)` stays positional); it is required when a later payload type or the case target mentions the binder. `plicity` is plain or `@` — implicit at the value-constructor function, named (`cons(@m : Nat, …)`, `m` recoverable from a later payload's type) or not (`at(n : Nat, @Holds(0 < n))`); the parser refuses `use` here. Erasure is sort-driven, so no per-field mark is kept.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CasePayloadParam {
+pub struct CasePayloadParam<D: Dialect = Program> {
     pub plicity: Plicity,
     pub label: Option<String>,
-    pub type_: Term,
+    pub type_: Term<D>,
 }
 
 /// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopCase {
+pub struct TopCase<D: Dialect = Program> {
     pub doc: Option<Doc>,
+    /// What the decorator before the case states: Core text's, and nothing in a program.
+    pub core: D::Fields,
     /// The constructor's name, carrying the span of the word alone. A case is reached as a path segment (`Color/red`), so this is a declaring position: it refuses a keyword, and a refusal about it — a repeated case, above all — points at the word.
     pub label: Label,
-    pub payload: Vec<CasePayloadParam>,
+    pub payload: Vec<CasePayloadParam<D>>,
     /// The parenthesized index expressions after the payload — the case's terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to `: (Nat/succ(m))`. Present iff the inductive head declares indices.
-    pub target: Option<Vec<Term>>,
+    pub target: Option<Vec<Term<D>>>,
 }
 
 /// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives both the type-constructor function and one value-constructor function per case; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopInduct {
+pub struct TopInduct<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    pub core: CoreHead,
+    pub core: D::Head,
     pub vis_pub: bool,
     /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
     pub label: Label,
     /// The parameters of the type constructor's function type, and written as one's are: a named plain or `@` parameter, or a `use` premise, which has no name. A plain or `@` parameter is *implicit* on every value constructor regardless of its mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq()(x, y)`). A `use` parameter is a witness slot at both: the type names the dictionary resolution found for it, and a value constructor finds the same one.
-    pub params: Vec<FuncTypeParam>,
+    pub params: Vec<FuncTypeParam<D>>,
     /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names are optional and documentary — needed only when a later index's type depends on an earlier one; they are *not* in scope in the cases.
-    pub indices: Vec<(Option<String>, Term)>,
+    pub indices: Vec<(Option<String>, Term<D>)>,
     /// The arity's result sort — `Type` or `Prop`. Written after the index telescope (`: (n : Nat) -> Prop`) or in its place when there are no indices (`: Prop`); defaults to `Type` when omitted.
-    pub result_sort: Term,
-    pub cases: Vec<TopCase>,
+    pub result_sort: Term<D>,
+    pub cases: Vec<TopCase<D>>,
 }
 
 /// One field of a `struct` declaration: its mark, the Σ-type field it is written as, and the documentation comment above it. Wrapped rather than fields on [`TupleTypeParam`], because a tuple type's fields are never documented and take no mark, and a slot that only one of a type's two grammars can fill is a slot every reader of the other must ignore.
 #[derive(Debug, Clone, PartialEq)]
-pub struct StructField {
+pub struct StructField<D: Dialect = Program> {
     pub doc: Option<Doc>,
     /// Plain or `@`: a hidden field is left out of a literal and filled as a call's omitted `@` argument is. Never `use` — a structure's premise is a parameter.
     pub plicity: Plicity,
-    pub param: TupleTypeParam,
+    pub param: TupleTypeParam<D>,
 }
 
 /// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the type-former's visibility); `rep_pub` is the declaration-local `pub` before the result sort (representation exported wherever the type name is visible). The two markers are orthogonal; every combination is legal. `params` are written exactly like an inductive's; `fields` reuse the Σ-type field grammar (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopStruct {
+pub struct TopStruct<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    pub core: CoreHead,
+    pub core: D::Head,
     pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: Label,
-    pub params: Vec<FuncTypeParam>,
+    pub params: Vec<FuncTypeParam<D>>,
     /// The result sort — `Type` or `Prop`, written `: Sort` after the parameters; defaults to `Type` when omitted.
-    pub result_sort: Term,
-    pub fields: Vec<StructField>,
+    pub result_sort: Term<D>,
+    pub fields: Vec<StructField<D>>,
 }
 
 /// One field of a `concept` declaration: a method, or a `use`-prefixed superclass edge, whose type must elaborate to a concept application.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConceptField {
+pub struct ConceptField<D: Dialect = Program> {
     pub doc: Option<Doc>,
     /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`) through the wrapper it generates. `None` on a superclass edge, which is a `use` member: a type and no binder.
     pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a superclass edge.
-    pub func_params: Option<Vec<FuncTypeParam>>,
-    pub type_: Term,
+    pub func_params: Option<Vec<FuncTypeParam<D>>>,
+    pub type_: Term<D>,
 }
 
-impl ConceptField {
+impl<D: Dialect> ConceptField<D> {
     /// Whether this field is a superclass edge rather than a method.
     pub fn is_super(&self) -> bool {
         self.label.is_none()
     }
 
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
-    pub fn desugared_type(&self) -> Term {
+    pub fn desugared_type(&self) -> Term<D> {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
                 params: params.clone(),
@@ -238,24 +224,24 @@ impl ConceptField {
 
 /// A `concept` declaration: a record-shaped interface. It lowers to a representation-public nominal structure plus a concept-registry entry and, into its own namespace, one method-wrapper `let` per field.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopConcept {
+pub struct TopConcept<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    pub core: CoreHead,
+    pub core: D::Head,
     pub vis_pub: bool,
     /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
     pub label: Label,
     /// Written as a `struct`'s are. A `use` parameter parses and is refused at lowering: a concept's premise is a superclass field.
-    pub params: Vec<FuncTypeParam>,
-    pub result_sort: Term,
-    pub fields: Vec<ConceptField>,
+    pub params: Vec<FuncTypeParam<D>>,
+    pub result_sort: Term<D>,
+    pub fields: Vec<ConceptField<D>>,
 }
 
 /// One implementation field of a `witness` declaration: `label = value`, or the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar with the label mandatory. The sugar is kept verbatim (the printer round-trips it); `into_core` undoes it when it builds the desugared struct literal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
     pub label: String,
-    pub func_params: Option<Vec<(Plicity, Label, Option<Term>)>>,
+    pub func_params: Option<Vec<FieldSugarParam>>,
     pub value: Term,
 }
 
@@ -285,10 +271,10 @@ impl PartialEq for TopWitness {
 
 /// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopTest {
-    pub core: CoreHead,
+pub struct TopTest<D: Dialect = Program> {
+    pub core: D::Head,
     pub label: Label,
-    pub body: Term,
+    pub body: Term<D>,
 }
 
 /// One top-level item of a module, one variant per declaration keyword. Every declaration keyword chains with `and`, so every variant but `Mod`, `Use` and `Foreign` holds a group: a `let f … and g …;` group of mutually recursive definitions, an `induct … and … end` group of mutually recursive inductive families, `struct` and `concept` groups whose fields name one another, and a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A lone `let` is a group of one; whether it recurses is read off its body, never declared.
@@ -304,23 +290,6 @@ pub enum TopItem {
     Foreign(TopForeign),
     Test(TopTest),
     Broken(TopBroken),
-}
-
-impl TopItem {
-    /// Each member's Core head beside the label it declares: what Core text writes of a declaration and a program never does.
-    pub fn core_heads(&self) -> Vec<(&CoreHead, &Label)> {
-        match self {
-            TopItem::Let(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
-            TopItem::Induct(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
-            TopItem::Struct(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
-            TopItem::Concept(group) => group.iter().map(|item| (&item.core, &item.label)).collect(),
-            TopItem::Foreign(item) => vec![(&item.core, &item.label)],
-            TopItem::Test(item) => vec![(&item.core, &item.label)],
-            TopItem::Mod(_) | TopItem::Use(_) | TopItem::Witness(_) | TopItem::Broken(_) => {
-                Vec::new()
-            }
-        }
-    }
 }
 
 /// An item the parser could not read: what it reported, the text it skipped to resume past it, and the name its head declared where the head parsed that far. Kept in the list rather than beside it so the module is an honest record of the file — every consumer says what it does with one, lowering registers the name so a reference to it resolves and is withheld rather than reported unbound, and nothing that reaches erasure ever holds one. See `Module::parse` for what recovers, and what refuses instead.
@@ -575,7 +544,7 @@ impl Entrypoint {
                         None => fail("Expected a program's final term").boxed(),
                     };
                     parse_term
-                        .and_drop(parse_program_end)
+                        .and_drop(parse_program_end::<Program>)
                         .map(move |tail| Entrypoint::new(into_module(items), tail))
                         .or(swallowed)
                 }),
@@ -610,7 +579,7 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
         parse_file_head
             .and_keep(many0(|| spanned(parse_top_item)))
             .and(parse_optional_term)
-            .and_drop(parse_program_end)
+            .and_drop(parse_program_end::<Program>)
             .map(|(items, tail)| {
                 let (spans, items): (Vec<_>, Vec<_>) = items.into_iter().unzip();
                 (Module::built(items), spans, tail)

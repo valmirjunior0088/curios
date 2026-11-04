@@ -1,14 +1,15 @@
 use {
     super::{
-        BINDER_FOLLOWS_IMPLICIT, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE, Read,
-        STRUCT_PATTERN_TAKES_NO_MARK, member_ends, members, parse_char_value, parse_cons_ih,
+        BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE,
+        Read, STRUCT_PATTERN_TAKES_NO_MARK, member_ends, members, parse_char_value, parse_cons_ih,
         parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark, parse_name,
-        parse_nat_digits, parse_place, parse_premise, parse_qualified_name, refused, require_space,
+        parse_named_premise, parse_nat_digits, parse_place, parse_qualified_name, refused,
+        require_space,
     },
     crate::{
-        BytesPattern, FuncParam, FuncType, FuncTypeParam, Label, ListPattern, MatchPattern,
-        MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
-        parse_term, parse_whitespace,
+        BytesPattern, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label, ListPattern,
+        MatchPattern, MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm,
+        Term, parse_term, parse_whitespace,
     },
     curios_common::{Plicity, recurse},
     curios_parse::{
@@ -19,25 +20,29 @@ use {
 };
 
 // What a plain or `@` member is where the site declares and a name is optional: `label: type`, or the type alone.
-fn parse_declared_member<'a>(state: ParserState<'a>) -> Parsed<'a, (Option<String>, Term)> {
+fn parse_declared_member<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, (Option<String>, Term<D>)> {
     parse_identifier
         .and_drop(parse_literal(":"))
-        .and(parse_term)
-        .map(|(label, type_): (&str, Term)| (Some(label.to_string()), type_))
-        .or(parse_term.map(|type_| (None, type_)))
+        .and(parse_term::<D>)
+        .map(|(label, type_): (&str, Term<D>)| (Some(label.to_string()), type_))
+        .or(parse_term::<D>.map(|type_| (None, type_)))
         .parse(state)
 }
 
 // One Π-binder: `use Concept(args)`, or under `@` or no mark `label: type` or the type alone.
-pub(super) fn parse_func_type_param<'a>(state: ParserState<'a>) -> Parsed<'a, Read<FuncTypeParam>> {
+pub(super) fn parse_func_type_param<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Read<FuncTypeParam<D>>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
-            Plicity::Witness => parse_premise(start)
+            Plicity::Witness => parse_named_premise(start)
                 .map(|read| {
-                    read.map(|type_| FuncTypeParam {
+                    read.map(|(label, type_)| FuncTypeParam {
                         plicity: Plicity::Witness,
-                        label: None,
+                        label,
                         type_,
                     })
                 })
@@ -55,7 +60,7 @@ pub(super) fn parse_func_type_param<'a>(state: ParserState<'a>) -> Parsed<'a, Re
         .parse(state)
 }
 
-pub(super) fn parse_func_type<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_func_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     uncommit(
         parse_literal("(")
             .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -66,8 +71,8 @@ pub(super) fn parse_func_type<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     )
     // Past the arrow this is a function type, so a member it refuses is its own to report.
     .flat_map(members)
-    .and(parse_term)
-    .map(|(params, output): (Vec<FuncTypeParam>, Term)| {
+    .and(parse_term::<D>)
+    .map(|(params, output): (Vec<FuncTypeParam<D>>, Term<D>)| {
         Subterm::FuncType(FuncType {
             params: params.into_iter().collect(),
             output,
@@ -489,31 +494,36 @@ fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatt
 }
 
 // The optional `: type` after a binder.
-fn parse_annotation<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Term>> {
+fn parse_annotation<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option<Term<D>>> {
     parse_literal(":")
-        .and_keep(parse_term)
+        .and_keep(parse_term::<D>)
         .map(Some)
         .or(pure(None))
         .parse(state)
 }
 
 // What a member is where the site binds, under each mark: `use _`, the member's place; after `@`, a binder with an optional annotation, a type in its place being read and reported; and with no mark the binder as `bound` reads it. Shared by a lambda's parameters and the definition sugar's, which differ only in what a binder is.
-fn parse_bound_member<'a, B: 'a>(
+fn parse_bound_member<'a, B: 'a, D: Grammar>(
     bound: impl Parser<'a, B> + Copy + 'a,
     wildcard: fn() -> B,
-) -> impl Parser<'a, Read<(Plicity, B, Option<Term>)>> {
+) -> impl Parser<'a, Read<(Plicity, B, Option<Term<D>>)>> {
     move |state: ParserState<'a>| {
         mark()
             .and(parse_mark)
             .flat_map(move |(start, plicity)| match plicity {
-                Plicity::Witness => parse_place(start)
+                // A witness binder Core text writes is the variable its body reads it by.
+                Plicity::Witness if D::NAMES_WITNESSES => bound
+                    .and_drop(member_ends)
+                    .map(|binder| Ok((Plicity::Witness, binder, None)))
+                    .boxed(),
+                Plicity::Witness => parse_place::<D>(start)
                     .map(move |read| read.map(|()| (Plicity::Witness, wildcard(), None)))
                     .boxed(),
                 Plicity::Implicit => bound
                     .and(parse_annotation)
                     .and_drop(member_ends)
                     .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
-                    .or(parse_term.flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
+                    .or(parse_term::<D>.flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
                     .boxed(),
                 Plicity::Explicit => bound
                     .and(parse_annotation)
@@ -525,14 +535,16 @@ fn parse_bound_member<'a, B: 'a>(
 }
 
 // One parameter of the definition sugar `label(params) = value` (tuple, struct, and witness fields). Like a lambda binder it retains its mark — `@name`, or `use _` — which is copied onto the generated function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark.
-pub(super) fn parse_func_param<'a>(
+pub(super) fn parse_func_param<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, Read<(Plicity, Label, Option<Term>)>> {
+) -> Parsed<'a, Read<FieldSugarParam<D>>> {
     parse_bound_member(parse_binder, || Label::from("_")).parse(state)
 }
 
 // A lambda parameter with an optional domain annotation and a binder pattern in place of a plain name — the pattern-accepting counterpart of `parse_func_param`, which serves the single-name-only `label(params) = value` definition sugar (`parse_tuple_field_prefix`). `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
-pub(super) fn parse_func_pattern_param<'a>(state: ParserState<'a>) -> Parsed<'a, Read<FuncParam>> {
+pub(super) fn parse_func_pattern_param<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Read<FuncParam<D>>> {
     parse_bound_member(parse_pattern, || Pattern::Binder(Label::from("_")))
         .map(|read| {
             read.map(|(plicity, pattern, annotation)| FuncParam {

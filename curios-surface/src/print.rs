@@ -11,13 +11,13 @@ mod list_layout_tests;
 use {
     super::{
         Apply, Argument, BytesPattern, BytesSegment, Choose, ChooseArm, ChooseTest, ConceptField,
-        CoreHead, Decorated, DecoratorField, Doc, Field, Func, FuncParam, FuncSugarParam, FuncType,
-        FuncTypeParam, GroupItem, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
-        ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StructField,
-        StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
-        TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
+        Doc, Field, FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
+        GroupItem, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry,
+        ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StructField, StructLit,
+        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
+        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
     },
     crate::{Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -455,7 +455,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
-fn print_func_param((plicity, name, annotation): (Plicity, Label, Option<Term>)) -> Printer {
+fn print_func_param((plicity, name, annotation): FieldSugarParam) -> Printer {
     let bound = match annotation {
         Some(ty) => flat([pure(name), pure(": "), print_term(ty)]),
         None => pure(name),
@@ -754,8 +754,7 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
 /// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
 fn print_suffix_head(term: Term, suffix: Printer) -> Printer {
     match term.as_subterm() {
-        // A decorator at the head of a call states the head's fields, which bare would read as the call's.
-        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) | Subterm::Decorated(_) => flat([
+        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => flat([
             pure("("),
             print_term(term),
             indent(ends()),
@@ -831,14 +830,7 @@ fn print_term_inner(term: Term, suffix: Printer) -> Printer {
         Subterm::TupleType(TupleType { fields }) => {
             listed("{", fields.into_iter().map(print_field).collect(), "}")
         }
-        // The operand is an applied atom, so a larger term, or a second decorator, is parenthesized.
-        Subterm::Decorated(Decorated { fields, term }) => {
-            let operand = match term.as_subterm() {
-                Subterm::Decorated(_) => flat([pure("("), print_term(term), pure(")")]),
-                _ => print_operand(term, u8::MAX),
-            };
-            flat([print_decorator(fields), pure(" "), operand])
-        }
+        Subterm::Core(form) => match form {},
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
@@ -1091,46 +1083,10 @@ fn print_top_use(item: TopUse) -> Printer {
     ])
 }
 
-/// `#{field = value, …}`, what a decorator states.
-fn print_decorator(fields: Vec<DecoratorField>) -> Printer {
-    let fields = fields
-        .into_iter()
-        .map(|field| {
-            flat([
-                pure(field.label.to_string()),
-                pure(" = "),
-                print_term(field.value),
-            ])
-        })
-        .collect();
-
-    listed("#{", fields, "}")
-}
-
-/// The decorator before a declaration, on a line of its own, where Core text writes one.
-fn print_item_decorator(core: &CoreHead) -> Printer {
-    match core.fields.is_empty() {
-        true => pure(""),
-        false => flat([print_decorator(core.fields.clone()), hard_line()]),
-    }
-}
-
-/// A declaration's name: its label, under the module its absolute path names where Core text writes one.
-fn print_declared(core: &CoreHead, label: &Label) -> Printer {
-    match &core.path {
-        Some(path) => {
-            let prefix = path.segments().iter().map(|segment| format!("/{segment}"));
-            pure(prefix.chain([format!("/{label}")]).collect::<String>())
-        }
-        None => pure(label.to_string()),
-    }
-}
-
 fn print_top_test(test: TopTest) -> Printer {
     flat([
-        print_item_decorator(&test.core),
         pure("test "),
-        print_declared(&test.core, &test.label),
+        pure(test.label.to_string()),
         pure(" ="),
         hard_line(),
         indent(flat([print_term(test.body), ends()])),
@@ -1145,10 +1101,9 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
 
     flat([
         print_doc(first.doc),
-        print_item_decorator(&first.core),
         print_pub(first.vis_pub),
         pure("let "),
-        print_declared(&first.core, &first.label),
+        pure(first.label.to_string()),
         print_let_signature(first.signature, true),
         flat(
             rest.into_iter()
@@ -1156,11 +1111,10 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
                     flat([
                         hard_line(),
                         print_doc(item.doc),
-                        print_item_decorator(&item.core),
                         // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
                         print_pub(item.vis_pub),
                         pure("and "),
-                        print_declared(&item.core, &item.label),
+                        pure(item.label.to_string()),
                         print_let_signature(item.signature, true),
                     ])
                 })
@@ -1218,10 +1172,9 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
 fn print_top_foreign(item: TopForeign) -> Printer {
     flat([
         print_doc(item.doc),
-        print_item_decorator(&item.core),
         print_pub(item.vis_pub),
         pure("foreign "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_wire_signature(&item.signature),
         pure(";"),
     ])
@@ -1357,10 +1310,9 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
 
     flat([
         print_doc(first.doc),
-        print_item_decorator(&first.core),
         print_pub(first.vis_pub),
         pure("induct "),
-        print_declared(&first.core, &first.label),
+        pure(first.label.to_string()),
         print_top_induct_params(first.params),
         print_top_induct_arity(first.indices, first.rep_pub, first.result_sort),
         flat(
@@ -1376,10 +1328,9 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
                     flat([
                         hard_line(),
                         print_doc(u.doc),
-                        print_item_decorator(&u.core),
                         print_pub(u.vis_pub),
                         pure("and "),
-                        print_declared(&u.core, &u.label),
+                        pure(u.label.to_string()),
                         print_top_induct_params(u.params),
                         print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
                         flat(
@@ -1419,10 +1370,9 @@ fn print_top_struct(items: Vec<TopStruct>) -> Printer {
 
 fn print_struct_member(item: TopStruct, keyword: &'static str) -> Printer {
     flat([
-        print_item_decorator(&item.core),
         print_pub(item.vis_pub),
         pure(keyword),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_top_induct_params(item.params),
         pure(": "),
         print_pub(item.rep_pub),
@@ -1490,10 +1440,9 @@ fn print_top_concept(items: Vec<TopConcept>) -> Printer {
 
 fn print_concept_member(item: TopConcept, keyword: &'static str) -> Printer {
     flat([
-        print_item_decorator(&item.core),
         print_pub(item.vis_pub),
         pure(keyword),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_top_induct_params(item.params),
         pure(": "),
         print_pub(item.rep_pub),
@@ -1634,7 +1583,7 @@ pub fn print_let_head(item: &TopLet) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("let "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         signature,
     ])
 }
@@ -1644,7 +1593,7 @@ pub fn print_induct_head(item: &TopInduct) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("induct "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_top_induct_params(item.params.clone()),
         print_top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
     ])
@@ -1725,7 +1674,7 @@ pub fn print_struct_head(item: &TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("struct "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
@@ -1746,7 +1695,7 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("concept "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
@@ -1798,7 +1747,7 @@ pub fn print_witness_head(item: &TopWitness) -> Printer {
 
 /// The head of a `test` declaration: the keyword and its name, without the body.
 pub fn print_test_head(item: &TopTest) -> Printer {
-    flat([pure("test "), print_declared(&item.core, &item.label)])
+    flat([pure("test "), pure(item.label.to_string())])
 }
 
 /// The head of a `foreign` declaration, which is the whole of it.
@@ -1806,7 +1755,7 @@ pub fn print_foreign_head(item: &TopForeign) -> Printer {
     flat([
         print_pub(item.vis_pub),
         pure("foreign "),
-        print_declared(&item.core, &item.label),
+        pure(item.label.to_string()),
         print_wire_signature(&item.signature),
     ])
 }

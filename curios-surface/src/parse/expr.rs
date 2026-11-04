@@ -1,16 +1,16 @@
 use {
     super::{
-        DEFINITION_NAMES_ITS_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, MEMO_TERM_BEFORE_ARROW, Read,
-        comment_ending_at, members, parse_caller_sort, parse_choose, parse_func, parse_func_type,
-        parse_intrinsic, parse_keyword, parse_label, parse_let_binder, parse_literal, parse_mark,
-        parse_match, parse_name, parse_parens, parse_pattern, parse_premise, parse_prop,
-        parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type, parse_type,
-        parse_usize_raw, refused,
+        DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, MEMO_TERM_BEFORE_ARROW,
+        Read, comment_ending_at, members, parse_caller_sort, parse_choose, parse_func,
+        parse_func_type, parse_intrinsic, parse_keyword, parse_let_binder, parse_literal,
+        parse_mark, parse_match, parse_name, parse_parens, parse_pattern, parse_premise,
+        parse_prop, parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type,
+        parse_type, parse_usize_raw, refused,
     },
     crate::{
-        Apply, Argument, Decorated, DecoratorField, Field, FuncSugarParam, Infix, Label, Let,
-        LetBinding, LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared,
-        parse_identifier_raw, parse_whitespace,
+        Apply, Argument, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
+        LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
+        parse_whitespace,
     },
     curios_common::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
     curios_parse::{
@@ -50,12 +50,14 @@ pub(super) fn refusing<'a>(literal: &'static str, refusal: &'static str) -> impl
 }
 
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
-pub(super) fn parse_binding<'a>(state: ParserState<'a>) -> Parsed<'a, (Label, LetSignature)> {
+pub(super) fn parse_binding<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, (Label, LetSignature<D>)> {
     declared(parse_let_signature).parse(state)
 }
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
-fn parse_let_group<'a>(state: ParserState<'a>) -> Parsed<'a, LetGroup> {
+fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGroup<D>> {
     parse_keyword("let")
         .and_keep(parse_let_binder)
         .and(parse_local_let_signature)
@@ -77,9 +79,9 @@ fn parse_let_group<'a>(state: ParserState<'a>) -> Parsed<'a, LetGroup> {
 }
 
 // One member of a definition telescope (`let`, `satisfy`): `use Concept(args)`, which has no binder and joins the witness scope, or under `@` or no mark a binder pattern with its type. A plain or `@` member written as its type alone is read and reported: a parameter the body cannot name is an annotation forgotten far more often than a parameter meant, and `_: T` says the second on purpose — a bound the body uses as a fact and never by name is `@_: T`.
-pub(super) fn parse_func_sugar_param<'a>(
+pub(super) fn parse_func_sugar_param<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, Read<FuncSugarParam>> {
+) -> Parsed<'a, Read<FuncSugarParam<D>>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
@@ -88,7 +90,7 @@ pub(super) fn parse_func_sugar_param<'a>(
                 .boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_pattern
                 .and_drop(parse_literal(":"))
-                .and(parse_term)
+                .and(parse_term::<D>)
                 .map(move |(binder, type_)| {
                     Ok(FuncSugarParam::Bound {
                         implicit: plicity == Plicity::Implicit,
@@ -97,7 +99,7 @@ pub(super) fn parse_func_sugar_param<'a>(
                     })
                 })
                 // Its type alone, or its binder alone where that is `_`, which no type is.
-                .or(parse_term
+                .or(parse_term::<D>
                     .map(|_| ())
                     .or(parse_pattern.map(|_| ()))
                     .flat_map(move |()| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
@@ -107,7 +109,9 @@ pub(super) fn parse_func_sugar_param<'a>(
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
-pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> impl Parser<'a, LetSignature> {
+pub(super) fn parse_func_let_signature<'a, D: Grammar>(
+    owns_body: bool,
+) -> impl Parser<'a, LetSignature<D>> {
     move |state: ParserState<'a>| {
         parse_literal("(")
             .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
@@ -117,7 +121,7 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> impl Parser<'a, L
             .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
             // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
             .flat_map(members)
-            .and(parse_term)
+            .and(parse_term::<D>)
             .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
             .and_drop(parse_literal("="))
             .and(body(owns_body))
@@ -131,11 +135,13 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> impl Parser<'a, L
 }
 
 // The plain `: T = body` form with a mandatory type.
-pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> impl Parser<'a, LetSignature> {
+pub(super) fn parse_required_name_signature<'a, D: Grammar>(
+    owns_body: bool,
+) -> impl Parser<'a, LetSignature<D>> {
     move |state: ParserState<'a>| {
         refusing(":=", DEFINITION_TAKES_EQUALS)
             .and_keep(parse_literal(":"))
-            .and_keep(parse_term)
+            .and_keep(parse_term::<D>)
             .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
             .and_drop(parse_literal("="))
             .and(body(owns_body))
@@ -148,30 +154,30 @@ pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> impl Parser<
 }
 
 /// A definition's body, committed when the signature before it could have been nothing but a declaration's: past `let name : T =` or `let name(params) -> T =` the local reading is the same text failing the same way, so a mistake in the body is the item's own diagnosis rather than a reason to try the tail — which is what lets the item loop recover past it. A local `let` keeps its body recoverable, since the term grammar around it decides its diagnoses.
-fn body<'a>(owned: bool) -> impl Parser<'a, Term> {
+fn body<'a, D: Grammar>(owned: bool) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         (match owned {
-            true => commit(parse_term).boxed(),
-            false => parse_term.boxed(),
+            true => commit(parse_term::<D>).boxed(),
+            false => parse_term::<D>.boxed(),
         })
         .parse(state)
     }
 }
 
 // The plain `(: T)? = body` form: the type may be omitted (inferred from `body`).
-pub(super) fn parse_optional_name_signature<'a>(
+pub(super) fn parse_optional_name_signature<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, LetSignature> {
+) -> Parsed<'a, LetSignature<D>> {
     refusing(":=", DEFINITION_TAKES_EQUALS)
         .and_keep(
             parse_literal(":")
-                .and_keep(parse_term)
+                .and_keep(parse_term::<D>)
                 .map(Some)
                 .or(pure(None)),
         )
         .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
         .and_drop(parse_literal("="))
-        .and(parse_term)
+        .and(parse_term::<D>)
         .map(|(type_, body)| LetSignature::Name { type_, body })
         .parse(state)
 }
@@ -179,7 +185,9 @@ pub(super) fn parse_optional_name_signature<'a>(
 // Parses the part of a `let` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and for every member after `and`, whose types cannot be inferred.
 //
 // The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report would be the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
-pub(super) fn parse_let_signature<'a>(state: ParserState<'a>) -> Parsed<'a, LetSignature> {
+pub(super) fn parse_let_signature<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, LetSignature<D>> {
     parse_func_let_signature(true)
         .or(parse_required_name_signature(true))
         .or(mark().and_drop(take_exact("=")).flat_map(|start| {
@@ -191,7 +199,9 @@ pub(super) fn parse_let_signature<'a>(state: ParserState<'a>) -> Parsed<'a, LetS
 }
 
 // Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
-pub(super) fn parse_local_let_signature<'a>(state: ParserState<'a>) -> Parsed<'a, LetSignature> {
+pub(super) fn parse_local_let_signature<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, LetSignature<D>> {
     parse_func_let_signature(false)
         .or(parse_optional_name_signature)
         .parse(state)
@@ -200,9 +210,9 @@ pub(super) fn parse_local_let_signature<'a>(state: ParserState<'a>) -> Parsed<'a
 // `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
 //
 // `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
-pub(super) fn parse_let<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_let<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     many1(|| mark().and(parse_let_group))
-        .and(parse_term.and(mark))
+        .and(parse_term::<D>.and(mark))
         .map(|(statements, (tail, end))| {
             // `many1` guarantees at least one statement, so the span start is defined.
             let span = statements[0].0.to(&end);
@@ -232,21 +242,23 @@ pub(super) fn parse_proj_suffix<'a>(state: ParserState<'a>) -> Parsed<'a, Field>
         .parse(state)
 }
 
-pub(super) enum Suffix {
+pub(super) enum Suffix<D: Dialect> {
     Proj(Field),
-    Apply(Vec<Argument>),
+    Apply(Vec<Argument<D>>),
     Bang,
 }
 
 // A call-site argument under its mark: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. Neither mark can begin a plain-argument term. Under a mark `_` holds the slot's place; a plain slot is always written.
-pub(super) fn parse_apply_argument<'a>(state: ParserState<'a>) -> Parsed<'a, Argument> {
+pub(super) fn parse_apply_argument<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Argument<D>> {
     parse_mark
         .flat_map(|plicity| match plicity {
-            Plicity::Explicit => parse_term
+            Plicity::Explicit => parse_term::<D>
                 .map(move |term| Argument { term, plicity })
                 .boxed(),
             Plicity::Implicit | Plicity::Witness => parse_held
-                .or(parse_term)
+                .or(parse_term::<D>)
                 .map(move |term| Argument { term, plicity })
                 .boxed(),
         })
@@ -254,7 +266,7 @@ pub(super) fn parse_apply_argument<'a>(state: ParserState<'a>) -> Parsed<'a, Arg
 }
 
 // A held place: a `_` that begins no longer name, read where a mark has opened a hidden member's place.
-pub(super) fn parse_held<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_held<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     spanned(parse_identifier_raw.flat_map(|word: &str| match word {
         "_" => pure(()).boxed(),
         _ => fail("a held place is `_`").boxed(),
@@ -264,7 +276,7 @@ pub(super) fn parse_held<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     .parse(state)
 }
 
-pub(super) fn parse_suffix<'a>(state: ParserState<'a>) -> Parsed<'a, Suffix> {
+pub(super) fn parse_suffix<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Suffix<D>> {
     parse_proj_suffix
         .map(Suffix::Proj)
         .or(parse_literal("(")
@@ -285,14 +297,17 @@ pub(super) fn parse_suffix<'a>(state: ParserState<'a>) -> Parsed<'a, Suffix> {
 }
 
 /// Folds a postfix chain onto its head, one node per suffix. Every intermediate node takes the span from the head's start to its own suffix's end — `acts.0` inside `acts.0!`, `f(x)` inside `f(x).1` — so an error at a node in the middle of a chain reports there rather than at the nearest spanned ancestor, which for a hoisted action is the outermost `!` of its region. A head without a span (a bare name) leaves the chain's own nodes unspanned, and the caller's `with_span` over the whole chain covers those.
-pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term {
+pub(super) fn apply_suffixes<D: Dialect>(
+    head: Term<D>,
+    suffixes: Vec<(Span, Suffix<D>)>,
+) -> Term<D> {
     suffixes
         .into_iter()
         .fold(head, |head, (suffix_span, suffix)| {
             let span = head
                 .span()
                 .map(|start| Span::new(start.source.clone(), start.start, suffix_span.end));
-            let node: Term = match suffix {
+            let node: Term<D> = match suffix {
                 Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
                 Suffix::Apply(arguments) => Subterm::Apply(Apply { head, arguments }).into(),
                 Suffix::Bang => Subterm::Bang(head).into(),
@@ -304,7 +319,7 @@ pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term 
         })
 }
 
-pub(super) fn parse_empty_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_empty_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_literal("(")
         .and_keep(parse_literal(")"))
         .map(|_| Subterm::Tuple(Tuple { fields: vec![] }))
@@ -312,7 +327,9 @@ pub(super) fn parse_empty_tuple<'a>(state: ParserState<'a>) -> Parsed<'a, Term> 
         .parse(state)
 }
 
-pub(super) fn with_span<'a>(parser: impl Parser<'a, Term>) -> impl Parser<'a, Term> {
+pub(super) fn with_span<'a, D: Grammar>(
+    parser: impl Parser<'a, Term<D>>,
+) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         spanned(parser)
             .map(|(span, term)| term.with_span(trimmed(span)))
@@ -345,23 +362,26 @@ fn parse_term_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
         .parse(state)
 }
 
-pub(super) fn parse_goal<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_goal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     // `?` is not an identifier character, so a plain literal suffices — no token-aware matching needed. (`_` remains the match wildcard binder.) A written `?` is a *goal* — reported at zonk — never a silent `Subterm::Hole`, which only desugars mint.
     parse_literal("?")
         .map(|()| Subterm::Goal.into())
         .parse(state)
 }
 
-pub(super) fn parse_atomic_term<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_atomic_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     // With room to recurse: every nesting of the grammar re-enters one of its memoized nonterminals.
     recurse(|| memoize(MEMO_ATOMIC_TERM, parse_atomic_term_inner).parse(state))
 }
 
-pub(super) fn parse_atomic_term_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_atomic_term_inner<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Term<D>> {
     // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins. `match` and `choose` are heads because `end` closes them: nothing after one can be read as part of it, so an operator, a call, a projection or a `!` may follow one bare.
     with_span(
         with_span(
-            parse_goal
+            D::parse_atom
+                .or(parse_goal)
                 .or(parse_match)
                 .or(parse_choose)
                 .or(parse_struct_lit)
@@ -377,7 +397,7 @@ pub(super) fn parse_atomic_term_inner<'a>(state: ParserState<'a>) -> Parsed<'a, 
                 .or(parse_term_name.map(|n| Subterm::Name(n).into())),
         )
         .and(many0(|| spanned(parse_suffix)))
-        .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),
+        .map(|(head, suffixes): (Term<D>, _)| apply_suffixes(head, suffixes)),
     )
     .parse(state)
 }
@@ -435,7 +455,7 @@ pub(super) fn parse_infix_op<'a>(state: ParserState<'a>) -> Parsed<'a, InfixOp> 
 }
 
 // Precedence-climbing over applied atoms: parse a left operand, then fold in every following operator whose precedence is at least `min_prec`. The right operand of an operator at precedence `p` is parsed at `p + 1` (left-associativity).
-pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> impl Parser<'a, Term> {
+pub(super) fn parse_infix_expr<'a, D: Grammar>(min_prec: u8) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         parse_operand
             .flat_map(move |left| parse_infix_rest(left, min_prec))
@@ -443,47 +463,15 @@ pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> impl Parser<'a, Term> {
     }
 }
 
-/// What an infix operator takes: an applied atom, or one under a decorator.
-fn parse_operand<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    parse_decorated.or(parse_atomic_term).parse(state)
+/// What an infix operator takes: an applied atom, or a form only the dialect writes.
+fn parse_operand<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    D::parse_form.or(parse_atomic_term).parse(state)
 }
 
-/// `#{field = value, …} operand`, committed once `#{` is read: no other form begins with `#`. The operand is an applied atom, so a decorator states the fields of one node and a second decorator on it is written in parentheses.
-fn parse_decorated<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    with_span(
-        parse_decorator
-            .and(commit(parse_atomic_term))
-            .map(|(fields, term)| Subterm::Decorated(Decorated { fields, term }).into()),
-    )
-    .parse(state)
-}
-
-/// `#{field = value, …}`, committed once `#{` is read: what a decorator states, before an operand or a declaration.
-pub(super) fn parse_decorator<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<DecoratorField>> {
-    take_exact("#{")
-        .and_drop(parse_whitespace)
-        .and_keep(commit(
-            sep_by0_trailing(parse_decorator_field, || parse_literal(","))
-                .and_drop(parse_literal("}")),
-        ))
-        .parse(state)
-}
-
-/// One field a decorator states, `label = value`, as a structure's literal states one: the `=` is guarded against `==` and `=>`, as a labelled field's is.
-fn parse_decorator_field<'a>(state: ParserState<'a>) -> Parsed<'a, DecoratorField> {
-    parse_label
-        .and_drop(
-            take_exact("=")
-                .and_drop(not_ahead("="))
-                .and_drop(not_ahead(">"))
-                .and_drop(parse_whitespace),
-        )
-        .and(commit(parse_term))
-        .map(|(label, value)| DecoratorField { label, value })
-        .parse(state)
-}
-
-pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> impl Parser<'a, Term> {
+pub(super) fn parse_infix_rest<'a, D: Grammar>(
+    left: Term<D>,
+    min_prec: u8,
+) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| // One `many0` loop per precedence level, folded by move. Recursing once per operator and deep-cloning the accumulated left spine at every link would cost an N-operator chain N native frame nests and O(N²) cloned nodes — the per-element-recursion class the flat `let` block in `parse_let` avoids. Native depth is bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
     many0(move || {
         parse_infix_op.flat_map(move |op| {
@@ -643,17 +631,19 @@ fn written_instead_of(word: &str) -> Option<&'static str> {
     })
 }
 
-pub(crate) fn parse_term<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(crate) fn parse_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     recurse(|| memoize(MEMO_TERM, term(true)).parse(state))
 }
 
 /// [`parse_term`] where the form around the term owes an arrow before the term that follows it: a `choose` arm's condition, a bind arm's value. A term standing where that arrow belongs is the arm's missing `=>`, which the arm reports, so the term is read without [`refuse_juxtaposed_term`]'s probe.
-pub(super) fn parse_term_before_arrow<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_term_before_arrow<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Term<D>> {
     recurse(|| memoize(MEMO_TERM_BEFORE_ARROW, term(false)).parse(state))
 }
 
 /// A term, with the probe for a second one on its line where `probed`.
-fn term<'a>(probed: bool) -> impl Parser<'a, Term> {
+fn term<'a, D: Grammar>(probed: bool) -> impl Parser<'a, Term<D>> {
     let juxtaposed = move || match probed {
         true => refuse_juxtaposed_term.boxed(),
         false => pure(()).boxed(),
@@ -677,7 +667,7 @@ fn term<'a>(probed: bool) -> impl Parser<'a, Term> {
 }
 
 // The last resort, for a position that begins no term at all. Every alternative above declines at the choice point, and [`Parser::or`]'s tie-break then reports the first of them — `Expected keyword 'let'`, which names the chain's order rather than the reader's mistake. Consuming the offending character puts this failure one past that point, where it outranks them. It stays uncommitted, so a speculative caller still backtracks past it: the trailing comma of `(a, b,)`, whose `parse_term` at the `)` must fail recoverably for the separator to be read as trailing, above all. A word needs none of this — `parse_keyword` consumes the identifier run before refusing it, so a word already fails past the choice point, and the only words that begin no term are the six [`refuse_declaration_head`] names.
-fn refuse_non_term<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+fn refuse_non_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     mark()
         .and(take_n(1))
         .flat_map(|(start, text)| {

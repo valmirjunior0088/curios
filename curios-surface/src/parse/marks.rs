@@ -5,7 +5,7 @@
 //! **A refused form is read, held, and raised once the site is known.** `(@A, use Show(A), x)` opens a function type and a lambda alike, and only the arrow after it says which, so neither grammar may refuse a member where it stands: whichever is tried first would commit a refusal of a program that is valid as the other. A member parser therefore answers with a [`Read`] — the member, or the report [`refused`] builds over the text the form covers — and the site hands its list to [`members`] past the token that discriminates it. A site nothing else can be read as — a declaration's parameters, a payload, a field, a constructor pattern — raises where the mark stands.
 
 use {
-    super::{parse_identifier, parse_keyword, parse_literal},
+    super::{Grammar, parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
     curios_common::Plicity,
     curios_parse::{
@@ -122,24 +122,42 @@ fn parse_wildcard<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 }
 
 /// What follows `use` where the site declares: the premise's type. A binder before it, or a bare `_` in its place, is read whole and reported; `start` is where the mark was written.
-pub(super) fn parse_premise<'a>(start: Mark) -> impl Parser<'a, Read<Term>> {
+pub(super) fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D>>> {
     let (bound, placed) = (start.clone(), start);
 
     move |state: ParserState<'a>| {
         parse_identifier
             .and_drop(parse_literal(":"))
-            .and_drop(parse_term)
+            .and_drop(parse_term::<D>)
             .flat_map(move |_| refused(&bound, USE_HAS_NO_BINDER))
             .or(parse_wildcard
                 .and_drop(member_ends)
                 .flat_map(move |()| refused(&placed, USE_PLACE_STATES_NO_TYPE)))
-            .or(parse_term.map(Ok))
+            .or(parse_term::<D>.map(Ok))
             .parse(state)
     }
 }
 
+/// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
+pub(super) fn parse_named_premise<'a, D: Grammar>(
+    start: Mark,
+) -> impl Parser<'a, Read<(Option<String>, Term<D>)>> {
+    move |state: ParserState<'a>| {
+        let premise = parse_premise::<D>(start.clone()).map(|read| read.map(|type_| (None, type_)));
+        match D::NAMES_WITNESSES {
+            true => parse_identifier
+                .and_drop(parse_literal(":"))
+                .and(parse_term::<D>)
+                .map(|(label, type_)| Ok((Some(label.to_string()), type_)))
+                .or(premise)
+                .parse(state),
+            false => premise.parse(state),
+        }
+    }
+}
+
 /// What follows `use` where the site binds: `_`, the member's place. A name or a type there is read whole and reported; `start` is where the mark was written.
-pub(super) fn parse_place<'a>(start: Mark) -> impl Parser<'a, Read<()>> {
+pub(super) fn parse_place<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<()>> {
     let (named, typed) = (start.clone(), start);
 
     move |state: ParserState<'a>| {
@@ -150,12 +168,12 @@ pub(super) fn parse_place<'a>(start: Mark) -> impl Parser<'a, Read<()>> {
                 .and_drop(member_ends)
                 .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
             // A type, or `_` and then a type, which no term is.
-            .or(parse_term
+            .or(parse_term::<D>
                 .map(|_| ())
                 .or(parse_wildcard.map(|_| ()))
                 .and_drop(
                     parse_literal(":")
-                        .and_keep(parse_term)
+                        .and_keep(parse_term::<D>)
                         .map(|_| ())
                         .or(pure(())),
                 )

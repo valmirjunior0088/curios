@@ -35,8 +35,8 @@ use {
     curios_module::{RootSource, SYNTAX},
     curios_num::{Natural, Rounding},
     curios_surface::{
-        CoreHead, Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase,
-        TopInduct, TopItem,
+        Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct,
+        TopItem,
     },
     curios_unicode::{PACKED_RUN, class_codes, packed_tables},
 };
@@ -76,7 +76,7 @@ fn result_decl() -> TopItem {
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
 fn true_prop() -> TopItem {
     TopItem::Induct(vec![TopInduct {
-        core: CoreHead::default(),
+        core: (),
         doc: Some(Doc {
             lines: vec!["The proposition that always holds.".to_string()],
             span: None,
@@ -92,6 +92,7 @@ fn true_prop() -> TopItem {
                 lines: vec!["Its proof, which anything may produce.".to_string()],
                 span: None,
             }),
+            core: (),
             label: "qed".into(),
             payload: Vec::new(),
             target: None,
@@ -102,7 +103,7 @@ fn true_prop() -> TopItem {
 // `pub induct False: pub Prop end` — no cases, so a value of it is a contradiction and a match on one eliminates into anything.
 fn false_prop() -> TopItem {
     TopItem::Induct(vec![TopInduct {
-        core: CoreHead::default(),
+        core: (),
         doc: Some(Doc {
             lines: vec![
                 "The proposition with no proof, which anything may be concluded from.".to_string(),

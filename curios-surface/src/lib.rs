@@ -11,6 +11,9 @@ pub use nat::*;
 mod intrinsic;
 pub use intrinsic::*;
 
+mod dialect;
+pub use dialect::*;
+
 mod term;
 pub use term::*;
 

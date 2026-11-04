@@ -13,7 +13,7 @@ fn top_foreign_without_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
@@ -33,7 +33,7 @@ fn top_foreign_with_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: true,
             label: "frobnicate".into(),
@@ -50,7 +50,7 @@ fn top_foreign_zero_arg() {
     assert_eq!(
         "foreign clock() -> Nat;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "clock".into(),
@@ -71,7 +71,7 @@ fn top_foreign_takes_no_result() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "close".into(),
@@ -92,7 +92,7 @@ fn top_foreign_takes_a_tuple_of_results() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "read".into(),
@@ -242,7 +242,7 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "f".into(),
@@ -315,7 +315,7 @@ fn top_foreign_list_of_leaf() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
@@ -339,7 +339,7 @@ fn top_foreign_option_of_leaf() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "maybe".into(),
@@ -419,7 +419,7 @@ fn top_foreign_is_written_as_a_function_with_no_body() {
     assert_eq!(
         "foreign gone() -> Never;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             label: "gone".into(),

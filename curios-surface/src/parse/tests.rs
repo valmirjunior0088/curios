@@ -4,7 +4,7 @@ mod application;
 mod bang;
 mod blank;
 mod concept;
-mod decorator;
+mod core_text;
 mod documentation;
 mod foreign;
 mod grammar;

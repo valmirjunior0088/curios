@@ -6,8 +6,8 @@ use {
     super::{Projection, intrinsic, name, projection},
     curios_common::{Plicity, SyntaxRegistry},
     curios_surface::{
-        CoreHead, Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern,
-        Term, TopItem, TopLet, TopMod, TopUse, UseGroup,
+        Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
+        TopItem, TopLet, TopMod, TopUse, UseGroup,
     },
 };
 
@@ -62,7 +62,7 @@ impl Decl {
         } = self;
 
         TopLet {
-            core: CoreHead::default(),
+            core: (),
             doc,
             vis_pub,
             label: label.into(),

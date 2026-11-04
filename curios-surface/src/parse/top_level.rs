@@ -1,18 +1,18 @@
 use {
     super::{
-        CONCEPT_FIELD_TAKES_NO_IMPLICIT, INDEX_TAKES_NO_MARK, LAMBDA_TAKES_PARENTHESES,
+        CONCEPT_FIELD_TAKES_NO_IMPLICIT, Grammar, INDEX_TAKES_NO_MARK, LAMBDA_TAKES_PARENTHESES,
         PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument,
-        parse_decorator, parse_field_member, parse_func_sugar_param, parse_func_type_param,
-        parse_identifier, parse_keyword, parse_let_signature, parse_literal, parse_mark,
-        parse_name, parse_premise, parse_prop, parse_tuple_field_prefix, parse_type, raised,
-        refusing,
+        parse_field_member, parse_func_sugar_param, parse_func_type_param, parse_identifier,
+        parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
+        parse_named_premise, parse_premise, parse_prop, parse_tuple_field_prefix, parse_type,
+        raised, refusing,
     },
     crate::{
-        CasePayloadParam, ConceptField, CoreHead, DOC_BEFORE_NOTHING, DecoratorField, Doc,
-        FuncTypeParam, GroupItem, Label, Module, Name, StructField, Term, TopCase, TopConcept,
-        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        UseGroup, WitnessField, declared_at, parse_declared_label, parse_doc, parse_identifier_raw,
-        parse_term, parse_whitespace, reserved_keyword, text_after, word_after,
+        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
+        Module, Name, Program, StructField, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup, WitnessField,
+        parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
+        reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Plicity, Qualifier, is_keyword},
@@ -41,12 +41,12 @@ const DOC_BEFORE_TEST: &str =
 /// The head of a later member of an `and` group: its documentation comment, its `pub`, and the `and` itself.
 ///
 /// Recoverable when there is no documentation, since the absence of `and` is how a group ends. With one, the keyword after the block — past a `pub` — decides: `and` makes it this group's next member, so a failure past it is the diagnosis; another word makes it the next item's, so the group ends recoverably and the item loop reads the block again; anything else is nothing the block may document.
-fn parse_and_head<'a>(
+pub(super) fn parse_and_head<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, (Option<Doc>, Vec<DecoratorField>, bool)> {
+) -> Parsed<'a, (Option<Doc>, D::Fields, bool)> {
     parse_doc
         .flat_map(|doc| {
-            let head = parse_item_decorator
+            let head = D::parse_fields
                 .and(parse_pub)
                 .and_drop(parse_keyword("and"));
             let Some(doc) = doc else {
@@ -68,11 +68,6 @@ fn parse_and_head<'a>(
         .parse(state)
 }
 
-/// The decorator before a declaration, Core text's, or none.
-fn parse_item_decorator<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<DecoratorField>> {
-    parse_decorator.or(pure(Vec::new())).parse(state)
-}
-
 /// `parser`, refused with the documentation diagnosis when `doc` is present and the parser fails — for a member's head token, whose absence after a documentation comment is exactly that mistake.
 fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> Boxed<'a, T> {
     match doc {
@@ -86,10 +81,7 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> 
 // A `test` declaration: `test name = body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
 //
 // Like `satisfy`, `test` stays a contextual word everywhere else, and the label is exactly how far that reaches. The label's own refusal stays recoverable because the head is already eaten when this runs: its failure sits past the item loop's choice point, so uncaught it would abort the loop rather than end it, and `test(1)` could not be a program's tail. Past the label there is nothing to fall through to — `test name` is two names in a row and so no term at all — so the rest commits and reports its own fault.
-pub(super) fn parse_top_test<'a>(
-    fields: Vec<DecoratorField>,
-    vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
+pub(super) fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
             true => {
@@ -97,50 +89,54 @@ pub(super) fn parse_top_test<'a>(
             }
             false => pure(()).boxed(),
         }
-        .and_keep(declared_at(commit(
-            parse_literal("=")
-                .and_keep(parse_term)
-                .and_drop(parse_literal(";")),
-        )))
-        .map(move |((path, label), body)| {
-            TopItem::Test(TopTest {
-                core: CoreHead {
-                    fields: fields.clone(),
-                    path,
-                },
-                label,
-                body,
-            })
-        }))
+        .and_keep(parse_test_member(()))
+        .map(TopItem::Test))
         .parse(state)
     }
 }
 
-pub(super) fn parse_top_let<'a>(
-    doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
-    vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
-    let member = |doc: Option<Doc>, fields: Vec<DecoratorField>, vis_pub: bool| {
-        declared_at(parse_let_signature).map(move |((path, label), signature)| TopLet {
-            doc,
-            core: CoreHead { fields, path },
-            vis_pub,
-            label,
-            signature,
-        })
-    };
-
+/// A test past its word: its name, its value and the `;` after it, the value committed past the label.
+pub(super) fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, TopTest<D>> {
     move |state: ParserState<'a>| {
-        member(doc, fields, vis_pub)
+        D::declaring(
+            fields.clone(),
+            commit(
+                parse_literal("=")
+                    .and_keep(parse_term::<D>)
+                    .and_drop(parse_literal(";")),
+            ),
+        )
+        .map(|((core, label), body)| TopTest { core, label, body })
+        .parse(state)
+    }
+}
+
+/// One member of a `let` group past its word, or past the `and` of a later one: its name and its signature.
+pub(super) fn parse_let_member<'a, D: Grammar>(
+    doc: Option<Doc>,
+    fields: D::Fields,
+    vis_pub: bool,
+) -> impl Parser<'a, TopLet<D>> {
+    D::declaring(fields, parse_let_signature::<D>).map(move |((core, label), signature)| TopLet {
+        doc: doc.clone(),
+        core,
+        vis_pub,
+        label,
+        signature,
+    })
+}
+
+pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+    move |state: ParserState<'a>| {
+        parse_let_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(move |first| {
                 // The item declares what its head declared: a failure anywhere after the first member — a later member, the `;` — is named for the first, whatever a later member's own tag said.
                 let tag = first.label.to_string();
                 tagging(
                     Some(tag),
                     many0(move || {
-                        parse_and_head.flat_map(move |(doc, fields, vis_pub)| {
-                            commit(member(doc, fields, vis_pub))
+                        parse_and_head::<Program>.flat_map(move |(doc, (), vis_pub)| {
+                            commit(parse_let_member::<Program>(doc, (), vis_pub))
                         })
                     })
                     // Committed for the body's reason: a first member read to the end of its body is a declaration and nothing else, the local reading being the same text failing the same way, so the `;` it owes is the item's own to report and the loop recovers past it.
@@ -367,24 +363,25 @@ pub(super) fn parse_wire_signature<'a>(state: ParserState<'a>) -> Parsed<'a, Wir
 }
 
 // `foreign name(T, ...) -> R;` — a function with no body, bound to an implementation where the program is linked. The list follows the name as a function definition's does, with no colon: a row's signature is not its type.
-pub(super) fn parse_top_foreign<'a>(
+pub(super) fn parse_top_foreign<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+    parse_foreign_member::<Program>(doc, (), vis_pub).map(TopItem::Foreign)
+}
+
+/// A foreign row past its word: its name, its signature and the `;` after it.
+pub(super) fn parse_foreign_member<'a, D: Grammar>(
     doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
+    fields: D::Fields,
     vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
-    move |state: ParserState<'a>| {
-        declared_at(parse_wire_signature.and_drop(parse_literal(";")))
-            .map(move |((path, label), signature)| {
-                TopItem::Foreign(TopForeign {
-                    doc,
-                    core: CoreHead { fields, path },
-                    vis_pub,
-                    label,
-                    signature,
-                })
-            })
-            .parse(state)
-    }
+) -> impl Parser<'a, TopForeign<D>> {
+    D::declaring(fields, parse_wire_signature.and_drop(parse_literal(";"))).map(
+        move |((core, label), signature)| TopForeign {
+            doc: doc.clone(),
+            core,
+            vis_pub,
+            label,
+            signature,
+        },
+    )
 }
 
 pub(super) fn parse_top_mod<'a>(
@@ -525,18 +522,18 @@ pub(super) fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> impl Parser<'a, T
 }
 
 // A payload binder, plain or `@` (implicit at the constructor function): `m : Nat` (named) or a bare type (positional), under either mark. A payload is no other grammar's, so `use` is refused where it stands.
-pub(super) fn parse_induct_payload_field<'a>(
+pub(super) fn parse_induct_payload_field<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, CasePayloadParam> {
+) -> Parsed<'a, CasePayloadParam<D>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PAYLOAD_TAKES_NO_USE)).boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(parse_term)
-                .map(|(name, type_): (&str, Term)| (Some(name.to_string()), type_))
-                .or(parse_term.map(|type_| (None, type_)))
+                .and(parse_term::<D>)
+                .map(|(name, type_): (&str, Term<D>)| (Some(name.to_string()), type_))
+                .or(parse_term::<D>.map(|type_| (None, type_)))
                 .map(move |(label, type_)| CasePayloadParam {
                     plicity,
                     label,
@@ -551,7 +548,9 @@ pub(super) fn parse_induct_payload_field<'a>(
 const CASE_STATES_ITS_PAYLOAD: &str =
     "a constructor is declared with its payload list, empty where it carries nothing: `| red()`";
 
-pub(super) fn parse_top_induct_case<'a>(state: ParserState<'a>) -> Parsed<'a, TopCase> {
+pub(super) fn parse_top_induct_case<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, TopCase<D>> {
     parse_doc
         .flat_map(|doc| {
             // As `parse_and_head` decides: a bar makes the block this case's, `and` or `pub` hand it to the group's next member, and anything else is nothing it may document.
@@ -567,7 +566,8 @@ pub(super) fn parse_top_induct_case<'a>(state: ParserState<'a>) -> Parsed<'a, To
 
             // A bar in a case list begins a case and nothing else, so past it the case owns its diagnosis; recoverable, a case with no payload list would end the list before it and the list's `end` would complain at the bar.
             bar.and_keep(commit(
-                parse_declared_label
+                D::parse_fields
+                    .and(parse_declared_label)
                     .and(
                         parse_literal("(")
                             .map_err(CASE_STATES_ITS_PAYLOAD)
@@ -582,7 +582,7 @@ pub(super) fn parse_top_induct_case<'a>(state: ParserState<'a>) -> Parsed<'a, To
                             .and_keep(
                                 parse_literal("(")
                                     .and_keep(sep_by0_trailing(
-                                        || parse_term,
+                                        || parse_term::<D>,
                                         || parse_literal(","),
                                     ))
                                     .and_drop(parse_literal(")")),
@@ -591,35 +591,36 @@ pub(super) fn parse_top_induct_case<'a>(state: ParserState<'a>) -> Parsed<'a, To
                             .or(pure(None)),
                     ),
             ))
-            .map(
-                move |((label, payload), target): ((Label, Vec<_>), Option<Vec<Term>>)| TopCase {
-                    doc,
-                    label,
-                    payload,
-                    target,
-                },
-            )
+            .map(move |(((core, label), payload), target)| TopCase {
+                doc,
+                core,
+                label,
+                payload,
+                target,
+            })
         })
         .parse(state)
 }
 
 // A declaration's parameter: `name : type`, `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out), or `use Concept(args)`, a premise the type names the dictionary of. A plain or `@` parameter is always named: the declaration's own types are what mention it.
-pub(super) fn parse_induct_param<'a>(state: ParserState<'a>) -> Parsed<'a, FuncTypeParam> {
+pub(super) fn parse_induct_param<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, FuncTypeParam<D>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             // A declaration's parameter list is no other grammar's, so a refused premise is raised where it stands.
-            Plicity::Witness => raised(parse_premise(start))
-                .map(|type_| FuncTypeParam {
+            Plicity::Witness => raised(parse_named_premise(start))
+                .map(|(label, type_)| FuncTypeParam {
                     plicity: Plicity::Witness,
-                    label: None,
+                    label,
                     type_,
                 })
                 .boxed(),
             Plicity::Explicit | Plicity::Implicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(parse_term)
-                .map(move |(name, type_): (&str, Term)| FuncTypeParam {
+                .and(parse_term::<D>)
+                .map(move |(name, type_): (&str, Term<D>)| FuncTypeParam {
                     plicity,
                     label: Some(name.to_string()),
                     type_,
@@ -630,7 +631,9 @@ pub(super) fn parse_induct_param<'a>(state: ParserState<'a>) -> Parsed<'a, FuncT
 }
 
 // A declaration's parameter list, or none. After a declaration's name a `(` opens its parameters and nothing else, so the list commits there: a member that is not one is reported where it stands, rather than as the `:` the head would read next had no list been written.
-fn parse_declaration_params<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<FuncTypeParam>> {
+fn parse_declaration_params<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Vec<FuncTypeParam<D>>> {
     parse_literal("(")
         .and_keep(commit(
             sep_by1_trailing(parse_induct_param, || parse_literal(","))
@@ -641,15 +644,17 @@ fn parse_declaration_params<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<FuncTy
 }
 
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
-pub(super) fn parse_induct_index<'a>(state: ParserState<'a>) -> Parsed<'a, (Option<String>, Term)> {
+pub(super) fn parse_induct_index<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, (Option<String>, Term<D>)> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Explicit => parse_identifier
                 .and_drop(parse_literal(":"))
-                .and(parse_term)
-                .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
-                .or(parse_term.map(|ty| (None, ty)))
+                .and(parse_term::<D>)
+                .map(|(name, ty): (&str, Term<D>)| (Some(name.to_string()), ty))
+                .or(parse_term::<D>.map(|ty| (None, ty)))
                 .boxed(),
             Plicity::Implicit | Plicity::Witness => {
                 commit(fail_from(&start, INDEX_TAKES_NO_MARK)).boxed()
@@ -659,15 +664,19 @@ pub(super) fn parse_induct_index<'a>(state: ParserState<'a>) -> Parsed<'a, (Opti
 }
 
 /// A parsed inductive head arity: the index telescope (each binder optionally named) and the sort it lands in.
-type InductArity = (Vec<(Option<String>, Term)>, bool, Term);
+type InductArity<D> = (Vec<(Option<String>, Term<D>)>, bool, Term<D>);
 
 /// A declaration-local result sort, with an independent representation visibility marker. This parser is deliberately not used for ordinary sort positions: `pub Type` and `pub Prop` are not terms.
-fn parse_representation_sort<'a>(state: ParserState<'a>) -> Parsed<'a, (bool, Term)> {
-    parse_pub.and(parse_sort).parse(state)
+fn parse_representation_sort<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, (bool, Term<D>)> {
+    parse_pub.and(D::parse_result_sort).parse(state)
 }
 
 // The head's arity after the `:` — either an index telescope landing in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index telescope must state where it lands (`-> Sort`), and a sortless head is a parse error, never an implicit `Type`.
-pub(super) fn parse_induct_arity<'a>(state: ParserState<'a>) -> Parsed<'a, InductArity> {
+pub(super) fn parse_induct_arity<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, InductArity<D>> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_induct_index, || parse_literal(",")))
         .and_drop(parse_literal(")"))
@@ -677,20 +686,21 @@ pub(super) fn parse_induct_arity<'a>(state: ParserState<'a>) -> Parsed<'a, Induc
         .parse(state)
 }
 
-pub(super) fn parse_top_induct_body<'a>(
+pub(super) fn parse_top_induct_body<'a, D: Grammar>(
     doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
+    fields: D::Fields,
     vis_pub: bool,
-) -> impl Parser<'a, TopInduct> {
+) -> impl Parser<'a, TopInduct<D>> {
     move |state: ParserState<'a>| {
-        declared_at(
+        D::declaring(
+            fields.clone(),
             parse_declaration_params
                 // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
                 .and(parse_literal(":").and_keep(parse_induct_arity))
                 .and(many0(parse_top_induct_case)),
         )
         .flat_map(
-            move |((path, label), ((params, (indices, rep_pub, result_sort)), cases))| {
+            move |((core, label), ((params, (indices, rep_pub, result_sort)), cases))| {
                 // Targets are required on every case iff the head declares indices, with arity equal to the index telescope's.
                 for case in &cases {
                     match (&case.target, indices.len()) {
@@ -725,11 +735,8 @@ pub(super) fn parse_top_induct_body<'a>(
                 }
 
                 pure(TopInduct {
-                    doc,
-                    core: CoreHead {
-                        fields: fields.clone(),
-                        path,
-                    },
+                    doc: doc.clone(),
+                    core,
                     vis_pub,
                     rep_pub,
                     label,
@@ -745,21 +752,17 @@ pub(super) fn parse_top_induct_body<'a>(
     }
 }
 
-pub(super) fn parse_top_induct<'a>(
-    doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
-    vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
+pub(super) fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
-        parse_top_induct_body(doc, fields, vis_pub)
+        parse_top_induct_body::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
                 // Named for the head's family, as a `let` group is for its first member — the `end` included.
                 let tag = first.label.to_string();
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head.flat_map(|(doc, fields, vis_pub)| {
-                            parse_top_induct_body(doc, fields, vis_pub)
+                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
+                            parse_top_induct_body::<Program>(doc, (), vis_pub)
                         })
                     })
                     .and_drop(parse_keyword("end")),
@@ -772,12 +775,12 @@ pub(super) fn parse_top_induct<'a>(
 }
 
 /// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an inductive head is always one of these two — the only universes — so the sort position parses this targeted form rather than a generic `parse_term`. A generic term parser is both too loose and, for a struct, greedily eats the `{` opening the field block.
-pub(super) fn parse_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+pub(super) fn parse_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_prop.or(parse_type).parse(state)
 }
 
 // One field of a `struct`: its documentation comment, then its mark and the Σ-type field grammar, which is what follows `@` as it is what a plain field is. A structure's field list is no other grammar's, so a `use` member is refused where it stands. A documentation comment before the closing brace documents nothing and says so.
-fn parse_struct_field<'a>(state: ParserState<'a>) -> Parsed<'a, StructField> {
+fn parse_struct_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, StructField<D>> {
     parse_doc
         .flat_map(|doc| {
             documented(&doc, not_ahead("}"))
@@ -807,13 +810,14 @@ const CONCEPT_STATES_ITS_SORT: &str =
     "a concept states its sort before its fields: `concept Shape(A: Type): Type { … }`";
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
-fn parse_struct_member<'a>(
+pub(super) fn parse_struct_member<'a, D: Grammar>(
     doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
+    fields: D::Fields,
     vis_pub: bool,
-) -> impl Parser<'a, TopStruct> {
+) -> impl Parser<'a, TopStruct<D>> {
     move |state: ParserState<'a>| {
-        declared_at(
+        D::declaring(
+            fields.clone(),
             parse_declaration_params
                 // The result sort: `: Type` or `: Prop` after the parameters. Required.
                 .and(
@@ -826,12 +830,9 @@ fn parse_struct_member<'a>(
                 .and_drop(parse_literal("}")),
         )
         .map(
-            move |((path, label), ((params, (rep_pub, result_sort)), members))| TopStruct {
-                doc,
-                core: CoreHead {
-                    fields: fields.clone(),
-                    path,
-                },
+            move |((core, label), ((params, (rep_pub, result_sort)), members))| TopStruct {
+                doc: doc.clone(),
+                core,
                 vis_pub,
                 rep_pub,
                 label,
@@ -845,20 +846,16 @@ fn parse_struct_member<'a>(
 }
 
 // A `struct` item: one structure, or a `struct A … and B …` group whose fields name one another. Each member takes its own `pub`, before `struct` for the first and before `and` for the rest.
-pub(super) fn parse_top_struct<'a>(
-    doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
-    vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
+pub(super) fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
-        parse_struct_member(doc, fields, vis_pub)
+        parse_struct_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
                 let tag = first.label.to_string();
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head.flat_map(|(doc, fields, vis_pub)| {
-                            parse_struct_member(doc, fields, vis_pub)
+                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
+                            parse_struct_member::<Program>(doc, (), vis_pub)
                         })
                     }),
                 )
@@ -871,7 +868,9 @@ pub(super) fn parse_top_struct<'a>(
 }
 
 // A concept field: `label : term`, the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar) — or `use Concept(args)`, a superclass edge, whose type must be a concept application, checked at lowering. A method takes no mark.
-pub(super) fn parse_concept_field<'a>(state: ParserState<'a>) -> Parsed<'a, ConceptField> {
+pub(super) fn parse_concept_field<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, ConceptField<D>> {
     let method = parse_declared_label
         .and(
             parse_literal("(")
@@ -883,10 +882,10 @@ pub(super) fn parse_concept_field<'a>(state: ParserState<'a>) -> Parsed<'a, Conc
                 // Past the arrow the list is this sugar's, so a member it refuses is its own to report.
                 .flat_map(members)
                 // As in `parse_tuple_type_field`: past the `->` or the `:` a type must follow, so the refusal is this one rather than the `}` the field list falls back to.
-                .and(commit(parse_term))
-                .map(|(params, output): (Vec<FuncTypeParam>, Term)| (Some(params), output))
+                .and(commit(parse_term::<D>))
+                .map(|(params, output): (Vec<FuncTypeParam<D>>, Term<D>)| (Some(params), output))
                 .or(parse_literal(":")
-                    .and_keep(commit(parse_term))
+                    .and_keep(commit(parse_term::<D>))
                     .map(|type_| (None, type_))),
         )
         .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
@@ -925,31 +924,31 @@ pub(super) fn parse_concept_field<'a>(state: ParserState<'a>) -> Parsed<'a, Conc
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 //
 // Like `test`, `concept` stays a contextual word everywhere else, and the label is how far that reaches: `concept Name` is two names in a row and so no term at all, so past the label the rest commits and reports its own fault, which is what lets the item loop recover past a broken concept.
-fn parse_concept_member<'a>(
+pub(super) fn parse_concept_member<'a, D: Grammar>(
     doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
+    fields: D::Fields,
     vis_pub: bool,
-) -> impl Parser<'a, TopConcept> {
+) -> impl Parser<'a, TopConcept<D>> {
     move |state: ParserState<'a>| {
-        declared_at(commit(
-            parse_declaration_params
-                // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
-                .and(
-                    parse_literal(":")
-                        .map_err(CONCEPT_STATES_ITS_SORT)
-                        .and_keep(parse_representation_sort),
-                )
-                .and_drop(parse_literal("{"))
-                .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
-                .and_drop(parse_literal("}")),
-        ))
+        D::declaring(
+            fields.clone(),
+            commit(
+                parse_declaration_params
+                    // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
+                    .and(
+                        parse_literal(":")
+                            .map_err(CONCEPT_STATES_ITS_SORT)
+                            .and_keep(parse_representation_sort),
+                    )
+                    .and_drop(parse_literal("{"))
+                    .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
+                    .and_drop(parse_literal("}")),
+            ),
+        )
         .map(
-            move |((path, label), ((params, (rep_pub, result_sort)), members))| TopConcept {
-                doc,
-                core: CoreHead {
-                    fields: fields.clone(),
-                    path,
-                },
+            move |((core, label), ((params, (rep_pub, result_sort)), members))| TopConcept {
+                doc: doc.clone(),
+                core,
                 vis_pub,
                 rep_pub,
                 label,
@@ -963,20 +962,16 @@ fn parse_concept_member<'a>(
 }
 
 // A `concept` item: one concept, or a `concept A … and B …` group whose method types name one another's dictionaries. Each member takes its own `pub`, as a `struct` group's do.
-pub(super) fn parse_top_concept<'a>(
-    doc: Option<Doc>,
-    fields: Vec<DecoratorField>,
-    vis_pub: bool,
-) -> impl Parser<'a, TopItem> {
+pub(super) fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
-        parse_concept_member(doc, fields, vis_pub)
+        parse_concept_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
                 let tag = first.label.to_string();
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head.flat_map(|(doc, fields, vis_pub)| {
-                            parse_concept_member(doc, fields, vis_pub)
+                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
+                            parse_concept_member::<Program>(doc, (), vis_pub)
                         })
                     }),
                 )
@@ -1079,22 +1074,16 @@ pub(super) fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Par
         }
         .and_keep(parse_witness_member(doc))
         .and(many0(|| {
-            parse_and_head.flat_map(
-                |(doc, fields, vis_pub)| match (vis_pub, fields.is_empty()) {
-                    (true, _) => fail(WITNESS_NEVER_PUB).boxed(),
-                    (false, false) => commit(fail(DECORATOR_BEFORE_NO_DECLARATION)).boxed(),
-                    (false, true) => parse_witness_member(doc).boxed(),
-                },
-            )
+            parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| match vis_pub {
+                true => fail(WITNESS_NEVER_PUB).boxed(),
+                false => parse_witness_member(doc).boxed(),
+            })
         }))
         .map(|(first, rest)| iter::once(first).chain(rest).collect())
         .map(TopItem::Witness))
         .parse(state)
     }
 }
-
-/// What refuses a decorator before an item it states nothing of: a witness, which is anonymous, a module or an import.
-const DECORATOR_BEFORE_NO_DECLARATION: &str = "a decorator states the fields of a declaration: a `let`, `induct`, `struct`, `concept`, `foreign` or `test`";
 
 /// What a head that names no item reports. Lists the heads rather than the offending word alone, because the reader's next question is what they were allowed to write.
 const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'use', 'concept', 'satisfy', 'test', 'let', 'induct', 'struct' or 'foreign'";
@@ -1115,65 +1104,57 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 pub(crate) fn parse_top_item<'a>(state: ParserState<'a>) -> Parsed<'a, TopItem> {
     parse_doc
         .flat_map(|doc| {
-            let head = parse_item_decorator
-                .and(parse_pub)
-                .and(parse_identifier_raw);
+            let head = parse_pub.and(parse_identifier_raw);
             let head = match &doc {
                 Some(_) => commit(head.map_err(DOC_BEFORE_NOTHING)).boxed(),
                 None => head.boxed(),
             };
 
-            mark()
-                .and(head)
-                .flat_map(move |(start, ((fields, vis_pub), head))| {
-                    // Recoverable only where a failed item may still be a program's tail, which a `pub` or a documentation comment rules out.
-                    let documented = doc.is_some();
-                    let fallible = |parser: Boxed<'a, TopItem>| match vis_pub || documented {
-                        true => commit(parser).boxed(),
-                        false => parser,
-                    };
+            mark().and(head).flat_map(move |(start, (vis_pub, head))| {
+                // Recoverable only where a failed item may still be a program's tail, which a `pub` or a documentation comment rules out.
+                let documented = doc.is_some();
+                let fallible = |parser: Boxed<'a, TopItem>| match vis_pub || documented {
+                    true => commit(parser).boxed(),
+                    false => parser,
+                };
 
-                    // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
-                    let undecorated = fields.is_empty();
-                    let body = match head {
-                        "mod" | "use" | "satisfy" if !undecorated => {
-                            commit(fail(DECORATOR_BEFORE_NO_DECLARATION)).boxed()
-                        }
-                        "mod" => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
-                        "use" => match documented {
-                            true => commit(fail(DOC_BEFORE_USE)).boxed(),
-                            false => commit(parse_top_use(vis_pub, start)).boxed(),
-                        }
-                        .boxed(),
-                        "induct" => commit(parse_top_induct(doc, fields, vis_pub)).boxed(),
-                        "struct" => commit(parse_top_struct(doc, fields, vis_pub)).boxed(),
-                        "foreign" => commit(parse_top_foreign(doc, fields, vis_pub)).boxed(),
-                        "concept" => fallible(parse_top_concept(doc, fields, vis_pub).boxed()),
-                        "satisfy" => fallible(parse_top_witness(doc, vis_pub).boxed()),
-                        // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose commitment reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
-                        "test" => match (documented, vis_pub) {
-                            (true, _) => commit(fail(DOC_BEFORE_TEST)).boxed(),
-                            (false, true) => commit(parse_top_test(fields, vis_pub)).boxed(),
-                            (false, false) => parse_top_test(fields, vis_pub).boxed(),
-                        }
-                        .boxed(),
-                        "let" => fallible(parse_top_let(doc, fields, vis_pub).boxed()),
-                        _ => {
-                            return fallible(
-                                fail_from(
-                                    &start,
-                                    match documented {
-                                        true => DOC_BEFORE_NOTHING,
-                                        false => NOT_A_TOP_LEVEL_ITEM,
-                                    },
-                                )
-                                .boxed(),
-                            );
-                        }
-                    };
+                // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
+                let body = match head {
+                    "mod" => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
+                    "use" => match documented {
+                        true => commit(fail(DOC_BEFORE_USE)).boxed(),
+                        false => commit(parse_top_use(vis_pub, start)).boxed(),
+                    }
+                    .boxed(),
+                    "induct" => commit(parse_top_induct(doc, vis_pub)).boxed(),
+                    "struct" => commit(parse_top_struct(doc, vis_pub)).boxed(),
+                    "foreign" => commit(parse_top_foreign(doc, vis_pub)).boxed(),
+                    "concept" => fallible(parse_top_concept(doc, vis_pub).boxed()),
+                    "satisfy" => fallible(parse_top_witness(doc, vis_pub).boxed()),
+                    // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose commitment reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
+                    "test" => match (documented, vis_pub) {
+                        (true, _) => commit(fail(DOC_BEFORE_TEST)).boxed(),
+                        (false, true) => commit(parse_top_test(vis_pub)).boxed(),
+                        (false, false) => parse_top_test(vis_pub).boxed(),
+                    }
+                    .boxed(),
+                    "let" => fallible(parse_top_let(doc, vis_pub).boxed()),
+                    _ => {
+                        return fallible(
+                            fail_from(
+                                &start,
+                                match documented {
+                                    true => DOC_BEFORE_NOTHING,
+                                    false => NOT_A_TOP_LEVEL_ITEM,
+                                },
+                            )
+                            .boxed(),
+                        );
+                    }
+                };
 
-                    parse_whitespace.and_keep(body).boxed()
-                })
+                parse_whitespace.and_keep(body).boxed()
+            })
         })
         .parse(state)
 }

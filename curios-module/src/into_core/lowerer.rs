@@ -578,8 +578,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 curios_core::Term::goal(self.context.fresh_metavar())
             }
             Subterm::Derive => curios_core::Term::derive(),
-            // A decorator states what a Core node holds beside its spelling, which a program leaves to the elaborator.
-            Subterm::Decorated(_) => return Err(Error::Decorator),
+            Subterm::Core(form) => match *form {},
             // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `proof_literal`), never a core intrinsic.
             Subterm::ProofLiteral(literal) => self.proof_literal(literal)?,
             Subterm::Literal(literal) => curios_core::Term::intrinsic(self.literal(span, literal)?),

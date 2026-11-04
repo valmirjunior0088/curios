@@ -20,20 +20,22 @@ pub(crate) use expr::{op_precedence, parse_term};
 mod top_level;
 pub(crate) use top_level::*;
 
+mod core_text;
+
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;
 
 use {
-    super::{Doc, Label, Name, Term},
-    curios_common::{Qualifier, Span, is_identifier_char, is_keyword},
+    super::{Dialect, Doc, Label, Name, Program, Term},
+    curios_common::{Qualifier, Source, Span, is_identifier_char, is_keyword},
     curios_parse::{
-        Parsed, Parser, ParserState, ahead, commit, fail, fail_from, is_blank, look_ahead, many0,
-        mark, not_ahead, obtained, pure, spanned, tagging, take_eof, take_exact, take_n,
-        take_while,
+        Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_from, is_blank,
+        look_ahead, many0, mark, not_ahead, obtained, pure, run_parser, spanned, tagging, take_eof,
+        take_exact, take_n, take_while,
     },
-    std::{cell::RefCell, collections::BTreeMap, iter},
+    std::{cell::RefCell, collections::BTreeMap, iter, sync::Arc},
 };
 
 // Grammar keys for the packrat cache (see `curios_parse::memoize`). One block here rather than one per grammar file, because the table those keys index is shared: two nonterminals that pick the same number serve each other's parses at that offset, silently whenever their outputs share a type, and a key minted by reading a sibling file is a key minted from memory. A new memoized nonterminal takes the next number in this block.
@@ -44,6 +46,54 @@ const MEMO_ATOMIC_TERM: u32 = 1;
 const MEMO_PATTERN: u32 = 2;
 const MEMO_MATCH_PATTERN: u32 = 3;
 const MEMO_TERM_BEFORE_ARROW: u32 = 4;
+
+/// What the grammar reads in one dialect and not the other ([`Dialect`]): the productions of the forms only Core text writes. A program has none, so where Core text reads one the program's grammar fails without consuming, and what stands there is refused as a token it did not expect.
+pub(crate) trait Grammar: Dialect {
+    /// Whether a `use` member is written with the word its binder is read by: in Core text, where a witness binder is a variable, and not in a program, where resolution reaches it.
+    const NAMES_WITNESSES: bool;
+
+    /// An operand only this dialect writes, a call chain and all.
+    fn parse_form<'a>(state: ParserState<'a>) -> Parsed<'a, Term<Self>>;
+
+    /// A primary only this dialect writes, which a call chain may follow.
+    fn parse_atom<'a>(state: ParserState<'a>) -> Parsed<'a, Term<Self>>;
+
+    /// The sort a nominal declaration's head lands in.
+    fn parse_result_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term<Self>>;
+
+    /// What a decorator states before a declaration's word, before a group's `and`, or before a case.
+    fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, Self::Fields>;
+
+    /// A declaration's name and what follows it, with the head the dialect writes beside the label: a program declares a label, and Core text the absolute path the label ends, under the decorator `fields` read before the declaring word.
+    fn declaring<'a, T: 'a>(
+        fields: Self::Fields,
+        rest: impl Parser<'a, T>,
+    ) -> impl Parser<'a, ((Self::Head, Label), T)>;
+}
+
+impl Grammar for Program {
+    const NAMES_WITNESSES: bool = false;
+
+    fn parse_form<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+        fail("a program writes no form of Core text").parse(state)
+    }
+
+    fn parse_atom<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+        fail("a program writes no form of Core text").parse(state)
+    }
+
+    fn parse_result_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+        parse_sort(state)
+    }
+
+    fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+        pure(()).parse(state)
+    }
+
+    fn declaring<'a, T: 'a>((): (), rest: impl Parser<'a, T>) -> impl Parser<'a, (((), Label), T)> {
+        declared(rest).map(|(label, rest)| (((), label), rest))
+    }
+}
 
 thread_local! {
     /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
@@ -79,9 +129,22 @@ pub(crate) fn take_comments() -> Vec<Span> {
     })
 }
 
+/// The term `source` holds, whole, in the dialect `D`.
+pub(crate) fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, ParserError> {
+    curios_profile::profile!("parse", group = "term");
+    run_parser(
+        parse_whitespace
+            .and_keep(parse_term::<D>)
+            .and_drop(take_eof),
+        source,
+    )
+}
+
 /// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
-pub(crate) fn parse_optional_term<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Term>> {
-    parse_term
+pub(crate) fn parse_optional_term<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Option<Term<D>>> {
+    parse_term::<D>
         .map(Some)
         .or(take_eof().map(|()| None))
         .parse(state)
@@ -113,14 +176,14 @@ const PROGRAM_TAKES_NO_SEMICOLON: &str = "a program closes with one term, the de
 /// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.
 ///
 /// The last two consume what they refuse, so each stands past the choice point and outranks `take_eof` in [`Parser::or`]'s tie-break, with its caret on what it read. Whether a term stands there is probed and the probe's own failure dropped: what begins no term is still a token the end of input was expected in place of, and not a term that was wanted.
-pub(crate) fn parse_program_end<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+pub(crate) fn parse_program_end<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_eof()
         .or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
         .or(mark()
             .and_drop(take_exact(";"))
             .flat_map(|start| fail_from(&start, PROGRAM_TAKES_NO_SEMICOLON)))
         .or(mark()
-            .and(look_ahead(parse_term).map(|_| true).or(pure(false)))
+            .and(look_ahead(parse_term::<D>).map(|_| true).or(pure(false)))
             .flat_map(|(start, begins_a_term)| match begins_a_term {
                 true => take_n(1)
                     .and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM))
@@ -283,34 +346,6 @@ pub(super) fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (
             })
             .parse(state)
     }
-}
-
-/// [`declared`] where a top-level declaration's name stands, which Core text may write as an absolute path: the module the name lies under, `None` for a label, and the label.
-pub(super) fn declared_at<'a, T: 'a>(
-    rest: impl Parser<'a, T>,
-) -> impl Parser<'a, ((Option<Qualifier>, Label), T)> {
-    move |state: ParserState<'a>| {
-        parse_declaring_path
-            .or(parse_declared_label.map(|label| (None, label)))
-            .flat_map(move |(path, label)| {
-                tagging(Some(label.to_string()), rest).map(move |rest| ((path, label), rest))
-            })
-            .parse(state)
-    }
-}
-
-/// `/a/b/c` where a declaration's name stands, Core text's: the module `/a/b` and the label `c`, committed once a `/` begins it, since no label does.
-fn parse_declaring_path<'a>(state: ParserState<'a>) -> Parsed<'a, (Option<Qualifier>, Label)> {
-    look_ahead(take_exact("/"))
-        .and_keep(commit(parse_name.flat_map(|name| match name.leaf_span() {
-            Some(span) if name.is_abs() => {
-                let label = Label::spanned(name.last(), span.clone());
-
-                pure((Some(name.qualifier().without_last()), label)).boxed()
-            }
-            _ => fail("a declaration's path is absolute: `let /std/Nat/add …`").boxed(),
-        })))
-        .parse(state)
 }
 
 fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {

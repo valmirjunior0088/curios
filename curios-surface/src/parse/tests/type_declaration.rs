@@ -8,7 +8,7 @@ fn top_inductive_single_variant() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             rep_pub: false,
@@ -18,6 +18,7 @@ fn top_inductive_single_variant() {
             result_sort: Subterm::Type.into(),
             cases: vec![TopCase {
                 doc: None,
+                core: (),
                 label: "bar".into(),
                 payload: vec![],
                 target: None,
@@ -32,7 +33,7 @@ fn top_inductive_empty() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
-            core: CoreHead::default(),
+            core: (),
             doc: None,
             vis_pub: false,
             rep_pub: false,

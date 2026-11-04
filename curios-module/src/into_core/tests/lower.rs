@@ -1,45 +1,6 @@
-//! Goals, `!`, `choose`, a match as the matrix it is written as, the packed runs constant atoms fold into, and what Core text writes and a program never does.
+//! Goals, `!`, `choose`, a match as the matrix it is written as, and the packed runs constant atoms fold into.
 
 use crate::into_core::test_support::*;
-
-/// A decorator is Core text's: a program that writes one is refused where it stands, in a declaration's body as in its final term.
-#[test]
-fn a_decorator_in_a_program_is_refused_where_it_stands() {
-    for (source, line) in [
-        ("pub let x : Type = Type;\n#{island = m} x\n", "2 |"),
-        ("pub let x : Type =\n    #{island = m} Type;\nx\n", "2 |"),
-    ] {
-        let report = run_err_report(source);
-        assert!(
-            report.contains("a decorator `#{…}` is written in Core text alone")
-                && report.contains(line),
-            "{report}"
-        );
-    }
-}
-
-/// A declaration named by its absolute path is Core text's, and so is a decorator before a declaration: a program writing either is refused at the name it declares.
-#[test]
-fn a_core_head_in_a_program_is_refused_at_its_name() {
-    for (source, refusal, line) in [
-        (
-            "pub let /x : Type = Type;\nx\n",
-            "a declaration is named by a path in Core text alone",
-            "1 |",
-        ),
-        (
-            "#{proof = true}\npub let x : Type = Type;\nx\n",
-            "a decorator `#{…}` is written in Core text alone",
-            "2 |",
-        ),
-    ] {
-        let report = run_err_report(source);
-        assert!(
-            report.contains(refusal) && report.contains(line),
-            "{report}"
-        );
-    }
-}
 
 #[test]
 fn goal_lowers_to_marked_metavar() {

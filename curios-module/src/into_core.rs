@@ -1602,21 +1602,6 @@ fn process_items(
         }
         // Only a declaration reaches here, and only here is its tree read.
         let item = &body.items()?[index];
-        // A head Core text writes — a decorator, a module named where a label stands — states what a program leaves to the elaborator and to where it is declared.
-        if let Some((core, label)) = item
-            .core_heads()
-            .into_iter()
-            .find(|(core, _)| !core.is_empty())
-        {
-            let error = match core.fields.is_empty() {
-                true => Error::DeclaredPath,
-                false => Error::Decorator,
-            };
-            return Err(match label.span() {
-                Some(span) => error.at(span.clone()),
-                None => error,
-            });
-        }
         match item {
             TopItem::Broken(_) | TopItem::Mod(_) | TopItem::Use(_) => {
                 unreachable!("a head stands where its item does")
