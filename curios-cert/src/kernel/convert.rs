@@ -561,7 +561,10 @@ fn structural(
         // A host call is its declaration and its operands, and reduction leaves both as they were posed.
         (Subterm::Foreign(_), Subterm::Foreign(_)) => convert_foreign(kernel, pairs, this, that),
 
-        (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
+        // Two variables are one only where both are free and the same: a bound index names no binder in scope, so it is apart from everything, another index included.
+        (Subterm::Var(left), Subterm::Var(right)) => Ok(left
+            .as_free()
+            .is_some_and(|left| right.as_free() == Some(left))),
 
         // A metavariable is elaboration-only syntax, and refusing it *here* is what makes the exclusion the kernel's own rather than an inherited guarantee of the elaborator's strict zonk. `whnf` still treats one as a stuck neutral — a reduction stance, not an admission: the only ways a term is admitted are `infer` and this comparison, and both refuse. The syntactic fast path in `compare` does admit a metavariable against *itself*, and soundly: reflexivity decides nothing about the unknown, which is exactly what this arm exists to prevent.
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Err(Error::NotCore(this.clone())),

@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::Erased,
     curios_core::{
-        Free, Intrinsic, Level, Nat, RecGroup, Term, UniverseContext, UniverseParam, Universes,
+        Free, Intrinsic, Level, Nat, RecGroup, Term, UniverseContext, UniverseParam, Universes, Var,
     },
 };
 
@@ -353,4 +353,15 @@ fn a_tower_of_negations_is_classified_on_the_default_stack() {
         matches!(Sort::of(&mut kernel, &tower), Ok(Sort::Prop(_))),
         "a Π into a proposition is a proposition at every depth",
     );
+}
+
+/// An index no scope binds names no binder to read a type off, so the lookup a stuck spine's sort is read through answers nothing and the sort is refused, never aborted on.
+#[test]
+fn a_bound_index_is_refused_rather_than_aborted_on() {
+    let mut kernel = kernel();
+
+    assert!(matches!(
+        Sort::of(&mut kernel, &Term::var(Var::bound(0))),
+        Err(Error::Unclassified(_)),
+    ));
 }

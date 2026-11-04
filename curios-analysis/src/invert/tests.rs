@@ -1,6 +1,10 @@
 //! Which payload binders an index target set determines, and the position a value of the family carries each one at — the answer erasure reads a pinned payload back from once the constructor itself is gone.
 
-use {super::*, curios_common::Qualifier, curios_core::Global};
+use {
+    super::*,
+    curios_common::Qualifier,
+    curios_core::{Global, Var},
+};
 
 fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
@@ -27,6 +31,16 @@ fn swapped_targets_pin_each_binder_at_its_own_position() {
         (pinned.position(&x), pinned.position(&y)),
         (Some(1), Some(0))
     );
+}
+
+/// A target that is an index no binder of the case binds is no binder at all, and determines nothing; a binder beside it is pinned where it stands.
+#[test]
+fn a_bound_index_target_pins_nothing() {
+    let x = binder(1, "x");
+
+    let pinned = pinned_by_targets(&[Term::var(Var::bound(0)), Term::free_var(&x)]);
+
+    assert_eq!(pinned.position(&x), Some(1));
 }
 
 /// `mk(@a) : (blur(a))` mentions its binder without determining it, and the control that occurrence is not determination.

@@ -414,7 +414,11 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
     }
 
     match &**term {
-        Subterm::Var(var) => Ok(kernel.local_type(var.unwrap()).cloned()),
+        // A bound index names no binder in scope, so it has no type to look up: a shape this cannot type, as every other is answered.
+        Subterm::Var(var) => Ok(var
+            .as_free()
+            .and_then(|free| kernel.local_type(free))
+            .cloned()),
 
         // A declaration at the levels this reference chose: the scheme read uninstantiated and substituted at those levels.
         Subterm::Instance(Instance { name, universes }) => {

@@ -31,9 +31,10 @@ pub fn pinned_by_targets(targets: &[Term]) -> Pinned {
     for (position, target) in targets.iter().enumerate() {
         // Anything but a bare binder — an application, a constructor's included, as well as a projection, an intrinsic, or a stuck match — determines nothing.
         if let Subterm::Var(var) = &**target
-            && !pinned.iter().any(|(binder, _)| binder == var.unwrap())
+            && let Some(binder) = var.as_free()
+            && !pinned.iter().any(|(pinned, _)| pinned == binder)
         {
-            pinned.push((*var.unwrap(), position));
+            pinned.push((*binder, position));
         }
     }
     Pinned(pinned)

@@ -140,7 +140,7 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
         return Ok(false);
     };
 
-    Ok(matches!(&*body, Subterm::Var(var) if var.unwrap() == &binder))
+    Ok(matches!(&*body, Subterm::Var(var) if var.as_free() == Some(&binder)))
 }
 
 /// Two stuck comparisons spelled across the family, aligned: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — first becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`; then two `Nat` or `Int` comparisons are read through their linear views, [`LinearViews::align`], and are one proposition where those agree and otherwise both respelled in the spelling the views give. `None` when nothing moved.

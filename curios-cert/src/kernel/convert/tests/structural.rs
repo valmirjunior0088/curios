@@ -6,7 +6,7 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Free, FuncType, Global, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext,
-        Universes,
+        Universes, Var,
     },
 };
 
@@ -23,6 +23,22 @@ fn a_term_converts_with_itself() {
             &Term::free_var(&x)
         ),
         Ok(true),
+    );
+}
+
+/// Two indices no scope binds name no binders, so neither is the other: conversion answers them apart rather than aborting on either.
+#[test]
+fn two_bound_indices_are_apart_rather_than_aborted_on() {
+    let mut kernel = kernel();
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &Term::var(Var::bound(0)),
+            &Term::var(Var::bound(1))
+        ),
+        Ok(false),
     );
 }
 

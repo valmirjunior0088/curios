@@ -339,6 +339,23 @@ fn a_map_by_a_function_whose_body_reduces_to_its_binder_is_the_list() {
     );
 }
 
+// A function whose body is an index past its own binder names nothing the probe opened, so it is no identity and the map stays, as for a body that is some other variable, rather than aborting where the probe reads the body's identity.
+#[test]
+fn a_map_by_a_function_whose_body_is_an_index_past_its_binder_stays_a_map() {
+    let binder = Free::local(2, Some("v"));
+    let map = Term::intrinsic(Intrinsic::list_map(
+        nat_type(),
+        nat_type(),
+        sym(0, "xs"),
+        Term::func([(binder, nat_type())], Term::var(Var::bound(3))),
+    ));
+
+    assert!(matches!(
+        &*fold(map),
+        Subterm::Intrinsic(Intrinsic::ListMap { .. })
+    ));
+}
+
 /// `x[h, ..t]` as lowering spells a cons: `h` appended to no bytes, then the rest.
 fn cons(head: Term, tail: Term) -> Term {
     let empty: Term = Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into();

@@ -191,7 +191,7 @@ pub fn eta_head(func: &Func, binders: &[Free]) -> Option<Term> {
                     .zip(func.telescope.members())
                     .all(|((argument, binder), (mark, _))| {
                         argument.plicity == mark
-                            && matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == binder)
+                            && matches!(argument.term.as_ref(), Subterm::Var(var) if var.as_free() == Some(binder))
                     })
                 && binders.iter().all(|binder| !head.mentions_free(binder)) =>
         {

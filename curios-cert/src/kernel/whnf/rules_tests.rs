@@ -5,7 +5,7 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Apply, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Rec, RecGroup, Reducer,
-        Scope, Subterm, Term, UniverseParam,
+        Scope, Subterm, Term, UniverseParam, Var,
     },
 };
 
@@ -284,6 +284,20 @@ fn eta_declines_when_the_head_mentions_the_binder() {
     let term = Term::func(
         [(x, nat_type())],
         Term::apply(Term::free_var(&x), [Term::free_var(&x)]),
+    );
+
+    assert_eq!(whnf(&mut kernel, term.clone()), Ok(term));
+}
+
+/// A forwarding's argument may be an index no binder of the term binds — one the boundary refuses, which reduction takes all the same: the lambda's own binder is no identity it can be compared with, so the lambda is its own normal form rather than an abort.
+#[test]
+fn an_eta_probes_argument_may_be_a_bound_index() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+
+    let term = Term::func(
+        [(x, nat_type())],
+        Term::apply(Term::var(Var::bound(3)), [Term::var(Var::bound(2))]),
     );
 
     assert_eq!(whnf(&mut kernel, term.clone()), Ok(term));

@@ -515,7 +515,7 @@ fn verdicts_within<'s>(
             error: Error::Unbound(local),
         });
     }
-    // A bound variable no scope binds is refused over the same positions, and no judgment could take the refusal instead: `Mentions` answers nothing for one, so every rule reads it as the variable it is not — `infer`'s through `Var::unwrap`, which aborts rather than returning a verdict — and the index denotes whatever the depth it is read at gives it, so what a rule would judge is not what the module carries.
+    // A bound variable no scope binds is refused over the same positions, and no judgment could take the refusal instead: `Mentions` answers nothing for one, so a rule could read it only as the variable it is not — `infer`'s refuses it, and every reader past it answers as for a term it cannot type — and the index denotes whatever the depth it is read at gives it, so what a rule would judge is not what the module carries.
     for (owner, reach) in open_positions_of(judged_items()) {
         verdicts.push(Verdict {
             name: owner,
