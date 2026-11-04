@@ -81,11 +81,11 @@ fn a_name_states_its_instance_and_a_call_parenthesizes_a_decorated_head() {
     );
     assert_eq!(
         written(&Term::apply(instance, [nat_type()])),
-        "(#{universes = {levels = [u], qualities = [Type]}} /f)(%NatType)"
+        "(#{universes = {levels = [u], qualities = [Type]}} /f)(#NatType)"
     );
 }
 
-/// An intrinsic is `%` and its variant's Core name over its operands, and a literal form builds its own node: a numeral its `Nat`, `true` its `Bool`, `x[…]` its `Bytes`.
+/// An intrinsic is `#` and its variant's Core name over its operands, and a literal form builds its own node: a numeral its `Nat`, `true` its `Bool`, `x[…]` its `Bytes`.
 #[test]
 fn an_intrinsic_is_its_variant_and_a_literal_its_own_form() {
     let n = Term::free_var(&Free::local(0, Some("n")));
@@ -93,13 +93,13 @@ fn an_intrinsic_is_its_variant_and_a_literal_its_own_form() {
 
     assert_eq!(
         written(&Term::intrinsic(Intrinsic::nat_add(n, three.clone()))),
-        "%NatAdd(n, 3)"
+        "#NatAdd(n, 3)"
     );
     assert_eq!(written(&three), "3");
     assert_eq!(written(&Term::intrinsic(Intrinsic::Bool(true))), "true");
     assert_eq!(
         written(&Term::intrinsic(Intrinsic::Flt(Floating::infinite(true)))),
-        "%Flt(-inf.0)"
+        "#Flt(-inf.0)"
     );
 }
 
@@ -111,7 +111,7 @@ fn a_family_and_a_constructors_value_state_the_node_they_are() {
 
     assert_eq!(
         written(&Term::induct_type(eq, [nat_type()], [one(), one()])),
-        "#{node = InductType} /Eq(%NatType)(1, 1)"
+        "#{node = InductType} /Eq(#NatType)(1, 1)"
     );
     assert_eq!(
         written(&Term::variant(
@@ -120,7 +120,7 @@ fn a_family_and_a_constructors_value_state_the_node_they_are() {
             "success",
             [one()]
         )),
-        "#{node = Variant} /Result/success(@%NatType, 1)"
+        "#{node = Variant} /Result/success(@#NatType, 1)"
     );
 }
 
@@ -161,7 +161,7 @@ fn a_match_states_the_goal_it_is_checked_against() {
 
     assert_eq!(
         written(&matched),
-        "#{result = Ambient(%NatType)} match b\n| false =>\n    0\n| true =>\n    1\nend"
+        "#{result = Ambient(#NatType)} match b\n| false =>\n    0\n| true =>\n    1\nend"
     );
 }
 
@@ -176,7 +176,7 @@ fn a_type_formers_eta_form_is_written_as_its_lambda() {
 
     assert_eq!(
         written(&lambda),
-        "(x: %NatType) => #{node = InductType} /Sign()(x)"
+        "(x: #NatType) => #{node = InductType} /Sign()(x)"
     );
     assert_eq!(lambda.faithful().to_string(), "/Sign");
 }
@@ -529,7 +529,7 @@ fn a_decorator_states_what_its_node_holds_once() {
 fn a_name_is_absolute_and_an_intrinsic_one_of_cores() {
     assert_eq!(refused("a/b").0, Refusal::RelativeName("/a/b".to_string()));
     assert_eq!(
-        refused("%Banana").0,
+        refused("#Banana").0,
         Refusal::UnknownIntrinsic("Banana".to_string())
     );
 }

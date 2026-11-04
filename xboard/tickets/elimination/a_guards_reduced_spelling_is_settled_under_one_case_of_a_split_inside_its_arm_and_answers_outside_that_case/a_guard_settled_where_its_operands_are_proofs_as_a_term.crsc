@@ -5,31 +5,31 @@ induct /Two: pub Prop
 | a()
 | b()
 end
-((c: %BoolType, h: (x: match c: (x2) => Type
+((c: #BoolType, h: (x: match c: (x2) => Type
         | false =>
-            %NatType
+            #NatType
         | true =>
             #{node = InductType}
             /Two()
-        end) -> %NatType, k: (n: %NatType) -> %BoolType, p: match c: (x3) => Type
+        end) -> #NatType, k: (n: #NatType) -> #BoolType, p: match c: (x3) => Type
     | false =>
-        %NatType
+        #NatType
     | true =>
         #{node = InductType}
         /Two()
     end, q: match c: (x4) => Type
     | false =>
-        %NatType
+        #NatType
     | true =>
         #{node = InductType}
         /Two()
-    end, guard: /sys/Bool/Holds(match %NatEql(h(p), h(q)): (x5) => %BoolType
+    end, guard: /sys/Bool/Holds(match #NatEql(h(p), h(q)): (x5) => #BoolType
         | false =>
             k(1)
         | true =>
             k(0)
         end)) =>
-    match match %NatEql(h(p), h(q)): (x9) => %BoolType
+    match match #NatEql(h(p), h(q)): (x9) => #BoolType
     | false =>
         k(1)
     | true =>
@@ -59,8 +59,8 @@ end
         /sys/Bool/True/qed()
     end)(
     false,
-    (n2: %NatType) => n2,
-    (n3: %NatType) => %NatEql(n3, 1),
+    (n2: #NatType) => n2,
+    (n3: #NatType) => #NatEql(n3, 1),
     0,
     1,
     #{node = Variant}

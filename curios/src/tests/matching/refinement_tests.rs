@@ -354,8 +354,8 @@ fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
     );
 
     assert!(
-        unlaid(&elaborated).contains(&unlaid("#{result = Ambient(%NatType)} match false"))
-            && unlaid(&elaborated).contains(&unlaid("#{result = Ambient(%NatType)} match true")),
+        unlaid(&elaborated).contains(&unlaid("#{result = Ambient(#NatType)} match false"))
+            && unlaid(&elaborated).contains(&unlaid("#{result = Ambient(#NatType)} match true")),
         "{elaborated}"
     );
 }

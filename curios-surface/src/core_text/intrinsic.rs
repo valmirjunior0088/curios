@@ -1,6 +1,6 @@
-//! An intrinsic node: `%` and its Core variant's name, then its operands in the order Core holds them; in a reader's spelling, as a program writes it.
+//! An intrinsic node: `#` and its Core variant's name, then its operands in the order Core holds them; in a reader's spelling, as a program writes it.
 //!
-//! **A literal form builds its own node.** A numeral is the `Nat` it spells, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes; every other value of a carrier states its variant: `%Int(-3)`, `%Byte(7)`, `%Flt(+1.5)`, `%Handle(2)`. A `Nat` over a term is `%Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `%FltAdd(TiesToEven, a, b)`, `%BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
+//! **A literal form builds its own node.** A numeral is the `Nat` it spells, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes; every other value of a carrier states its variant: `#Int(-3)`, `#Byte(7)`, `#Flt(+1.5)`, `#Handle(2)`. A `Nat` over a term is `#Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `#FltAdd(TiesToEven, a, b)`, `#BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
 
 use {
     super::{
@@ -645,9 +645,9 @@ pub fn writes_operands(intrinsic: &Intrinsic) -> bool {
     )
 }
 
-/// `%` and a variant's name, then its operands where it has any.
+/// `#` and a variant's name, then its operands where it has any.
 fn called(name: &str, operands: Vec<Printer>) -> Printer {
-    let head = format!("%{name}");
+    let head = format!("#{name}");
     match operands.is_empty() {
         true => pure(head),
         false => listed(format!("{head}("), false, operands, ")"),
@@ -755,7 +755,7 @@ fn reader_flt(flt: Floating, frame: Frame) -> Printer {
     pure(flt_written(flt))
 }
 
-/// An intrinsic node as Core text writes it, `%` and its variant's name over its operands, each read as its variant holds it: a term, a rounding by its name, a list of terms, an instance as a decorator's universes are written; a carrier's value by what it is.
+/// An intrinsic node as Core text writes it, `#` and its variant's name over its operands, each read as its variant holds it: a term, a rounding by its name, a list of terms, an instance as a decorator's universes are written; a carrier's value by what it is.
 pub fn intrinsic_read(
     intrinsic: &CoreIntrinsic,
     reader: &mut Reader<'_>,

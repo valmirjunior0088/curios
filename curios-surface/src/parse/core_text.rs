@@ -79,7 +79,7 @@ impl Grammar for CoreText {
     }
 }
 
-/// `#{field = value, …} operand`, committed once `#{` is read: no other form begins with `#`. The operand is an applied atom, so a decorator states the fields of one node and a second decorator on it is written in parentheses; it is `_` where the node is a variable no binder in the text binds.
+/// `#{field = value, …} operand`, committed once `#{` is read: no other form begins with `#{`. The operand is an applied atom, so a decorator states the fields of one node and a second decorator on it is written in parentheses; it is `_` where the node is a variable no binder in the text binds.
 fn parse_decorated<'a>(state: ParserState<'a>) -> Parsed<'a, Term<CoreText>> {
     with_span(
         parse_decorator
@@ -164,22 +164,19 @@ fn not_ahead_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
         .parse(state)
 }
 
-/// `%Variant` or `%Variant(operands)`, committed once `%` is read: no operand of a program begins with one.
+/// `#Variant` or `#Variant(operands)`, committed once `#` and a word are read: `#` and a brace is a decorator, and no operand of a program begins with `#`.
 fn parse_intrinsic<'a>(state: ParserState<'a>) -> Parsed<'a, CoreIntrinsic> {
-    take_exact("%")
-        .and_keep(commit(
-            spanned(parse_identifier_raw)
-                .map(|(span, word)| Label::spanned(word, span))
-                .and(
-                    take_exact("(")
-                        .and_drop(parse_whitespace)
-                        .and_keep(commit(
-                            sep_by0_trailing(parse_value, || parse_literal(","))
-                                .and_drop(parse_literal(")")),
-                        ))
-                        .map(Some)
-                        .or(parse_whitespace.map(|()| None)),
-                ),
+    take_exact("#")
+        .and_keep(spanned(parse_identifier_raw).map(|(span, word)| Label::spanned(word, span)))
+        .and(commit(
+            take_exact("(")
+                .and_drop(parse_whitespace)
+                .and_keep(commit(
+                    sep_by0_trailing(parse_value, || parse_literal(","))
+                        .and_drop(parse_literal(")")),
+                ))
+                .map(Some)
+                .or(parse_whitespace.map(|()| None)),
         ))
         .map(|(variant, operands)| CoreIntrinsic { variant, operands })
         .parse(state)

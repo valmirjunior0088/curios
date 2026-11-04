@@ -420,7 +420,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
 
     assert_eq!(
         refusal.rendered(&Spelling::for_refusal(&definitions, &[], &SYNTAX)),
-        "expected `%NatType`, found `#{node = StructType} Box(@%NatType)`"
+        "expected `#NatType`, found `#{node = StructType} Box(@#NatType)`"
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.
     assert_eq!(

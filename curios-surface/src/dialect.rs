@@ -52,7 +52,7 @@ pub enum CoreForm {
     Decorated(Decorated),
     /// A witness named by its identity, `/std/Nat/witness~/std/ops/Add(Nat)`: a program reaches one by resolution alone.
     Witness(WitnessId),
-    /// An intrinsic node, `%NatAdd(a, b)`: `%` and its Core variant's name, then its operands where it has any, each a value as a decorator writes one.
+    /// An intrinsic node, `#NatAdd(a, b)`: `#` and its Core variant's name, then its operands where it has any, each a value as a decorator writes one.
     Intrinsic(CoreIntrinsic),
 }
 

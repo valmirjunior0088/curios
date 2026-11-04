@@ -53,7 +53,7 @@ fn a_module_whose_term_proves_nothing_is_refused_at_false() {
 fn core_text_the_reader_refuses_is_refused_by_the_name_of_its_refusal() {
     let witness = Witness {
         what: "an intrinsic Core has no variant for".to_string(),
-        proof: Proof::Module("%Banana".to_string()),
+        proof: Proof::Module("#Banana".to_string()),
         expect: vec![Expected {
             by: Checker::Reader,
             error: Some("UnknownIntrinsic"),
@@ -77,7 +77,7 @@ fn core_text_that_does_not_parse_is_refused_by_the_reader_with_the_kernel_not_as
 
 #[test]
 fn core_text_that_states_the_type_of_its_term_is_refused_by_the_reader() {
-    let answer = put_core_text("0\n: %NatType");
+    let answer = put_core_text("0\n: #NatType");
 
     assert!(!answer.kernel_asked());
     assert!(

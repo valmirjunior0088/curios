@@ -168,7 +168,7 @@ fn a_witness_is_named_by_its_identity() {
     );
 }
 
-/// An intrinsic node is `%` and its variant, with its operands where it has any, each a value.
+/// An intrinsic node is `#` and its variant, with its operands where it has any, each a value.
 #[test]
 fn an_intrinsic_reads_its_variant_and_operands() {
     let intrinsic = |term: &Term<CoreText>| match term.as_subterm() {
@@ -176,11 +176,11 @@ fn an_intrinsic_reads_its_variant_and_operands() {
         other => panic!("expected an intrinsic, got {other:?}"),
     };
 
-    let nat = intrinsic(&core("%NatType"));
+    let nat = intrinsic(&core("#NatType"));
     assert_eq!(nat.variant.to_string(), "NatType");
     assert_eq!(nat.operands, None);
 
-    let list = intrinsic(&core("%List(%NatType, [1, 2])"));
+    let list = intrinsic(&core("#List(#NatType, [1, 2])"));
     assert_eq!(list.variant.to_string(), "List");
     assert!(matches!(
         list.operands.as_deref(),
@@ -215,7 +215,7 @@ fn a_program_reads_no_form_of_core_text() {
         ("#{a = x} f", 0),
         ("f(#{a = x} y)", 2),
         ("/std/Nat/witness~/std/ops/Add(Nat)", 16),
-        ("%NatType", 0),
+        ("#NatType", 0),
     ] {
         let error = source.parse::<Term>().expect_err(source);
         assert_eq!(refused_at(error), Some(at), "{source:?}");

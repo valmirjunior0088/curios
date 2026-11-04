@@ -74,7 +74,7 @@ impl fmt::Display for ReadError {
             }
             Refusal::Malformed(expected) => write!(formatter, "expected {expected}"),
             Refusal::UnknownIntrinsic(variant) => {
-                write!(formatter, "`%{variant}` names no intrinsic of Core")
+                write!(formatter, "`#{variant}` names no intrinsic of Core")
             }
             Refusal::RelativeName(name) => write!(
                 formatter,
