@@ -1,0 +1,7 @@
+-- The argument names no variable the arm was handed but the payload: what is graded is the application, whatever it is applied to.
+use /std/Bool/{False};
+induct Bad: Prop
+| c(f: (A: Prop) -> (A) -> A)
+end
+let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(Bad/c(f))) end;
+bad(Bad/c((A) => (x) => x))

@@ -2664,6 +2664,8 @@ dependencies = [
  "curios-module",
  "curios-pipeline",
  "curios-surface",
+ "serde",
+ "toml",
 ]
 
 [[package]]

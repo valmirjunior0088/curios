@@ -10,6 +10,8 @@ workspace = true
 
 [features]
 profile = ["curios-profile/enabled", "curios-parse/profile"]
+# `test_support`: the reader's refusals by name, which the soundness board's records name a refusal by. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = ["curios-common/test-support"]
 
 [dependencies]
 curios-abi = { workspace = true }
@@ -20,3 +22,7 @@ curios-num = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }
 curios-profile = { workspace = true }
+
+[dev-dependencies]
+# `variants!`, by which the test support names the reader's refusals. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-common = { workspace = true, features = ["test-support"] }

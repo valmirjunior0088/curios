@@ -1,10 +1,13 @@
-//! What tests share: a directory of its own that goes away with the test, however the test ends, and a fixture's text with values spliced into it.
+//! What tests share: a directory of its own that goes away with the test, however the test ends, a fixture's text with values spliced into it, and an enum's variants by name.
 
 #[cfg(test)]
 mod tests;
 
 mod fill;
 pub use fill::*;
+
+mod variants;
+pub use variants::*;
 
 use std::{
     env, fs,

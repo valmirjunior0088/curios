@@ -1,0 +1,8 @@
+title = "A reduct read off a local's type outlives the arm that re-typed the local"
+found = 2026-10-09
+status = "fixed"
+
+[[witness]]
+what = "a match on a proof fired inside an arm at the payload the arm's case states, and answered again after the arm"
+source = "a_reduct_read_under_an_arms_retyping.crsc"
+refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]

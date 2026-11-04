@@ -14,10 +14,8 @@ pub(crate) struct Date {
 }
 
 impl Date {
-    /// The day `year`-`month`-`day`.
-    ///
-    /// A day the calendar does not have panics, and a ticket is a constant, so one written with such a day does not compile.
-    pub(crate) const fn new(year: u16, month: u8, day: u8) -> Date {
+    /// The day `year`-`month`-`day`, where the calendar has it.
+    pub(crate) fn new(year: u16, month: u8, day: u8) -> Option<Date> {
         let leap =
             year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
 
@@ -26,12 +24,12 @@ impl Date {
             4 | 6 | 9 | 11 => 30,
             2 if leap => 29,
             2 => 28,
-            _ => panic!("a month is one of the twelve"),
+            _ => return None,
         };
 
-        assert!(day >= 1 && day <= last, "the month has no such day");
-
-        Date { year, month, day }
+        (1..=last)
+            .contains(&day)
+            .then_some(Date { year, month, day })
     }
 }
 

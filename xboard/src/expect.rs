@@ -2,32 +2,24 @@
 
 use {
     crate::{Answer, Checker, Refusal, Witness, declared_in, raised, standing_at},
-    curios_common::Qualifier,
+    curios_common::{Qualifier, test_support::Variants},
     curios_core::Global,
     std::fmt,
 };
 
-/// One checker's refusal, as a witness expects it. Written by [`refused!`](crate::refused), which keeps the pattern and its spelling one.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Expected {
-    /// The elaborator, by an error `is` recognises: every one where `pattern` is absent, which is how an open ticket expects a refusal no error names yet.
-    Elaborator {
-        pattern: Option<&'static str>,
-        within: Option<Within>,
-        is: fn(&curios_elab::Error) -> bool,
-    },
-    /// The kernel, by an error `is` recognises, at the item or entry `within` names, or whichever it refused where it names none.
-    Kernel {
-        pattern: Option<&'static str>,
-        within: Option<Within>,
-        is: fn(&curios_cert::Error) -> bool,
-    },
+/// One checker's refusal, as a witness expects it: by the checker, by the error it raises where one is named, and where it stands where that is named.
+#[derive(Debug, Clone)]
+pub(crate) struct Expected {
+    pub(crate) by: Checker,
+    /// The error, by the name its checker's crate states for it ([`Checker::errors`]); none where any error of the checker meets it, which is how an open ticket expects a refusal no error names yet.
+    pub(crate) error: Option<&'static str>,
+    pub(crate) within: Option<Within>,
 }
 
-/// Where an expected refusal stands: the declaration it is raised in, by its path, or the term a program closes with. A mismatch is every conversion's refusal, so one named where the flaw's construction stands is not met by one raised anywhere else.
-#[derive(Debug, Clone, Copy)]
+/// Where an expected refusal stands: the declaration it is raised in, by its absolute path, or the term a program closes with. A mismatch is every conversion's refusal, so one named where the flaw's construction stands is not met by one raised anywhere else.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Within {
-    Declaration(&'static str),
+    Declaration(String),
     Entry,
 }
 
@@ -45,26 +37,19 @@ impl Within {
 }
 
 impl Expected {
-    /// The checker expected to refuse.
-    fn checker(&self) -> Checker {
-        match self {
-            Expected::Elaborator { .. } => Checker::Elaborator,
-            Expected::Kernel { .. } => Checker::Kernel,
-        }
-    }
-
     /// Whether `refusal` is the one expected.
     fn meets(&self, refusal: &Refusal) -> bool {
-        match (self, refusal) {
-            (Expected::Elaborator { is, within, .. }, Refusal::Elaborator { error, .. }) => {
-                error.each().any(|member| {
-                    is(raised(member))
-                        && within.is_none_or(|within| within.holds(declared_in(member)))
-                })
-            }
-            (Expected::Kernel { is, within, .. }, Refusal::Kernel(verdict)) => {
-                is(&verdict.error)
-                    && within.is_none_or(|within| within.holds(verdict.name.as_ref()))
+        let named = |name: &str| self.error.is_none_or(|error| error == name);
+        let stands =
+            |name: Option<&Global>| self.within.as_ref().is_none_or(|within| within.holds(name));
+
+        match (self.by, refusal) {
+            (Checker::Elaborator, Refusal::Elaborator { error, .. }) => error
+                .each()
+                .any(|member| named(raised(member).variant_name()) && stands(declared_in(member))),
+            (Checker::Reader, Refusal::Read { error, .. }) => named(error.refusal.variant_name()),
+            (Checker::Kernel, Refusal::Kernel(verdict)) => {
+                named(verdict.error.variant_name()) && stands(verdict.name.as_ref())
             }
             _ => false,
         }
@@ -73,94 +58,16 @@ impl Expected {
 
 impl fmt::Display for Expected {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // A pattern is spelled as it was written, line breaks included, and a report gives it one line.
-        let on_one_line = |pattern: &str| pattern.split_whitespace().collect::<Vec<_>>().join(" ");
-
-        let (pattern, within) = match self {
-            Expected::Elaborator {
-                pattern, within, ..
-            }
-            | Expected::Kernel {
-                pattern, within, ..
-            } => (pattern, within),
-        };
-
-        match pattern {
-            None => write!(formatter, "the {}", self.checker())?,
-            Some(pattern) => write!(
-                formatter,
-                "the {}'s `{}`",
-                self.checker(),
-                on_one_line(pattern)
-            )?,
+        match self.error {
+            None => write!(formatter, "the {}", self.by)?,
+            Some(error) => write!(formatter, "the {}'s `{error}`", self.by)?,
         }
-        match within {
+        match &self.within {
             None => Ok(()),
             Some(Within::Entry) => write!(formatter, " {}", standing_at(None)),
             Some(Within::Declaration(path)) => write!(formatter, " in `{path}`"),
         }
     }
-}
-
-/// What refuses a witness once its flaw is closed, one entry per checker expected to refuse it.
-///
-/// `refused![kernel: curios_cert::Error::NotASort(_)]` expects the kernel's refusal by that error, and `refused![elaborator: curios_elab::Error::TypeMismatch { .. }, kernel: curios_cert::Error::Mismatch { .. }]` expects both checkers'. Each pattern names its checker's own error with its crate, `curios_elab::Error` under `elaborator` and `curios_cert::Error` under `kernel`. After either, `in` and a declaration's path, `in "/f"`, or `in entry` for the term a program closes with, names where the refusal stands ([`Within`]), and `if` and a condition over what the pattern binds narrows an error whose variant says too little. A label alone, `refused![kernel]`, expects a refusal by an error not named yet, which is how an open ticket states a refusal its fix has still to introduce.
-#[macro_export]
-macro_rules! refused {
-    ($($checker:ident $(: $pattern:pat $(in $within:tt)? $(if $guard:expr)?)?),+ $(,)?) => {
-        &[
-            $($crate::expected!($checker $(: $pattern $(in $within)? $(if $guard)?)?)),+
-        ]
-    };
-}
-
-/// One entry of [`refused!`].
-#[doc(hidden)]
-#[macro_export]
-macro_rules! expected {
-    (elaborator) => {
-        $crate::Expected::Elaborator {
-            pattern: None,
-            within: None,
-            is: |_| true,
-        }
-    };
-    (elaborator: $pattern:pat $(in $within:tt)? $(if $guard:expr)?) => {
-        $crate::Expected::Elaborator {
-            pattern: Some(stringify!($pattern $(if $guard)?)),
-            within: $crate::within!($($within)?),
-            is: |error| matches!(error, $pattern $(if $guard)?),
-        }
-    };
-    (kernel) => {
-        $crate::Expected::Kernel {
-            pattern: None,
-            within: None,
-            is: |_| true,
-        }
-    };
-    (kernel: $pattern:pat $(in $within:tt)? $(if $guard:expr)?) => {
-        $crate::Expected::Kernel {
-            pattern: Some(stringify!($pattern $(if $guard)?)),
-            within: $crate::within!($($within)?),
-            is: |error| matches!(error, $pattern $(if $guard)?),
-        }
-    };
-}
-
-/// Where an entry of [`refused!`] stands: nowhere named, the closing term, or a declaration by its path.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! within {
-    () => {
-        None
-    };
-    (entry) => {
-        Some($crate::Within::Entry)
-    };
-    ($declaration:literal) => {
-        Some($crate::Within::Declaration($declaration))
-    };
 }
 
 /// What a refusal says, on one line, with the checker and error it is.
@@ -186,10 +93,10 @@ impl Witness {
             .iter()
             .find(|expected| !refusals.iter().any(|refusal| expected.meets(refusal)))
             .map(|expected| {
-                let asked = expected.checker() == Checker::Elaborator || answer.kernel_asked();
+                let asked = expected.by != Checker::Kernel || answer.kernel_asked();
                 let nearest = refusals
                     .iter()
-                    .find(|refusal| refusal.by() == expected.checker())
+                    .find(|refusal| refusal.by() == expected.by)
                     .unwrap_or(first);
 
                 match asked {

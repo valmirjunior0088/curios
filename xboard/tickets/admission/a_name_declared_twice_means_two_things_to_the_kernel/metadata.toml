@@ -1,0 +1,13 @@
+title = "A name declared twice means two things to the kernel"
+found = 2026-10-06
+status = "fixed"
+
+[[witness]]
+what = "an inhabited `False` under the prelude's own name"
+source = "a_registry_entry_under_the_preludes_false.crsc"
+refused = [{ by = "kernel", error = "Redeclared" }]
+
+[[witness]]
+what = "a theorem typed under one definition of its statement and read under another"
+source = "a_statement_declared_twice.crsc"
+refused = [{ by = "kernel", error = "Redeclared" }]

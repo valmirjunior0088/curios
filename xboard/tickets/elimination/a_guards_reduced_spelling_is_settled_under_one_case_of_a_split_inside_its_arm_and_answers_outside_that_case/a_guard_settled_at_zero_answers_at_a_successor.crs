@@ -1,0 +1,21 @@
+-- The guard is the match on `p`, which stands while `n` is open: its proof's two indices are one only at a literal, so nothing states `z` before then. Its `true` arm assumes it, and the equation stands for the whole arm. Inside the `0` arm of the split `p` proves `Eq()(0, 0)`, and the match fired on the type `p` stood at there, so the equation's reduced spelling was settled as `h(0)`, where it is true. The spelling is kept with the equation, which outlives that arm: under `k + 1`, where the guard says `h(1)`, `h(0)` was answered `true` still. The match now states the instance it eliminates, `Eq()(g(n), g(g(n)))`, and fires on that: the `0` arm reaches it as a substitution into the term, the equation's own spelling is settled with `n` open, and `True/qed()` under `k + 1` is refused at `Holds(h(0))`.
+use /std/{Nat, Eq, Bool};
+use /std/Bool/{True, False, Holds};
+let g(n: Nat) -> Nat = match n | 0 => 0 | j + 1 => 1 end;
+let f(
+    h: (Nat) -> Bool,
+    n: Nat,
+    p: Eq()(g(n), g(g(n))),
+    guard: Holds(match p: (i, j, q) => Bool | refl(@z) => h(z) end),
+    nonzero: Holds(n != 0)) -> Holds(h(0)) =
+    match (match p: (i, j, q) => Bool | refl(@z) => h(z) end)
+    | false => match guard end
+    | true =>
+        match n
+        | 0 =>
+            let settled: Holds(h(0)) = True/qed();
+            match nonzero end
+        | k + 1 => True/qed()
+        end
+    end;
+f((m: Nat) => m != 0, 1, Eq/refl(), True/qed(), True/qed())

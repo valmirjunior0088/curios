@@ -3,7 +3,7 @@ name = "xboard"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The soundness board: every flaw found in the Curios checkers as a ticket whose witnesses are put to them again on each run"
+description = "The soundness board: every flaw found in the Curios checkers as a ticket, a record whose witnesses are put to them again on each run"
 
 [lints]
 workspace = true
@@ -12,17 +12,20 @@ workspace = true
 [dependencies]
 # The module a witness built by hand is read to, and the term it closes with.
 curios-core = { workspace = true }
-# The qualified name an expected refusal stands in, and the report a reader's refusal is located by.
-curios-common = { workspace = true }
-# The error a witness expects of the kernel.
-curios-cert = { workspace = true }
-# The error a witness expects of the elaborator.
-curios-elab = { workspace = true }
+# The qualified name an expected refusal stands in, the report a reader's refusal is located by, and the trait each checker's errors are named through.
+curios-common = { workspace = true, features = ["test-support"] }
+# The error a witness expects of the kernel, and every one's name.
+curios-cert = { workspace = true, features = ["test-support"] }
+# The error a witness expects of the elaborator, and every one's name.
+curios-elab = { workspace = true, features = ["test-support"] }
 # A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope, read over the prelude's declarations.
 curios-pipeline = { workspace = true, features = ["test-support"] }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
-# The program a witness's text is parsed as, the reader that makes a module of one written as Core text, and the spelling a kernel's refusal is printed in.
-curios-surface = { workspace = true }
+# The program a witness's text is parsed as, the reader that makes a module of one written as Core text and the name of each of its refusals, and the spelling a kernel's refusal is printed in.
+curios-surface = { workspace = true, features = ["test-support"] }
 # The binary's subcommands, `report` and `probe`.
 clap = { workspace = true }
+# The board's records, each a `metadata.toml`.
+serde = { workspace = true }
+toml = { workspace = true }

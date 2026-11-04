@@ -55,7 +55,7 @@ fn a_negative_self_occurrence_is_refused() {
 
 /// The same route to `False` with the negative occurrence spelled through an indirection: an identity lambda applied to the family, a `let` bound to it, and the first component of a tuple of it. Each is a shape the walk cannot read as a type former until it has reduced it, and each must leave `Bad` reaching itself at a non-accepting polarity — an occurrence a reduction loses stays at the `Unused` the fixpoint seeds a target at, which admits the declaration outright.
 ///
-/// These are the nearest representable neighbours of `a_parameter_named_through_an_instance_is_an_occurrence_positivity_does_not_see`, the ticket `xboard/src/formation.rs` records as retired: an instance names a declaration, so no parameter can be named through one, and a telescope built by hand puts these in its place. The alias cases below exercise the same arm through delta; these exercise it through beta, zeta and iota.
+/// These are the nearest representable neighbours of `a_parameter_named_through_an_instance_is_an_occurrence_positivity_does_not_see`, a ticket of the board's formation part retired at `d5c4715c2`: an instance names a declaration, so no parameter can be named through one, and a telescope built by hand puts these in its place. The alias cases below exercise the same arm through delta; these exercise it through beta, zeta and iota.
 #[test]
 fn a_negative_occurrence_through_an_indirection_is_refused() {
     let false_name = Global::Authored(Qualifier::from(["False"]));

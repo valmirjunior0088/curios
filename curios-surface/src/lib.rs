@@ -46,3 +46,7 @@ use parse::*;
 
 mod module;
 pub use module::*;
+
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_surface::test_support` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

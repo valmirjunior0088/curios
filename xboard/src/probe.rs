@@ -18,7 +18,7 @@ pub(crate) struct Probe {
 
 impl Probe {
     /// Put `proof` to what its form puts it to, its term as a proof of `False`.
-    pub(crate) fn put(proof: Proof<'_>) -> Probe {
+    pub(crate) fn put(proof: &Proof) -> Probe {
         Probe {
             answer: proof.answer(),
             asked: proof.asked(),

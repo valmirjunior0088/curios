@@ -1,0 +1,28 @@
+title = "An arm of a fold is typed with its scrutinee at the arm's case, and is taken at every tail"
+found = 2026-10-07
+status = "fixed"
+
+[[witness]]
+what = "a fold whose identity arm is a hypothesis about its scrutinee, false at zero"
+source = "an_identity_arm_reads_its_scrutinee_at_zero.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "a fold whose cons arm reads a hypothesis about its scrutinee beside the one at the tail"
+source = "a_cons_arm_reads_its_scrutinee_at_a_successor.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "the fold over a call, whose equation is recorded and not substituted"
+source = "an_identity_arm_reads_a_call_at_zero.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "the fold over a list, whose identity arm reads its length at the empty one"
+source = "an_identity_arm_reads_a_list_at_the_empty_one.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "the fold whose identity arm is a hypothesis about its scrutinee, as a term"
+source = "an_identity_arm_typed_at_zero.crsc"
+refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]

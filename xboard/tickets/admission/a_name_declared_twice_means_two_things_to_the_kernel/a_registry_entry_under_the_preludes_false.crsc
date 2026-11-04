@@ -1,0 +1,5 @@
+-- Declared over the environment a walk is seeded with, the entry stands where the prelude's did and is the one every rule reads. Checking it would not refuse it: an inhabited proposition is a well-formed declaration, and what is wrong with this one is its name.
+#{module = /, absent = [/sys/Bool/False/mk]} induct /sys/Bool/False: pub Prop
+| mk()
+end
+#{node = Variant} /sys/Bool/False/mk()

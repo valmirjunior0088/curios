@@ -1,0 +1,33 @@
+title = "A guard's reduced spelling is settled under one case of a split inside its arm, and answers outside that case"
+found = 2026-10-09
+status = "fixed"
+
+[[witness]]
+what = "a guard over a match on a proof, read at zero in one arm of a split and answered at a successor in the next"
+source = "a_guard_settled_at_zero_answers_at_a_successor.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "the same guard settled in the false arm of a split and answered in the true one, as a term"
+source = "a_guard_settled_under_one_case_of_a_split.crsc"
+refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]
+
+[[witness]]
+what = "a guard decided by proof irrelevance under one case of a split, and answered after the split"
+source = "a_guard_settled_where_its_operands_are_proofs.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/F" }]
+
+[[witness]]
+what = "the same guard settled where its operands are proofs and answered where they are not, as a term"
+source = "a_guard_settled_where_its_operands_are_proofs_as_a_term.crsc"
+refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]
+
+[[witness]]
+what = "a guard decided by the unit type's one inhabitant under one case of a split, and answered after the split"
+source = "a_guard_settled_where_its_operands_are_units.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
+what = "the same guard settled where its operands are units and answered where they are not, as a term"
+source = "a_guard_settled_where_its_operands_are_units_as_a_term.crsc"
+refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]

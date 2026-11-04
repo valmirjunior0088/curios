@@ -1,0 +1,48 @@
+-- `F(c)` is the match on `c` into `Type`, a proposition `Two` at `true` and `Nat` at `false`, and `read` is the match on `h(p) == h(q)`, `k(0)` at `true` and `k(1)` at `false`.
+-- The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, was checked at a `Holds(k(0))` that still answered `True`, and at `false`, where `read` is `k(1)`, what it proved is `Holds(false)`. The kernel now refuses `F(c)` where its `true` arm is typed, a proposition where the motive wants a type.
+#{absent = [/Two/a, /Two/b]} induct /Two: pub Prop
+| a()
+| b()
+end
+((c: %BoolType, h: (x: match c: (x2) => Type
+        | false =>
+            %NatType
+        | true =>
+            #{node = InductType} /Two()
+        end) -> %NatType, k: (n: %NatType) -> %BoolType, p: match c: (x3) => Type
+    | false =>
+        %NatType
+    | true =>
+        #{node = InductType} /Two()
+    end, q: match c: (x4) => Type
+    | false =>
+        %NatType
+    | true =>
+        #{node = InductType} /Two()
+    end, guard: /sys/Bool/Holds(match %NatEql(h(p), h(q)): (x5) => %BoolType
+        | false =>
+            k(1)
+        | true =>
+            k(0)
+        end)) =>
+    match match %NatEql(h(p), h(q)): (x9) => %BoolType
+    | false =>
+        k(1)
+    | true =>
+        k(0)
+    end: (x6) => /sys/Bool/Holds(k(0))
+    | false =>
+        match guard: (x7) => /sys/Bool/Holds(k(0))
+        end
+    | true =>
+        let w: #{node = InductType} /sys/Bool/True() =
+            match c: (x8) => #{node = InductType} /sys/Bool/True()
+            | false =>
+                #{node = Variant} /sys/Bool/True/qed()
+            | true =>
+                let u: /sys/Bool/Holds(k(0)) =
+                    #{node = Variant} /sys/Bool/True/qed();
+                #{node = Variant} /sys/Bool/True/qed()
+            end;
+        #{node = Variant} /sys/Bool/True/qed()
+    end)(false, (n2: %NatType) => n2, (n3: %NatType) => %NatEql(n3, 1), 0, 1, #{node = Variant} /sys/Bool/True/qed())

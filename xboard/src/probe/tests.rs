@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn a_program_whose_tail_proves_something_else_is_refused_and_says_by_whom() {
-    let probe = Probe::put(Proof::Program("/std/Bool/True/qed()"));
+    let probe = Probe::put(&Proof::Program("/std/Bool/True/qed()".to_string()));
     let said = probe.to_string();
 
     assert!(!probe.admitted());
@@ -17,7 +17,7 @@ fn a_program_whose_tail_proves_something_else_is_refused_and_says_by_whom() {
 
 #[test]
 fn a_program_that_does_not_read_is_refused_with_the_kernel_not_asked() {
-    let probe = Probe::put(Proof::Program("let"));
+    let probe = Probe::put(&Proof::Program("let".to_string()));
     let said = probe.to_string();
 
     assert!(!probe.admitted());
@@ -27,7 +27,7 @@ fn a_program_that_does_not_read_is_refused_with_the_kernel_not_asked() {
 
 #[test]
 fn a_module_is_put_to_the_reader_and_the_kernel_and_says_by_whom() {
-    let probe = Probe::put(Proof::Module("0"));
+    let probe = Probe::put(&Proof::Module("0".to_string()));
     let said = probe.to_string();
 
     assert!(!probe.admitted());
@@ -40,7 +40,7 @@ fn a_module_is_put_to_the_reader_and_the_kernel_and_says_by_whom() {
 
 #[test]
 fn a_module_that_does_not_read_is_refused_by_the_reader_with_the_kernel_not_asked() {
-    let probe = Probe::put(Proof::Module("let"));
+    let probe = Probe::put(&Proof::Module("let".to_string()));
 
     assert_eq!(probe.said(Checker::Reader), "refused");
     assert_eq!(probe.said(Checker::Kernel), "not asked");

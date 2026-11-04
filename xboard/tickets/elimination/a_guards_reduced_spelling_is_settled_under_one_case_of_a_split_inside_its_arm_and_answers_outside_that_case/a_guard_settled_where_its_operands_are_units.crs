@@ -1,0 +1,21 @@
+-- `a_guard_settled_where_its_operands_are_proofs.crs` with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants are one by the type's shape, so the comparison is decided inside that arm and the guard's spelling was settled the same way. What the settlement read of the split was the type the arm re-typed `p` and `q` at, which the guard names and the split solves. The guard is now restated in that arm, and its spelling settled there goes with it: the `True/qed()` inside the arm holds, and the one after the split, where the guard is settled with `c` open and `h(p)` and `h(q)` are apart, is refused at `Holds(k(0))`.
+use /std/{Nat, Bool};
+use /std/Bool/{True, False, Holds};
+let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+let f(
+    c: Bool,
+    h: (F(c)) -> Nat,
+    k: (Nat) -> Bool,
+    p: F(c),
+    q: F(c),
+    guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
+    match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+    | false => match guard end
+    | true =>
+        let split: {} = match c
+            | false => ()
+            | true => (let settled: Holds(k(0)) = True/qed(); ())
+            end;
+        True/qed()
+    end;
+f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())

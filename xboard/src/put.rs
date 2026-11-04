@@ -6,11 +6,12 @@ mod tests;
 use {
     crate::Proof,
     curios_cert::Verdict,
-    curios_common::Report,
+    curios_common::{Report, test_support::Variants},
     curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
     curios_module::{RootSource, SYNTAX},
     curios_pipeline::{DEFAULT_BUDGET, Examined, test_support::*},
     curios_surface::{CoreEntry, CoreFile, ReadError, Spelling, to_core},
+    serde::Deserialize,
     std::fmt,
 };
 
@@ -24,8 +25,9 @@ pub(crate) fn false_type() -> Term {
     Term::instance(false_name(), Universes::default())
 }
 
-/// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place. A record names one by the word it is displayed as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Checker {
     /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the kernel either way.
     Elaborator,
@@ -33,6 +35,17 @@ pub(crate) enum Checker {
     Reader,
     /// `curios-cert` and the layer it judges through: the trusted base.
     Kernel,
+}
+
+impl Checker {
+    /// Every error the checker raises, by the name its crate states for it once, in a match no variant is missing from.
+    pub(crate) fn errors(self) -> &'static [&'static str] {
+        match self {
+            Checker::Elaborator => <curios_elab::Error as Variants>::NAMES,
+            Checker::Reader => <curios_surface::Refusal as Variants>::NAMES,
+            Checker::Kernel => <curios_cert::Error as Variants>::NAMES,
+        }
+    }
 }
 
 impl fmt::Display for Checker {
@@ -50,8 +63,10 @@ impl fmt::Display for Checker {
 pub(crate) enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
-    /// Core text the reader built no module of: it did not parse, the reader refused it, or it closes otherwise than with a term stating no type. Held as the reader reports it.
+    /// Core text that does not parse, or closes otherwise than with a term stating no type: a text that has rotted, which no expectation meets. Held as the reader reports it.
     Unread(String),
+    /// The reader's refusal of a text that parses, with where it stands in the text.
+    Read { error: ReadError, reported: String },
     /// The elaborator's error, with the diagnostic a compilation prints for it.
     Elaborator {
         error: curios_elab::Error,
@@ -100,23 +115,12 @@ pub(crate) fn standing_at(name: Option<&Global>) -> String {
     }
 }
 
-/// The variant `error` is, as its `Debug` spells it.
-fn variant(error: &impl fmt::Debug) -> String {
-    let spelled = format!("{error:?}");
-
-    spelled
-        .split(['(', ' ', '{'])
-        .next()
-        .unwrap_or_default()
-        .to_string()
-}
-
 impl Refusal {
     /// The checker that made it.
     pub(crate) fn by(&self) -> Checker {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Checker::Elaborator,
-            Refusal::Unread(_) => Checker::Reader,
+            Refusal::Unread(_) | Refusal::Read { .. } => Checker::Reader,
             Refusal::Unfinished(_) | Refusal::Kernel(_) => Checker::Kernel,
         }
     }
@@ -126,13 +130,14 @@ impl Refusal {
         match self {
             Refusal::Text(_) => "text".to_string(),
             Refusal::Unread(_) => "reader".to_string(),
+            Refusal::Read { error, .. } => format!("reader `{}`", error.refusal.variant_name()),
             Refusal::Elaborator { error, .. } => {
                 let mut variants = error
                     .each()
                     .map(|member| {
                         format!(
                             "`{}` {}",
-                            variant(raised(member)),
+                            raised(member).variant_name(),
                             standing_at(declared_in(member))
                         )
                     })
@@ -144,7 +149,7 @@ impl Refusal {
             Refusal::Unfinished(_) => "kernel, as unfinished".to_string(),
             Refusal::Kernel(verdict) => format!(
                 "kernel `{}` {}",
-                variant(&verdict.error),
+                verdict.error.variant_name(),
                 standing_at(verdict.name.as_ref())
             ),
         }
@@ -157,6 +162,7 @@ impl fmt::Display for Refusal {
         match self {
             Refusal::Text(reported)
             | Refusal::Unread(reported)
+            | Refusal::Read { reported, .. }
             | Refusal::Elaborator { reported, .. } => formatter.write_str(reported),
             Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
             Refusal::Kernel(verdict) => {
@@ -270,7 +276,10 @@ pub(crate) fn put_core_text(text: &str) -> Answer {
     }
 
     match to_core(&file, Some(&prelude_form_scope())) {
-        Err(error) => unread(located(&error)),
+        Err(error) => Answer::Unbuilt(Refusal::Read {
+            reported: located(&error),
+            error,
+        }),
         Ok((definitions, entry)) => {
             let body = entry.expect("an entry the text writes is read").body;
 
@@ -287,7 +296,7 @@ fn located(error: &ReadError) -> String {
     }
 }
 
-impl Proof<'_> {
+impl Proof {
     /// Put the proof to the checkers at `False`.
     pub(crate) fn answer(&self) -> Answer {
         match self {

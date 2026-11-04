@@ -1,0 +1,8 @@
+title = "A proof's constructor inside an arm's solution is graded as structure"
+found = 2026-10-30
+status = "fixed"
+
+[[witness]]
+what = "a recursion graded below a data binder through the proof its index solution holds"
+source = "a_recursion_through_a_proofs_constructor.crsc"
+refused = [{ by = "kernel", error = "NotDescending" }]

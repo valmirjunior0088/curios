@@ -1,0 +1,18 @@
+title = "A payload that quantifies over `Prop` is applied at its own family, and the application is graded below its constructor"
+found = 2026-10-08
+status = "fixed"
+
+[[witness]]
+what = "a proof by recursion on what a payload returns of the scrutinee, the payload the polymorphic identity"
+source = "a_payload_returns_the_scrutinee_it_is_applied_to.crs"
+refused = [{ by = "elaborator", error = "UniverseInconsistency" }]
+
+[[witness]]
+what = "the same recursion on what the payload returns of its constructor built again"
+source = "a_payload_returns_its_constructor_built_again.crs"
+refused = [{ by = "elaborator", error = "UniverseInconsistency" }]
+
+[[witness]]
+what = "the recursion on what the payload returns of the scrutinee, as a term"
+source = "a_payload_applied_at_its_own_family.crsc"
+refused = [{ by = "kernel", error = "Oversized" }]

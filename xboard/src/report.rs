@@ -74,50 +74,85 @@ pub(crate) fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]
 
 /// One line of a report: a ticket, with what its witnesses answered and where it stands.
 #[derive(Debug)]
-pub(crate) struct Row {
-    part: &'static Part,
-    ticket: &'static Ticket,
+pub(crate) struct Row<'b> {
+    /// The name of the part it is filed under.
+    part: &'b str,
+    ticket: &'b Ticket,
     answers: Vec<Answer>,
     standing: Standing,
 }
 
-impl Row {
+impl<'b> Row<'b> {
+    /// Put every witness of `ticket`, filed under the part named `part`, to the checkers.
+    pub(crate) fn put(part: &'b str, ticket: &'b Ticket) -> Row<'b> {
+        let answers = ticket
+            .witnesses
+            .iter()
+            .map(|witness| witness.proof.answer())
+            .collect::<Vec<_>>();
+        let standing = standing(ticket.status, &ticket.witnesses, &answers);
+
+        Row {
+            part,
+            ticket,
+            answers,
+            standing,
+        }
+    }
+
     /// Whether the kernel judged any witness of the ticket. A program the elaborator refuses while it is still building the module never reaches it, so a ticket holding only such programs says nothing of the trusted base.
     pub(crate) fn reaches_kernel(&self) -> bool {
         self.answers.iter().any(Answer::kernel_asked)
+    }
+
+    /// Whether any witness of the ticket was admitted at `False`.
+    pub(crate) fn admitted(&self) -> bool {
+        self.answers.iter().any(Answer::admitted)
+    }
+}
+
+/// Where the ticket stands, the part it is filed under, each witness with who refused it, and what keeps a failing ticket from standing.
+impl fmt::Display for Row<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            formatter,
+            "  {:<9}  {}  {}",
+            self.standing.label(),
+            self.ticket.found_on,
+            self.ticket.title
+        )?;
+        writeln!(formatter, "             part     {}", self.part)?;
+        for (witness, answer) in self.ticket.witnesses.iter().zip(&self.answers) {
+            writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
+        }
+        if let Standing::Regressed(problems) | Standing::Unshown(problems) = &self.standing {
+            for problem in problems {
+                writeln!(formatter, "             !        {problem}")?;
+            }
+        }
+
+        Ok(())
     }
 }
 
 /// Every ticket of a board with where it stands.
 #[derive(Debug)]
-pub(crate) struct Report {
-    board: &'static [&'static Part],
-    rows: Vec<Row>,
+pub(crate) struct Report<'b> {
+    board: &'b [Part],
+    rows: Vec<Row<'b>>,
 }
 
-impl Report {
+impl<'b> Report<'b> {
     /// Put every witness of every ticket on `board` to the checkers.
-    pub(crate) fn run(board: &'static [&'static Part]) -> Report {
-        let mut rows = Vec::new();
-
-        for part in board {
-            for ticket in part.tickets {
-                let answers = ticket
-                    .witnesses
+    pub(crate) fn run(board: &'b [Part]) -> Report<'b> {
+        let rows = board
+            .iter()
+            .flat_map(|part| {
+                part.tickets
                     .iter()
-                    .map(|witness| witness.proof.answer())
-                    .collect::<Vec<_>>();
-
-                let standing = standing(ticket.status, ticket.witnesses, &answers);
-
-                rows.push(Row {
-                    part,
-                    ticket,
-                    answers,
-                    standing,
-                });
-            }
-        }
+                    .map(|ticket| Row::put(&part.name, ticket))
+            })
+            .collect();
 
         Report { board, rows }
     }
@@ -149,7 +184,7 @@ pub(crate) fn refusers(answer: &Answer) -> String {
     }
 }
 
-impl fmt::Display for Report {
+impl fmt::Display for Report<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             formatter,
@@ -166,22 +201,7 @@ impl fmt::Display for Report {
         rows.sort_by_key(|row| (!row.standing.fails(), row.ticket.found_on));
 
         for row in rows {
-            writeln!(
-                formatter,
-                "\n  {:<9}  {}  {}",
-                row.standing.label(),
-                row.ticket.found_on,
-                row.ticket.title
-            )?;
-            writeln!(formatter, "             part     {}", row.part.name)?;
-            for (witness, answer) in row.ticket.witnesses.iter().zip(&row.answers) {
-                writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
-            }
-            if let Standing::Regressed(problems) | Standing::Unshown(problems) = &row.standing {
-                for problem in problems {
-                    writeln!(formatter, "             !        {problem}")?;
-                }
-            }
+            write!(formatter, "\n{row}")?;
         }
 
         writeln!(formatter, "\nparts: {}", self.board.len())?;
@@ -198,6 +218,7 @@ impl fmt::Display for Report {
                 Some(last) => writeln!(formatter, ", the last found {last}")?,
                 None => writeln!(formatter)?,
             }
+            writeln!(formatter, "    {}", part.description)?;
         }
 
         let unreached = self

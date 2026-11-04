@@ -1,0 +1,11 @@
+-- A walk takes items as they are stored, and a name declared twice is written twice: `thm` is typed while `p` is `Holds`, and the second `p`, which names `thm`, is defined where the first stood. The closing term is then read at a `p` that reduces to `False`.
+#{absent = [/Holds/qed]} induct /Holds: pub Prop
+| qed()
+end
+let /p : Prop =
+    #{node = InductType} /Holds();
+let /thm : /p =
+    #{node = Variant} /Holds/qed();
+let /p : Prop =
+    ((x: #{node = InductType} /Holds()) => /sys/Bool/False)(/thm);
+/thm

@@ -1,0 +1,9 @@
+-- The fold at `2` takes its cons arm twice and then its identity arm, where `n` is still `2` and `h` the proof it was handed. The arm was typed with `n` solved to `0`, where `h` proves `Holds(0 == 2)`, which is `False`.
+use /std/{Nat};
+use /std/Bool/{True, False, Holds};
+let f(n: Nat, h: Holds(n == 2)) -> False =
+    match n: (m) => False
+    | 0 => h
+    | k + 1; ih => ih
+    end;
+f(2, True/qed())

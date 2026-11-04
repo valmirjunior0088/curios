@@ -1,0 +1,8 @@
+title = "A proof index refined by irrelevance is graded as the constructor it was unified with"
+found = 2026-10-30
+status = "fixed"
+
+[[witness]]
+what = "a recursion that hands its own proof back, graded below the index the proof's target refined"
+source = "a_recursion_on_a_refined_proof_index.crsc"
+refused = [{ by = "kernel", error = "NotDescending" }]

@@ -1,0 +1,25 @@
+-- `read` is the match on `p` that hands its payload to `g`, and the guard is the match on `read`.
+-- The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`. The match fired on the type `p` was assumed at, so `read` named `p` and `g` and not `b`: the `false` arm of the split re-types `p` at `Read(false)`, where `read` was `g(false)`, and a stuck form met while that arm is typed settled the equation's reduced spelling there, as `g(false)`, which the equation rightly answers `true` under that case. The settled spelling stays with the equation when the arm is left, so in the `true` arm, where `read` is `g(true)`, `g(false)` was answered `true` as well, and at the identity what the `qed` proved is `Holds(false)`. The match now fires on the instance it states, `Read(b)`, so `read` is `g(b)` wherever it stands and names `b`: the spelling is settled as `g(b)` under either case, and the `qed` in the `true` arm is refused at `Holds(g(false))`.
+#{absent = [/Read/mk]} induct /Read: (i: %BoolType) -> pub Prop
+| mk(x: %BoolType): (x)
+end
+((g: (c: %BoolType) -> %BoolType, b: %BoolType, p: #{node = InductType} /Read()(b), guard: /sys/Bool/Holds(#{cases = {stated = #{node = InductType} /Read()(b)}} match p: (x3, x4) => %BoolType
+        | mk(x) =>
+            g(x)
+        end), chosen: /sys/Bool/Holds(b)) =>
+    match #{cases = {stated = #{node = InductType} /Read()(b)}} match p: (x9, x10) => %BoolType
+    | mk(x2) =>
+        g(x2)
+    end: (x5) => /sys/Bool/Holds(g(false))
+    | false =>
+        match guard: (x6) => /sys/Bool/Holds(g(false))
+        end
+    | true =>
+        match b: (x7) => /sys/Bool/Holds(g(false))
+        | false =>
+            match chosen: (x8) => /sys/Bool/Holds(g(false))
+            end
+        | true =>
+            #{node = Variant} /sys/Bool/True/qed()
+        end
+    end)((c2: %BoolType) => c2, true, #{node = Variant} /Read/mk(true), #{node = Variant} /sys/Bool/True/qed(), #{node = Variant} /sys/Bool/True/qed())
