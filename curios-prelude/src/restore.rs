@@ -140,4 +140,10 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
 }
 
 #[cfg(test)]
-mod tests;
+mod declaration_tests;
+#[cfg(test)]
+mod image_tests;
+#[cfg(test)]
+mod kernel_tests;
+#[cfg(test)]
+mod test_support;

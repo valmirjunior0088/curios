@@ -3,6 +3,7 @@
 mod binding;
 mod declaration;
 mod intrinsic;
+mod memo;
 mod signature;
 mod sort;
 mod structure;

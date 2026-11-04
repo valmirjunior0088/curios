@@ -80,10 +80,6 @@ fn at_sorts(verdict: &Verdict) -> Option<(&[Quality], &Error)> {
     }
 }
 
-fn nat() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
 fn zero() -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))
 }

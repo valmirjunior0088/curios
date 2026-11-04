@@ -14,10 +14,6 @@ use {
 /// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
 const COLLIDING: std::ops::Range<u64> = 0..4;
 
-fn nat() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
 /// `(x : Nat) => stray`, the function a capture turns into the identity.
 fn constant_over(stray: &Free) -> Term {
     Term::func(

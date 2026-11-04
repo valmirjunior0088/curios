@@ -4,14 +4,9 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{Definitions, Free, Global, Intrinsic, Nat, Reads, Term, Universes},
+    curios_core::{Definitions, Free, Intrinsic, Nat, Reads, Term, Universes},
     std::collections::BTreeSet,
 };
-
-fn global(symbol: &str) -> Global {
-    Global::Authored(Qualifier::from([symbol]))
-}
 
 /// `alias : Type = Nat`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => x`, `five : Nat = identity(5)`, and `four : Nat = 4`.
 fn reading_definitions() -> Definitions {

@@ -1,0 +1,243 @@
+//! What typing remembers: a node a term shares typed once, an answer kept no longer than the equations and binders it was read under, and a refused walk's typings taken back with the positions it recorded.
+
+use {
+    crate::kernel::infer::test_support::*,
+    crate::*,
+    curios_analysis::test_support::*,
+    curios_core::{Intrinsic, Nat, Term},
+};
+
+/// A local-free term's type is remembered for the declaration, so a term whose tree is exponential in its depth — a sum adding a shared subterm to itself sixty times over, the shape a reduct takes when each step mentions the one before it more than once — is typed in the size of its graph. At a depth the uncached kernel can afford, both give the same type.
+#[test]
+fn a_shared_closed_term_is_typed_once_per_node() {
+    let doubled = |depth: usize| {
+        let mut term = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        for _ in 0..depth {
+            term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+        }
+        term
+    };
+
+    assert!(infer(&mut kernel(), &doubled(60)).is_ok());
+
+    let mut uncached = Kernel::uncached(100_000, SYNTAX);
+    assert_eq!(
+        infer(&mut kernel(), &doubled(8)),
+        infer(&mut uncached, &doubled(8))
+    );
+}
+
+/// Nor does a hit replay the identities the inference it remembers minted. Each level here applies a lambda, whose binder typing opens, to a sum sharing the level below twice; replayed per hit, those identities double with every level as a memo-free kernel's would, and forty levels are past the identity space. A hit opens nothing, so the graph mints what typing each of its nodes once does, read off the identities minted on either side.
+#[test]
+fn a_shared_closed_term_mints_once_per_node() {
+    let x = binder(0, "x");
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
+    let mut term = nat(1);
+    for _ in 0..40 {
+        term = Term::apply(
+            identity.clone(),
+            [Term::intrinsic(Intrinsic::nat_add(term.clone(), term))],
+        );
+    }
+
+    let mut kernel = kernel();
+    let before = kernel.fresh(None).index();
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    let after = kernel.fresh(None).index();
+    let minted = after - before - 1;
+    assert!(minted <= 40, "minted {minted}");
+}
+
+/// A pair of the level below with itself, `depth` deep, over `base`, beside the record of its type over `base_type`.
+fn doubled_pair(base: Term, base_type: Term, depth: u32) -> (Term, Term) {
+    (0..depth).fold((base, base_type), |(value, type_), level| {
+        (
+            Term::tuple([value.clone(), value]),
+            Term::tuple_type([
+                (binder(2 * level + 100, "first"), type_.clone()),
+                (binder(2 * level + 101, "second"), type_),
+            ]),
+        )
+    })
+}
+
+/// A term naming a local is typed once per node too, for as long as what its typing read of the scope stands: sixty levels of a pair over a binder are sixty-one nodes, and inferring it answers where a walk per path does not. At a depth the uncached kernel affords, both give the same type.
+///
+/// Mutation-checked: with no type read off the scope answered, the sixty-level inference runs the budget out.
+#[test]
+fn a_shared_term_over_a_local_is_typed_once_per_node() {
+    let n = binder(0, "n");
+    let over = |mut kernel: Kernel<'static>| {
+        kernel.assume(&n, &nat_type());
+        kernel
+    };
+    let pair = |depth| doubled_pair(Term::free_var(&n), nat_type(), depth).0;
+
+    assert!(infer(&mut over(kernel()), &pair(60)).is_ok());
+    assert_eq!(
+        infer(&mut over(kernel()), &pair(8)),
+        infer(&mut over(Kernel::uncached(100_000, SYNTAX)), &pair(8)),
+    );
+}
+
+/// And under an arm, where no type was remembered at all: the same pair is typed once per node while the arm's equation stands.
+#[test]
+fn a_shared_term_under_an_arm_is_typed_once_per_node() {
+    let n = binder(0, "n");
+    let m = binder(1, "m");
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&m, &nat_type());
+
+    let inferred = kernel.scoped(|kernel| {
+        kernel
+            .refine(Term::free_var(&m), nat(0))
+            .expect("the equation records");
+        infer(kernel, &doubled_pair(Term::free_var(&n), nat_type(), 60).0)
+    });
+
+    assert!(inferred.is_ok());
+}
+
+/// A tuple checked against a record reaches no inference — the Σ rule checks each field at its entry's type — so the check itself is remembered: a pair of the level below with itself, sixty deep, checks against the record of its type in the size of the two graphs.
+///
+/// Mutation-checked: with no check read off the scope answered, it runs the budget out.
+#[test]
+fn a_shared_tuple_is_checked_once_per_node() {
+    let n = binder(0, "n");
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    let (value, type_) = doubled_pair(Term::free_var(&n), nat_type(), 60);
+
+    assert_eq!(check(&mut kernel, &value, &type_), Ok(()));
+}
+
+/// A remembered type, and a remembered check, live as long as the equations they were taken under. `f(a)` is typed only where `a`'s type converts with `f`'s domain, which holds under `n = 0` and nowhere else: refused before the arm, accepted inside it, refused after it — and the uncached kernel agrees on all three, inferring and checking.
+///
+/// Mutation-checked: with either scoped table left standing where an equation moves, its judgment accepts the term after the arm.
+#[test]
+fn a_remembered_type_does_not_outlive_the_equations_it_was_taken_under() {
+    type Judge = fn(&mut Kernel, &Term) -> bool;
+    let inferring: Judge = |kernel, term| infer(kernel, term).is_ok();
+    let checking: Judge = |kernel, term| check(kernel, term, &nat_type()).is_ok();
+
+    let sequence = |mut kernel: Kernel, judge: Judge| {
+        let n = binder(0, "n");
+        let family = binder(1, "P");
+        let f = binder(2, "f");
+        let a = binder(3, "a");
+        let x = binder(4, "x");
+        let at = |index: Term| Term::apply(Term::free_var(&family), [index]);
+
+        kernel.assume(&n, &nat_type());
+        kernel.assume(
+            &family,
+            &Term::func_type([(x, nat_type())], Term::type_ground()),
+        );
+        kernel.assume(
+            &f,
+            &Term::func_type([(x, at(Term::free_var(&n)))], nat_type()),
+        );
+        kernel.assume(&a, &at(nat(0)));
+        let term = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
+
+        let before = judge(&mut kernel, &term);
+        let inside = kernel.scoped(|kernel| {
+            kernel
+                .refine(Term::free_var(&n), nat(0))
+                .expect("the equation records");
+            judge(kernel, &term)
+        });
+        let after = judge(&mut kernel, &term);
+
+        [before, inside, after]
+    };
+
+    for judge in [inferring, checking] {
+        let cached = sequence(kernel(), judge);
+
+        assert_eq!(cached, [false, true, false]);
+        assert_eq!(cached, sequence(Kernel::uncached(100_000, SYNTAX), judge));
+    }
+}
+
+/// Nor its binder: a name assumed again at another type, once its first binder is closed, is typed at the second.
+///
+/// Mutation-checked: answering a scoped type without asking whether its binders stand types the second `h` at `Nat`.
+#[test]
+fn a_remembered_type_does_not_outlive_its_binder() {
+    let mut kernel = kernel();
+    let h = binder(0, "h");
+    let term = Term::free_var(&h);
+
+    let first = kernel.scoped(|kernel| {
+        kernel.assume(&h, &nat_type());
+        infer(kernel, &term)
+    });
+    let second = kernel.scoped(|kernel| {
+        kernel.assume(&h, &bool_type());
+        infer(kernel, &term)
+    });
+
+    assert_eq!(first, Ok(nat_type()));
+    assert_eq!(second, Ok(bool_type()));
+}
+
+/// A walk refused inside [`Kernel::tried`] leaves no position behind: what it recorded before the refusal is taken back, so the judgment after it records what that judgment records alone. The same walk in an ordinary bracket leaves the positions it recorded, and the judgment's are counted after them.
+#[test]
+fn a_refused_walk_takes_back_the_positions_it_recorded() {
+    let refused = |kernel: &mut Kernel| {
+        check(kernel, &nat_type(), &Term::type_ground())?;
+        check(kernel, &nat(0), &bool_type())
+    };
+    let judged = |kernel: &mut Kernel| {
+        check(kernel, &bool_type(), &Term::type_ground()).expect("a type is typed");
+        let (positions, failure) = kernel.take_checked();
+        assert!(failure.is_none());
+
+        positions.len()
+    };
+
+    let alone = judged(&mut kernel());
+
+    let mut tried = kernel();
+    assert!(tried.tried(refused).is_err());
+    assert_eq!(judged(&mut tried), alone);
+
+    let mut scoped = kernel();
+    assert!(scoped.scoped(refused).is_err());
+    assert!(judged(&mut scoped) > alone);
+}
+
+/// A term first typed inside a refused [`Kernel::tried`] walk is recorded where it is typed again, as fully as a term typed once. A remembered typing records the term's own position and none inside it, which its first typing recorded; the refusal takes those back, and the typing with them. The control types the term twice in an ordinary bracket, where nothing is taken back and the two typings record what one does.
+///
+/// Mutation-checked: with the typings kept past a refusal, the lambda typed again records no position.
+#[test]
+fn a_term_typed_in_a_refused_walk_is_recorded_when_typed_again() {
+    let x = binder(0, "x");
+    let term = Term::func([(x, nat_type())], Term::free_var(&x));
+    let judged = |kernel: &mut Kernel| {
+        infer(kernel, &term).expect("the lambda types");
+        let (positions, failure) = kernel.take_checked();
+        assert!(failure.is_none());
+
+        positions.len()
+    };
+
+    let alone = judged(&mut kernel());
+    assert!(alone > 0, "the lambda's domain is a type position");
+
+    let mut tried = kernel();
+    let refused = tried.tried(|kernel| {
+        infer(kernel, &term)?;
+        check(kernel, &nat(0), &bool_type())
+    });
+    assert!(refused.is_err());
+    assert_eq!(judged(&mut tried), alone);
+
+    let mut scoped = kernel();
+    scoped
+        .scoped(|kernel| infer(kernel, &term))
+        .expect("the lambda types");
+    assert_eq!(judged(&mut scoped), alone);
+}

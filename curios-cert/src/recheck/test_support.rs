@@ -7,15 +7,20 @@
 use {
     crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Plicity, Qualifier, SyntaxRegistry},
+    curios_analysis::test_support::SYNTAX,
+    curios_common::{Candidates, Plicity, Qualifier, SyntaxRegistry},
     curios_core::{
-        Atom, Certification, Definition, DefinitionKind, Definitions, Entrypoint, Free, Func,
-        FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat, Nominal,
-        Places, Polarity, Program, RecGroup, RecItem, Scope, StructDecl, StructType, Subterm,
-        Telescope, Term, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseParam, Universes, Variance, test_support::*,
+        Atom, Certification, Certified, Definition, DefinitionKind, Definitions, Entrypoint, Free,
+        Func, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat,
+        Nominal, Places, Polarity, Program, Reads, RecGroup, RecItem, Scope, StructDecl,
+        StructType, Subterm, Telescope, Term, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
+        test_support::*,
     },
-    std::{collections::BTreeMap, sync::Arc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 /// A top-level definition, as `recheck_definitions_verdicts` binds one.
@@ -4096,4 +4101,196 @@ pub(super) fn fixture_certified(
     let (definitions, entry) = fixture.parts();
 
     super::verdicts_from(Kernel::new(budget, syntax), definitions, entry, globals)
+}
+
+pub(super) const BUDGET: u64 = 1_000_000;
+
+pub(super) fn global(symbol: &str) -> Global {
+    Global::Authored(Qualifier::from([symbol]))
+}
+
+pub(super) fn nat() -> Term {
+    Term::intrinsic(Intrinsic::NatType)
+}
+
+pub(super) fn literal(n: usize) -> Term {
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
+}
+
+/// `alias : Type = <alias>`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => <returned>`, and `five : Nat = identity(5)`: `three` unfolds `alias`, and `five` types `identity` and unfolds nothing.
+pub(super) fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definitions {
+    let x = Free::local(10, Some("x"));
+
+    Definitions {
+        items: vec![
+            authored(&global("alias"), Term::type_ground(), alias),
+            authored(
+                &global("three"),
+                Term::instance(global("alias"), Universes::default()),
+                literal(3),
+            ),
+            authored(
+                &global("identity"),
+                Term::func_type([(x, nat())], nat()),
+                Term::func([(x, nat())], returned(&x)),
+            ),
+            authored(
+                &global("five"),
+                nat(),
+                Term::apply(
+                    Term::instance(global("identity"), Universes::default()),
+                    [literal(5)],
+                ),
+            ),
+        ]
+        .into(),
+    }
+}
+
+/// The module every fixture here is an edit of: `alias` is `Nat` and `identity` returns its argument.
+pub(super) fn written() -> Definitions {
+    reading_definitions(nat(), Term::free_var)
+}
+
+/// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
+pub(super) fn walked(definitions: &Definitions) -> Rechecked {
+    let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);
+    assert_eq!(rechecked.verdicts, Vec::new());
+
+    rechecked
+}
+
+/// `module` walked over `baseline` as `certification` records it.
+pub(super) fn walked_over(
+    definitions: &Definitions,
+    baseline: &Definitions,
+    certification: &Certification,
+) -> Rechecked {
+    walked_among(definitions, baseline, certification, None)
+}
+
+/// [`walked_over`], taking what it can from what `store` holds.
+pub(super) fn walked_among(
+    definitions: &Definitions,
+    baseline: &Definitions,
+    certification: &Certification,
+    store: Option<&dyn Candidates>,
+) -> Rechecked {
+    let (places, now) = (Places::of(baseline), Places::of(definitions));
+    let globals = Globals::default();
+
+    super::verdicts_into(
+        &mut Kernel::new(BUDGET, SYNTAX),
+        definitions,
+        None,
+        &globals,
+        Some(super::Over {
+            baseline: Baseline {
+                definitions: baseline,
+                places: &places,
+                certification,
+            },
+            places: &now,
+            candidates: store,
+        }),
+    )
+}
+
+/// `certification` with `symbol`'s entry replaced by `entry`'s answer for it.
+pub(super) fn doctored(
+    certification: &Certification,
+    symbol: &str,
+    entry: impl Fn(Certified) -> Certified,
+) -> Certification {
+    Certification::of(
+        certification.iter().map(|(name, totality)| {
+            let certified = Certified {
+                totality,
+                reads: certification
+                    .reads(name)
+                    .cloned()
+                    .expect("a record holds the reads of every definition it classifies"),
+            };
+
+            match *name == global(symbol) {
+                true => (*name, entry(certified)),
+                false => (*name, certified),
+            }
+        }),
+        [],
+        [],
+        [],
+    )
+}
+
+/// A record of `written` in which `five` is marked: its reads hold `alias`'s signature, which no judgment of `five` reads. A walk that hands the mark back adopted the entry, and one that judged `five` filed its own reads in its place.
+pub(super) fn marked() -> Certification {
+    doctored(&walked(&written()).certification, "five", |certified| {
+        Certified {
+            reads: Reads {
+                signatures: BTreeSet::from([global("identity"), global("alias")]),
+                bodies: BTreeSet::new(),
+            },
+            ..certified
+        }
+    })
+}
+
+/// `module` with its items held as a version's: a module made of it by replacing an item shares every other item with it, as a recompile's module shares the ones it kept with its baseline's.
+pub(super) fn versioned(definitions: Definitions) -> Definitions {
+    Definitions {
+        items: definitions.items.version(),
+    }
+}
+
+/// `module`, a version, with the item declaring `name` replaced by `item`.
+pub(super) fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definitions {
+    let place = Places::of(definitions)
+        .place(&global(name))
+        .expect("the module declares the name")
+        .item();
+    let mut items = definitions.items.clone();
+    items.replace(place, item);
+
+    Definitions { items }
+}
+
+/// `Type 5`, `Type 4` and `Type 0` as hand-built universes.
+pub(super) fn type_at(level: u32) -> Term {
+    Term::type_at(Level::constant(level))
+}
+
+/// `name : type_ = body`, stating the sort `value_sort` its value inhabits ([`curios_core::Definition::value_sort`]): the field a type alias carries and the one `read_digest` leaves out.
+pub(super) fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
+    match authored(name, type_, body) {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
+            value_sort: Some(value_sort),
+            ..*definition
+        })),
+        item => item,
+    }
+}
+
+/// Three aliases in a chain, each saying the sort its value inhabits: `H : Type 5 = h_body` saying `h`, `K : Type 5 = H` saying `k`, and `L : Type 5 = K` saying `l`.
+///
+/// The walk states `L`'s value sort by `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so what it states of `L` is a function of what it stated of `K` and of nothing else about `K`, and nothing the module says of a sort.
+pub(super) fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
+    Definitions {
+        items: vec![
+            aliased(&global("H"), type_at(5), h_body, h),
+            aliased(
+                &global("K"),
+                type_at(5),
+                Term::instance(global("H"), Universes::default()),
+                k,
+            ),
+            aliased(
+                &global("L"),
+                type_at(5),
+                Term::instance(global("K"), Universes::default()),
+                l,
+            ),
+        ]
+        .into(),
+    }
 }

@@ -45,6 +45,8 @@ mod scope_tests;
 #[cfg(test)]
 mod sort_tests;
 #[cfg(test)]
+mod standing_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod totality_tests;
