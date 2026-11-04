@@ -141,9 +141,9 @@ pub(crate) struct Program {
 /// The version of a program a run needs.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Pin {
-    /// This version and no other, as a formatter's, whose output moves between releases, or a generator matching a crate.
+    /// This version and no other: `version = "2.6.2"`.
     Exact(String),
-    /// This version or a later one.
+    /// This version or a later one: `version = ">= 22"`.
     Minimum(String),
 }
 
@@ -932,17 +932,17 @@ fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Refusal> {
         .collect()
 }
 
-/// The program `item` declares: a `version` it must be or a `minimum` it must reach, and the command that installs it, `{version}` in it the pin.
+/// The program `item` declares: the `version` it must be, or reach where `>=` leads it, and the command that installs it, `{version}` in it the version's numbers.
 fn program_of(file: &File<'_>, item: &Item) -> Result<Program, Refusal> {
     let table = item.as_table_like().ok_or_else(|| {
         file.refuse(
             item.span(),
-            "a program is a table of its `version` or `minimum` and its `install`".to_string(),
+            "a program is a table of its `version` and its `install`".to_string(),
         )
     })?;
     if let Some((key, _)) = table
         .iter()
-        .find(|(key, _)| !["version", "minimum", "install"].contains(key))
+        .find(|(key, _)| !["version", "install"].contains(key))
     {
         return Err(file.refuse(
             table.key(key).and_then(|key| key.span()),
@@ -956,17 +956,13 @@ fn program_of(file: &File<'_>, item: &Item) -> Result<Program, Refusal> {
             .transpose()
     };
 
-    let pin = match (text("version")?, text("minimum")?) {
-        (Some(version), None) => Some(Pin::Exact(version)),
-        (None, Some(minimum)) => Some(Pin::Minimum(minimum)),
-        (None, None) => None,
-        (Some(_), Some(_)) => {
-            return Err(file.refuse(
-                item.span(),
-                "a program is pinned at a `version` or a `minimum`, not both".to_string(),
-            ));
-        }
-    };
+    let written = text("version")?;
+    let pin = written
+        .as_deref()
+        .map(|version| match version.strip_prefix(">=") {
+            Some(minimum) => Pin::Minimum(minimum.trim_start().to_string()),
+            None => Pin::Exact(version.to_string()),
+        });
     if let Some(pin) = &pin
         && !pin.version().split('.').all(|part| {
             !part.is_empty() && part.chars().all(|character| character.is_ascii_digit())
@@ -975,8 +971,8 @@ fn program_of(file: &File<'_>, item: &Item) -> Result<Program, Refusal> {
         return Err(file.refuse(
             item.span(),
             format!(
-                "a pin is numbers between dots, and `{}` is not",
-                pin.version()
+                "a version is numbers between dots, after `>=` for a minimum, and `{}` is not",
+                written.unwrap_or_default()
             ),
         ));
     }
