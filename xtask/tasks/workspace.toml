@@ -19,21 +19,29 @@ run = [
 
 [lint.biome-format]
 description = "Fail on formatting drift in the JavaScript, JSON and CSS the workspace holds"
-run = [["biome", "format", "{web}"]]
+run = [
+    ["biome", "format", "{web}"],
+]
 
 [lint.clippy]
 description = "Lint every target of the workspace as it ships, which elaborates, erases and certifies the whole standard library; alone refuses a loop over a hash's order"
 consumes = ["launcher.binary"]
-run = [["cargo", "clippy", "{shipped}", "--all-targets", "--keep-going"]]
+run = [
+    ["cargo", "clippy", "{shipped}", "--all-targets", "--keep-going"],
+]
 
 [lint.biome-lint]
 description = "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet"
-run = [["biome", "lint", "--error-on-warnings", "{web}"]]
+run = [
+    ["biome", "lint", "--error-on-warnings", "{web}"],
+]
 
 [test.suite]
 description = "Run the workspace's tests as it ships, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote"
 consumes = ["launcher.binary"]
-run = [["cargo", "nextest", "run", "{shipped}", "--all-targets", "--no-fail-fast", "--no-tests=warn", "{expression}"]]
+run = [
+    ["cargo", "nextest", "run", "{shipped}", "--all-targets", "--no-fail-fast", "--no-tests=warn", "{expression}"],
+]
 
 [test.binaryen-cache]
 description = "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash"

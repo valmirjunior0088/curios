@@ -3,8 +3,12 @@ description = "The workspace with every feature on"
 [lint]
 description = "Lint the workspace with every feature on; alone compiles the instrumentation a feature turns on"
 consumes = ["launcher.binary"]
-run = [["cargo", "clippy", "{workspace.shipped}", "--all-targets", "--all-features", "--keep-going"]]
+run = [
+    ["cargo", "clippy", "{workspace.shipped}", "--all-targets", "--all-features", "--keep-going"],
+]
 
 [test]
 description = "Run the recorder's tests, which `curios-profile` compiles under its `enabled` feature alone: a build of that one crate, which depends on nothing of the compiler"
-run = [["cargo", "nextest", "run", "--package", "curios-profile", "--features", "enabled", "--no-fail-fast"]]
+run = [
+    ["cargo", "nextest", "run", "--package", "curios-profile", "--features", "enabled", "--no-fail-fast"],
+]

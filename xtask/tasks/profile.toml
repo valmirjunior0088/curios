@@ -25,4 +25,6 @@ run = [
 [prelude]
 description = "Run the prelude's build under a recorder, its stream filed where the program says, and fold what it filed"
 # A program is asked, and no build is: a build script takes no argument, so the prelude's work runs again in a program beside it, in release, the level a build script's copy is compiled at.
-run = [["cargo", "run", "--release", "--package", "curios-prelude", "--bin", "profile-prelude", "--features", "profile"]]
+run = [
+    ["cargo", "run", "--release", "--package", "curios-prelude", "--bin", "profile-prelude", "--features", "profile"],
+]

@@ -3,21 +3,29 @@ description = "The Zed extension, a workspace of its own"
 [lint.rustfmt]
 description = "Fail on formatting drift in the Zed extension"
 dir = "editors/zed"
-run = [["cargo", "fmt", "--all", "--", "--check"]]
+run = [
+    ["cargo", "fmt", "--all", "--", "--check"],
+]
 
 [lint.clippy]
 description = "Lint every target of the Zed extension, for the target Zed loads"
 dir = "editors/zed"
-run = [["cargo", "clippy", "--all-targets", "--target", "wasm32-wasip2"]]
+run = [
+    ["cargo", "clippy", "--all-targets", "--target", "wasm32-wasip2"],
+]
 
 [build]
 description = "Link the Zed extension into the wasm32-wasip2 component Zed loads, which the lint's check build and the test's host build never do"
 dir = "editors/zed"
-run = [["cargo", "build", "--release", "--target", "wasm32-wasip2"]]
+run = [
+    ["cargo", "build", "--release", "--target", "wasm32-wasip2"],
+]
 
 [test]
 description = "Hold the Zed extension to the tree around it: the grammar revisions it pins publish these grammars, and its lints are the workspace's"
 # It hashes the grammar where `extension.toml` says Zed installs it from, a path it states rather than one it is handed.
 dir = "editors/zed"
 consumes = ["grammar.parser"]
-run = [["cargo", "test"]]
+run = [
+    ["cargo", "test"],
+]

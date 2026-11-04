@@ -2,8 +2,12 @@ description = "The jig's own crates, whose names start with x: these task files'
 
 [lint]
 description = "Lint every target of the jig's crates, which the compiler's lint leaves out so that their dependencies give the compiler no feature it ships without"
-run = [["cargo", "clippy", "--package", "x*", "--all-targets", "--keep-going"]]
+run = [
+    ["cargo", "clippy", "--package", "x*", "--all-targets", "--keep-going"],
+]
 
 [test]
 description = "Run the jig's tests: these task files held to the command line and the check workflow, the runner's own, the bench's and the board's"
-run = [["cargo", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"]]
+run = [
+    ["cargo", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
+]

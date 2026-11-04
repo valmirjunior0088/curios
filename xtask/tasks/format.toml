@@ -9,9 +9,13 @@ run = [
 
 [web]
 description = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
-run = [["biome", "format", "--write", "."]]
+run = [
+    ["biome", "format", "--write", "."],
+]
 
 [zed]
 description = "Format the Zed extension, a workspace of its own"
 dir = "editors/zed"
-run = [["cargo", "fmt", "--all"]]
+run = [
+    ["cargo", "fmt", "--all"],
+]

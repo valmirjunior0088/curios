@@ -11,4 +11,6 @@ run = [
 [test]
 description = "Run a compiled program under a JavaScript engine, against the browser harness's own host"
 consumes = ["bindings"]
-run = [["CURIOS_JS={bindings}", "node", "--test", "curios-browser/src/harness.test.mjs"]]
+run = [
+    ["CURIOS_JS={bindings}", "node", "--test", "curios-browser/src/harness.test.mjs"],
+]

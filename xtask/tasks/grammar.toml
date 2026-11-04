@@ -4,25 +4,35 @@ description = "The tree-sitter grammars"
 description = "Install the grammar's tools from its lock file, exactly, as every run that reads them does"
 dir = "editors/grammar"
 produces.installed = "editors/grammar/node_modules"
-run = [["npm", "clean-install"]]
+run = [
+    ["npm", "clean-install"],
+]
 
 [lint.biome-format]
 description = "Fail on formatting drift in the grammar's JavaScript and JSON"
-run = [["biome", "format", "editors/grammar"]]
+run = [
+    ["biome", "format", "editors/grammar"],
+]
 
 [lint.biome-lint]
 description = "Lint the grammar's JavaScript and JSON"
-run = [["biome", "lint", "--error-on-warnings", "editors/grammar"]]
+run = [
+    ["biome", "lint", "--error-on-warnings", "editors/grammar"],
+]
 
 [build]
 description = "Generate the parsers from the grammars, the program's into `src/` and Core text's into `core/src/`, where the repository commits them"
 dir = "editors/grammar"
 consumes = ["installed"]
 produces.parser = "editors/grammar/src"
-run = [["npm", "run", "generate"]]
+run = [
+    ["npm", "run", "generate"],
+]
 
 [test]
 description = "Regenerate the parsers and refuse drift from the committed ones, then parse the standard library, the corpus and the board's Core text"
 dir = "editors/grammar"
 consumes = ["installed"]
-run = [["npm", "test"]]
+run = [
+    ["npm", "test"],
+]

@@ -2,8 +2,12 @@ description = "The native host alone, for a machine that checks only it, as the 
 
 [lint]
 description = "Lint every target of the native host as it ships: a build of that one crate, which embeds no launcher"
-run = [["cargo", "clippy", "--package", "curios-native", "--all-targets", "--keep-going"]]
+run = [
+    ["cargo", "clippy", "--package", "curios-native", "--all-targets", "--keep-going"],
+]
 
 [test]
 description = "Run the native host's tests as it ships: a build of that one crate"
-run = [["cargo", "nextest", "run", "--package", "curios-native", "--all-targets", "--no-fail-fast", "--no-tests=warn"]]
+run = [
+    ["cargo", "nextest", "run", "--package", "curios-native", "--all-targets", "--no-fail-fast", "--no-tests=warn"],
+]
