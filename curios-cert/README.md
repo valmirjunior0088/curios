@@ -82,6 +82,14 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 **Rejected.** Judging at the parameter with an answer for each reader, which is the elaborator's own check: the decision's reason. One budget across the assignments, under which what a declaration costs to accept follows how many sorts it leaves.
 
+### A held attack the elaborator refuses first is written as Core text
+
+**Decision.** A module put to the kernel because the elaborator refuses its source before a module exists is written as Core text in the test that puts it, read with nothing in scope and judged under the registry stand-in (`recheck::test_support::core_text_verdicts`, as `recheck::positivity_tests` puts its families): the text declares every name it uses, the propositions the registry names among them.
+
+**Rationale.** A held attack is a refusal and not a proof of `False`, so it needs no prelude, and a text names what it builds the way a reader writes it, where a module spelled in this crate's constructors is read only as Rust and rots with the representation it spells.
+
+**Rejected.** The prelude in scope, which a refusal does not need and this crate's suites cannot reach. A module built in `curios-core`'s constructors, which rots with the representation it spells.
+
 ### The universe decisions are the kernel's
 
 **Decision.** The two decisions over a universe constraint set — the level entailment oracle (`entails`) and satisfiability (`satisfiable`) — sit in this crate rather than with the shared analyses.

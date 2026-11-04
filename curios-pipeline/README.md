@@ -27,3 +27,11 @@ The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and t
 **Rationale.** A baseline crosses the seam as the one thing the fold understands, a `Unit`, never a path or a record, and which commands take one is written in one place: a build takes one because the store's cache answers, and nothing of the fold says so.
 
 **Rejected.** A `baselines` parameter on `compile_units`, a second seam for the same fact; deciding by entry point, when `wonder --stage` and `curios test` reach the fold through the same ones.
+
+### The puts are this crate's, behind `test-support`
+
+**Decision.** What hands a program or a module to the checkers as an instrument, rather than building it, sits in `test_support` behind `test-support`. `examine_with_prelude` puts a program whole to both checkers at the tail it is handed — the program contract, as a suite guarding a rule puts one, or `False`, as the soundness board puts a witness — and hands back the elaborator's error, its reported obligations and the kernel's verdicts; `typecheck_with_prelude` and `recheck_with_prelude` are its two halves. `compile_read` compiles a unit read from Core text where a program's is lowered and elaborated, over the baseline the store offers, judged as a recompile is. `prelude_form_scope` is the scope Core text is read over in front of the prelude. The instruments beneath, `examine_entrypoint` and `typecheck_entrypoint`, take the predecessors they are handed.
+
+**Rationale.** This is the lowest crate that puts a program over the prelude, so the board's puts and the rules' tests in `curios` are one function, and a ticket and a rule test cannot disagree on what refused a program and where. Behind a feature, no build that ships holds an instrument.
+
+**Rejected.** A put per consumer, which states twice how a refusal is read. A put in the board's crate, which a test of `curios` cannot reach.
