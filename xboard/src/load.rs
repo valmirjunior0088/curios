@@ -1,12 +1,15 @@
 //! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for its title, its day is one the calendar has, its status is `open` or `fixed`, a witness's text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for its title, its day is one the calendar has, its status is `open` or `fixed`, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Checker, Date, Expected, Part, Proof, Status, Ticket, Within, Witness},
+    crate::{Checker, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness},
+    curios_common::Qualifier,
+    curios_core::Global,
+    curios_verdict::test_support::Written,
     serde::Deserialize,
     std::collections::{BTreeMap, BTreeSet},
     toml::value::Datetime,
@@ -32,14 +35,26 @@ struct TicketRecord {
     witness: Vec<WitnessRecord>,
 }
 
-/// A witness's entry in its ticket's record.
+/// A witness's entry in its ticket's record: its proof's file, or the steps of its history, the last of them its proof's.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WitnessRecord {
     what: String,
     /// The file of the ticket's directory its text is.
-    source: String,
+    source: Option<String>,
+    #[serde(default)]
+    step: Vec<StepRecord>,
     refused: Vec<RefusedRecord>,
+}
+
+/// One step of a witness's history: a unit, by the path it is mounted at and its file; a record withheld, by the unit's path and the names withheld, all of them where none is listed; or the proof, its file alone.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StepRecord {
+    mount: Option<String>,
+    source: Option<String>,
+    withhold: Option<String>,
+    verdicts: Option<Vec<String>>,
 }
 
 /// One refusal a witness expects.
@@ -128,47 +143,54 @@ pub(crate) fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Resu
     let witnesses = witness
         .into_iter()
         .map(|record| {
-            let text = files.get(record.source.as_str()).ok_or_else(|| {
-                in_record(format!(
-                    "no file `{}` holds a witness's text",
-                    record.source
-                ))
-            })?;
-            if !put.insert(record.source.clone()) {
-                return Err(in_record(format!(
-                    "`{}` is put by two witnesses",
-                    record.source
-                )));
-            }
-            let proof = match record.source.rsplit_once('.') {
-                Some((_, "crs")) => Proof::Program(text.to_string()),
-                Some((_, "crsc")) => Proof::Module(text.to_string()),
-                _ => {
-                    return Err(in_record(format!(
-                        "`{}` is neither a program, `.crs`, nor Core text, `.crsc`",
-                        record.source
-                    )));
+            let mut read = BTreeSet::new();
+            let mut text = |source: &str| {
+                read.insert(source.to_string());
+                text_of(files, source)
+            };
+            let (steps, proof) = match (record.source, record.step) {
+                (Some(source), steps) if steps.is_empty() => (Vec::new(), proof_of(text(&source)?)),
+                (None, steps) if !steps.is_empty() => history(steps, &mut text)?,
+                (Some(_), _) => {
+                    return Err(format!(
+                        "the witness `{}` states its `source` or its steps, not both",
+                        record.what
+                    ));
+                }
+                (None, _) => {
+                    return Err(format!(
+                        "the witness `{}` states its `source` or its steps",
+                        record.what
+                    ));
                 }
             };
+            if let Some(shared) = read.iter().find(|source| put.contains(*source)) {
+                return Err(format!("`{shared}` is put by two witnesses"));
+            }
+            put.extend(read);
+
+            let witness = Witness {
+                what: record.what,
+                steps,
+                proof,
+                expect: Vec::new(),
+            };
             if record.refused.is_empty() {
-                return Err(in_record(format!(
-                    "the witness of `{}` states what refuses it",
-                    record.source
-                )));
+                return Err(format!(
+                    "the witness `{}` states what refuses it",
+                    witness.what
+                ));
             }
             let expect = record
                 .refused
                 .into_iter()
-                .map(|refused| expected(refused, &proof).map_err(in_record))
+                .map(|refused| expected(refused, &witness))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(Witness {
-                what: record.what,
-                proof,
-                expect,
-            })
+            Ok(Witness { expect, ..witness })
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, String>>()
+        .map_err(in_record)?;
 
     if let Some(stray) = files
         .keys()
@@ -185,11 +207,131 @@ pub(crate) fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Resu
     })
 }
 
-/// The refusal `record` expects of a witness put as `proof`.
-fn expected(record: RefusedRecord, proof: &Proof) -> Result<Expected, String> {
+/// The text the file `source` of a ticket's directory holds, with what it is written in, read off its extension.
+fn text_of<'f>(
+    files: &BTreeMap<&str, &'f str>,
+    source: &str,
+) -> Result<(Written, &'f str), String> {
+    let text = files
+        .get(source)
+        .ok_or_else(|| format!("no file `{source}` holds a witness's text"))?;
+    match source.rsplit_once('.') {
+        Some((_, "crs")) => Ok((Written::Program, text)),
+        Some((_, "crsc")) => Ok((Written::CoreText, text)),
+        _ => Err(format!(
+            "`{source}` is neither a program, `.crs`, nor Core text, `.crsc`"
+        )),
+    }
+}
+
+/// The proof a text is, by what it is written in.
+fn proof_of((written, text): (Written, &str)) -> Proof {
+    match written {
+        Written::Program => Proof::Program(text.to_string()),
+        Written::CoreText => Proof::Module(text.to_string()),
+    }
+}
+
+/// The steps a history's records state before its last, and the proof its last puts, each text read through `text`.
+fn history<'f>(
+    records: Vec<StepRecord>,
+    text: &mut impl FnMut(&str) -> Result<(Written, &'f str), String>,
+) -> Result<(Vec<Step>, Proof), String> {
+    let shape = "a step is a unit, `mount` and `source`; a record withheld, `withhold` and its `verdicts` where it withholds some; or the proof, `source` alone";
+    let mut records = records;
+    let last = records.pop().expect("a history states a step");
+    let proof = match last {
+        StepRecord {
+            mount: None,
+            source: Some(source),
+            withhold: None,
+            verdicts: None,
+        } => proof_of(text(&source)?),
+        _ => {
+            return Err(
+                "a history closes with its proof, a step with a `source` and no `mount`"
+                    .to_string(),
+            );
+        }
+    };
+    if records.is_empty() {
+        return Err("a history of its proof alone is a witness's `source`".to_string());
+    }
+
+    let mut mounted = BTreeSet::new();
+    let steps = records
+        .into_iter()
+        .map(|record| match record {
+            StepRecord {
+                mount: Some(mount),
+                source: Some(source),
+                withhold: None,
+                verdicts: None,
+            } => {
+                let mount = mount_of(&mount)?;
+                let (written, text) = text(&source)?;
+                mounted.insert(mount.clone());
+
+                Ok(Step::Unit {
+                    mount,
+                    written,
+                    text: text.to_string(),
+                })
+            }
+            StepRecord {
+                mount: None,
+                source: None,
+                withhold: Some(withheld),
+                verdicts,
+            } => {
+                let mount = mount_of(&withheld)?;
+                if !mounted.contains(&mount) {
+                    return Err(format!("`{withheld}` is withheld before a step mounts it"));
+                }
+                let names = verdicts
+                    .map(|verdicts| verdicts.iter().map(|path| name_of(path)).collect())
+                    .transpose()?;
+
+                Ok(Step::Withhold { mount, names })
+            }
+            StepRecord {
+                mount: None,
+                source: Some(_),
+                withhold: None,
+                verdicts: None,
+            } => Err("only a history's last step is its proof".to_string()),
+            _ => Err(shape.to_string()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok((steps, proof))
+}
+
+/// The mount a step's path names, `/lib` mounting `lib`: a path of one name.
+fn mount_of(path: &str) -> Result<String, String> {
+    match path.strip_prefix('/') {
+        Some(name) if !name.is_empty() && !name.contains('/') => Ok(name.to_string()),
+        _ => Err(format!(
+            "`{path}` is no path of one name a unit is mounted at"
+        )),
+    }
+}
+
+/// The declaration an absolute path names.
+fn name_of(path: &str) -> Result<Global, String> {
+    match path.strip_prefix('/') {
+        Some(rest) if !rest.is_empty() && rest.split('/').all(|part| !part.is_empty()) => {
+            Ok(Global::Authored(Qualifier::from(rest.split('/'))))
+        }
+        _ => Err(format!("`{path}` is no declaration's absolute path")),
+    }
+}
+
+/// The refusal `record` expects of `witness`.
+fn expected(record: RefusedRecord, witness: &Witness) -> Result<Expected, String> {
     let RefusedRecord { by, error, within } = record;
-    if !proof.asked().contains(&by) {
-        return Err(format!("a {} is not put to the {by}", proof.kind()));
+    if !witness.asked().contains(&by) {
+        return Err(format!("a {} is not put to the {by}", witness.kind()));
     }
     let error = error
         .map(|name| {

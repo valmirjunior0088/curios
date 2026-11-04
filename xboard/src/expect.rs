@@ -96,7 +96,7 @@ impl Witness {
                 let asked = expected.by != Checker::Kernel || answer.kernel_asked();
                 let nearest = refusals
                     .iter()
-                    .find(|refusal| refusal.by() == expected.by)
+                    .find(|refusal| refusal.by() == Some(expected.by))
                     .unwrap_or(first);
 
                 match asked {

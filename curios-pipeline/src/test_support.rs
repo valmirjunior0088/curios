@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        Earlier, Examined, Over, Refused, Typechecked, examine_entrypoint, globals_after, recheck,
-        recheck_measured, recheck_over, typecheck_entrypoint,
+        Earlier, Over, Refused, Typechecked, globals_after, recheck, recheck_measured,
+        recheck_over, typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
     curios_cert::{Verdict, certify_definitions},
@@ -96,23 +96,6 @@ pub fn typecheck_with_prelude(
 ) -> Result<Typechecked, Refused> {
     with_prelude(|prelude| {
         typecheck_entrypoint(
-            budget,
-            Predecessors::over(prelude),
-            &SYNTAX,
-            entrypoint,
-            loader,
-        )
-    })
-}
-
-/// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`].
-pub fn examine_with_prelude(
-    budget: u64,
-    entrypoint: &curios_surface::Entrypoint,
-    loader: &curios_module::RootSource,
-) -> Result<Examined, Refused> {
-    with_prelude(|prelude| {
-        examine_entrypoint(
             budget,
             Predecessors::over(prelude),
             &SYNTAX,

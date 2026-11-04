@@ -88,7 +88,7 @@ impl<'b> Row<'b> {
         let answers = ticket
             .witnesses
             .iter()
-            .map(|witness| witness.proof.answer())
+            .map(Witness::answer)
             .collect::<Vec<_>>();
         let standing = standing(ticket.status, &ticket.witnesses, &answers);
 

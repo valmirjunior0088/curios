@@ -18,8 +18,12 @@ curios-common = { workspace = true, features = ["test-support"] }
 curios-cert = { workspace = true, features = ["test-support"] }
 # The error a witness expects of the elaborator, and every one's name.
 curios-elab = { workspace = true, features = ["test-support"] }
-# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope, read over the prelude's declarations.
+# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel, over the units in scope.
 curios-pipeline = { workspace = true, features = ["test-support"] }
+# A witness's history: its steps walked over a store of their own, and the units in scope its proof is put over.
+curios-verdict = { workspace = true, features = ["test-support"] }
+# The units in scope, as the history hands them to the proof's put.
+curios-unit = { workspace = true }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
 # The program a witness's text is parsed as, the reader that makes a module of one written as Core text and the name of each of its refusals, and the spelling a kernel's refusal is printed in.

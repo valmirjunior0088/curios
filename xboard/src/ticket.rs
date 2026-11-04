@@ -2,6 +2,8 @@
 
 use {
     crate::{Checker, Date, Expected},
+    curios_core::Global,
+    curios_verdict::test_support::Written,
     serde::Deserialize,
     std::fmt,
 };
@@ -38,22 +40,82 @@ pub(crate) struct Ticket {
     pub(crate) witnesses: Vec<Witness>,
 }
 
-/// One term put to the checkers at `False` on every run. Admitted, it is the flaw; refused as it expects, it is what holds the flaw shut.
+/// One term put to the checkers at `False` on every run, at the end of a history: the steps it states walked over a store of their own, then the proof put over the prelude and every unit they compiled. Admitted, it is the flaw; refused as it expects, it is what holds the flaw shut.
 #[derive(Debug)]
 pub(crate) struct Witness {
     /// What is being put, in a few words.
     pub(crate) what: String,
+    /// The steps walked before the proof is put: none where it is put over the prelude alone.
+    pub(crate) steps: Vec<Step>,
     pub(crate) proof: Proof,
     /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass.
     pub(crate) expect: Vec<Expected>,
 }
 
-/// The proof of `False` a witness alleges, by its text and the form it is written in, which says how it is put. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
+/// One step of a witness's history, walked as `curios_verdict::test_support::History` walks it.
+#[derive(Debug, Clone)]
+pub(crate) enum Step {
+    /// The unit claiming `mount` stepped to `text`, written as `written`, and every unit built: compiled over its earlier step where it had one, as a recompile is over its baseline.
+    Unit {
+        mount: String,
+        written: Written,
+        text: String,
+    },
+    /// What the record of the unit claiming `mount` states of `names`, or all of it where they are none, withheld from the store, so every later build mounts the unit without it.
+    Withhold {
+        mount: String,
+        names: Option<Vec<Global>>,
+    },
+}
+
+impl Step {
+    /// What the step is put to: the checkers of the text it compiles, and the kernel for a record withheld, which is whose judgment a later build makes of it.
+    fn asked(&self) -> &'static [Checker] {
+        match self {
+            Step::Unit {
+                written: Written::Program,
+                ..
+            } => &[Checker::Elaborator, Checker::Kernel],
+            Step::Unit {
+                written: Written::CoreText,
+                ..
+            } => &[Checker::Reader, Checker::Kernel],
+            Step::Withhold { .. } => &[Checker::Kernel],
+        }
+    }
+}
+
+impl Witness {
+    /// The form it is put as, as a report shows it: a history where steps come before the proof, and the proof's form otherwise.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self.steps.is_empty() {
+            true => self.proof.kind(),
+            false => "history",
+        }
+    }
+
+    /// What any step of it is put to, the proof's included, in the order a program meets them.
+    pub(crate) fn asked(&self) -> Vec<Checker> {
+        let asked = self
+            .steps
+            .iter()
+            .flat_map(|step| step.asked().iter().copied())
+            .chain(self.proof.asked())
+            .collect::<Vec<_>>();
+
+        [Checker::Elaborator, Checker::Reader, Checker::Kernel]
+            .into_iter()
+            .filter(|checker| asked.contains(checker))
+            .collect()
+    }
+}
+
+/// The proof of `False` a witness alleges, by its text and the form it is written in, which says how it is put, over the units in scope: the prelude, and every unit its history compiled after it. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
 #[derive(Debug, Clone)]
 pub(crate) enum Proof {
     /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the kernel over the module it built.
     Program(String),
-    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the prelude, and put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
+    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the units in scope, and put to the kernel alone with them in scope, through the walk a compilation puts a program to.
     Module(String),
 }
 
@@ -77,12 +139,7 @@ impl Proof {
 /// How a witness reads on the board: the form of its proof, what it puts, and what refuses it.
 impl fmt::Display for Witness {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{:<7}  {} — refused by ",
-            self.proof.kind(),
-            self.what
-        )?;
+        write!(formatter, "{:<7}  {} — refused by ", self.kind(), self.what)?;
 
         for (index, expected) in self.expect.iter().enumerate() {
             if index > 0 {

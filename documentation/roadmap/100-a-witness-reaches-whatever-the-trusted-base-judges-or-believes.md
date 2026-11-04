@@ -73,13 +73,6 @@ Settled 2026-11-03.
 
 Each stage lands under `cargo xtask workspace format` and `cargo xtask workspace lint` and the checks it names; the whole gate runs once at the end. Every reference to a path or a name a stage moves is updated in that stage.
 
-### 4. Histories and withholding
-
-- First, what a unit compiled from Core text holds where `Unit::new` takes the lowering of its text: what reads a unit's lowering after its walk decides between an absent lowering and a stage of its own, and the stage stops for a decision where neither is clean.
-- `curios-pipeline` gains, under `test-support`, the seam where a Core-text step enters the fold in place of its lowering and elaboration; `curios-verdict` the put of a history over a store in a temporary directory, a step's withheld record written into it; a witness's steps in its `metadata.toml`; `probe` reading a history's directory. The board's own tests hold an example of a history and one of a withheld record.
-- `xboard/README.md` states the history and withholding; [The soundness board](../design/soundness/the-soundness-board.md)'s second boundary names withholding as the power a witness has over a believed record.
-- Check: the board's examples; the verification below.
-
 ### 5. The tests that guard a rule
 
 - The rule for an attack that held goes into [The soundness board](../design/soundness/the-soundness-board.md). `curios/src/tests/board/` becomes `curios/src/tests/rules/`, and the positivity tests, the totality obligations of `tests::soundness` and the coherence tests of `tests::concepts` join it, a file for each rule, each refusal beside its control; each `rejected_by` becomes a pattern over the checker's error, a term it pins written as Core text; each file names its counterpart in `curios-cert` and the rule's ticket; the references to `tests/board` in `curios-cert`, `curios-analysis` and the documents are updated.

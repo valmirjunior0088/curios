@@ -36,7 +36,7 @@ impl Probe {
             .answer
             .refusals()
             .iter()
-            .any(|refusal| refusal.by() == checker);
+            .any(|refusal| refusal.by() == Some(checker));
 
         match (refused, checker) {
             (true, _) => "refused",

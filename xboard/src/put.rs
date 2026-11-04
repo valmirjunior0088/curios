@@ -4,13 +4,15 @@
 mod tests;
 
 use {
-    crate::Proof,
+    crate::{Proof, Step, Witness},
     curios_cert::Verdict,
     curios_common::{Report, test_support::Variants},
     curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{DEFAULT_BUDGET, Examined, test_support::*},
-    curios_surface::{CoreEntry, CoreFile, ReadError, Spelling, to_core},
+    curios_pipeline::{DEFAULT_BUDGET, Examined, examine_entrypoint, recheck, test_support::*},
+    curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, Spelling, to_core},
+    curios_unit::Predecessors,
+    curios_verdict::test_support::*,
     serde::Deserialize,
     std::fmt,
 };
@@ -76,6 +78,8 @@ pub(crate) enum Refusal {
     Unfinished(ZonkedRefusal),
     /// The kernel's refusal, and the item or registry entry it refused.
     Kernel(Verdict),
+    /// A history stopped at the step of the unit claiming `mount` by what names no checker's error, held as it was reported: a program refused as a build reports it, a unit erasure refused, or the history's store. No expectation meets it, so a fix that refuses a unit before the proof writes that unit as Core text.
+    Stopped { mount: String, reported: String },
 }
 
 /// The error an elaborator's report wraps in where it was raised: what a witness names.
@@ -116,12 +120,13 @@ pub(crate) fn standing_at(name: Option<&Global>) -> String {
 }
 
 impl Refusal {
-    /// The checker that made it.
-    pub(crate) fn by(&self) -> Checker {
+    /// The checker that made it, where the refusal names one.
+    pub(crate) fn by(&self) -> Option<Checker> {
         match self {
-            Refusal::Text(_) | Refusal::Elaborator { .. } => Checker::Elaborator,
-            Refusal::Unread(_) | Refusal::Read { .. } => Checker::Reader,
-            Refusal::Unfinished(_) | Refusal::Kernel(_) => Checker::Kernel,
+            Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
+            Refusal::Unread(_) | Refusal::Read { .. } => Some(Checker::Reader),
+            Refusal::Unfinished(_) | Refusal::Kernel(_) => Some(Checker::Kernel),
+            Refusal::Stopped { .. } => None,
         }
     }
 
@@ -152,6 +157,7 @@ impl Refusal {
                 verdict.error.variant_name(),
                 standing_at(verdict.name.as_ref())
             ),
+            Refusal::Stopped { mount, .. } => format!("the step of `/{mount}`"),
         }
     }
 }
@@ -163,7 +169,8 @@ impl fmt::Display for Refusal {
             Refusal::Text(reported)
             | Refusal::Unread(reported)
             | Refusal::Read { reported, .. }
-            | Refusal::Elaborator { reported, .. } => formatter.write_str(reported),
+            | Refusal::Elaborator { reported, .. }
+            | Refusal::Stopped { reported, .. } => formatter.write_str(reported),
             Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
             Refusal::Kernel(verdict) => {
                 write!(
@@ -179,7 +186,7 @@ impl fmt::Display for Refusal {
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
 pub(crate) enum Answer {
-    /// Refused before a module existed for the kernel to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text.
+    /// Refused before a module existed for the kernel to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text; or a history stopped by what names no checker, which says nothing of whether the kernel was asked.
     Unbuilt(Refusal),
     /// Judged by the kernel, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
     Judged(Vec<Refusal>),
@@ -205,16 +212,22 @@ impl Answer {
     }
 }
 
-/// Put a source program to both checkers as a proof of `False`: the elaborator, then the kernel over the module it built. The pipeline states the type; nothing here or in the program chooses it.
+/// Put a source program to both checkers as a proof of `False`, over `predecessors`: the elaborator, then the kernel over the module it built. The pipeline states the type; nothing here or in the program chooses it.
 ///
 /// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the kernel to judge. A refusal while the module is being built leaves the kernel nothing to judge.
-pub(crate) fn put_program(source: &str) -> Answer {
+fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
     let entrypoint = match source.parse::<curios_surface::Entrypoint>() {
         Ok(entrypoint) => entrypoint,
         Err(error) => return Answer::Unbuilt(Refusal::Text(format!("{error:?}"))),
     };
 
-    match examine_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none()) {
+    match examine_entrypoint(
+        DEFAULT_BUDGET,
+        predecessors,
+        &SYNTAX,
+        &entrypoint,
+        &RootSource::none(),
+    ) {
         Err(refused) => Answer::Unbuilt(match refused.error {
             Some(error) => Refusal::Elaborator {
                 error: *error,
@@ -238,8 +251,13 @@ pub(crate) fn put_program(source: &str) -> Answer {
     }
 }
 
-/// Put a module built by hand to the kernel alone, with the prelude in scope, as a program closing with `body` stated at `type_`.
-fn put_module(definitions: Definitions, body: Term, type_: Term) -> Answer {
+/// Put a module built by hand to the kernel alone, with `predecessors` in scope, as a program closing with `body` stated at `type_`.
+fn put_module(
+    predecessors: Predecessors<'_>,
+    definitions: Definitions,
+    body: Term,
+    type_: Term,
+) -> Answer {
     let program = Program {
         definitions,
         entrypoint: curios_core::Entrypoint {
@@ -251,15 +269,15 @@ fn put_module(definitions: Definitions, body: Term, type_: Term) -> Answer {
     // The walk takes a program only with the evidence that elaboration finished it, so one carrying what elaboration should have solved is refused here, by the layer the kernel judges through.
     Answer::Judged(match Zonked::project(&program) {
         Err(refusal) => vec![Refusal::Unfinished(refusal)],
-        Ok(program) => recheck_with_prelude(&program, DEFAULT_BUDGET)
+        Ok(program) => recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
             .into_iter()
             .map(Refusal::Kernel)
             .collect(),
     })
 }
 
-/// Read `text` as Core text over the prelude, and put the module it writes to the kernel alone, with the prelude in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
-pub(crate) fn put_core_text(text: &str) -> Answer {
+/// Read `text` as Core text over `predecessors`, and put the module it writes to the kernel alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
+fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
     let unread = |reported: String| Answer::Unbuilt(Refusal::Unread(reported));
     let file = match text.parse::<CoreFile>() {
         Ok(file) => file,
@@ -275,7 +293,7 @@ pub(crate) fn put_core_text(text: &str) -> Answer {
         None => return unread("the text closes with no term to put".to_string()),
     }
 
-    match to_core(&file, Some(&prelude_form_scope())) {
+    match to_core(&file, Some(&FormScope::over(SYNTAX, predecessors.cores()))) {
         Err(error) => Answer::Unbuilt(Refusal::Read {
             reported: located(&error),
             error,
@@ -283,7 +301,7 @@ pub(crate) fn put_core_text(text: &str) -> Answer {
         Ok((definitions, entry)) => {
             let body = entry.expect("an entry the text writes is read").body;
 
-            put_module(definitions, body, false_type())
+            put_module(predecessors, definitions, body, false_type())
         }
     }
 }
@@ -296,12 +314,65 @@ fn located(error: &ReadError) -> String {
     }
 }
 
-impl Proof {
-    /// Put the proof to the checkers at `False`.
-    pub(crate) fn answer(&self) -> Answer {
-        match self {
-            Proof::Program(source) => put_program(source),
-            Proof::Module(text) => put_core_text(text),
+/// Walk `steps` over a store of their own, then put `proof` to the checkers at `False` over the prelude and every unit they compiled: the history a witness is. With no step, the proof is put over the prelude alone, and nothing is written anywhere.
+pub(crate) fn put(steps: &[Step], proof: &Proof) -> Answer {
+    let mut history = History::new();
+    for step in steps {
+        let walked = match step {
+            Step::Unit {
+                mount,
+                written,
+                text,
+            } => history.step(mount, *written, text),
+            Step::Withhold { mount, names } => history.withhold(mount, names.as_deref()),
+        };
+        if let Err(stopped) = walked {
+            return halted(stopped);
         }
+    }
+
+    history
+        .built(|predecessors| match proof {
+            Proof::Program(source) => put_program(predecessors, source),
+            Proof::Module(text) => put_core_text(predecessors, text),
+        })
+        .unwrap_or_else(halted)
+}
+
+/// What a history that stopped before its proof answered: the refusal of the step it stopped at, as the checker that made it raised it where one did.
+fn halted(Stopped { mount, why }: Stopped) -> Answer {
+    let at = |reported: String| format!("in the step of `/{mount}`: {reported}");
+    match why {
+        Unbuilt::Unparsed(reported) => Answer::Unbuilt(Refusal::Unread(at(reported))),
+        Unbuilt::Read(error) => Answer::Unbuilt(Refusal::Read {
+            reported: at(located(&error)),
+            error: *error,
+        }),
+        Unbuilt::Unmade(Unmade::Unfinished(refusal)) => {
+            Answer::Judged(vec![Refusal::Unfinished(*refusal)])
+        }
+        Unbuilt::Unmade(Unmade::Kernel(verdict)) => Answer::Judged(vec![Refusal::Kernel(*verdict)]),
+        Unbuilt::Unmade(Unmade::Erased(reported)) => {
+            Answer::Judged(vec![Refusal::Stopped { mount, reported }])
+        }
+        Unbuilt::Compiled(error) => Answer::Unbuilt(Refusal::Stopped {
+            mount,
+            reported: error.to_string(),
+        }),
+        Unbuilt::Stored(reported) => Answer::Unbuilt(Refusal::Stopped { mount, reported }),
+    }
+}
+
+impl Proof {
+    /// Put the proof to the checkers at `False` over the prelude alone.
+    pub(crate) fn answer(&self) -> Answer {
+        put(&[], self)
+    }
+}
+
+impl Witness {
+    /// Put the witness to the checkers at `False`: its history walked, then its proof.
+    pub(crate) fn answer(&self) -> Answer {
+        put(&self.steps, &self.proof)
     }
 }

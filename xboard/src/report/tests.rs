@@ -14,6 +14,7 @@ fn refused(by: Checker, error: Option<&'static str>, within: Option<Within>) -> 
 fn forged() -> Witness {
     Witness {
         what: "the forged proof".to_string(),
+        steps: Vec::new(),
         proof: Proof::Program(String::new()),
         expect: vec![refused(Checker::Kernel, Some("UntypedEntry"), None)],
     }

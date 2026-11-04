@@ -22,6 +22,28 @@ const RECORD: &str = r#"
     refused = [{ by = "kernel", error = "Mismatch", within = "entry" }, { by = "reader" }]
 "#;
 
+/// A ticket's record whose one witness is a history: a program mounted at `/lib`, its record of `/lib/one` withheld, and Core text read over it.
+const HISTORY: &str = r#"
+    title = "A forged proof"
+    found = 2026-10-02
+    status = "open"
+
+    [[witness]]
+    what = "a history"
+    refused = [{ by = "elaborator" }, { by = "reader" }, { by = "kernel" }]
+
+    [[witness.step]]
+    mount = "/lib"
+    source = "a_program.crs"
+
+    [[witness.step]]
+    withhold = "/lib"
+    verdicts = ["/lib/one"]
+
+    [[witness.step]]
+    source = "a_module.crsc"
+"#;
+
 /// The ticket `record` states, read with a text for each of the record's witnesses and any `others` beside them.
 fn read(record: &str, others: &[(&str, &str)]) -> Result<Ticket, String> {
     let mut files = BTreeMap::from([
@@ -186,5 +208,81 @@ fn a_part_holds_its_record() {
         load_board(files)
             .expect_err("a part with no record is refused")
             .contains("a part's directory holds its `metadata.toml`")
+    );
+}
+
+#[test]
+fn a_history_reads_its_steps_and_closes_with_its_proof() {
+    let ticket = read(HISTORY, &[]).expect("the ticket reads");
+    let [history] = &ticket.witnesses[..] else {
+        panic!("the ticket carries its witness");
+    };
+
+    let one = Global::Authored(Qualifier::from(["lib", "one"]));
+    assert!(matches!(
+        &history.steps[..],
+        [
+            Step::Unit { mount, written: Written::Program, text },
+            Step::Withhold { mount: withheld, names: Some(names) },
+        ] if mount == "lib" && text == "/std/Bool/True/qed()" && withheld == "lib" && names[..] == [one]
+    ));
+    assert!(matches!(&history.proof, Proof::Module(text) if text == "0"));
+    assert_eq!(
+        history.asked(),
+        [Checker::Elaborator, Checker::Reader, Checker::Kernel]
+    );
+}
+
+#[test]
+fn a_witness_states_its_source_or_its_steps() {
+    assert!(
+        refusal(&HISTORY.replace(
+            "what = \"a history\"",
+            "what = \"a history\"\n    source = \"a_module.crsc\""
+        ))
+        .contains("its `source` or its steps, not both")
+    );
+    assert!(
+        refusal(&RECORD.replace("source = \"a_program.crs\"", ""))
+            .contains("states its `source` or its steps")
+    );
+}
+
+#[test]
+fn a_history_closes_with_its_proof_and_holds_more_than_it() {
+    assert!(
+        refusal(&HISTORY.replace(
+            "[[witness.step]]\n    source = \"a_module.crsc\"",
+            "[[witness.step]]\n    mount = \"/m\"\n    source = \"a_module.crsc\""
+        ))
+        .contains("closes with its proof")
+    );
+
+    let alone = HISTORY
+        .split("    [[witness.step]]\n    mount")
+        .next()
+        .expect("the record opens with its witness")
+        .to_string()
+        + "    [[witness.step]]\n    source = \"a_module.crsc\"\n";
+    assert!(
+        read(&alone, &[("a_program.crs", "0")])
+            .expect_err("a history of its proof alone is refused")
+            .contains("is a witness's `source`")
+    );
+}
+
+#[test]
+fn a_unit_is_withheld_once_a_step_mounts_it() {
+    assert!(
+        refusal(&HISTORY.replace("withhold = \"/lib\"", "withhold = \"/other\""))
+            .contains("`/other` is withheld before a step mounts it")
+    );
+}
+
+#[test]
+fn a_unit_is_mounted_at_a_path_of_one_name() {
+    assert!(
+        refusal(&HISTORY.replace("mount = \"/lib\"", "mount = \"/lib/deep\""))
+            .contains("`/lib/deep` is no path of one name")
     );
 }

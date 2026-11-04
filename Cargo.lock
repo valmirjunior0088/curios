@@ -2553,6 +2553,8 @@ dependencies = [
  "curios-module",
  "curios-pipeline",
  "curios-surface",
+ "curios-unit",
+ "curios-verdict",
  "serde",
  "toml",
 ]
