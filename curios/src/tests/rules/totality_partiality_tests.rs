@@ -1,11 +1,11 @@
 //! A partial definition's place: usable in a program and refused in a type, and the type-level loops diagnosed rather than aborted.
 
-use {super::test_support::*, crate::tests::run, curios_common::fill};
+use {super::test_support::*, crate::tests::run, curios_analysis::Erased, curios_common::fill};
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`.
 #[test]
 fn a_type_level_rec_cannot_tie_the_negative_knot() {
-    rejected(&format!(
+    refused(&format!(
         r#"
         {SINK}
 
@@ -20,12 +20,15 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
 
         /std/print("unreachable")
         "#
-    ));
+    ))
+    .by_elaborator_in("/Bad", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
-    rejected(&fill!(
+    refused(&fill!(
         r#"
         ${SINK}
 
@@ -41,13 +44,16 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
         /std/print("unreachable")
         "#,
         SINK
-    ));
+    ))
+    .by_elaborator_in("/P", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 // Why (T) has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it.
 #[test]
 fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
-    rejected(&fill!(
+    refused(&fill!(
         r#"
         ${SINK}
 
@@ -74,13 +80,16 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
         /std/print("unreachable")
         "#,
         SINK
-    ));
+    ))
+    .by_elaborator_in("/delta", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 // The entrypoint's trailing expression is not a top-level item — lowering leaves it in `Module::body`. An obligation seeded only from `items` sees nothing here. The only items below are `Sink` and `consume`, and neither is partial; the offending `rec` lives entirely inside the final term.
 #[test]
 fn the_entrypoint_expression_is_not_a_blind_spot() {
-    rejected(&fill!(
+    refused(&fill!(
         r#"
         ${SINK}
 
@@ -92,13 +101,16 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
         )
         "#,
         SINK
-    ));
+    ))
+    .by_elaborator_in("entry", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 // A shape that would abort the compiler rather than reject the program: reducing `Bad` rebuilds an arrow whose domain is `Bad`, so elaborating the first *use* would overflow the stack long before any whole-module gate could run. This is what the local form at `rec` elaboration exists for, and the only claim it makes is that the compiler answers instead of dying.
 #[test]
 fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
-    rejected(
+    refused(
         r#"
         let Bad : Prop = (Bad) -> /std/Bool/False;
 
@@ -108,13 +120,16 @@ fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 // The same shape as a *local* `rec`. `Item::Rec` and `Subterm::Rec` are separate elaboration paths, and each needs the local form.
 #[test]
 fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
-    rejected(
+    refused(
         r#"
         let consume(u : {}) -> {} = u;
 
@@ -123,7 +138,10 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
             ()
         )
         "#,
-    );
+    )
+    .by_elaborator_in("entry", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
 }
 
 // General recursion is untouched wherever erasure keeps it. `collatz` cannot pass any size-change checker — it recurses on a computed quotient, and whether it terminates at all is an open problem — and it runs anyway, because its result is a `Nat` the program actually consumes.
@@ -153,9 +171,18 @@ fn a_partial_definition_stays_usable_in_a_program() {
 // `Shape(inf)` here reduces to itself with no progress; the productive sibling is `a_total_type_function_applied_to_a_partial_value_is_rejected`.
 #[test]
 fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
-    rejected_as_a_type(&format!(
+    refused(&format!(
         "{SHAPE}\n let here(x : Shape(inf)) -> Nat = 0;\n\n 0"
-    ));
+    ))
+    .by_elaborator_in("/here", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // A struct *field* is the written type position obligation (T)'s early net reaches on its own, and the three fixtures below are its two halves and its control.
@@ -167,18 +194,36 @@ fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
 // Without the net, on the default main-thread stack, the productive field aborts the compiler outright with a stack overflow, and the non-productive one is refused with "reduction ran out of steps on: Shape(inf)", naming neither the definition at fault nor the reason — where the same `Shape(inf)` written as an `induct` payload, an `induct` parameter, a `struct` parameter, or a `concept` method type is diagnosed by name.
 #[test]
 fn a_productive_type_level_loop_in_a_struct_field_is_diagnosed_not_aborted() {
-    rejected_as_a_type(&fill!(
+    refused(&fill!(
         "${PRODUCTIVE_SHAPE}\n struct Trap : pub Type { x : Shape(inf) }\n\n ()",
         PRODUCTIVE_SHAPE
-    ));
+    ))
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 #[test]
 fn a_non_productive_type_level_loop_in_a_struct_field_is_diagnosed_too() {
-    rejected_as_a_type(&fill!(
+    refused(&fill!(
         "${SHAPE}\n struct Trap : pub Type { x : Shape(inf) }\n\n 0",
         SHAPE
-    ));
+    ))
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control. `Shape` applied to a *total* value is an ordinary type-level application and must keep working in a field, so a net that refused every struct field — or every field whose type mentions a `rec` — would fail here rather than pass quietly. It runs, so the field type really did reduce to `Nat`.
@@ -206,7 +251,7 @@ fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
 // The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests entirely on (T): the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` non-descending, and a type reaching `g` is then refused. `loop` is exactly such a `g`, and the type of `held` reaches it; nothing in the totality grading refuses this — (T) does.
 #[test]
 fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -225,13 +270,22 @@ fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/held", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The (V)-side mirror of `a_payload_application_that_reaches_a_partial_function_is_a_partial_type`: here the payload-child rule grades a *proof*-returning group total, and (V) — not the grading — is what keeps it from proving `False`. `drop` recurses on `f(0)`, an application of the constructor payload `f`, which the size order reads as a child of the `node(f)` it was projected from, so `drop` descends and is accepted at `(Fam) -> False`. That acceptance is sound only because every total `Fam` is a finite tree: the one inhabitant that would make `drop` loop is an infinite one, which no total definition builds. `grow` is that inhabitant, and it is non-descending — its self-call sits under a payload lambda, graded `Unknown` — so the proof `drop(grow(0))` is a proof position reaching `grow`, and (V) refuses it there. A grading that refused `drop` would be rejecting the well-founded recursion `a_call_through_a_constructor_payload_descends` turns on; the obligation, not the grade, carries this.
 #[test]
 fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_proof() {
-    let report = crate::tests::error(
+    let refusals = refused(
         r#"
         use /std/{Nat};
         use /std/Bool/{False};
@@ -250,20 +304,20 @@ fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_pr
         /std/print(match drop(grow(0)) end)
         "#,
     );
-    assert!(
-        report.contains("is a proof position") && report.contains("reaches 'grow'"),
-        "expected (V) to refuse the proof for reaching the partial producer:\n{report}",
-    );
-    assert!(
-        !report.contains("reaches 'drop'"),
-        "the payload-descending group must be accepted, not blamed:\n{report}",
-    );
+    refusals.by_elaborator_in("entry", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { erased: Erased::Proof, offender: Some(offender), .. } if *offender == global("/grow"))
+    })
+        .by_kernel_in("entry", |error| matches!(error, curios_cert::Error::NotTotal { erased: Erased::Proof, .. }));
+    // The payload-descending group is accepted, not blamed.
+    refusals.not_by_elaborator(|error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { offender: Some(offender), .. } if *offender == global("/drop"))
+    });
 }
 
 // (T) across the unit boundary: a partial definition in one unit is partial to every unit that mounts it. Every (T) fixture above builds its partiality in-unit, so none exercises the replay path's load-bearing half — that a definition the prelude's own walk classified `Partial` is read back as partial by a user suffix that only mentions it. `Json/decode` is that definition: a parser no size-change checker can show terminates, whose `Partial` verdict lives in the archived record alone. `Bad(s)` is a type that computes through that parse, so its body is a type position reaching `Json/decode`; a gate that read the archive's verdict as `Total`, or did not consult it, would form `Bad` over a diverging type and satisfy (T) by a classification it never read.
 #[test]
 fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat, Json, Str};
 
@@ -277,5 +331,14 @@ fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/_held", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }

@@ -1,11 +1,11 @@
 //! The erasure obligation: a partial value may not reach a proof, at any head a program can spell.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_analysis::Erased};
 
 // The second route (T) cannot see, and the one that needs no `exit` at all. `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing about `Box` or its type mentions a partial definition — and the certificate escapes through an arm binder, so `boom`'s body reaches `forge` without naming a partial type anywhere.
 #[test]
 fn a_partial_carrier_releasing_a_proof_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         induct Box : pub Type
         | box(p : /std/Bool/False)
@@ -20,7 +20,25 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/boom", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/boom", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
 }
 
 // The tests below cover (V)'s *argument* rule: a proof handed to a `Prop`-declared parameter of a definition that is not itself a proof. Nothing above them catches these — the definition-level rule needs a `Prop`-sorted declared type, and every offender here sits inside a `Nat`-valued function, so no seed reaches it by name.
@@ -30,7 +48,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
 // A universe-polymorphic head. `@A : Type` generalizes the definition, so the call site's head is a universe instance rather than a plain name — the most common shape in the language, and the widest of this set: without the rule, a one-line helper with no `match`, no data type, and no recursion but the forged proof's own would pass.
 #[test]
 fn a_proof_at_a_polymorphic_head_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         let ignore(@A : Type, x : A, p : /std/Bool/False) -> A = x;
 
@@ -38,13 +56,31 @@ fn a_proof_at_a_polymorphic_head_is_rejected() {
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
-    );
+    )
+    .by_elaborator_in("/leak", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/leak", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
 }
 
 // A match arm binder as the head. An arm binder's type lives in the eliminated constructor's telescope rather than in the arm scope, so opening the arm without consulting the declaration leaves the binder untyped — and the scrutinee's own type is a recursive group member wrapping the inductive, not the inductive itself, so naming the declaration takes an unfolding step.
 #[test]
 fn a_proof_at_an_arm_binder_head_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         induct Holder : pub Type
         | hold(f : (/std/Bool/False) -> /std/Nat)
@@ -59,13 +95,25 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
 
         /std/print(/std/Nat/to_str(leak(make())))
         "#,
-    );
+    )
+    .by_elaborator_in("/leak", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/leak", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
 }
 
 // An intrinsic fold binder as the head. `List`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
 #[test]
 fn a_proof_at_a_fold_binder_head_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         let apply_it(fs : /std/List((/std/Bool/False) -> /std/Nat)) -> /std/Nat =
             match fs
@@ -75,13 +123,25 @@ fn a_proof_at_a_fold_binder_head_is_rejected() {
 
         /std/print(/std/Nat/to_str(apply_it([])))
         "#,
-    );
+    )
+    .by_elaborator_in("/apply_it", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/apply_it", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
 }
 
 // A nominal structure projection as the head. A structure's field types come from its declaration, instantiated at the head's universes and then at its parameters — two steps a tuple projection needs neither of.
 #[test]
 fn a_proof_at_a_struct_projection_head_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         struct Api : pub Type {
             take : (/std/Bool/False) -> /std/Nat,
@@ -93,13 +153,31 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
-    );
+    )
+    .by_elaborator_in("/leak", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/leak", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
 }
 
 // The same projection route as a user would actually write it: concept dispatch projects a method out of a resolved witness dictionary, so the head of `Sink/drain` is a structure projection reached through resolution rather than through a written `.field`.
 #[test]
 fn a_proof_at_a_concept_method_head_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         pub concept Sink(A : Type) : pub Type {
             drain(x : A, p : /std/Bool/False) -> /std/Nat,
@@ -113,7 +191,25 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
-    );
+    )
+    .by_elaborator_in("/leak", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/leak", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
 }
 
 // A call back into a group from inside another group's projected member. `Walk::walk` gives a *member reference* — a `rec` node whose tail selects one member — an arm above the general `rec` one, so that a self-reference cannot send the walk into the bodies it is already inside; `RecGroup::member_body` materializes each self-reference as a projection carrying the whole group, so descending would regenerate those bodies without end. That arm answers for a projection of *this* group alone: a projection of a different group falls to the general arm, because an inner group is classified on its own but its bodies may still call this group, and such a call is a real edge of this group's call graph.
@@ -121,7 +217,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
 // Answered by the member-reference arm instead, the call back into `f` from inside the projected `g` would be invisible, and so would `g`'s own call site inside `f`: each group would close to no call at all and be classified `Total` while `f(0)` diverges through `g`, a closed inhabitant of `False` — `f`'s declared type is a proposition, so (V) is the whole defence and it reads the engine's verdict. The same loop with the inner group removed, `rec f(n : Nat) -> False = f(n);`, is refused either way, which places the rule in the walk rather than in the obligation.
 #[test]
 fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
-    rejected_as_a_proof(
+    refused(
         r#"
         use /std/{Nat, Str};
         use /std/Bool/{False};
@@ -131,7 +227,19 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
 
         /std/print(match f(0) : (_) => Str end)
         "#,
-    );
+    )
+    .by_elaborator_in("/f", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/f", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
 }
 
 // The accepting side of that same descent, and the reason the rule is not "a group whose body mentions a projection is partial". `outer` descends on its own parameter, and its arm projects a foreign group whose bodies the walk enters. Nothing in `keep` calls back, so entering it must find no edge and leave both groups total — `outer` by its own `outer(p)`, `keep` by having no recursive call at all. Both types are propositions, so a spurious edge in either is a rejection rather than a silent loss of precision.
@@ -156,9 +264,13 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
 
 #[test]
 fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
-    rejected_as_a_type(&format!(
+    refused(&format!(
         "{SHAPE}\n let ignore(@A : Type, x : Nat) -> Nat = x;\n\n let _ = ignore(@Shape(inf), 5);\n /std/Io/pure(())"
-    ));
+    ))
+    .by_elaborator_in("entry", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { erased: Erased::Type, .. })
+    })
+        .by_kernel_in("entry", |error| matches!(error, curios_cert::Error::NotTotal { erased: Erased::Type, .. }));
 }
 
 // The four fixtures below probe the *erasure premise*: that everything erasure deletes lies within a term one of the obligations covers.
@@ -182,7 +294,25 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
 
         /std/print(Nat/to_str(use_it(5)))
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }
 
 // `is_proof_constructor`: a `Prop` family's constructor is the one direct call erasure drops whole, on a predicate that never consults `is_erasable`.
@@ -203,7 +333,25 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
 
         /std/print(Nat/to_str(use_it(5)))
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }
 
 // An erasable scrutinee: the elimination reduces to its single live arm and the scrutinee is never emitted.
@@ -224,7 +372,25 @@ fn a_partial_erased_scrutinee_is_still_reached() {
 
         /std/print(Nat/to_str(use_it(5)))
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }
 
 // A proof bound by `let`: the binding is a kept slot, filled with a stand-in, and its value is never walked — whatever form the value takes, so this one is an elimination rather than a call.
@@ -246,7 +412,25 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
 
         /std/print(Nat/to_str(use_it(5)))
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/use_it", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }
 
 // (V) is seeded where elaboration *settles* a term, so its coverage argument rests on every `Prop`-typed term in the accepted module having been settled. A metavariable solution is the one way a term reaches the module without that: witness resolution fills the slot rather than elaborating a written argument. Here the witness of a `Prop`-sorted concept — a proof — is partial, and it arrives entirely by resolution. If solutions were outside what the seeding sees, this program would compile.
@@ -268,7 +452,25 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
 
         /std/print(Nat/to_str(needs_witness(5)))
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/witness~/Trivial(Nat)", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/witness~/Trivial(Nat)", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }
 
 // (V) across the unit boundary, the proof-side twin of `a_type_reaching_a_partial_prelude_definition_is_rejected`. Every fixture above builds its partiality in-unit; this one reaches `/std/Json/decode`, whose `Partial` classification lives only in the archived record the user suffix reads back. `p`'s type is `True`, a proof position, and its body eliminates a partial parse, so the proof reaches `Json/decode`. A gate reading the archive's verdict as `Total` would accept `p`, and the parser's divergence would stand behind a proof erasure deletes — the identification (V) exists to prevent, here resting entirely on the prelude's own verdict being read.
@@ -286,5 +488,23 @@ fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
 
         /std/print("unreachable")
         "#;
-    rejected_as_a_proof(source);
+    refused(source)
+        .by_elaborator_in("/p", |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        })
+        .by_kernel_in("/p", |error| {
+            matches!(
+                error,
+                curios_cert::Error::NotTotal {
+                    erased: Erased::Proof,
+                    ..
+                }
+            )
+        });
 }

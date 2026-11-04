@@ -48,6 +48,8 @@ curios-native = { workspace = true, features = ["test-support"] }
 curios-pipeline = { workspace = true, features = ["test-support"] }
 # The law table the generated grid states and holds at closed values.
 curios-algebra = { workspace = true }
+# Where a totality refusal stands, erased as a proof or as a type, which the rules' suites hold a refusal to.
+curios-analysis = { workspace = true }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-cps = { workspace = true }

@@ -561,6 +561,7 @@ dependencies = [
  "clap",
  "curios-abi",
  "curios-algebra",
+ "curios-analysis",
  "curios-anf",
  "curios-archive",
  "curios-binaryen",

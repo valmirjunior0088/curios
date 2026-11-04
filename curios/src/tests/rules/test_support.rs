@@ -18,6 +18,8 @@ use {
 pub(super) struct Refusals {
     elaborator: Vec<curios_elab::Error>,
     kernel: Vec<Verdict>,
+    /// Whether the kernel judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
+    judged: bool,
 }
 
 /// Put `source` to both checkers at the program contract: what they refused it with, which must be something.
@@ -34,6 +36,7 @@ pub(super) fn refused(source: &str) -> Refusals {
         }) => Refusals {
             elaborator: vec![*error],
             kernel: Vec::new(),
+            judged: false,
         },
         Err(Refused {
             error: None,
@@ -48,6 +51,7 @@ pub(super) fn refused(source: &str) -> Refusals {
                 .map(|obligation| obligation.error)
                 .collect(),
             kernel: verdicts,
+            judged: true,
         },
     };
     assert!(
@@ -93,16 +97,7 @@ fn on_one_line(term: &Term, spelling: Spelling) -> String {
         .join(" ")
 }
 
-/// Whether a refusal raised in `name`, a declaration or none for the term a program closes with, stands `at`: a declaration's absolute path, or `entry`.
-fn stands(name: Option<&Global>, at: &str) -> bool {
-    match (name, at) {
-        (None, "entry") => true,
-        (Some(name), at) if at.starts_with('/') => *name == global(at),
-        _ => false,
-    }
-}
-
-/// Where a refusal raised in `name` stands, as [`stands`] reads it.
+/// Where a refusal raised in `name` stands: the declaration it names, written as its name prints, a witness's included, or `entry` for the term a program closes with.
 fn place(name: Option<&Global>) -> String {
     name.map_or("entry".to_string(), |name| name.faithful().to_string())
 }
@@ -114,11 +109,41 @@ impl Refusals {
     }
 
     /// The elaborator refused the program `at` by an error `pattern` holds of, read beneath what located it.
-    pub(super) fn by_elaborator_in(&self, at: &str, pattern: impl Fn(&curios_elab::Error) -> bool) {
+    pub(super) fn by_elaborator_in(
+        &self,
+        at: &str,
+        pattern: impl Fn(&curios_elab::Error) -> bool,
+    ) -> &Self {
         assert!(
             self.elaborated()
-                .any(|error| stands(error.declared_in(), at) && pattern(error.raised())),
+                .any(|error| place(error.declared_in()) == at && pattern(error.raised())),
             "not refused so by the elaborator in `{at}`:\n{self}"
+        );
+
+        self
+    }
+
+    /// The kernel refused the program `at` by an error `pattern` holds of.
+    pub(super) fn by_kernel_in(
+        &self,
+        at: &str,
+        pattern: impl Fn(&curios_cert::Error) -> bool,
+    ) -> &Self {
+        assert!(
+            self.kernel
+                .iter()
+                .any(|verdict| place(verdict.name.as_ref()) == at && pattern(&verdict.error)),
+            "not refused so by the kernel in `{at}`:\n{self}"
+        );
+
+        self
+    }
+
+    /// The elaborator refused the program by no error `pattern` holds of, wherever it stands.
+    pub(super) fn not_by_elaborator(&self, pattern: impl Fn(&curios_elab::Error) -> bool) {
+        assert!(
+            !self.elaborated().any(|error| pattern(error.raised())),
+            "refused so by the elaborator:\n{self}"
         );
     }
 }
@@ -152,6 +177,9 @@ impl fmt::Display for Refusals {
                 }
             }
             writeln!(formatter)?;
+        }
+        if !self.judged {
+            writeln!(formatter, "kernel not asked")?;
         }
         for verdict in &self.kernel {
             writeln!(
@@ -2655,39 +2683,6 @@ pub(super) const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str =
     let confused(a: Bool, b: Bool) -> Eq()(a && b, a || b) = Eq/refl();
     /std/print("FORGED")
     "#;
-
-pub(super) fn rejected(source: &str) {
-    let (system, _io) = MockHost::builder().build();
-    let error = run_text(source, system).expect_err("expected the erased position to be rejected");
-    assert!(
-        error.contains("not known to terminate") || error.contains("does not terminate"),
-        "rejected, but not by the totality gate:\n{error}",
-    );
-}
-
-/// As [`rejected`], and by **(V)** rather than by (T).
-///
-/// Which gate fires is the whole claim of a (V)-only fixture: (T) runs first, so a fixture that accidentally put a partial definition in a type position would pass `rejected` while proving nothing about proof positions.
-pub(super) fn rejected_as_a_proof(source: &str) {
-    let (system, _io) = MockHost::builder().build();
-    let error = run_text(source, system).expect_err("expected the proof position to be rejected");
-    assert!(
-        error.contains("is a proof position"),
-        "rejected, but not as a proof position:\n{error}",
-    );
-}
-
-/// As [`rejected`], and by **(T)** rather than by (V).
-///
-/// The mirror of [`rejected_as_a_proof`]: a fixture that means to pin a type position proves nothing if a stray proof position is what actually fired.
-pub(super) fn rejected_as_a_type(source: &str) {
-    let (system, _io) = MockHost::builder().build();
-    let error = run_text(source, system).expect_err("expected the type position to be rejected");
-    assert!(
-        error.contains("is a type position"),
-        "rejected, but not as a type position:\n{error}",
-    );
-}
 
 /// The negative functor every exploit below is built from. It is *accepted* — strict positivity asks whether a declaration reaches itself, and `Sink` never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct` can express that.
 pub(super) const SINK: &str = r#"

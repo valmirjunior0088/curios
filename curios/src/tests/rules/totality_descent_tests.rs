@@ -1,6 +1,6 @@
 //! The size-change obligation: what licenses a decrease — a dispatch or guard that rules out zero, a shrinking literal operand, a payload — and what does not.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_analysis::Erased};
 
 // The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and a `Nat` dispatch's default arm establishes nonzero exactly when `0` is one of the enumerated cases. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
 //
@@ -11,7 +11,7 @@ use {super::test_support::*, crate::tests::run};
 // Probed rather than closed: the fixture asserts the diagnostic so it cannot pass on an unrelated failure. Its control is `a_dispatch_that_enumerates_zero_licenses_the_decrease`, the same recursion with `0` enumerated, which must keep compiling — refusing it would take `/std/Nat/to_str` and every other bounded `Nat` descent with it.
 #[test]
 fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -23,7 +23,16 @@ fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control for the fixture above: with `0` enumerated, the default arm does establish nonzero, `n - 1` is a genuine decrease, and the same type-level recursion is accepted.
@@ -55,7 +64,7 @@ fn a_dispatch_that_enumerates_zero_licenses_the_decrease() {
 #[test]
 fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
     // The intrinsic spelling: the relation table on its own.
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -67,10 +76,19 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 
     // The literal first, so the guard is readable only once its operands are exchanged.
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -82,10 +100,19 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 
     // Behind a definition, so the guard is readable only after unfolding.
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat, Bool};
 
@@ -99,7 +126,16 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control for the fixture above, in both spellings the guard reader accepts. `n > 0` excludes zero whatever the literal, and `0 < n` is the same fact with its operands exchanged — so the flip is pinned in the accepting direction as well as the refusing one, which a rejection-only fixture cannot do.
@@ -144,7 +180,7 @@ fn a_boolean_guard_that_excludes_zero_licenses_the_decrease() {
 #[test]
 fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
     // Divisor below the least value that decreases: `n / 1` is `n`.
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -156,10 +192,19 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 
     // A divisor that is not a literal at all, so no bound can be read off it.
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -171,7 +216,16 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control for the fixture above: the same dispatch, the same operand shape, and a divisor of `2`, which does decrease. `/std/Nat/to_str` descends on exactly this, so a rule that stopped reading divisors would fail here rather than pass quietly.
@@ -202,7 +256,7 @@ fn a_division_by_a_literal_above_one_licenses_the_decrease() {
 // Probed rather than closed: each asserts the diagnostic. Its control is `a_boolean_guard_that_excludes_zero_licenses_the_decrease` above, whose true arm must keep descending on the same guard.
 #[test]
 fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -214,9 +268,18 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -228,7 +291,16 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The descent gate reads a declared type, and a declared type is a term like any other.
@@ -240,7 +312,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
 // Its control is `an_aliased_sort_that_descends_is_still_accepted`, which keeps the same alias at a recursion that does descend: refusing every member declared through one would pass this and fail that.
 #[test]
 fn a_sort_reached_through_an_alias_still_needs_descent() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat, Option};
 
@@ -252,7 +324,16 @@ fn a_sort_reached_through_an_alias_still_needs_descent() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control for the fixture above: the same aliased sort at a recursion that descends is ordinary code and still compiles.
@@ -305,7 +386,7 @@ fn a_call_through_a_constructor_payload_descends() {
 // The control: the same call through a function that is *not* a constructor payload. `again` is a parameter, so nothing relates `again(n)` to anything smaller, the group does not descend, and (V) refuses the proof position. A rule that read every application of a binder as a decrease would accept this, and `loop(P, 0, (m) => m)` then proves any `P`.
 #[test]
 fn a_call_through_a_parameter_bound_function_does_not_descend() {
-    rejected_as_a_proof(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -314,7 +395,19 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/loop", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/loop", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
 }
 
 // The library's recursion along `<` needs no accessibility: `/std/Nat/descend` recurses on a bound its measure fits under, so a proposition recursing along `<` is written once against the library and is total by the successor's descent. The proof is consumed in `List/get`'s erased bound, so nothing about it runs.
@@ -432,7 +525,7 @@ fn a_halving_walk_descends_on_its_span_halved_and_stands_in_a_type() {
 // The subtraction half of `an_arithmetic_decrease_needs_a_literal_operand_that_shrinks`: `n - k` decreases only for a literal `k >= 1`, because `Nat` subtraction saturates and `n - 0` is `n` itself — a fixed point, not a descent. The division sibling pins `k >= 2`; nothing pinned subtraction's floor, so a reader that let `0` through would grade `Bad(n - 0)` as descending and admit a type that unfolds to itself forever. The control is `a_dispatch_that_enumerates_zero_licenses_the_decrease`, whose `Bad(n - 1)` is the same shape one above the floor.
 #[test]
 fn a_subtraction_by_zero_licenses_no_decrease() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -444,13 +537,22 @@ fn a_subtraction_by_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // A `choose` ladder reaches the same nonzero reader a headed boolean match does, by a different spelling: each condition arm desugars to a boolean match whose true branch is the arm and whose false branch is the rest of the ladder. The arm-scoping `a_nonzero_fact_does_not_escape_the_arm_that_established_it` holds for a `match` must survive that desugaring — a guard that admits zero (`n < 10`) licenses no decrease, and only one that excludes it (`n > 0`) does.
 #[test]
 fn a_choose_guard_that_does_not_exclude_zero_licenses_no_decrease() {
-    rejected_as_a_type(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -462,7 +564,16 @@ fn a_choose_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
 }
 
 // The control for the fixture above: `n > 0` excludes zero through the same desugaring, so the ladder's true arm descends and the type is accepted.
@@ -487,7 +598,7 @@ fn a_choose_guard_that_excludes_zero_licenses_the_decrease() {
 // The size-change closure's own verdict, at the source level: a recursion that hands its two arguments on exchanged does not descend, however one of them shrinks. `swap`'s first arm passes `(y, 0)` and its second `(k, y + 1)`; neither argument is below the caller's in the position it lands, and the swap's call matrix composed with itself is an idempotent that carries `Same` on its diagonal and no `Less` — a path that can repeat forever with nothing getting smaller — so the group is `Partial` and the proof `swap(3, 0)` is refused. The accepting direction of the same closure — two members that descend only across their composite cycle — is `/std/List/sort_by`'s `merge`, which `the_prelude_shapes_a_user_program_leans_on_still_elaborate` carries; this is the refusing direction the seed's "descent through an exchange of arguments" names.
 #[test]
 fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
-    rejected(
+    refused(
         r#"
         use /std/{Nat};
         use /std/Bool/{False};
@@ -500,5 +611,11 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
 
         /std/print("unreachable")
         "#,
-    );
+    )
+    .by_elaborator_in("/swap", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_kernel_in("/swap", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
 }
