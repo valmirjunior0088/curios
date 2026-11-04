@@ -25,7 +25,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 ## Decisions
 
 - A decision states what was **decided**, the **rationale**, and what was **rejected**, so a settled question is told from an unasked one. It states the intended rule; where the code falls short, the gap is a roadmap item, not a caveat.
-- A decision records no evidence: a flaw found is a ticket on the soundness board, an attack that found nothing is a test in the crate it attacked, and neither is inventoried or graded in a document.
+- A decision records no evidence: a flaw found is a ticket on the soundness board, an attack that held is a test where [The soundness board](../../documentation/design/soundness/the-soundness-board.md) places one, and neither is inventoried or graded in a document.
 - Decisions have no index: a directory listing cannot go stale. A filename spells its heading out, and a decision is cited by its path, so a moved one fails loudly.
 - A wrong sentence is corrected in place, never annotated as amended. Everything is written in the present tense.
 - A measured figure is the latest result of a measurement a reader can retake — a named measurement test or a stated protocol — and stays only where it is the argument. A past reading, a replaced baseline and a rejected alternative's cost are dropped, here and in the comments beside a measurement alike; only xbench's reading files, `xbench/readings/NN.toml`, keep theirs.

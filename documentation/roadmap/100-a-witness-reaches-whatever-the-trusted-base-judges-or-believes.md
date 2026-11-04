@@ -6,8 +6,6 @@
 
 ## What is wrong today
 
-- **A proof of `False` through a believed object has no form.** `Baseline::holds` (`curios-cert/src/baseline.rs`) compared a `rec` item by its group, its member count and each member's name and proof mark, and not by `RecItem::universe_context`, the context its members' levels positionally mean, which `globals::held` publishes to every reader of a member. So a walk over a baseline adopted a group under constraints no walk assumed, filed it, and a later walk reading that unit admitted Hurkens' paradox: the carrier of [a group met as a bare projection](../../xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs) as a one-member `rec`, accepted under `u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x`, re-offered with an empty constraint list and read at `carrier@{0, 1, 0, 2}`. It was fixed at `45e8eeb67`, by comparing each item form through a whole destructuring, and is on no ticket: its witness needed a unit one walk filed and a later one read, so it closed at a locally declared empty proposition and `cargo xboard report` never saw it. The route of 2026-11-02 — a unit a walk accepts, mounted with an empty record, so that `Totals::seeded` classified it from its own terms — was put through a third form, `Proof::Mounted` (`6ff9ad99c`), which one ticket constructed and which was removed once that ticket retired (`19e469e02`).
-- **The tests that guard the rules that can admit a term are scattered, and assert text.** `curios/src/tests/board/` holds 213 of them under the board's name, while its own doc sends positivity, the totality obligations and witness coherence to `tests::positivity`, `tests::soundness` and `tests::concepts`. A refusal there asserts a fragment of the printed diagnostic — 139 do, through `rejected_by` — so a program refused for another reason, whose message happens to hold the fragment, passes. The kernel's own tests build their modules from Rust constructors and rot with the representation as the board's witnesses did.
 - **A hunt assumes worktrees.** `.claude/commands/hunt-findings.md`'s **Worktrees**, `.claude/commands/hunt-soundness.md`'s probing and filing, `.claude/agents/hunter.md`'s **What you touch**, and the hunter's three scripts — `guard.sh`, which admits cargo only inside a worktree, `write-guard.sh` and `worktree.sh` — all rest on one, and a hunter builds in it, so its `target/` grows as the main checkout's does.
 
 ## What this builds on
@@ -72,11 +70,6 @@ Settled 2026-11-03.
 ## Stages
 
 Each stage lands under `cargo xtask workspace format` and `cargo xtask workspace lint` and the checks it names; the whole gate runs once at the end. Every reference to a path or a name a stage moves is updated in that stage.
-
-### 5. The tests that guard a rule
-
-- The rule for an attack that held goes into [The soundness board](../design/soundness/the-soundness-board.md). `curios/src/tests/board/` becomes `curios/src/tests/rules/`, and the positivity tests, the totality obligations of `tests::soundness` and the coherence tests of `tests::concepts` join it, a file for each rule, each refusal beside its control; each `rejected_by` becomes a pattern over the checker's error, a term it pins in the fixed spelling; the references to `tests/board` in `curios-cert`, `curios-analysis` and the documents are updated.
-- Check: every test moved runs under its name or the name the move gives it, listed before and after; `curios`'s suite.
 
 ### 6. Hunts without worktrees
 
