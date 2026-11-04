@@ -1,8 +1,8 @@
 //! A type the walk computes or unfolds before it reads an occurrence: an alias, a type-level match decided or stuck, a sort a caller would decide, and a field or payload a type-level `rec` computes.
 
 use {
-    super::test_support::*, crate::tests::run, crate::tests::typecheck_within, curios_common::fill,
-    curios_core::Polarity, curios_elab::Error,
+    super::test_support::*, crate::test_support::*, curios_common::fill, curios_core::Polarity,
+    curios_elab::Error,
 };
 
 // A `let`-defined alias is unfolded rather than read as an opaque former, so the arrow it hides counts where it stands — once for the negative, twice for the merely positive.

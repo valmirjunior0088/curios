@@ -1,6 +1,6 @@
 //! The `Key` laws, which a witness must discharge where it is declared. `Map` and `Set` themselves — lookups, the canonical shape and the rewriting functions — are the corpus's `/data/map`.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // The trie's identity is the byte string a key's `Hash` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. `Key/injective` states that obligation where it can be checked, and an encoding that provably collides cannot discharge it: both constructors here hash to the empty byte string, so the law demands `Eq()(a, b)` for values that are not equal. The collision is declared once, in the `Hash` witness — `Key` reaches the encoding through its superclass edge and has no second field to disagree with it — so there is one place for a collision to come from and the law still catches it there. The order ties every pair as the encodings do, so `monotone` holds and `injective` alone is what refuses the witness.
 #[test]

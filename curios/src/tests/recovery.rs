@@ -1,7 +1,7 @@
 //! What a run reports when more than one declaration is refused: every independent refusal, nothing from a declaration that reaches a refused one, and both erasure obligations when both fail.
 
 use {
-    super::*,
+    crate::test_support::*,
     crate::*,
     curios_common::{Qualifier, RootKind},
     curios_module::{RootSource, supply_entrypoint},

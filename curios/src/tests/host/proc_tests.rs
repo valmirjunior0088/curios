@@ -1,7 +1,7 @@
 //! The process surface through `/std/Proc`: argv, environment and exit, and children started from a `Proc` and reaped as a `Proc/Child`.
 
 use {
-    crate::tests::{run, run_text, typecheck},
+    crate::test_support::*,
     curios_abi::ChildExit,
     curios_common::fill,
     curios_module::RootSource,

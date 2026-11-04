@@ -1,10 +1,6 @@
 //! Handles, reads and writes, and the drain that surfaces an error rather than a partial prefix.
 
-use {
-    crate::tests::{run, run_text, typecheck},
-    curios_common::fill,
-    curios_native::MockHost,
-};
+use {crate::test_support::*, curios_common::fill, curios_native::MockHost};
 
 #[test]
 fn io_write() {

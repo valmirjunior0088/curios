@@ -1,6 +1,6 @@
 //! Searching text and cutting it where a search lands: each walk held to Rust's reading of the same UTF-8.
 
-use {crate::tests::run, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// Texts mixing every width of character, whitespace at either end, line endings of both kinds, and a needle repeated.
 const TEXTS: [&str; 7] = [

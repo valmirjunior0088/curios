@@ -1,6 +1,6 @@
 //! A goal no witness answers: what the refusal names — the concept, the key, the call, the premise and the type.
 
-use crate::tests::error;
+use crate::test_support::*;
 
 // No witness registered for the goal's head: a resolution-time error.
 #[test]

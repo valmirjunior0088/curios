@@ -1,10 +1,11 @@
 //! What a dump of Core writes a program's declarations as: a test and a foreign row in their forms, which imply their definitions, where the dump is handed what those are made against.
 
 use {
-    super::*,
-    curios_module::SYNTAX,
+    crate::test_support::*,
+    curios_module::{RootSource, SYNTAX},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
     curios_prelude::with_prelude,
-    curios_surface::{FormScope, Spelling},
+    curios_surface::{Entrypoint, FormScope, Spellable, Spelling},
     std::rc::Rc,
 };
 

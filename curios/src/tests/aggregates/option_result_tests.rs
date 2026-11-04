@@ -1,6 +1,6 @@
 //! The bound `Option/get` carries, and the report naming it when nothing fills it. The `Option` and `Result` surface itself is the corpus's `/aggregates/option_result`.
 
-use crate::tests::error;
+use crate::test_support::*;
 
 // An opaque option's bound reduces to nothing, and the report names the binder that was not filled rather than guessing.
 #[test]
@@ -29,7 +29,7 @@ fn reexported_option_serves_repeated_occurrences_and_higher_universes() {
         let nested: Option(Option(Nat)) = some(small.0);
         /std/print(Spell/spell(nested))
     "#;
-    assert_eq!(crate::tests::run(source), b"Option/some(Option/some(7))");
+    assert_eq!(run(source), b"Option/some(Option/some(7))");
 }
 
 #[test]
@@ -45,8 +45,5 @@ fn reexported_result_serves_repeated_occurrences_and_higher_universes() {
         let nested: Result(Str, Result(Str, Nat)) = success(small.0);
         /std/print(Spell/spell(nested))
     "#;
-    assert_eq!(
-        crate::tests::run(source),
-        b"Result/success(Result/success(7))"
-    );
+    assert_eq!(run(source), b"Result/success(Result/success(7))");
 }

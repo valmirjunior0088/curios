@@ -5,7 +5,7 @@
 //! A shape that compiles at sixty lines is a fixture here; `tower_measurements`, among the instrumented tests, counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
 use {
-    super::*,
+    crate::test_support::*,
     curios_common::fill,
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},

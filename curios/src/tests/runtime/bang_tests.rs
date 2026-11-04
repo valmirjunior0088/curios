@@ -1,11 +1,8 @@
 //! `!` regions at runtime: dispatch through a user witness, left-to-right threading, and mixed action types.
 
 use {
-    crate::tests::{run, run_entrypoint},
-    curios_common::fill,
-    curios_module::RootSource,
-    curios_native::MockHost,
-    curios_surface::Entrypoint,
+    crate::test_support::*, curios_common::fill, curios_module::RootSource,
+    curios_native::MockHost, curios_surface::Entrypoint,
 };
 
 #[test]

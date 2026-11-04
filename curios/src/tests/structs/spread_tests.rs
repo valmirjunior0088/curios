@@ -1,6 +1,6 @@
 //! Struct spread: identity copies, overrides, and every shape the update form rejects.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // `T { ..base, f = x }` copies every unwritten field from `base`; a bare spread is the identity copy.
 #[test]

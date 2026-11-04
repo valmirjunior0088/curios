@@ -1,7 +1,7 @@
 //! A stream's reader: its named reads over every way an input may arrive, a read a deadline abandons, a refusal past the bound, and one reader read by two branches.
 
 use {
-    crate::tests::{compile, run_text},
+    crate::test_support::*,
     curios_common::fill,
     curios_native::{ForeignBindings, MockHost},
 };

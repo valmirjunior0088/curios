@@ -1,6 +1,6 @@
 //! Packed literals and field stores fusing to a flat build, and the regrown store that stays lazy.
 
-use crate::tests::{census_settles, cps_optm_module, emits, run};
+use crate::test_support::*;
 
 /// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cps`): the byte literal's two runtime atoms become a `BytesChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
 #[test]

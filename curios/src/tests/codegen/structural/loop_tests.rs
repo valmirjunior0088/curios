@@ -1,9 +1,6 @@
 //! Hot loops and recursion: single-entry continuations, natural loops, scalars in registers, and no irreducible fallback.
 
-use {
-    super::test_support::*,
-    crate::tests::{cps_optm_module, emits, reads_nat},
-};
+use {super::test_support::*, crate::test_support::*};
 
 // -- LCG --------------------------------------------------------------------
 

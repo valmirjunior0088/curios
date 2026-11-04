@@ -2,7 +2,7 @@
 //!
 //! **A pair per bound, because `/sys` states none of its own.** Each `/sys` declaration's bound is read off `Intrinsic::signature`, so a row that drew its edge one off — `<=` where `<` was meant — would be copied into the declaration faithfully and admit the operand. A second spelling of the row could only say that two spellings agree; a program on each side of the edge says what the bound means.
 
-use {crate::tests::typecheck, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// One bound at its edge: the operation, as a refusal names it, and the call on each side.
 struct Edge {

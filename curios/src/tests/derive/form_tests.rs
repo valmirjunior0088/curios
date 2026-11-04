@@ -1,6 +1,6 @@
 //! The derived witness's form: the transient it lowers to and its expansion, and what the compiler refuses in its place, as it refuses a written witness.
 
-use crate::tests::{core, core_elab, error, unlaid};
+use crate::test_support::*;
 
 #[test]
 fn the_stages_show_the_transient_and_its_expansion() {

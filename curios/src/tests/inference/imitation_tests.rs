@@ -2,10 +2,7 @@
 //!
 //! `M(A)` against `Two(Nat, Bool)` holds at `M := (x) => Two(Nat, x)`, the imitation, and at `(x) => Two(x, Bool)` as well: one function among several, so conversion leaves the pair parked, and the call takes the imitation only once it has read every argument, where nothing else stated the function and every such pair gives it the same. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
 
-use {
-    crate::tests::{error, run},
-    curios_common::fill,
-};
+use {crate::test_support::*, curios_common::fill};
 
 /// `body` over the declarations these programs share, its last line the text printed.
 fn program(body: &str) -> String {

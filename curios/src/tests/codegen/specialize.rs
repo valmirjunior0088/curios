@@ -1,7 +1,7 @@
 //! Constructor specialization preserves nominal row identity across runtime-dependent types.
 
 use {
-    crate::tests::compile,
+    crate::test_support::*,
     curios_native::{ForeignBindings, MockHost},
 };
 

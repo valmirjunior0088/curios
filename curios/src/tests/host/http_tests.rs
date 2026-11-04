@@ -1,7 +1,7 @@
 //! HTTP: the messages a program is refused where it writes them, a server's connection from the request it reads to the close, and a client's reply read as its framing delimits it.
 
 use {
-    crate::tests::{compile, typecheck},
+    crate::test_support::*,
     curios_common::fill,
     curios_native::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
 };

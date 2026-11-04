@@ -1,6 +1,6 @@
 //! The `Lift` edges between monads: an action or tail lifted along a declared edge, a `Try` lifted by its base, and a missing edge or composite reported by the witness it lacks.
 
-use crate::tests::{run, typecheck};
+use crate::test_support::*;
 
 // === `/std/Try`: the error channel over a base monad, and its edges. ====
 

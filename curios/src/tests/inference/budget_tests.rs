@@ -2,10 +2,7 @@
 //!
 //! A budget is a refusal about cost rather than about meaning, so each row is a pair in spirit: a computation the default budget affords, and one no budget should. A regression here shows up as a program that used to compile and now cannot, or as one that spends unboundedly before saying so.
 
-use {
-    crate::tests::{error, run, typecheck_within},
-    curios_pipeline::DEFAULT_BUDGET,
-};
+use {crate::test_support::*, curios_pipeline::DEFAULT_BUDGET};
 
 // A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in type position — same infinite-spin behavior as a top-level `rec` — so a step budget stops it with an error rather than hanging.
 #[test]
@@ -45,7 +42,7 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
             end;
         entry()
         "#;
-    assert!(crate::tests::typecheck_within(1_000, source).is_err());
+    assert!(typecheck_within(1_000, source).is_err());
 }
 
 /// The same chain end to end: with `Term::any_metavar` visiting a shared subterm once, it elaborates, compiles, and runs within the default budget. Kept beside the small-budget probe above so the pair states both directions — a budget too small refuses loudly, the default one finishes.

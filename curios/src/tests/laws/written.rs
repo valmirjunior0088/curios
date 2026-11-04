@@ -1,6 +1,6 @@
 //! The rows stated by hand: every carrier's laws no family states, the controls beside the laws a rule must stop short of, and the refused candidates with the reason conversion does not take each.
 
-use {super::*, crate::tests::typecheck, curios_common::fill};
+use {super::*, curios_common::fill};
 
 /// One carrier's rows: the binders every claim is stated under, the laws `Eq/refl()` closes, and the laws it refuses.
 struct Carrier {

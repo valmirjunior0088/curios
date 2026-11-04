@@ -1,6 +1,6 @@
 //! How an infix resolves: against a literal's or a variable's type, to a user type's witness or a local premise, and the refusals that name what is missing.
 
-use crate::tests::{error, run, typecheck_within};
+use crate::test_support::*;
 
 // A default is a literal's. An operator with no literal operand takes none: its operand type waits for whatever pins it, here the line after, and where nothing does the program is refused at the parameter nothing typed, not read at `Nat`.
 #[test]

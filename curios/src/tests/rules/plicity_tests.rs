@@ -2,7 +2,7 @@
 //!
 //! The rule is `documentation/design/theory/plicity-is-part-of-function-identity.md`. The kernel's halves are `curios_cert`'s `plicity_distinguishes_two_function_types`, `a_function_type_is_below_none_of_other_marks` and `a_lambda_of_other_marks_does_not_check_against_a_function_type`.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // A family computing a function type of one mark or the other, and a value of the first handed where the second is wanted. Wrapped in a call, the reference keeps its type and nothing is inserted, so what refuses it is conversion holding the two function types apart by their marks. The control hands the same value where its own type is wanted and calls it.
 #[test]

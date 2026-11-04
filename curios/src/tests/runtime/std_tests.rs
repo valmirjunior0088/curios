@@ -1,9 +1,6 @@
 //! The `/std` surfaces a program reaches at runtime: randomness, parsing, the clock, and cells.
 
-use {
-    crate::tests::{error, run, run_text},
-    curios_native::MockHost,
-};
+use {crate::test_support::*, curios_native::MockHost};
 
 // A struct type is nominal: it never converts with a structural tuple type of the same fields.
 #[test]

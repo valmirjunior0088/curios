@@ -2,10 +2,7 @@
 //!
 //! `rest(xs)` against `rest([1, 2])` holds at `xs := [1, 2]` and at every list with that tail: one answer among several, so conversion decides the pair by reduction and leaves it parked where reduction is stuck, and the call takes the spines' answer only once it has read every argument, where nothing else gave the implicit and every such pair gives it the same. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
 
-use {
-    crate::tests::{error, run},
-    curios_common::fill,
-};
+use {crate::test_support::*, curios_common::fill};
 
 /// `body` over the declarations these programs share, its last line the text printed.
 fn program(body: &str) -> String {

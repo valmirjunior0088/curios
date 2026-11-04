@@ -10,6 +10,7 @@
 
 use {
     super::*,
+    crate::test_support::*,
     curios_common::fill,
     curios_core::{Consumption, Cost},
     curios_module::RootSource,

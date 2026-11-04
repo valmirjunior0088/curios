@@ -2,7 +2,7 @@
 //!
 //! Two things, and they are why the motive may be omitted at all: the result type inferred from the arms, and the definitional refinement each arm carries for its own body. A guard is the same mechanism wearing `choose`'s syntax.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 #[test]
 fn match_omitted_motive_infers() {

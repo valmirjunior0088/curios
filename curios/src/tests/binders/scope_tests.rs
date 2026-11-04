@@ -1,6 +1,6 @@
 //! Scoping: a later binder's annotation sees the earlier ones and the pattern leaves before it, and a binder or member left unnamed is reached by no name.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // === Scoping: a later annotation names the binders before it. ====================
 

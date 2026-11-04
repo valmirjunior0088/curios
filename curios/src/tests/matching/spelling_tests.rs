@@ -1,6 +1,6 @@
 //! A guard and the statement its fact proves, apart in how an argument is spelled: an implicit written on one side and left out on the other, at a structure's element and through a structure's proof field.
 
-use {crate::tests::typecheck, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A recursive predicate over a list of any element type: every written call takes a universe level of its own, so a guard and a statement over it are two calls apart in their instance, which their arguments decide.
 const EVERY: &str = "let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =

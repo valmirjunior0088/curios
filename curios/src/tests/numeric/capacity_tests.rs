@@ -1,10 +1,6 @@
 //! Requested construction counts stay exact until the runtime's logical length bound, and larger values refuse before allocation.
 
-use {
-    super::test_support::*,
-    crate::tests::{compile, error},
-    curios_common::fill,
-};
+use {super::test_support::*, crate::test_support::*, curios_common::fill};
 
 #[test]
 fn a_requested_length_past_the_runtime_bound_refuses_before_allocating() {

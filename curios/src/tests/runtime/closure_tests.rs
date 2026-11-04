@@ -1,7 +1,7 @@
 //! Closures and local recursion surviving erasure and codegen, including the shapes a knot builds.
 
 use {
-    crate::tests::{emits, run, run_text},
+    crate::test_support::*,
     curios_module::RootSource,
     curios_native::MockHost,
     curios_pipeline::{Stage, compile_with_prelude},

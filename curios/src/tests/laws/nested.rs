@@ -3,7 +3,7 @@
 //! A node is held to another by its own reader over operands spelled already, so each layer of a term is read once, from its leaves, and only against the nodes that stand over its atoms. Two nodes put to a checker as two atoms are would have their operands classed again inside each comparison, and the cost would double with every level; a node read against every earlier node of its operation would be read pair by pair at every fold above it. A stuck sum is classified from the sum it extends, so a sum of calls of one head puts each pair of calls to its checker once, where classifying every level from nothing asks the classes below again. The fixtures hold the three shapes at sizes none answers at otherwise; `nested_operation_measurements` reports what each size of the first two costs.
 
 use {
-    crate::tests::typecheck,
+    crate::test_support::*,
     curios_common::fill,
     std::{fmt::Write, time::Instant},
 };

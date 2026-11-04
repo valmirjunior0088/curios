@@ -1,7 +1,7 @@
 //! What a rope's run holds once it is read: every element in its place, whatever shape built it.
 
 use {
-    crate::tests::{compile, run_text},
+    crate::test_support::*,
     curios_native::{MockHost, test_support::*},
 };
 

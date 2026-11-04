@@ -2,7 +2,7 @@
 //!
 //! A block is typed by its tail, and the tail's type may name what the block binds. Nothing binds those names once the block is left, so the type the block answers reads each local as its value and a recursive member as its projection out of its group, and a candidate that names a local, for a metavariable born outside the block, is that value's. A metavariable born in the block holds each local as an argument: one the block leaves unsolved is restricted to the binders that remain, so that whatever solves it later names no local where the block's type is read.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 /// A block's type reads the block's local by value: `tag(n)` is typed `Eq()(n, n)` inside the block and `Eq()(2, 2)` where the block is left, which is how the kernel types a `let`. Left naming `n`, the binding after the block is refused for a type that reads `Eq()(n, n)`, and with nothing reading the type the kernel refuses the declaration for an unbound name.
 #[test]

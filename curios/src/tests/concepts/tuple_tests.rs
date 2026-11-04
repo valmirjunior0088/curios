@@ -1,6 +1,6 @@
 //! The standard library's witnesses on the tuple shapes, end to end: `/std/Tuple`'s `Show`, `Eql` and `Ord`.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 // A tuple shows as its literal is written, so the rendering re-reads as source: the empty shape as `()`, the one-field shape keeping the trailing comma that separates it from a parenthesized term, and a nested tuple showing through the same witness at its own shape.
 #[test]

@@ -1,6 +1,6 @@
 //! Guest storage outcomes, erased payloads, and the bounds and privacy behind coordination.
 
-use crate::tests::{run, typecheck};
+use crate::test_support::*;
 
 #[test]
 fn a_channel_preserves_fifo_through_wraparound_and_close() {

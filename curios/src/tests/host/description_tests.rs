@@ -1,6 +1,6 @@
 //! A host call as a term: a description whose declaration and operands are all it is, so two calls of one row are one where their operands convert, to each checker alike.
 
-use crate::tests::typecheck;
+use crate::test_support::*;
 
 /// The declarations every claim below is stated over: a `File`'s `Io/close` called through two definitions, and through one over an operand that converts with its binder without being it.
 const CALLS: &str = r#"

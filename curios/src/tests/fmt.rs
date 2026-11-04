@@ -3,7 +3,7 @@
 //! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
-    super::*,
+    crate::test_support::*,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
@@ -266,7 +266,7 @@ fn runtime_args_leave_no_formatter_in_cps() {
 /// A format string the program reads at run time has a type nothing can reduce, and the refusal spells that type as written — `format_type_with(Str, Fmt/parse(s))` — rather than as the unfolded definition stuck on `s`, which is what the reduced form is.
 #[test]
 fn a_runtime_format_string_is_refused_by_its_written_type() {
-    let refused = super::error(
+    let refused = error(
         r#"
         use /std/{Str, Fmt, Io, Try, Proc};
 

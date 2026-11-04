@@ -2,7 +2,7 @@
 //!
 //! An inductive is not uniform in its indices, so nothing composes through one and the walk leaves them opaque. What these pin is the boundary that leaves: which index positions still admit a recursive occurrence, and which are not reachable at all.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // A family that recurses at an index computed from its own payload. Indices are walked opaquely — an inductive is not uniform in them — so what has to survive is the *payload* occurrence, not the index.
 #[test]

@@ -1,9 +1,6 @@
 //! What each carrier's operators compute: `Bool`'s logic and equality, `Nat` and `Int` arithmetic and bitwise operations, `Flt`'s remainder, and equality on text and bytes.
 
-use {
-    crate::tests::{run, run_text},
-    curios_native::MockHost,
-};
+use {crate::test_support::*, curios_native::MockHost};
 
 #[test]
 fn bool_logic_and_of_str() {

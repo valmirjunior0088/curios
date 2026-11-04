@@ -1,6 +1,6 @@
 //! `choose`: arm order, bind arms, the fallthrough a nested bind shares, and what a ladder's rest learns of the arms before it.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // A condition arm followed by a refutable bind arm parses as `Choose`, and lowering the bind arm does not route through the headed-match dependent-motive/default gate.
 #[test]

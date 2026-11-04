@@ -2,7 +2,7 @@
 //!
 //! A goal is never accepted in a compiled program, so what these check is the *report*: which scope it names and at which position, for each syntactic place a goal may be written.
 
-use crate::tests::typecheck;
+use crate::test_support::*;
 
 #[test]
 fn a_goal_in_a_local_let_annotation_is_reported() {

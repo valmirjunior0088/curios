@@ -2,7 +2,7 @@
 //!
 //! Each program types its callee `g` at a `Pick` of a decision that is `true` to conversion and stuck to the fold alone.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 // The fold of `==` pairs its atoms by spelling, and `f(same(n))` is no spelling of `f(n)`: the two are one call to conversion, which unfolds `same`.
 #[test]

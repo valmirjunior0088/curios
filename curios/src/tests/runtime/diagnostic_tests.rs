@@ -1,6 +1,6 @@
 //! What a runtime diagnostic names: source binder names, shortened globals, and infix index arithmetic.
 
-use {crate::tests::error, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 #[test]
 fn uses_source_binder_names() {

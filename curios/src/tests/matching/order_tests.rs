@@ -1,6 +1,6 @@
 //! The order a match's arms are stored in: the order the family declares its constructors, however the arms are written.
 
-use crate::tests::typecheck;
+use crate::test_support::*;
 
 /// Two matches whose arms are written in two orders are one term, so each checker converts the one to the other: with a catch-all, which reads only the constructors the arms name; with an arm for every constructor; and through the matrix form, a tuple's rows naming a constructor each.
 #[test]

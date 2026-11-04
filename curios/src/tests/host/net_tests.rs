@@ -1,7 +1,7 @@
 //! Calling and serving over the network, TLS, and the foreign declaration that reaches the host through supplied bindings.
 
 use {
-    crate::tests::{run, run_text},
+    crate::test_support::*,
     curios_common::{fill, test_support::*},
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},

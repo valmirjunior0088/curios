@@ -1,6 +1,6 @@
 //! The typing facts erasure rests on: two proofs of one proposition are interchangeable, data is not, and a proposition eliminates into data only when that cannot observe which proof it was.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {

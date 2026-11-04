@@ -1,6 +1,6 @@
 //! A fold's arms learn nothing of its scrutinee: what an arm reads of it, and what a motive that names it states.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // The induction hypothesis of a fold is typed at the motive opened at the tail, and no arm of a fold refines the scrutinee. A motive that names the scrutinee instead of binding it therefore states one proposition at every tail, `Eq()(n, 0)` here, and the identity arm's `refl` does not inhabit it. Were the arms typed with the scrutinee at their case, every program below would compile, run, and print, certifying a closed inhabitant of `Eq()(1, 0)`.
 #[test]

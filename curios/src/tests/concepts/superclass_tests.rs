@@ -1,6 +1,6 @@
 //! Resolving a goal through a superclass edge of a `use` binder in scope, an edge's scope over the fields of its own concept, and a literal's laws over the edge it writes.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // A superclass edge resolved by projection: inside `same`, the goal `Equal(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to the `Ordered(Nat)` witness, whose own omitted superclass field resolves to the `Equal(Nat)` witness — no field names a witness anywhere.
 #[test]

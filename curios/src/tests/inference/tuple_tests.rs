@@ -2,10 +2,7 @@
 //!
 //! Three rules meet here. A literal whose expectation never gains structure takes the non-dependent product where the term that awaits its type has read its parts, because by then nothing is left to send a dependent telescope. Two literals that wait on one type are one shape there, each filling what the other left open, whichever is read first. A literal whose expectation is merely *stuck* — a `rec` waiting on an index it has not been given — waits instead, since a solution is still coming. The refusals matter as much as the acceptances: a rigid non-tuple expectation and a rigidly stuck one both refuse at the literal.
 
-use {
-    crate::tests::{error, run},
-    curios_common::fill,
-};
+use {crate::test_support::*, curios_common::fill};
 
 // A tuple argument that is the *only* thing determining a call's type variable, where the result type does not mention it — so the apply's turnaround pins nothing and the literal is left holding its own expectation. The call gives it its shape where it completes, rather than leaving it for the item's drain.
 #[test]

@@ -1,6 +1,6 @@
 //! Which guards an arm records an equation under: only a spelling that mentions a local, the same rule in both checkers, so a dead arm under a closed guard is refused where it is written rather than accepted and then refused by the kernel.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 /// The refusal a proof resting on a guard that records nothing gets: the proof's own mismatch, and the note that the arm is never taken.
 fn assert_refused_in_a_dead_arm(source: &str) {

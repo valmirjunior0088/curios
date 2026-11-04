@@ -1,6 +1,6 @@
 //! What a refusal's report says and where it points, for refusals `tests::rules` holds as patterns over the checker's error: a report is read by a person, so its words and its caret are claims of their own, which no pattern over an error states.
 
-use crate::tests::error;
+use crate::test_support::*;
 
 // The refusal names the declaration by the keyword it is written with and stands at the field's type, spelling the field as it is written: a superclass edge under `use`, a labeled field by its label, and a method or field written as a signature over the whole of it.
 #[test]

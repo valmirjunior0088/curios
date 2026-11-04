@@ -2,7 +2,7 @@
 //!
 //! What parks holds the frames it parks under, and its retry stands on them wherever it runs: each guard in the frame it was registered in, so a guard read under another is read under it on a retry as it is in place.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 /// A call read on a retry is read under both guards of its arm. `need(y, z)` asks for `y <= z`, which the inner guard gives once the outer one has made `p(x)` true: `q(p(x), y) <= z` is `y <= z` there. Behind `late`'s lambda the call is read on a retry, which stands on the two arms' frames, the inner guard under the outer. Registered again side by side in one frame, the inner guard was settled with nothing of the outer and the declaration was refused, `a proof was found and did not check`; it was refused the same where the retry ran in another arm than the lambda's.
 #[test]

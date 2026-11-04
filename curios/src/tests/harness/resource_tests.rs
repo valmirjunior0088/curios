@@ -1,6 +1,6 @@
 //! Resource protection covers complete interpretation, including failures reached after suspension.
 
-use {super::super::*, curios_native::MockHost};
+use {crate::test_support::*, curios_native::MockHost};
 
 #[test]
 fn a_scope_releases_before_propagating_a_failure_reached_after_yielding() {

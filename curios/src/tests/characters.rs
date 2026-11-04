@@ -1,6 +1,6 @@
 //! Character literals as numerals: realization at each carrier with `Char` as the shape default, and dispatch as `Nat` pattern literals.
 
-use super::*;
+use crate::test_support::*;
 
 #[test]
 fn a_character_realizes_at_the_expected_carrier() {

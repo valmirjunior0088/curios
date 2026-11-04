@@ -5,10 +5,8 @@
 //! **Each row's control is its first column.** A pair conversion does not equate outside every arm is no respelling, and a cell over it would be refused for that and say nothing of the position; so each row states the equation at the top of an item, and it is held.
 
 use {
-    super::{
-        laws::{Binder, orders},
-        *,
-    },
+    super::laws::{Binder, orders},
+    crate::test_support::*,
     curios_common::fill,
 };
 

@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::tests::run_text,
+    crate::test_support::*,
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
     curios_core::{Global, Term},

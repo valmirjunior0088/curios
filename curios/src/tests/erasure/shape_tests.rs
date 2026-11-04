@@ -2,7 +2,7 @@
 //!
 //! A nominal type's runtime shape is its declaration's row at the sorts its instance states, read by every site that builds or reads a value of it: a use at `Prop` of a declaration that leaves its sort to its caller reads the row at `Prop`, which keeps no field for a proof, and a body generic in that sort is linked at the sort each use states.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 // The lambda is written at `(Type, Nat) -> Nat`, with `A` the caller's `Type`, and called at `(A, Nat) -> Nat`.
 #[test]

@@ -1,9 +1,6 @@
 //! What a `Str` literal costs to compile and how one reads in a report. The `Str` surface itself — indexing, slicing and trimming at codepoint boundaries — is the corpus's `/strings/str`.
 
-use {
-    crate::tests::{run, typecheck},
-    curios_common::fill,
-};
+use {crate::test_support::*, curios_common::fill};
 
 #[test]
 fn literal_prints_its_bytes() {
@@ -63,7 +60,7 @@ fn a_long_literal_is_elided_in_a_report() {
         "#,
         literal
     );
-    let refused = crate::tests::error(&source);
+    let refused = error(&source);
 
     assert!(
         refused.contains(&format!("\"{}…\" (36 more characters)", &literal[..64])),

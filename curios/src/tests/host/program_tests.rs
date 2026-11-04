@@ -1,7 +1,7 @@
 //! What closes a program: each type `/std/Program` executes, by what the program wrote and the status it ended with, and what a term nothing executes is told.
 
 use {
-    crate::{tests::typecheck, *},
+    crate::{test_support::*, *},
     curios_common::fill,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, MockHostBuilder},

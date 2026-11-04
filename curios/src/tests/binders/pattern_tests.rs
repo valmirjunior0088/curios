@@ -1,6 +1,6 @@
 //! Plicity at a constructor pattern: an implicit payload matched, a hidden one left out or written under its mark, and the binders that claim no slot.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // A constructor pattern names an implicit payload under `@`, ahead of the plain payload it precedes. `Vec/cons` declares its length index implicit, so the arm that names it binds it with `@`.
 #[test]

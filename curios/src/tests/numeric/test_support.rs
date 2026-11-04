@@ -5,7 +5,7 @@
 //! The differential harness: each scalar expression runs twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and the two answers must be identical, pinning the folders and the backend to one semantics.
 
 use {
-    crate::tests::compile,
+    crate::test_support::*,
     curios_common::fill,
     curios_native::{Compiled, ForeignBindings, MockHost},
 };

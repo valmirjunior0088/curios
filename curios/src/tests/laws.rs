@@ -13,7 +13,7 @@
 //! **The rules no law table states have seeds.** Beta, delta, zeta, iota, eta and irrelevance are conversion's as the carriers' laws are, and `structural` states one equation for each and the near miss beside it, which `contexts` places under every child a term former holds. A seed states no side: [`asked_alone`] reads which side each checker puts it on — the elaborator by the proof it is handed, since a candidate search costs a seed's row more than elaborating it does — and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find. Why a row's verdict is derived from its seed and asked of each checker alone is `documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md`.
 
 use {
-    super::*,
+    crate::test_support::*,
     curios_common::Qualifier,
     curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
     curios_module::RootSource,

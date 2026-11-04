@@ -1,6 +1,6 @@
 //! Which arithmetic the totality analysis grades: `sqrt` descends on a guard between two computed values and is refused in a type, `log2` halves under a guard and is accepted, and `gcd` recurses on well-founded `<` and is accepted. What those functions compute is the corpus's `/numeric`.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // `sqrt`'s iteration descends on a comparison of two computed values, which the totality analysis does not grade, so it is retained as a partial program and refused where a proposition would depend on it. `log2` halves under a guard, which the arithmetic rung reads as a decrease, and `gcd` recurses through `/std/Nat/descend`, whose descent is its bound's, so the same position accepts both.
 #[test]

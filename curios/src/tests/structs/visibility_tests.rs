@@ -1,6 +1,6 @@
 //! What a representation exposes and to whom: private construction and projection, public signatures, and the plumbing user code may not reach.
 
-use crate::tests::{error, run};
+use crate::test_support::*;
 
 // Constructing a private-representation struct from outside its declaring module is rejected (`PrivateRepresentation`).
 #[test]

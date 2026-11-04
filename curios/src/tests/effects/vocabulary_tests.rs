@@ -1,9 +1,6 @@
 //! Each vocabulary in a region: an `Io` description sequenced and performed, `State` threaded, and `Result`'s early return.
 
-use {
-    crate::tests::{run, typecheck},
-    curios_common::fill,
-};
+use {crate::test_support::*, curios_common::fill};
 
 // === The `Io` vocabulary: constructing, sequencing, and forcing descriptions. ====
 

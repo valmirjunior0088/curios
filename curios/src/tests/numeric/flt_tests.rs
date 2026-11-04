@@ -1,6 +1,6 @@
 //! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding; and the literals of the values no decimal spells. The narrowings that answer partiality with an `Option` are the corpus's `/numeric`.
 
-use crate::tests::run;
+use crate::test_support::*;
 
 /// The codec round-trips at runtime: `to_str` prints the shortest decimal that reads back as its input, and `of_str` reads it back exactly. Every value is scaled by a runtime-tainted `1.0` so the whole pair runs in emitted Wasm rather than folding at compile time; a closed program would only exercise the partial evaluator.
 #[test]

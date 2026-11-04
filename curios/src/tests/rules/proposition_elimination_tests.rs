@@ -1,6 +1,6 @@
 //! What a proposition may be eliminated into: data where no constructor applies, another proposition always, and a cast along a proof that runs none of it.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]

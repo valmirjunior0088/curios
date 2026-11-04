@@ -1,6 +1,6 @@
 //! A spine's arguments and the proofs they carry: where an argument is typed, and two calls of one definition compared before either unfolds.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // **The position this row is about is typed.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they meet the head's telescope rather than `ground`, where the goal type is `Type`, irrelevance is never asked, and the kernel would refuse what the elaborator accepts.
 //

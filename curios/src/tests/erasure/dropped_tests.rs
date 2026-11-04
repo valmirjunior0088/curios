@@ -1,7 +1,7 @@
 //! What erasure deletes — type- and proof-valued parameters, fields, payloads and indices — and the runtime arities both sides of the seam agree on once they are gone.
 
 use {
-    crate::tests::run,
+    crate::test_support::*,
     curios_module::RootSource,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,

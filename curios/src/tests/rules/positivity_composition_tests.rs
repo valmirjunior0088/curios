@@ -2,7 +2,7 @@
 //!
 //! A check recognizing recursive occurrences only in immediate payload positions rejects every shape here, `/std/Toml` among them. Each row names the former whose polarity vector the occurrence composes against.
 
-use {super::test_support::*, crate::tests::run, curios_core::Polarity, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_core::Polarity, curios_elab::Error};
 
 // `Json/arr(List(Json))`: a list is a finite product of its element, so the intrinsic is covariant and a strict occurrence stays strict. Without polarity on intrinsics this shape is rejected outright.
 #[test]

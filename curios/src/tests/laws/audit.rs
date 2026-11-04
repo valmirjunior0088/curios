@@ -6,7 +6,6 @@
 
 use {
     super::*,
-    crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, declares},
 };
 

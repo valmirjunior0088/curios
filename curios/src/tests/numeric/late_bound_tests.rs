@@ -1,6 +1,6 @@
 //! A bound whose subject or proposition is pinned later: discharged once a later argument, the expected type or the goal pins it, held under the guard its slot was born under, and what a failing one reports.
 
-use crate::tests::{run, typecheck};
+use crate::test_support::*;
 
 // A bound is tried when it is inserted, where an arm's refinements are in scope — but its subject may not be known yet. Here a later argument pins `n`, after `ok` was inserted over an unsolved `n`; the bound is parked and discharged once the subject is known, instead of reported with the subject already substituted into it.
 #[test]

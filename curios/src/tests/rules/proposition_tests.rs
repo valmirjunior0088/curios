@@ -1,6 +1,6 @@
 //! What a proposition may carry and what is one: no informative field, method or superclass, no type field or payload over its own sort, and the records, functions and lists that are or are not propositions.
 
-use {super::test_support::*, crate::tests::run, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry. A hidden field is a field like any other, whatever position a literal gives it.
 #[test]
