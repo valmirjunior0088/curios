@@ -7,7 +7,7 @@
 use {
     super::*,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, test_support::*},
     curios_surface::Entrypoint,
     std::{fmt::Write, time::Instant},
 };

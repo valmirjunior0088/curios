@@ -7,7 +7,7 @@ use {
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
     curios_module::RootSource,
     curios_num::Binary,
-    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
     curios_surface::Entrypoint,
     std::hash::{DefaultHasher, Hash, Hasher},
 };

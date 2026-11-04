@@ -23,5 +23,9 @@ pub use recompile::*;
 mod standard;
 pub use standard::*;
 
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_pipeline::test_support::recheck_with_prelude` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
+
 /// The default reduction budget, re-exported so every caller of [`compile_entrypoint`] can name it without depending on `curios-elab`.
 pub use curios_elab::DEFAULT_BUDGET;

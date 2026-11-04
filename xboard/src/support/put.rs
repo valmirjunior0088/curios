@@ -12,7 +12,7 @@ use {
         Zonked, ZonkedRefusal,
     },
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Examined, test_support::*},
     curios_surface::Spelling,
     std::fmt,
 };

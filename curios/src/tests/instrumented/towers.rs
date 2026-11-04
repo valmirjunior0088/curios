@@ -4,7 +4,7 @@ use {
     crate::tests::{Shape, Stands, tower},
     curios_core::{Zonked, take_looks},
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude_measured, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
     curios_surface::Entrypoint,
 };
 

@@ -44,6 +44,8 @@ getrandom = { workspace = true }
 [dev-dependencies]
 # The runtime's test support too, for the replies no checked host gives that the guest's own checks of a reply are tested against.
 curios-native = { workspace = true, features = ["test-support"] }
+# The puts, which judge a program or a module with the prelude in scope as the board does. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-pipeline = { workspace = true, features = ["test-support"] }
 # The law table the generated grid states and holds at closed values.
 curios-algebra = { workspace = true }
 curios-cert = { workspace = true }

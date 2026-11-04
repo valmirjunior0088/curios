@@ -9,7 +9,7 @@ use {
         Telescope, Term, UniverseContext, Universes, Zonked,
     },
     curios_module::SYNTAX,
-    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
 };
 
 fn bad() -> Global {

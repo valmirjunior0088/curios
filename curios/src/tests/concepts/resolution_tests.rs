@@ -5,7 +5,7 @@ use {
     curios_common::{Qualifier, fill},
     curios_core::{Field, Global, Item, Proj, Subterm},
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
     curios_surface::Entrypoint,
 };
 

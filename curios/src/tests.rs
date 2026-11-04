@@ -78,7 +78,7 @@ use {
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_pipeline::{
-        DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude, typecheck_with_prelude,
+        DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude, test_support::*,
     },
     curios_surface::Entrypoint,
     curios_surface::Spellable,

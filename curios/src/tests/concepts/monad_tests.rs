@@ -5,7 +5,7 @@ use {
     curios_common::fill,
     curios_core::Zonked,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
     curios_surface::Entrypoint,
 };
 

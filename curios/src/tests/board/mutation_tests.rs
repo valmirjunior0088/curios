@@ -5,6 +5,7 @@
 use {
     curios_core::{Definitions, Item, Program, Term, Zonked},
     curios_module::RootSource,
+    curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     curios_surface::Spellable,
 };
@@ -12,7 +13,7 @@ use {
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.
 fn recheck(program: &Program, budget: u64) -> Vec<curios_cert::Verdict> {
     let zonked = Zonked::project(program).expect("a mutant stays zonked");
-    curios_pipeline::recheck_with_prelude(&zonked, budget)
+    recheck_with_prelude(&zonked, budget)
 }
 /// Programs whose items sit at deliberately varied types — intrinsic, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.
 const SUBJECTS: &[(&str, &str)] = &[
@@ -83,7 +84,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             program,
             obligations,
             ..
-        } = curios_pipeline::typecheck_with_prelude(
+        } = typecheck_with_prelude(
             curios_pipeline::DEFAULT_BUDGET,
             &entrypoint,
             &RootSource::none(),
@@ -138,7 +139,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let program = curios_pipeline::typecheck_with_prelude(
+        let program = typecheck_with_prelude(
             curios_pipeline::DEFAULT_BUDGET,
             &entrypoint,
             &RootSource::none(),
@@ -222,7 +223,7 @@ fn elaborated(description: &str, source: &str) -> Program {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    curios_pipeline::typecheck_with_prelude(
+    typecheck_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),

@@ -9,6 +9,8 @@ description = "The pure Curios compile driver, from surface text to a WebAssembl
 workspace = true
 
 [features]
+# `test_support`: the puts, a program or a module handed to the checkers with the fixed prelude in scope, for the soundness board and `curios`'s suites that judge what it judges. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
 profile = [
     "curios-profile/enabled",
     "curios-module/profile",

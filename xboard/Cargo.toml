@@ -19,7 +19,7 @@ curios-cert = { workspace = true }
 # The error a witness expects of the elaborator.
 curios-elab = { workspace = true }
 # A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope.
-curios-pipeline = { workspace = true }
+curios-pipeline = { workspace = true, features = ["test-support"] }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
 curios-surface = { workspace = true }

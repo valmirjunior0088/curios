@@ -7,10 +7,9 @@ mod tests;
 
 use {
     crate::{
-        Cache, Checked, CompileError, EntryTail, Examined, Progress, ReadLowering, Refused, Stage,
-        TestProgram, Told, Typechecked, check_entrypoint_reading, compile_units_reading,
-        compile_with_tail, declared_test_paths, examine_entrypoint, lower_subject, recheck,
-        recheck_measured, typecheck_entrypoint,
+        Cache, Checked, CompileError, EntryTail, Progress, ReadLowering, Stage, TestProgram, Told,
+        check_entrypoint_reading, compile_units_reading, compile_with_tail, declared_test_paths,
+        lower_subject,
     },
     curios_abi::ForeignStore,
     curios_common::Qualifier,
@@ -423,57 +422,4 @@ fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifi
 /// The documentation record of each of the prelude's roots, in the fold's order — off the image this compiler was built with: no sources, no store, nothing compiled and no unit restored.
 pub fn prelude_documentation() -> Vec<Documentation> {
     curios_prelude::documentation()
-}
-
-/// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`].
-pub fn typecheck_with_prelude(
-    budget: u64,
-    entrypoint: &curios_surface::Entrypoint,
-    loader: &curios_module::RootSource,
-) -> Result<Typechecked, Refused> {
-    with_prelude(|prelude| {
-        typecheck_entrypoint(
-            budget,
-            Predecessors::over(prelude),
-            &SYNTAX,
-            entrypoint,
-            loader,
-        )
-    })
-}
-
-/// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`].
-pub fn examine_with_prelude(
-    budget: u64,
-    entrypoint: &curios_surface::Entrypoint,
-    loader: &curios_module::RootSource,
-) -> Result<Examined, Refused> {
-    with_prelude(|prelude| {
-        examine_entrypoint(
-            budget,
-            Predecessors::over(prelude),
-            &SYNTAX,
-            entrypoint,
-            loader,
-        )
-    })
-}
-
-/// Put `program` to the independent kernel with the fixed prelude in scope, handing the walk's own kernel to `read` for a measurement to take what it wants of it. See [`recheck_measured`].
-pub fn recheck_with_prelude_measured<T>(
-    program: &curios_core::Zonked<curios_core::Program>,
-    budget: u64,
-    read: impl FnOnce(&curios_cert::Kernel<'_>) -> T,
-) -> (Vec<curios_cert::Verdict>, T) {
-    with_prelude(|prelude| {
-        recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX, read)
-    })
-}
-
-/// Put `program` to the independent kernel with the fixed prelude in scope. See [`recheck`].
-pub fn recheck_with_prelude(
-    program: &curios_core::Zonked<curios_core::Program>,
-    budget: u64,
-) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| recheck(program, budget, Predecessors::over(prelude), &SYNTAX))
 }

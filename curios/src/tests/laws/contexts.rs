@@ -9,7 +9,7 @@ use {
     curios_common::{Qualifier, recurse},
     curios_core::{Bound, Carrier, Cases, Global, Item, Match, Subterm, Term, Universes, Visit},
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
+    curios_pipeline::DEFAULT_BUDGET,
     curios_surface::Entrypoint,
 };
 
