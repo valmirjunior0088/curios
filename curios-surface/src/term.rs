@@ -7,7 +7,7 @@ use {
     curios_num::Natural,
     curios_parse::ParserError,
     curios_print::run_printer,
-    std::{fmt, ops::Deref, rc::Rc, str::FromStr},
+    std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -102,13 +102,31 @@ impl<D: Dialect> TupleTypeParam<D> {
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
     pub fn desugared_type(&self) -> Term<D> {
         match &self.func_params {
-            Some(params) => Subterm::FuncType(FuncType {
-                params: params.clone(),
-                output: self.type_.clone(),
-            })
-            .into(),
+            Some(params) => signature_type(self.label.as_ref(), params, &self.type_),
             None => self.type_.clone(),
         }
+    }
+}
+
+/// The Π-type a signature written `label(params) -> output` stands for, placed from its label to its result type where both were written: a report about the type stands on the signature its reader wrote, as one about a plain field's type stands on that type.
+pub(crate) fn signature_type<D: Dialect>(
+    label: Option<&Label>,
+    params: &[FuncTypeParam<D>],
+    output: &Term<D>,
+) -> Term<D> {
+    let undone: Term<D> = Subterm::FuncType(FuncType {
+        params: params.to_vec(),
+        output: output.clone(),
+    })
+    .into();
+
+    match (label.and_then(Label::span), output.span()) {
+        (Some(label), Some(output)) => undone.with_span(Span::new(
+            Arc::clone(&label.source),
+            label.start,
+            output.end,
+        )),
+        _ => undone,
     }
 }
 

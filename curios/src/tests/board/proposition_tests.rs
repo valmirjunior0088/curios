@@ -25,7 +25,7 @@ fn a_proposition_concept_may_not_carry_informative_methods() {
     );
 }
 
-// The refusal names the declaration by the keyword it is written with and stands at the field's type, spelling the field as it is written: a superclass edge under `use`, a labeled field by its label.
+// The refusal names the declaration by the keyword it is written with and stands at the field's type, spelling the field as it is written: a superclass edge under `use`, a labeled field by its label, and a method or field written as a signature over the whole of it.
 #[test]
 fn an_informative_field_is_reported_as_written_at_its_type() {
     for (source, words, place) in [
@@ -38,6 +38,16 @@ fn an_informative_field_is_reported_as_written_at_its_type() {
             "use /std/{Nat};\nuse /std/Bool/{True};\npub struct Bad: Prop { first: True, value: Nat, }\n/std/print(\"no\")\n",
             "struct 'Bad' is declared at sort 'Prop' but its field 'value: Nat' is informative\n  a 'Prop' struct's fields must all be propositions\n",
             "    3 | pub struct Bad: Prop { first: True, value: Nat, }\n      |                                            ^^^",
+        ),
+        (
+            "use /std/{Nat};\nconcept Bad(A: Type): Prop { get(A) -> Nat, }\n/std/print(\"no\")\n",
+            "concept 'Bad' is declared at sort 'Prop' but its field 'get: (A) -> Nat' is informative\n  a 'Prop' concept's fields must all be propositions\n",
+            "    2 | concept Bad(A: Type): Prop { get(A) -> Nat, }\n      |                              ^^^^^^^^^^^^^",
+        ),
+        (
+            "use /std/{Nat};\npub struct Bad: Prop { get(Nat) -> Nat, }\n/std/print(\"no\")\n",
+            "struct 'Bad' is declared at sort 'Prop' but its field 'get: (Nat) -> Nat' is informative\n  a 'Prop' struct's fields must all be propositions\n",
+            "    2 | pub struct Bad: Prop { get(Nat) -> Nat, }\n      |                        ^^^^^^^^^^^^^^^",
         ),
     ] {
         let report = error(source);

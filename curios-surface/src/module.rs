@@ -1,9 +1,9 @@
 use {
     super::{
-        Argument, Dialect, FieldSugarParam, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic,
-        Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
+        Argument, Dialect, FieldSugarParam, FuncSugarParam, FuncTypeParam, Intrinsic, Label,
+        LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
         clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
-        parse_top_item, print_module_items, print_term, take_comments,
+        parse_top_item, print_module_items, print_term, signature_type, take_comments,
     },
     curios_abi::WireSignature,
     curios_common::{Plicity, Report, Source, Span},
@@ -214,11 +214,7 @@ impl<D: Dialect> ConceptField<D> {
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
     pub fn desugared_type(&self) -> Term<D> {
         match &self.func_params {
-            Some(params) => Subterm::FuncType(FuncType {
-                params: params.clone(),
-                output: self.type_.clone(),
-            })
-            .into(),
+            Some(params) => signature_type(self.label.as_ref(), params, &self.type_),
             None => self.type_.clone(),
         }
     }
