@@ -1,0 +1,21 @@
+-- A witness's reasoning, at its head: `#{` and `#Name` in a comment are text.
+#{absent = [/Wit/base]}
+induct /Wit: pub Prop
+| base()
+end
+#{absent = [/Box/box]}
+and induct /Box: pub Type
+| box(x: #{node = InductType} /Wit())
+end
+#{
+    module = /,
+    universe_context = {
+        parameter_count = 1,
+        constraints = [u + 1 <= w]}}
+let /p : Prop =
+    #{node = InductType}
+    /Holds();
+test /held = 1;
+let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
+/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
+: Prop

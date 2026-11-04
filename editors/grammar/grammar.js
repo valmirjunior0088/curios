@@ -1,26 +1,14 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// The surface grammar of `documentation/syntax.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability.
+// The surface grammar of `documentation/syntax.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
 
-// An identifier is a nonempty run of Unicode alphanumerics and `_` (`curios_common::is_identifier`).
-const IDENTIFIER = /[\p{Alphabetic}\p{N}_]+/u;
-const CONTEXTUAL_WORDS = ["concept", "satisfy", "and", "test"];
-const SORT_WORDS = ["Type", "Prop", "Sort"];
-
-// Higher binds tighter, every level left-associative (`curios_module::op_precedence`).
-const PRECEDENCE = {
-  or: 1,
-  and: 2,
-  compare: 3,
-  add: 4,
-  multiply: 5,
-  suffix: 6,
-};
-
-const separated = (rule, separator) => seq(rule, repeat(seq(separator, rule)));
-
-// Every comma-separated list admits one trailing comma before its closing delimiter.
-const commaList = (rule) => optional(seq(separated(rule, ","), optional(",")));
+const {
+  IDENTIFIER,
+  CONTEXTUAL_WORDS,
+  SORT_WORDS,
+  PRECEDENCE,
+  commaList,
+} = require("./common");
 
 module.exports = grammar({
   name: "curios",
@@ -29,6 +17,9 @@ module.exports = grammar({
 
   // The four blanks the compiler takes, and a byte-order mark, which it takes at a file's head alone: an extra has no position to be held to.
   extras: ($) => [/[ \t\n\r]/, /\uFEFF/, $.comment],
+
+  // A hook a dialect widens is written at its uses, so the program's own tables are those of the rule it stands for.
+  inline: ($) => [$._declared_name, $._result_sort],
 
   conflicts: ($) => [
     [$.lambda_parameters, $.unit],
@@ -88,7 +79,7 @@ module.exports = grammar({
         ),
       ),
 
-    let_member: ($) => seq(field("name", $._name), $._signature),
+    let_member: ($) => seq(field("name", $._declared_name), $._signature),
 
     // `(params) -> type = body` or `: type = body`.
     _signature: ($) =>
@@ -139,7 +130,7 @@ module.exports = grammar({
 
     induct_body: ($) =>
       seq(
-        field("name", $._name),
+        field("name", $._declared_name),
         optional(field("parameters", $.type_parameters)),
         ":",
         $._arity,
@@ -158,8 +149,15 @@ module.exports = grammar({
     // `(indices) -> Sort` or a bare `Sort`, each with its own representation `pub`.
     _arity: ($) =>
       choice(
-        seq("(", commaList($.index), ")", "->", optional("pub"), $.sort),
-        seq(optional("pub"), $.sort),
+        seq(
+          "(",
+          commaList($.index),
+          ")",
+          "->",
+          optional("pub"),
+          $._result_sort,
+        ),
+        seq(optional("pub"), $._result_sort),
       ),
 
     index: ($) =>
@@ -196,11 +194,11 @@ module.exports = grammar({
 
     struct_member: ($) =>
       seq(
-        field("name", $._name),
+        field("name", $._declared_name),
         optional(field("parameters", $.type_parameters)),
         ":",
         optional("pub"),
-        $.sort,
+        $._result_sort,
         "{",
         // A structure's field is plain or hidden under `@`; a tuple type's takes no mark.
         commaList(seq(optional("@"), $.field_declaration)),
@@ -231,11 +229,11 @@ module.exports = grammar({
 
     concept_member: ($) =>
       seq(
-        field("name", $._name),
+        field("name", $._declared_name),
         optional(field("parameters", $.type_parameters)),
         ":",
         optional("pub"),
-        $.sort,
+        $._result_sort,
         "{",
         commaList($.concept_field),
         "}",
@@ -281,7 +279,7 @@ module.exports = grammar({
       seq(
         optional("pub"),
         "foreign",
-        field("name", $._name),
+        field("name", $._declared_name),
         field("operands", $.function_type_parameters),
         "->",
         field("result", $._term),
@@ -290,7 +288,13 @@ module.exports = grammar({
 
     // A test declaration: `test name = body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
     test_item: ($) =>
-      seq("test", field("name", $._name), "=", field("body", $._term), ";"),
+      seq(
+        "test",
+        field("name", $._declared_name),
+        "=",
+        field("body", $._term),
+        ";",
+      ),
 
     // ---- Telescopes ----
 
@@ -713,6 +717,11 @@ module.exports = grammar({
         $._path_head,
         ...SORT_WORDS.map((word) => alias(word, $.identifier)),
       ),
+
+    // The name a declaration states, and the sort a declaration's type lands in: a program's are a name and a sort word, and Core text's grammar widens each.
+    _declared_name: ($) => $._name,
+
+    _result_sort: ($) => $.sort,
 
     _path_head: ($) =>
       choice(

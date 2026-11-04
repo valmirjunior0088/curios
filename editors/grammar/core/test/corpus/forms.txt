@@ -1,0 +1,217 @@
+================================================================================
+A decorator above the node it decorates, and an intrinsic over its operands
+================================================================================
+
+#{node = Variant}
+/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (entry
+    (decorated
+      (decorator
+        (decorator_field
+          (identifier)
+          (path
+            (identifier))))
+      (call
+        (path
+          (identifier)
+          (identifier))
+        (arguments
+          (argument
+            (call
+              (intrinsic)
+              (arguments
+                (argument
+                  (path
+                    (identifier)))
+                (argument
+                  (number)))))
+          (argument
+            (call
+              (intrinsic)
+              (arguments
+                (argument
+                  (path
+                    (identifier)))
+                (argument
+                  (path
+                    (identifier)))
+                (argument
+                  (decorator_struct
+                    (decorator_field
+                      (identifier)
+                      (list_literal
+                        (path
+                          (identifier))))
+                    (decorator_field
+                      (identifier)
+                      (list_literal
+                        (call
+                          (path
+                            (identifier))
+                          (arguments
+                            (argument
+                              (number))))))))))))))))
+
+================================================================================
+Declarations by their absolute names, a group joined by `and`, and the entry's type
+================================================================================
+
+#{absent = [/Wit/base]}
+induct /Wit: pub Prop
+| base()
+end
+#{absent = [/Box/box]}
+and induct /Box: pub Type
+| box(x: #{node = InductType} /Wit())
+end
+#{module = /, universe_context = {parameter_count = 1, constraints = [u + 1 <= w]}}
+let /p : Prop =
+    #{node = InductType}
+    /Holds();
+test /held = 1;
+/p
+: Prop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (group
+    (decorator
+      (decorator_field
+        (identifier)
+        (list_literal
+          (path
+            (identifier)
+            (identifier)))))
+    (induct_body
+      (path
+        (identifier))
+      (sort)
+      (constructor
+        (identifier)))
+    (decorator
+      (decorator_field
+        (identifier)
+        (list_literal
+          (path
+            (identifier)
+            (identifier)))))
+    (induct_body
+      (path
+        (identifier))
+      (sort)
+      (constructor
+        (identifier)
+        (payload
+          (identifier)
+          (decorated
+            (decorator
+              (decorator_field
+                (identifier)
+                (path
+                  (identifier))))
+            (call
+              (path
+                (identifier))
+              (arguments)))))))
+  (group
+    (decorator
+      (decorator_field
+        (identifier)
+        (root))
+      (decorator_field
+        (identifier)
+        (decorator_struct
+          (decorator_field
+            (identifier)
+            (number))
+          (decorator_field
+            (identifier)
+            (list_literal
+              (binary
+                (binary
+                  (path
+                    (identifier))
+                  (number))
+                (path
+                  (identifier))))))))
+    (let_member
+      (path
+        (identifier))
+      (sort)
+      (decorated
+        (decorator
+          (decorator_field
+            (identifier)
+            (path
+              (identifier))))
+        (call
+          (path
+            (identifier))
+          (arguments)))))
+  (test_item
+    (path
+      (identifier))
+    (number))
+  (entry
+    (path
+      (identifier))
+    (sort)))
+
+================================================================================
+A witness named by its identity, a `use` binder's word, and a decorated result sort
+================================================================================
+
+concept /C: pub
+    #{level = #{id = 0} ?}
+    Type {
+    use o: /Eql(/A)
+}
+let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
+/m/witness~/std/ops/Add(Nat)#1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (group
+    (concept_member
+      (path
+        (identifier))
+      (decorator
+        (decorator_field
+          (identifier)
+          (decorated
+            (decorator
+              (decorator_field
+                (identifier)
+                (number)))
+            (goal))))
+      (sort)
+      (concept_field
+        (identifier)
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))))
+  (group
+    (let_member
+      (witness_name)
+      (function_type
+        (function_type_parameters
+          (function_type_parameter
+            (identifier)
+            (call
+              (path
+                (identifier))
+              (arguments))))
+        (intrinsic))
+      (witness_name)))
+  (entry
+    (witness_name)))

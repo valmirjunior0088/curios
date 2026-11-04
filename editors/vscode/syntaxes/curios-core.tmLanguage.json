@@ -1,0 +1,149 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Curios Core",
+  "scopeName": "source.curios.core",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#witness"
+    },
+    {
+      "include": "#declaration"
+    },
+    {
+      "include": "#decorator"
+    },
+    {
+      "include": "#intrinsic"
+    },
+    {
+      "include": "source.curios"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "include": "source.curios#comment"
+    },
+    "witness": {
+      "comment": "A witness named by its identity: its module, `witness~`, and the concept with the key's heads and its place, or its place alone.",
+      "name": "variable.other.constant.witness.curios",
+      "match": "/(?:[\\p{L}\\p{N}_]+/)*witness~(?:[0-9]+|/[\\p{L}\\p{N}_]+(?:/[\\p{L}\\p{N}_]+)*\\([^)]*\\)(?:#[0-9]+)?)"
+    },
+    "declaration": {
+      "comment": "A declaration named by its absolute path, after its keyword or the `and` that joins it to a group; a witness's name, which runs on past `witness~`, is the witness pattern's.",
+      "patterns": [
+        {
+          "match": "\\b(induct|struct|concept|and\\s+induct|and\\s+struct|and\\s+concept)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "support.module.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            },
+            "3": {
+              "name": "entity.name.type.curios"
+            }
+          }
+        },
+        {
+          "match": "\\b(let|foreign|test|and)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "support.module.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            },
+            "3": {
+              "name": "entity.name.function.curios"
+            }
+          }
+        }
+      ]
+    },
+    "decorator": {
+      "comment": "`#{field = value, …}`: the fields of the node it stands above, each value a term or a structure of fields.",
+      "begin": "#\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.decorator.begin.curios"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.decorator.end.curios"
+        }
+      },
+      "name": "meta.decorator.curios",
+      "patterns": [
+        {
+          "include": "#fields"
+        }
+      ]
+    },
+    "fields": {
+      "patterns": [
+        {
+          "match": "([\\p{L}\\p{N}_]+)\\s*(=)(?!=)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.curios"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.curios"
+            }
+          }
+        },
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.bracket.curios"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.bracket.curios"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#fields"
+            }
+          ]
+        },
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "intrinsic": {
+      "comment": "`#` and a Core variant's name.",
+      "name": "support.function.builtin.curios",
+      "match": "#[\\p{L}\\p{N}_]+"
+    }
+  }
+}

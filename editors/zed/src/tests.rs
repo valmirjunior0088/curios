@@ -1,4 +1,4 @@
-//! What ties this extension to the tree around it: the grammar it publishes is the grammar the tree holds, and the lints it is held to are the workspace's.
+//! What ties this extension to the tree around it: the grammars it publishes are the grammars the tree holds, Core text's highlight query is the program's and its own, and the lints it is held to are the workspace's.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -7,7 +7,7 @@ use std::{
     process::{self, Command},
 };
 
-/// The directory Zed installs the grammar from, relative to the repository root.
+/// The directory Zed installs the grammars from, relative to the repository root: the program's at its root and Core text's in `core/`.
 const GRAMMAR: &str = "editors/grammar";
 
 /// The object `revision` names, or `None` when this checkout cannot resolve it.
@@ -50,38 +50,53 @@ fn working(root: &Path) -> Option<String> {
     written
 }
 
-/// Zed installs the grammar from a pushed commit rather than from the checkout, so the rev in `extension.toml` is the only thing tying this extension to a grammar, and nothing else in the tree reads it. A regenerated grammar whose rev was not moved leaves every install building the previous one, silently.
+/// Zed installs each grammar from a pushed commit rather than from the checkout, so the revs in `extension.toml` — one for the program's grammar and one for Core text's, each a directory of [`GRAMMAR`] — are the only thing tying this extension to a grammar, and nothing else in the tree reads them. A regenerated grammar whose rev was not moved leaves every install building the previous one, silently.
 ///
 /// **The held side is the working tree, and it has to be.** It was `HEAD` once, which made this check unable to fail until the grammar change was already committed — so the gate, which runs before a hand-off, could never be the thing that caught one. It was CI, every time, after the push. Hashing what is on disk moves the refusal to where the edit is, and costs nothing when the tree is clean: a clean checkout hashes to exactly what `HEAD` holds.
 ///
 /// **The fetch is a fallback rather than the first move.** A working checkout already holds the pinned commit whenever it is an ancestor, so the common case resolves offline and this stays runnable without a network; CI checks out one commit deep and has to be told to go and get it.
 #[test]
-fn the_pinned_rev_publishes_this_grammar() {
+fn every_pinned_rev_publishes_this_grammar() {
     let extension = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = extension.join("../..");
     let manifest =
         fs::read_to_string(extension.join("extension.toml")).expect("extension.toml is read");
-    let rev = manifest
+    let revs = manifest
         .lines()
-        .find_map(|line| line.strip_prefix("rev = \""))
-        .and_then(|rest| rest.strip_suffix('"'))
-        .expect("extension.toml states a grammar rev");
-
-    let published = tree(&root, &format!("{rev}:{GRAMMAR}")).unwrap_or_else(|| {
-        Command::new("git")
-            .current_dir(&root)
-            .args(["fetch", "--depth=1", "origin", rev])
-            .status()
-            .expect("git fetch runs");
-
-        tree(&root, &format!("{rev}:{GRAMMAR}")).expect("the pinned rev is reachable")
-    });
+        .filter_map(|line| line.strip_prefix("rev = \""))
+        .filter_map(|rest| rest.strip_suffix('"'))
+        .collect::<Vec<_>>();
+    assert!(!revs.is_empty(), "extension.toml states a grammar rev");
     let held = working(&root).expect("the working tree's grammar hashes");
 
-    assert_eq!(
-        published, held,
-        "extension.toml pins {rev}, publishing grammar tree {published}, but this tree holds {held} — commit and push {GRAMMAR}, then move the rev"
-    );
+    for rev in revs {
+        let published = tree(&root, &format!("{rev}:{GRAMMAR}")).unwrap_or_else(|| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(["fetch", "--depth=1", "origin", rev])
+                .status()
+                .expect("git fetch runs");
+
+            tree(&root, &format!("{rev}:{GRAMMAR}")).expect("the pinned rev is reachable")
+        });
+
+        assert_eq!(
+            published, held,
+            "extension.toml pins {rev}, publishing grammar tree {published}, but this tree holds {held} — commit and push {GRAMMAR}, then move the rev"
+        );
+    }
+}
+
+/// Zed reads a language's queries from its own directory alone, so Core text's highlight query restates the program's — every node of the program's grammar is one of Core text's — and adds its own beneath it, where a later pattern refines an earlier one.
+#[test]
+fn the_core_text_query_opens_with_the_programs() {
+    let languages = Path::new(env!("CARGO_MANIFEST_DIR")).join("languages");
+    let read = |language: &str| {
+        fs::read_to_string(languages.join(language).join("highlights.scm"))
+            .expect("a highlight query is read")
+    };
+
+    assert!(read("curios_core").starts_with(&read("curios")));
 }
 
 /// The lints a manifest states, by tool: each line of every table whose header is `prefix` and the tool's name.

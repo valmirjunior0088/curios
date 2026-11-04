@@ -179,7 +179,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -533,7 +533,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -773,7 +773,7 @@
             },
             {
               "type": "SYMBOL",
-              "name": "sort"
+              "name": "_result_sort"
             }
           ]
         },
@@ -794,7 +794,7 @@
             },
             {
               "type": "SYMBOL",
-              "name": "sort"
+              "name": "_result_sort"
             }
           ]
         }
@@ -1116,7 +1116,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -1153,7 +1153,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "sort"
+          "name": "_result_sort"
         },
         {
           "type": "STRING",
@@ -1381,7 +1381,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -1418,7 +1418,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "sort"
+          "name": "_result_sort"
         },
         {
           "type": "STRING",
@@ -1843,7 +1843,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -1884,7 +1884,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_declared_name"
           }
         },
         {
@@ -4854,6 +4854,14 @@
         }
       ]
     },
+    "_declared_name": {
+      "type": "SYMBOL",
+      "name": "_name"
+    },
+    "_result_sort": {
+      "type": "SYMBOL",
+      "name": "sort"
+    },
     "_path_head": {
       "type": "CHOICE",
       "members": [
@@ -4980,7 +4988,10 @@
   ],
   "precedences": [],
   "externals": [],
-  "inline": [],
+  "inline": [
+    "_declared_name",
+    "_result_sort"
+  ],
   "supertypes": [],
   "reserved": {}
 }

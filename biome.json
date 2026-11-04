@@ -12,7 +12,8 @@
       "editors/vscode/**/*.js",
       "editors/vscode/**/*.json",
       "!**/package-lock.json",
-      "!editors/grammar/src"
+      "!editors/grammar/src",
+      "!editors/grammar/core/src"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2 }

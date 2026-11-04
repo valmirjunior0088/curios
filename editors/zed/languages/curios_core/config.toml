@@ -1,0 +1,4 @@
+name = "Curios Core"
+grammar = "curios_core"
+path_suffixes = ["crsc"]
+line_comments = ["-- "]

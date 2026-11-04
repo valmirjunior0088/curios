@@ -1,4 +1,4 @@
-; Captures for the `curios` grammar in `editors/grammar`. Zed reads only this file — the grammar ships no `queries/` — so it is the single copy, and `editors/grammar`'s `npm test` compiles it against the grammar so a renamed node cannot orphan a capture silently.
+; Captures for the `curios` grammar in `editors/grammar`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `editors/grammar`'s `npm test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
 
 (comment) @comment
 

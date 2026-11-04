@@ -4,13 +4,21 @@
       "name": "curios",
       "camelcase": "Curios",
       "scope": "source.curios",
-      "file-types": ["crs"]
+      "file-types": ["crs"],
+      "path": "."
+    },
+    {
+      "name": "curios_core",
+      "camelcase": "CuriosCore",
+      "scope": "source.curios.core",
+      "path": "core",
+      "file-types": ["crsc"]
     }
   ],
   "metadata": {
     "version": "0.1.0",
     "license": "Apache-2.0",
-    "description": "Curios grammar for tree-sitter",
+    "description": "Curios grammars for tree-sitter: programs, and Core text",
     "authors": [
       {
         "name": "Valmir Pretto",

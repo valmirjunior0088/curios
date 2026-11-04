@@ -3,13 +3,18 @@ name = "Curios"
 version = "0.1.0"
 schema_version = 1
 authors = ["Valmir Pretto <valmirjunior0088@gmail.com>"]
-description = "Curios language support for Zed"
+description = "Curios language support for Zed: programs, and Core text"
 repository = "https://github.com/valmirjunior0088/curios"
 
 [grammars.curios]
 repository = "https://github.com/valmirjunior0088/curios"
 rev = "d4a4056525f51bdc11eda459af6ec11165bf33f8"
 path = "editors/grammar"
+
+[grammars.curios_core]
+repository = "https://github.com/valmirjunior0088/curios"
+rev = "d4a4056525f51bdc11eda459af6ec11165bf33f8"
+path = "editors/grammar/core"
 
 [language_servers.curios]
 name = "Curios"

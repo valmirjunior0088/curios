@@ -1,7 +1,7 @@
 {
   "name": "curios",
   "displayName": "Curios",
-  "description": "Syntax highlighting and diagnostics for the Curios language",
+  "description": "Syntax highlighting and diagnostics for the Curios language, and highlighting for Core text",
   "version": "0.1.0",
   "publisher": "valmirjunior0088",
   "license": "Apache-2.0",
@@ -60,6 +60,21 @@
           "light": "./icons/curios-light.svg",
           "dark": "./icons/curios-dark.svg"
         }
+      },
+      {
+        "id": "curios-core",
+        "aliases": [
+          "Curios Core",
+          "curios-core"
+        ],
+        "extensions": [
+          ".crsc"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/curios-light.svg",
+          "dark": "./icons/curios-dark.svg"
+        }
       }
     ],
     "grammars": [
@@ -67,6 +82,11 @@
         "language": "curios",
         "scopeName": "source.curios",
         "path": "./syntaxes/curios.tmLanguage.json"
+      },
+      {
+        "language": "curios-core",
+        "scopeName": "source.curios.core",
+        "path": "./syntaxes/curios-core.tmLanguage.json"
       }
     ],
     "configuration": {
@@ -92,8 +112,8 @@
     "prepare": "npm run bundle",
     "vscode:prepublish": "npm run bundle -- --minify",
     "package": "vsce package --out .artifacts",
-    "test": "vscode-tmgrammar-snap \"tests/**/*.crs\"",
-    "test:update": "vscode-tmgrammar-snap -u \"tests/**/*.crs\""
+    "test": "vscode-tmgrammar-snap \"tests/**/*.crs\" \"tests/**/*.crsc\"",
+    "test:update": "vscode-tmgrammar-snap -u \"tests/**/*.crs\" \"tests/**/*.crsc\""
   },
   "devDependencies": {
     "@vscode/vsce": "^4.0.0",

@@ -1,6 +1,6 @@
 # Curios for Zed
 
-Syntax highlighting and live diagnostics for [Curios](https://github.com/valmirjunior0088/curios), a dependently typed functional language that compiles to WebAssembly.
+Syntax highlighting and live diagnostics for [Curios](https://github.com/valmirjunior0088/curios), a dependently typed functional language that compiles to WebAssembly, and highlighting for Core text, the `.crsc` files Core is written in, as the language Curios Core.
 
 ## Requirements
 

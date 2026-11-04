@@ -210,12 +210,12 @@ impl Step {
             Step::GrammarBuild => always(
                 Subject::Grammar,
                 Action::Build,
-                "Generate the parser from the grammar into `src/`, where the repository commits it",
+                "Generate the parsers from the grammars, the program's into `src/` and Core text's into `core/src/`, where the repository commits them",
             ),
             Step::GrammarTest => always(
                 Subject::Grammar,
                 Action::Test,
-                "Regenerate the parser and refuse drift from the committed one, then parse the standard library and the corpus",
+                "Regenerate the parsers and refuse drift from the committed ones, then parse the standard library, the corpus and the board's Core text",
             ),
             Step::VscodeInstall => always(
                 Subject::Vscode,
@@ -235,7 +235,7 @@ impl Step {
             Step::VscodeTest => always(
                 Subject::Vscode,
                 Action::Test,
-                "Hold the TextMate grammar to its snapshots",
+                "Hold the TextMate grammars to their snapshots",
             ),
             Step::VscodeBuild => always(
                 Subject::Vscode,
