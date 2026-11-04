@@ -1,7 +1,7 @@
 ---
 description: Hunt for what is wrong and not yet written down, gathering what a count of hunters finds, one charter each, and file it where it belongs, one entry a cause: what the tree can show as its cause closes, what would set the roadmap once it is approved
 argument-hint: "<count> [directions in prose — a scope: a crate, a path, an area or a theme; a seed: a commit, a decision, a section of the reference; what to look at or leave alone]"
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Agent, SendMessage
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Bash(mkdir:*), Bash(tar:*), Bash(cp:*), Agent, SendMessage
 disable-model-invocation: true
 ---
 

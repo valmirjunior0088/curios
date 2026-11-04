@@ -1,7 +1,7 @@
 ---
 description: Hunt for a proof of False the checkers admit, gathering what a count of hunters finds, one charter each, a theme with the rules it crosses — file it on the soundness board as an open ticket, and land its fix next where the fix follows; an attack that holds is left as a test, and what stops short of False as a finding
 argument-hint: "<count> [directions in prose — a theme, a rule by its decision, a part (formation, introduction, elimination, conversion, totality, admission), a seed, what to look at or leave alone]"
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Agent, SendMessage
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Bash(mkdir:*), Bash(tar:*), Bash(cp:*), Agent, SendMessage
 ---
 
 Find a proof of `False`: a closed term the checkers admit at `/std/Bool/False`.
