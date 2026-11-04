@@ -228,6 +228,8 @@ pub(crate) fn compile_lowered_over(
         return Err(refuse(&lowered, refusal));
     }
     let certification = rechecked.certification;
+    // The unit is the module the kernel stated, so every mark it carries is the walk's own.
+    let core = core.map(|_| rechecked.definitions);
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and everything its erasure read digests as it did.
     let scope_places = predecessors.places();

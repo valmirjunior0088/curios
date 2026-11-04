@@ -5,14 +5,16 @@
 //! **The term is walked closed.** Opening each scope to reach the next rewrites everything under it, once per binder, and re-closing rebuilds every node, where all this walk changes is a label. It keeps instead the variables standing for the binders entered and releases one binder's type against them, the type alone, to put the question; the body is never opened. A node none of whose binders changed is handed back as it was, so a term keeps its sharing and whatever its nodes had cached.
 //!
 //! **What is asked, what is entered, and what is crossed.** A function literal's binders and a `let`'s are asked, since those are the positions a reducer substitutes at. A function type's and a tuple type's are entered at their types and not asked: nothing substitutes there, but a literal further in may name them. Every other scope — a motive, an arm, a recursive group's members — is crossed with a variable standing for each binder and no type, so a question about a type that reads one of those binders is answered by what its head's declaration says or conservatively: a binder left unmarked costs a reduction and changes no reduct. An arm states no mark of its own: where one fires, the closed machine asks its host which of its constructor's payloads the declaration states are proofs ([`ClosedHost::payload_proofs`](crate::ClosedHost::payload_proofs)).
+//!
+//! **Carried where a declaration is not judged again.** A checker that adopts what it stated of an earlier declaration equal to this one but for its binders' names, its marks and its places hands the declaration on with this one's names and places and the earlier one's marks ([`Term::with_proofs_of`]): what it stated stands, and the names a reader prints are the ones written now. The two terms are walked as a pair, node by node, and a pair whose marks agree is handed back as it was.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Bound, Free, Func, FuncType, Let, LetBinding, One, Scope, Subterm, Telescope, Term,
-        TupleType, Visit,
+        Bound, Free, Func, FuncType, Let, LetBinding, Many, One, RecGroup, RecMemberScopes, Scope,
+        Subterm, Telescope, Term, TupleType, Visit,
     },
     curios_common::recurse,
     std::{
@@ -305,4 +307,254 @@ impl<E: ProofBinders> Marking<'_, E> {
 
         Ok(term.respelled((**term).traverse(&mut rebuild)))
     }
+}
+
+impl Term {
+    /// This term with every binder a function literal or a `let` binds stating what the same binder of `stated` states, `stated` being this term but for its binders' labels and its extents, as [`PartialEq`] compares two: every other label and every extent is this term's. A node whose binders state what `stated`'s do is handed back as it was.
+    ///
+    /// # Panics
+    ///
+    /// Where the two terms differ in shape, which two terms equal under [`PartialEq`] never do.
+    pub fn with_proofs_of(&self, stated: &Term) -> Term {
+        Carrying::default().term(self, stated)
+    }
+}
+
+impl RecGroup {
+    /// This group with every binder a function literal or a `let` binds in its members' types and bodies stating what the same binder of `stated` states, as [`Term::with_proofs_of`] carries them.
+    ///
+    /// # Panics
+    ///
+    /// Where the two groups differ in shape, which two groups equal under [`PartialEq`] never do.
+    pub fn with_proofs_of(&self, stated: &RecGroup) -> RecGroup {
+        assert_eq!(
+            self.length(),
+            stated.length(),
+            "a group and the one it is equal to hold as many members"
+        );
+        let mut carrying = Carrying::default();
+        let mut changed = false;
+        let members = self
+            .iter()
+            .zip(stated.iter())
+            .map(|(member, from)| {
+                let mut carried = |scope: &Scope<Many>, from: &Scope<Many>| {
+                    scope.map_body(|body: &Term| {
+                        let carried = carrying.term(body, from.body());
+                        changed |= carried.identity() != body.identity();
+                        carried
+                    })
+                };
+
+                RecMemberScopes {
+                    type_: carried(&member.type_, &from.type_),
+                    body: carried(&member.body, &from.body),
+                }
+            })
+            .collect();
+
+        match changed {
+            true => RecGroup::from_scopes(members),
+            false => self.clone(),
+        }
+    }
+}
+
+/// The carrying walk: what each pair of nodes came back as, by both nodes. What a node comes back as depends on the pair alone, so one answer serves every occurrence of it. Each node is held beside its answer, so the address it is keyed by names it while the walk lasts.
+#[derive(Default)]
+struct Carrying {
+    carried: HashMap<(usize, usize), (Term, Term, Term)>,
+}
+
+impl Carrying {
+    fn term(&mut self, term: &Term, stated: &Term) -> Term {
+        if term.identity() == stated.identity()
+            || matches!(&**term, Subterm::Var(_) | Subterm::Sort(_))
+        {
+            return term.clone();
+        }
+        let key = (term.identity(), stated.identity());
+        if let Some((_, _, carried)) = self.carried.get(&key) {
+            // An answer is this node rebuilt, or the node itself, so it carries the extent of the occurrence that filled it.
+            return carried.clone().occurring_at(term.extent());
+        }
+
+        let carried = recurse(|| match (&**term, &**stated) {
+            (Subterm::Func(Func { telescope }), Subterm::Func(Func { telescope: from })) => self
+                .telescope(telescope, from, true, |carrying, body, from| {
+                    let carried = carrying.term(body, from);
+                    let changed = carried.identity() != body.identity();
+                    (carried, changed)
+                })
+                .map_or_else(
+                    || term.clone(),
+                    |telescope| term.respelled(Subterm::Func(Func { telescope })),
+                ),
+            (
+                Subterm::FuncType(FuncType { telescope }),
+                Subterm::FuncType(FuncType { telescope: from }),
+            ) => self
+                .telescope(telescope, from, false, |carrying, body, from| {
+                    let carried = carrying.term(body, from);
+                    let changed = carried.identity() != body.identity();
+                    (carried, changed)
+                })
+                .map_or_else(
+                    || term.clone(),
+                    |telescope| term.respelled(Subterm::FuncType(FuncType { telescope })),
+                ),
+            (
+                Subterm::TupleType(TupleType { telescope }),
+                Subterm::TupleType(TupleType { telescope: from }),
+            ) => self
+                .telescope(telescope, from, false, |_, (), ()| ((), false))
+                .map_or_else(
+                    || term.clone(),
+                    |telescope| term.respelled(Subterm::TupleType(TupleType { telescope })),
+                ),
+            (Subterm::Let(let_), Subterm::Let(from)) => self.let_(term, let_, from),
+            _ => self.children(term, stated),
+        });
+
+        self.carried
+            .insert(key, (term.clone(), stated.clone(), carried.clone()));
+
+        carried
+    }
+
+    /// A telescope's entries paired with `stated`'s in order, each type carried and, where `asked`, each binder stating what `stated`'s does; `payload` carries what the two end in and says whether that changed. `None` where nothing did.
+    fn telescope<B: Bound>(
+        &mut self,
+        telescope: &Telescope<B>,
+        stated: &Telescope<B>,
+        asked: bool,
+        payload: impl FnOnce(&mut Self, &B, &B) -> (B, bool),
+    ) -> Option<Telescope<B>> {
+        let mut entries = Vec::new();
+        let mut changed = false;
+        let (mut current, mut from) = (telescope, stated);
+
+        let (body, body_changed) = loop {
+            match (current, from) {
+                (Telescope::Done(body), Telescope::Done(from)) => break payload(self, body, from),
+                (
+                    Telescope::Cons(mark, type_, rest, ..),
+                    Telescope::Cons(_, from_type, from_rest, ..),
+                ) => {
+                    let carried = self.term(type_, from_type);
+                    let proof = match asked {
+                        true => from_rest.binds_proof(0),
+                        false => rest.binds_proof(0),
+                    };
+                    changed |=
+                        carried.identity() != type_.identity() || proof != rest.binds_proof(0);
+
+                    entries.push((*mark, carried, rest, proof));
+                    current = rest.body();
+                    from = from_rest.body();
+                }
+                _ => panic!("a telescope and the one it is equal to hold as many entries"),
+            }
+        };
+        if !changed && !body_changed {
+            return None;
+        }
+
+        Some(entries.into_iter().rev().fold(
+            Telescope::Done(Box::new(body)),
+            |carried, (mark, type_, rest, proof)| {
+                let scope = Scope {
+                    arity: One,
+                    labels: rest.labels.clone(),
+                    body: Box::new(carried),
+                };
+
+                Telescope::cons(mark, type_, scope.with_proofs(&[proof]))
+            },
+        ))
+    }
+
+    /// A `let` paired with `stated`'s: each binding carried, each binder stating what `stated`'s does, and the tail carried.
+    fn let_(&mut self, term: &Term, Let { bindings, tail }: &Let, stated: &Let) -> Term {
+        assert_eq!(
+            bindings.len(),
+            stated.bindings.len(),
+            "a `let` and the one it is equal to hold as many bindings"
+        );
+        let mut carried = Vec::with_capacity(bindings.len());
+        let mut proofs = Vec::with_capacity(bindings.len());
+        let mut changed = false;
+        for (index, (binding, from)) in bindings.iter().zip(&stated.bindings).enumerate() {
+            let type_ = self.term(binding.type_(), from.type_());
+            let value = self.term(binding.value(), from.value());
+            let proof = stated.tail.binds_proof(index);
+            changed |= type_.identity() != binding.type_().identity()
+                || value.identity() != binding.value().identity()
+                || proof != tail.binds_proof(index);
+
+            carried.push(LetBinding::new(type_, value));
+            proofs.push(proof);
+        }
+        let body = self.term(tail.body(), stated.tail.body());
+        if !changed && body.identity() == tail.body().identity() {
+            return term.clone();
+        }
+
+        let tail = Scope {
+            arity: tail.arity,
+            labels: tail.labels.clone(),
+            body: Box::new(body),
+        }
+        .with_proofs(&proofs);
+
+        term.respelled(Subterm::Let(Let {
+            bindings: carried,
+            tail,
+        }))
+    }
+
+    /// Any other node: each child term paired with `stated`'s in traversal order and carried, and the node rebuilt over what came back where a child changed.
+    fn children(&mut self, term: &Term, stated: &Term) -> Term {
+        let (children, from) = (children_of(term), children_of(stated));
+        assert_eq!(
+            children.len(),
+            from.len(),
+            "a node and the one it is equal to hold as many children"
+        );
+
+        let mut carried = VecDeque::with_capacity(children.len());
+        let mut changed = false;
+        for (child, from) in children.iter().zip(&from) {
+            let child_carried = self.term(child, from);
+            changed |= child_carried.identity() != child.identity();
+            carried.push_back(child_carried);
+        }
+        if !changed {
+            return term.clone();
+        }
+
+        let carried = Rc::new(RefCell::new(carried));
+        let mut rebuild = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, _| carried.borrow_mut().pop_front()),
+        );
+
+        term.respelled((**term).traverse(&mut rebuild))
+    }
+}
+
+/// The child terms of `term`'s node, in traversal order.
+fn children_of(term: &Term) -> Vec<Term> {
+    let found = Rc::new(RefCell::new(Vec::new()));
+    let sink = Rc::clone(&found);
+    let mut collect = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, child| {
+            sink.borrow_mut().push(child.clone());
+            Some(child.clone())
+        }),
+    );
+    let _: Subterm = (**term).traverse(&mut collect);
+
+    found.take()
 }

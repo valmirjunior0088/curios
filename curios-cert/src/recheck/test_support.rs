@@ -35,7 +35,7 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
     }))
 }
 
-/// [`authored`] for a proof a declaration wrote, marked as elaboration marks one where its item is published.
+/// [`authored`] marked a proof, as the module a walk hands back marks one its declaration wrote at a proposition: what a unit in scope holds.
 pub(super) fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
         Item::Let(definition) => Item::Let(Box::new(Definition {

@@ -4,6 +4,8 @@
 //!
 //! **It decides no runtime shape and no judgment.** A function has a parameter for each binder whatever a binder states, a declaration's stored fields are classified by erasure against its signature, and a term bound unreduced is the same term to conversion. `curios-core`'s marking walk states what is asked and what is crossed; this module is the checker's half of it.
 //!
+//! **The elaborator's run alone reads them.** The certifier states every mark again by its own reading and reads none this module states, and the module a unit stores holds what it stated, so a unit in scope is read by the certifier's marks in both checkers.
+//!
 //! **A name the item declares is the one binder its terms do not hold.** It is asked here with them, at its declared type, and the answer is kept on its definition ([`curios_core::Definition::proof`]): a proof a declaration wrote is bound, from its publication on, to a body no judgment unfolds it to. That mark does decide a judgment, which a binder's never does, since a name that does not unfold is a constant to conversion. It refuses nothing a body unfolded would admit, because conversion holds two proofs of one proposition equal before it reduces either.
 
 use {

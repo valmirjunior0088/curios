@@ -6,7 +6,7 @@ use {
     curios_analysis::{Erased, test_support::*},
     curios_common::Qualifier,
     curios_core::{
-        Atom, Definitions, Global, InductParam, Intrinsic, Nat, Telescope, Term, Universes,
+        Atom, Definitions, Global, InductParam, Intrinsic, Item, Nat, Telescope, Term, Universes,
         test_support::*,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -161,9 +161,9 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     );
 }
 
-/// A group's member is held to its mark as a definition is: one marked a proof at a proposition is accepted and read, by its type, by the declaration after it, and one marked at `Nat` is refused.
+/// The walk states a group's member a proof as it states a definition one, whatever the module says: one at a proposition is stated a proof and read, by its type, by the declaration after it, and one at `Nat` is stated none, its module's mark notwithstanding.
 #[test]
-fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
+fn a_groups_member_is_stated_a_proof_where_its_type_is_a_proposition() {
     let (vouched_name, declaration) = vouched_declaration();
     let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let qed = Term::variant(
@@ -185,10 +185,9 @@ fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
         ],
         BTreeMap::from([(vouched_name, declaration)]),
     );
-    assert_eq!(
-        fixture_verdicts(&honest, 1_000_000, &Globals::default(), SYNTAX),
-        Vec::new(),
-    );
+    let stated = fixture_certified(&honest, 1_000_000, &Globals::default(), SYNTAX);
+    assert_eq!(stated.verdicts, Vec::new());
+    assert_eq!(member_proofs(&stated.definitions, &lemma), [true]);
 
     let lying = collision_definitions(
         vec![proof_group(
@@ -198,11 +197,21 @@ fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
         )],
         BTreeMap::new(),
     );
-    let verdicts = fixture_verdicts(&lying, 1_000_000, &Globals::default(), SYNTAX);
-    assert!(
-        verdicts.iter().any(
-            |verdict| verdict.name == Some(lemma) && matches!(verdict.error, Error::NoProof(_))
-        ),
-        "a member marked a proof at `Nat` was not refused for its mark: {verdicts:?}",
-    );
+    let stated = fixture_certified(&lying, 1_000_000, &Globals::default(), SYNTAX);
+    assert_eq!(stated.verdicts, Vec::new());
+    assert_eq!(member_proofs(&stated.definitions, &lemma), [false]);
+}
+
+/// Whether each member of the group `definitions` holds `name` in is a proof, as its walk stated it.
+fn member_proofs(definitions: &Definitions, name: &Global) -> Vec<bool> {
+    definitions
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Rec(rec) if rec.definitions.iter().any(|member| member.name == *name) => {
+                Some(rec.definitions.iter().map(|member| member.proof).collect())
+            }
+            _ => None,
+        })
+        .expect("the module holds the group")
 }

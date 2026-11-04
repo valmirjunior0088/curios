@@ -1,4 +1,4 @@
-//! The marking walk: which binders it asks, what it stands in for the binders around them, and that a term it changes nothing in comes back the node it was.
+//! The marking walk: which binders it asks, what it stands in for the binders around them, and that a term it changes nothing in comes back the node it was; and the carrying walk, which hands a term its twin's marks and keeps its own names.
 
 use {super::*, crate::*, std::collections::BTreeMap};
 
@@ -209,4 +209,102 @@ fn a_literal_under_a_scope_of_unknown_types_is_still_asked() {
         false
     });
     assert_eq!(literals, [vec![true], vec![true]]);
+}
+
+/// `(P: Prop, n: Nat, h: P) => n` under the names `names` gives it, its binders stating nothing.
+fn written(names: [&str; 3]) -> Term {
+    let [p, n, h] = [0, 1, 2].map(|index| binder(index, names[index as usize]));
+
+    Term::func(
+        [(p, Term::prop()), (n, nat_type()), (h, Term::free_var(&p))],
+        Term::free_var(&n),
+    )
+}
+
+/// A carried literal's binders state what its twin's do, and keep the names they were written with: `(P, n, h)` takes `[true, false, true]` from the same literal written `(Q, m, k)` and stated.
+#[test]
+fn a_carried_literal_states_what_its_twin_states_under_its_own_names() {
+    let incoming = written(["P", "n", "h"]);
+    let stated = written(["Q", "m", "k"])
+        .stating_proofs(&mut Sorts::default())
+        .expect("answers");
+    assert_eq!(incoming, stated, "twins but for their labels");
+
+    let carried = incoming.with_proofs_of(&stated);
+
+    let Subterm::Func(Func { telescope }) = &*carried else {
+        panic!("not a function literal: {carried:?}");
+    };
+    assert_eq!(telescope.proofs(), [true, false, true]);
+    assert_eq!(telescope.labels(), ["P", "n", "h"]);
+}
+
+/// A carried `let` states what its twin's binders state, and a literal in its tail and one at the head of an application in a binding's value are carried as well.
+#[test]
+fn a_carried_lets_binders_and_the_literals_under_it_state_what_its_twins_do() {
+    let block = |names: [&str; 3]| {
+        let [p, proof, x] = [0, 1, 2].map(|index| binder(index, names[index as usize]));
+        let applied = Term::apply(written(names), [Term::prop()]);
+
+        Term::let_block(
+            vec![
+                (p, Term::type_ground(), Term::prop()),
+                (proof, Term::prop(), applied),
+            ],
+            Term::func([(x, Term::prop())], Term::free_var(&x)),
+        )
+    };
+    let incoming = block(["P", "proof", "x"]);
+    let stated = block(["Q", "lemma", "y"])
+        .stating_proofs(&mut Sorts::default())
+        .expect("answers");
+    assert_eq!(incoming, stated, "twins but for their labels");
+
+    let carried = incoming.with_proofs_of(&stated);
+
+    let Subterm::Let(Let { bindings, tail }) = &*carried else {
+        panic!("not a `let`: {carried:?}");
+    };
+    assert_eq!([tail.binds_proof(0), tail.binds_proof(1)], [true, true]);
+    assert_eq!(proofs(tail.body()), [true]);
+    let Subterm::Apply(apply) = &**bindings[1].value() else {
+        panic!("not an application: {:?}", bindings[1].value());
+    };
+    assert_eq!(proofs(&apply.head), [true, false, true]);
+}
+
+/// A term whose marks agree with its twin's comes back the node it was, though the two are no one node.
+#[test]
+fn a_carried_term_whose_marks_agree_is_handed_back_as_it_was() {
+    let stating = |names| {
+        written(names)
+            .stating_proofs(&mut Sorts::default())
+            .expect("answers")
+    };
+    let (incoming, stated) = (stating(["P", "n", "h"]), stating(["Q", "m", "k"]));
+    assert_ne!(incoming.identity(), stated.identity());
+
+    assert_eq!(
+        incoming.with_proofs_of(&stated).identity(),
+        incoming.identity()
+    );
+}
+
+/// A carried group's members state what their twins' do: a member whose body is a literal takes its twin's marks.
+#[test]
+fn a_carried_groups_members_state_what_their_twins_do() {
+    let group =
+        |body: Term| RecGroup::closing(vec![(binder(9, "member"), Term::type_ground(), body)]);
+    let incoming = group(written(["P", "n", "h"]));
+    let stated = group(
+        written(["Q", "m", "k"])
+            .stating_proofs(&mut Sorts::default())
+            .expect("answers"),
+    );
+    assert_eq!(incoming, stated, "twins but for their labels");
+
+    let carried = incoming.with_proofs_of(&stated);
+
+    let member = carried.iter().next().expect("one member");
+    assert_eq!(proofs(member.body.body()), [true, false, true]);
 }

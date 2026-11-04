@@ -874,11 +874,11 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
     );
 }
 
-/// A definition's published value sort is the sort its value has at its own instance's levels, so the shadowed reading cannot be laundered into a believed fact.
+/// The value sort the walk states of a definition is the sort its value has at its own instance's levels, so the shadowed reading cannot be laundered into a believed fact.
 ///
-/// `hold_value_sort` computes a definition's reached sort as `Sort::of` of its value, and `Sort::of`'s `published` arm then hands that stated sort to every later reader with nothing run and no `check_instance`. That is what makes this position worse than the four sites it stands beside: each of those is a lie a reader has to reach for, while this one becomes a fact recorded on the definition.
+/// The walk states a definition's value sort as `Sort::of` of its value, and `Sort::of`'s `published` arm then hands that stated sort to every later reader with nothing run and no `check_instance`. That is what makes this position worse than the four sites it stands beside: each of those is a lie a reader has to reach for, while this one becomes a fact recorded on the definition.
 ///
-/// `carrier@{p} : Type (p + 2) = let w : Nat = 0 in rec m : Type (p + 2) = Type (p + 1) end.0` has the value `Type 6` at `p := 5`, whose sort is `Type 7`. While the group bound its own levels the value reduced to `Type (q + 1)` under the reader's `q ≤ 0` — `Type 1` — and `Type 2` was the sort admitted.
+/// `carrier@{p} : Type (p + 2) = let w : Nat = 0 in rec m : Type (p + 2) = Type (p + 1) end.0` has the value `Type 6` at `p := 5`, whose sort is `Type 7`. While the group bound its own levels the value reduced to `Type (q + 1)` under the reader's `q ≤ 0` — `Type 1` — and `Type 2` was the sort that reading reached. What the module says of the sort is read by nothing.
 ///
 /// Beside this, `Judge::sort_below` through `curios-analysis`'s `fits_its_variable` is the cause's other consumer of a level, which a hand-written indexed family, match and inversion would reach; a `False` through it is another witness of the same ticket rather than a second one, and no fixture is built for it here.
 #[test]
@@ -956,30 +956,24 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
         tests: Vec::new(),
     };
 
-    let verdicts = fixture_verdicts(
-        &definitions(Level::constant(2)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
-    assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(published)
-                && matches!(verdict.error, Error::ValueSort { .. })),
-        "a definition published the sort the shadowed reading gave its value: {verdicts:?}",
-    );
-
-    assert_eq!(
-        fixture_verdicts(
-            &definitions(Level::constant(7)),
+    for said in [Level::constant(2), Level::constant(7)] {
+        let rechecked = fixture_certified(
+            &definitions(said.clone()),
             1_000_000,
             &Globals::default(),
-            SYNTAX
-        ),
-        Vec::new(),
-        "the sort the value has at its instance's levels was refused",
-    );
+            SYNTAX,
+        );
+        assert_eq!(rechecked.verdicts, Vec::new(), "{said:?}");
+        let Item::Let(definition) = &rechecked.definitions.items[1] else {
+            panic!("the module's second item is `published`");
+        };
+        assert_eq!(definition.name, published);
+        assert_eq!(
+            definition.value_sort,
+            Some(Term::type_at(Level::constant(7))),
+            "the walk stated the sort the shadowed reading gave the value, where the module said {said:?}",
+        );
+    }
 }
 
 /// A registry entry's field type is read at the levels the occurrence's instance states.

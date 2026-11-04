@@ -21,10 +21,10 @@ mod walk_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::{hold_proof, instantiate_qualities, yields_a_sort},
+    crate::{bears_proof, instantiate_qualities, yields_a_sort},
     curios_core::{
-        Bound, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope, StructDecl,
-        Subterm, Telescope, Term, Totality, UniverseContext,
+        Bound, DefinitionKind, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope,
+        StructDecl, Subterm, Telescope, Term, Totality, UniverseContext,
     },
 };
 
@@ -74,45 +74,98 @@ fn at_sorts<B: Bound>(value: &B, sorts: &[Quality]) -> B {
 ///
 /// A definition polymorphic in a level is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites. One that leaves a sort to its caller is checked at every assignment of them ([`at_every_sort`]), and stored as it is stated: an occurrence states the sorts with the levels, and reads the type and the body at them.
 ///
-/// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers, with nothing run: no proposition stands at a `Type`, so a statement typed at one reduces to none.
-///
-/// `value_sort` is the sort the definition states its value inhabits ([`curios_core::Definition::value_sort`]), held one way too: a stated sort the checked value does not inhabit is refused ([`Error::ValueSort`]), since every judgment that asks a binder of the name its sort reads it unreduced, and a definition stating none is read by its reduct and refused nowhere.
+/// What this check states of the definition, by its own reading, and defines it by ([`Stated`]): whether it is a proof a declaration wrote — one introduced as [`DefinitionKind::Authored`] whose type is a proposition at every assignment of its sorts, which the sort this check types the statement at answers with nothing run — and the sort its value inhabits, where its type is written as a sort, its value is no proof, and every assignment reaches one sort.
 pub(crate) fn check_definition(
     kernel: &mut Kernel,
     name: &Global,
+    kind: &DefinitionKind,
     type_: &Term,
     body: &Term,
-    proof: bool,
-    value_sort: Option<&Term>,
     universes: &UniverseContext,
-) -> Result<(), Error> {
-    at_every_sort(kernel, universes, |kernel, sorts| {
-        let (type_, body) = (at_sorts(type_, sorts), at_sorts(body, sorts));
+) -> Result<Stated, Error> {
+    let stated = stating(kernel, kind, type_, body, true, universes)?;
+    define_as_stated(
+        kernel,
+        name,
+        type_,
+        body,
+        stated.proof,
+        stated.value_sort.as_ref(),
+        universes,
+    )?;
 
-        let sort = infer_type(kernel, &type_)?;
-        if proof && !sort.is_prop() {
-            return Err(Error::NoProof(type_.clone()));
-        }
-        check(kernel, &body, &type_)?;
-        match value_sort {
-            Some(stated) => hold_value_sort(kernel, &at_sorts(stated, sorts), &body),
-            None => Ok(()),
-        }
-    })?;
-
-    define_as_stated(kernel, name, type_, body, proof, value_sort, universes)
+    Ok(stated)
 }
 
-/// Refuse `stated` where the checked `value` does not inhabit it: the sort the value's own classification reaches, which is what reading the name's reduct would have answered.
-fn hold_value_sort(kernel: &mut Kernel, stated: &Term, value: &Term) -> Result<(), Error> {
-    let reached = Sort::of(kernel, value)?.term();
-    match convert(kernel, &Term::type_ground(), stated, &reached)? {
-        true => Ok(()),
-        false => Err(Error::ValueSort {
-            stated: stated.clone(),
-            reached,
-        }),
-    }
+/// [`check_definition`]'s statements of a definition whose verdict a record vouches for, the walk judging nothing of it: the same questions, its body not checked, and the name defined by them.
+pub(crate) fn state_definition(
+    kernel: &mut Kernel,
+    name: &Global,
+    kind: &DefinitionKind,
+    type_: &Term,
+    body: &Term,
+    universes: &UniverseContext,
+) -> Result<Stated, Error> {
+    let stated = stating(kernel, kind, type_, body, false, universes)?;
+    define_as_stated(
+        kernel,
+        name,
+        type_,
+        body,
+        stated.proof,
+        stated.value_sort.as_ref(),
+        universes,
+    )?;
+
+    Ok(stated)
+}
+
+/// What a definition of `kind` at `type_` and of `body` is stated, at every assignment of its sorts, its body checked against its type there where `checking`.
+fn stating(
+    kernel: &mut Kernel,
+    kind: &DefinitionKind,
+    type_: &Term,
+    body: &Term,
+    checking: bool,
+    universes: &UniverseContext,
+) -> Result<Stated, Error> {
+    let mut proof = matches!(kind, DefinitionKind::Authored);
+    let sorted = matches!(&**type_, Subterm::Sort(_));
+    let mut reached = Vec::new();
+    at_every_sort(kernel, universes, |kernel, sorts| {
+        let (type_, body) = (at_sorts(type_, sorts), at_sorts(body, sorts));
+        proof &= infer_type(kernel, &type_)?.is_prop();
+        if checking {
+            check(kernel, &body, &type_)?;
+        }
+        if sorted {
+            reached.push(Sort::of(kernel, &body).ok().map(Sort::term));
+        }
+
+        Ok(())
+    })?;
+    let value_sort = match proof {
+        true => None,
+        false => agreed(reached),
+    };
+
+    Ok(Stated { proof, value_sort })
+}
+
+/// What the kernel states of a definition it judged beside its terms ([`check_definition`]): whether it is a proof, whose body no judgment after its own check unfolds, and the sort its value inhabits, which a judgment asking a binder of the name its sort reads unreduced.
+pub(crate) struct Stated {
+    pub(crate) proof: bool,
+    pub(crate) value_sort: Option<Term>,
+}
+
+/// The one sort every assignment reached, where each reached one and they are one: a sort stated generically holds at every assignment only where none of them moves it.
+fn agreed(reached: Vec<Option<Term>>) -> Option<Term> {
+    let mut reached = reached.into_iter();
+    let first = reached.next()??;
+
+    reached
+        .all(|sort| sort.as_ref() == Some(&first))
+        .then_some(first)
 }
 
 /// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does, with the sort its value inhabits where it states one. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
@@ -221,17 +274,17 @@ pub(crate) fn check_group<R>(
 
 /// Check a top-level recursive group, then bring every member into scope under the name it is exported as.
 ///
-/// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `members` parallels the group's members positionally, each the name it is exported as with its mark ([`curios_core::RecDefinition::proof`]); an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through, and one marked a proof is held to its type as a binder is ([`hold_proof`]) and reduces through nothing.
+/// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `members` parallels the group's members positionally, each the name it is exported as with the kind it was introduced as; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through, and one this check states a proof — introduced as [`DefinitionKind::Authored`], at a type that is a proposition at every assignment of its sorts — reduces through nothing. What it states of each member is handed back, in member order.
 ///
 /// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`.
 ///
 /// A group that leaves a sort to its caller is judged at every assignment of them ([`at_every_sort`]), the group read at each, and defined as it is stated. What the obligations read of it under its own spelling is what every assignment says: it descends where it does at each, and a member encloses a group that does not where it does at any.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
-    members: &[(Global, bool)],
+    members: &[(Global, &DefinitionKind)],
     group: &RecGroup,
     universes: &UniverseContext,
-) -> Result<(), Error> {
+) -> Result<Vec<bool>, Error> {
     if members.len() != group.length() {
         return Err(Error::Arity {
             counted: Counted::GroupMembers,
@@ -242,6 +295,10 @@ pub(crate) fn check_rec_group(
 
     let mut totality = Totality::Total;
     let mut enclosing = vec![false; group.length()];
+    let mut proofs = members
+        .iter()
+        .map(|(_, kind)| matches!(kind, DefinitionKind::Authored))
+        .collect::<Vec<_>>();
     at_every_sort(kernel, universes, |kernel, sorts| {
         let at;
         let group = match sorts.is_empty() {
@@ -255,8 +312,8 @@ pub(crate) fn check_rec_group(
 
         check_group(kernel, group, None, |_, _| Ok(()))?;
 
-        for (index, (_, proof)) in members.iter().enumerate() {
-            hold_proof(kernel, *proof, &group.member_type(index))?;
+        for (index, proof) in proofs.iter_mut().enumerate() {
+            *proof = *proof && bears_proof(kernel, &group.member_type(index)).unwrap_or(false);
             enclosing[index] |= kernel.member_encloses_partial(group, index);
         }
         if kernel.group_verdict(group) != Some(Totality::Total) {
@@ -269,7 +326,7 @@ pub(crate) fn check_rec_group(
         kernel.file_group(group, totality, enclosing);
     }
 
-    for (index, (name, proof)) in members.iter().enumerate() {
+    for (index, ((name, _), proof)) in members.iter().zip(&proofs).enumerate() {
         define_as_stated(
             kernel,
             name,
@@ -281,7 +338,41 @@ pub(crate) fn check_rec_group(
         )?;
     }
 
-    Ok(())
+    Ok(proofs)
+}
+
+/// [`check_rec_group`]'s statements of a group whose verdict a record vouches for, the walk judging nothing of it: which members are proofs, at every assignment of its sorts, and each export defined by them.
+pub(crate) fn state_rec_group(
+    kernel: &mut Kernel,
+    members: &[(Global, &DefinitionKind)],
+    group: &RecGroup,
+    universes: &UniverseContext,
+) -> Result<Vec<bool>, Error> {
+    let mut proofs = members
+        .iter()
+        .map(|(_, kind)| matches!(kind, DefinitionKind::Authored))
+        .collect::<Vec<_>>();
+    at_every_sort(kernel, universes, |kernel, sorts| {
+        let at = group.map_members(|body| at_sorts(body, sorts));
+        for (index, proof) in proofs.iter_mut().enumerate() {
+            *proof = *proof && bears_proof(kernel, &at.member_type(index)).unwrap_or(false);
+        }
+
+        Ok(())
+    })?;
+    for (index, ((name, _), proof)) in members.iter().zip(&proofs).enumerate() {
+        define_as_stated(
+            kernel,
+            name,
+            &group.member_type(index),
+            &Term::rec_proj(group.clone(), index),
+            *proof,
+            None,
+            universes,
+        )?;
+    }
+
+    Ok(proofs)
 }
 
 /// What a well-formed `induct` registry entry asserts — the whole statement, under the declaration's own universe hypotheses.
@@ -589,7 +680,6 @@ fn check_signature<B: Bound + Clone>(
 
         while let Some((_, domain)) = cursor.entry() {
             let sort = infer_type(kernel, &domain)?;
-            hold_proof(kernel, cursor.binds_proof(), &domain)?;
 
             if let Some((bound, raised)) = &sized {
                 let (Sort::Type(level) | Sort::Prop(level)) = sort;

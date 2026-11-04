@@ -6,9 +6,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     curios_core::{
-        Certification, Certified, Definition, Definitions, Entrypoint, Free, Global, Intrinsic,
-        Item, ItemRun, Level, Nat, Places, Program, ReadTable, Reads, Term, Totality,
-        UniverseParam, Universes, Variance,
+        Certification, Certified, Definition, DefinitionKind, Definitions, Entrypoint, Free, Func,
+        Global, Intrinsic, Item, ItemRun, Level, Nat, Places, Program, ReadTable, Reads, Subterm,
+        Term, Totality, UniverseParam, Universes, Variance,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -533,12 +533,16 @@ fn qed() -> Term {
     )
 }
 
-/// `lemma : Vouched = <proof>`, marked a proof where `marked`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`.
-fn proving_definitions(proof: Term, marked: bool) -> Definitions {
+/// `lemma : Vouched = <proof>`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`, with `lemma` written by its declaration where `written` and generated as a witness is otherwise: the kernel states it a proof in the first case alone, and it is marked as the module a walk hands back marks it.
+fn proving_definitions(proof: Term, written: bool) -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
-    let lemma = match marked {
-        true => authored_proof(&global("lemma"), vouched(), proof),
-        false => authored(&global("lemma"), vouched(), proof),
+    let lemma = match authored_proof(&global("lemma"), vouched(), proof) {
+        Item::Let(definition) if !written => Item::Let(Box::new(Definition {
+            kind: DefinitionKind::Witness,
+            proof: false,
+            ..*definition
+        })),
+        lemma => lemma,
     };
 
     collision_definitions(
@@ -562,7 +566,7 @@ fn proved_otherwise() -> Term {
     Term::apply(Term::func([(u, vouched())], Term::free_var(&u)), [qed()])
 }
 
-/// A record of `module` in which `corollary` asked for `lemma`'s body, marked as [`marked`] marks `five`: its reads hold `spare`'s signature, which no judgment of `corollary` reads, so a walk that hands the entry back adopted it.
+/// A record of `definitions` in which `corollary` asked for `lemma`'s body: its reads hold `spare`'s signature, which no judgment of `corollary` reads, so a walk that hands the entry back adopted it.
 fn asking(definitions: &Definitions) -> Certification {
     doctored(
         &walked(definitions).certification,
@@ -593,9 +597,9 @@ fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
     );
 }
 
-/// The control: left unmarked, the same statement unfolds to its body, and the same edit has `corollary` judged again.
+/// The control: generated as a witness is, the same statement is stated no proof and unfolds to its body, and the same edit has `corollary` judged again.
 #[test]
-fn a_read_of_an_unmarked_proofs_body_falls_with_an_edit_to_it() {
+fn a_read_of_a_generated_definitions_body_falls_with_an_edit_to_it() {
     let baseline = proving_definitions(qed(), false);
     let certification = asking(&baseline);
     let edited = proving_definitions(proved_otherwise(), false);
@@ -609,13 +613,13 @@ fn a_read_of_an_unmarked_proofs_body_falls_with_an_edit_to_it() {
     );
 }
 
-/// What a name unfolds to moves with its mark though no term does: a `lemma` that starts or stops being a proof is no longer the baseline's, and `corollary`, which asked for its body, is judged again.
+/// What a name unfolds to moves with what the kernel states of it though no term does: a `lemma` written by its declaration is stated a proof and one generated none, so one that moves from either to the other is no longer the baseline's, and `corollary`, which asked for its body, is judged again.
 #[test]
 fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
-    for marked in [true, false] {
-        let baseline = proving_definitions(qed(), marked);
+    for written in [true, false] {
+        let baseline = proving_definitions(qed(), written);
         let certification = asking(&baseline);
-        let edited = proving_definitions(qed(), !marked);
+        let edited = proving_definitions(qed(), !written);
 
         let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -623,7 +627,7 @@ fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
         assert_ne!(
             rechecked.certification.reads(&global("corollary")),
             certification.reads(&global("corollary")),
-            "marked in the baseline: {marked}",
+            "written in the baseline: {written}",
         );
     }
 }
@@ -915,9 +919,9 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
     );
 }
 
-/// Three aliases in a chain, each stating the sort its value inhabits: `H : Type 5 = h_body` stating `h`, `K : Type 5 = H` stating `k`, and `L : Type 5 = K` stating `l`.
+/// Three aliases in a chain, each saying the sort its value inhabits: `H : Type 5 = h_body` saying `h`, `K : Type 5 = H` saying `k`, and `L : Type 5 = K` saying `l`.
 ///
-/// `hold_value_sort` checks `L`'s stated sort against `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so `L`'s verdict is a function of `K`'s `value_sort` and of nothing else about `K`.
+/// The walk states `L`'s value sort by `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so what it states of `L` is a function of what it stated of `K` and of nothing else about `K`, and nothing the module says of a sort.
 fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
     Definitions {
         mounts: Vec::new(),
@@ -942,9 +946,22 @@ fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definiti
     }
 }
 
-/// A level alone does gate a verdict — `hold_value_sort` refuses a stated sort the value does not inhabit, reading the value's sort off a published one — so a walk over a baseline asks that reader's reads again and refuses it where a whole compile refuses it.
+/// The sort the walk states a definition's value inhabits ([`Rechecked::definitions`]), where it states one.
+fn stated_value_sort(rechecked: &Rechecked, name: &str) -> Option<Term> {
+    let place = Places::of(&rechecked.definitions)
+        .place(&global(name))
+        .expect("the module declares the name")
+        .item();
+
+    match &rechecked.definitions.items[place] {
+        Item::Let(definition) => definition.value_sort.clone(),
+        Item::Rec(_) => None,
+    }
+}
+
+/// A walk over a baseline states a reader of a moved value sort what a whole compile states it: `L`'s value sort is read off `K`'s published one, which reads `H`'s, so moving `H`'s body to a higher universe moves the sort the walk states of `L` though `L`'s terms stand. What each version said of its sorts is nothing the walk reads.
 #[test]
-fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it() {
+fn a_reader_of_a_moved_value_sort_is_stated_the_sort_a_whole_compile_states() {
     let baseline = versioned(chained_sort_definitions(
         nat(),
         type_at(0),
@@ -957,36 +974,25 @@ fn a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_i
         &replaced(
             &baseline,
             "H",
-            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
+            aliased(&global("H"), type_at(5), type_at(4), type_at(0)),
         ),
         "K",
         aliased(
             &global("K"),
             type_at(5),
             Term::instance(global("H"), Universes::default()),
-            type_at(5),
+            type_at(0),
         ),
     );
 
-    let whole = walked_whole(&edited);
-    assert!(
-        whole
-            .verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(global("L"))
-                && matches!(verdict.error, Error::ValueSort { .. })),
-        "a whole compile of the edited module refuses L for the sort it states: {:?}",
-        whole.verdicts,
-    );
+    let whole = walked(&edited);
+    assert_eq!(stated_value_sort(&whole, "L"), Some(type_at(5)));
 
     let over = walked_over(&edited, &baseline, &certification);
-    assert!(
-        over.verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(global("L"))
-                && matches!(verdict.error, Error::ValueSort { .. })),
-        "the walk over the baseline refuses L for the same reason: {:?}",
-        over.verdicts,
+    assert_eq!(over.verdicts, Vec::new());
+    assert_eq!(
+        stated_value_sort(&over, "L"),
+        stated_value_sort(&whole, "L")
     );
 }
 
@@ -1011,27 +1017,17 @@ fn later_alias(sort: Term) -> Definitions {
     }
 }
 
-/// A later walk reads the sort a definition states for its value with nothing run, so it refuses an alias publishing a sort that value does not inhabit: `M : Type 5 = L` stating `Type 0`, where `L` unfolds to a type at `Type 5`.
-///
-/// No walk files a unit whose own `L` states a sort its value denies — [`a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it`] holds that — so the unit in scope here is the honest one, and what is under test is the reading rather than the record.
+/// A later walk states an alias the sort its value inhabits, whatever the alias says of it: `M : Type 5 = L` saying `Type 0`, where `L` unfolds to a type at `Type 5`, is admitted and stated `Type 5`, read off what the walk over `L`'s unit stated with nothing run.
 #[test]
-fn a_later_walk_refuses_an_alias_publishing_a_sort_its_value_does_not_inhabit() {
+fn a_later_walk_states_an_alias_the_sort_its_value_inhabits() {
     let honest = chained_sort_definitions(type_at(4), type_at(5), type_at(5), type_at(5));
     let record = walked(&honest).certification;
-    let scope = AlreadyJudged::with(&honest, &record);
-    let verdicts =
-        |stated| fixture_certified(&later_alias(stated), BUDGET, &scope.globals(), SYNTAX).verdicts;
+    let stated = walked(&honest).definitions;
+    let scope = AlreadyJudged::with(&stated, &record);
+    let later = fixture_certified(&later_alias(type_at(0)), BUDGET, &scope.globals(), SYNTAX);
 
-    let refused = verdicts(type_at(0));
-    assert!(
-        refused
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::ValueSort { .. })),
-        "M publishing Type 0 for a value whose sort is Type 5: {refused:?}",
-    );
-
-    // The control: the same alias publishing the sort its value inhabits stands, so what refuses the first is the sort and not the shape.
-    assert_eq!(verdicts(type_at(5)), Vec::new());
+    assert_eq!(later.verdicts, Vec::new());
+    assert_eq!(stated_value_sort(&later, "M"), Some(type_at(5)));
 }
 
 /// `Big : (T: Type 5) -> Type 6` with one constructor aiming at `L`, and `f(X: Type 0, b: Big(X)) -> X = match b at X | big() => Type 3 end`.
@@ -1802,6 +1798,55 @@ fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
             .any(|verdict| matches!(verdict.error, Error::UniverseInstance { .. })),
         "the paradox's instance does not discharge the carrier's constraints, and was not refused for it: {refused:?}",
     );
+}
+
+/// An item the elaborator made again, its terms the baseline's but for its binders' names and marks, is handed back with what the baseline's walk stated of it under the names it was written with: `lemma`'s second binder binds a proof, and its binders are `Q` and `k` though the baseline's are `P` and `h`.
+#[test]
+fn an_item_made_again_is_handed_back_with_the_baselines_statements_under_its_own_names() {
+    let lemma = |names: [&str; 2], proofs: &[bool]| {
+        let [p, h] =
+            [(20, names[0]), (21, names[1])].map(|(index, hint)| Free::local(index, Some(hint)));
+        let binders = [(p, Term::prop()), (h, Term::free_var(&p))];
+        let Subterm::Func(Func { telescope }) =
+            Term::unwrap_or_clone(Term::func(binders.clone(), Term::free_var(&h)))
+        else {
+            panic!("a function literal");
+        };
+
+        authored(
+            &global("lemma"),
+            Term::func_type(binders, Term::free_var(&p)),
+            Term::from(Subterm::Func(Func {
+                telescope: telescope.with_proofs(proofs),
+            })),
+        )
+    };
+    let stated = walked(&collision_definitions(
+        vec![lemma(["P", "h"], &[false, false])],
+        BTreeMap::new(),
+    ));
+    let baseline = versioned(stated.definitions);
+    let edited = replaced(&baseline, "lemma", lemma(["Q", "k"], &[true, false]));
+
+    let rechecked = walked_over(&edited, &baseline, &stated.certification);
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    let handed = rechecked
+        .definitions
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Let(definition) if definition.name == global("lemma") => {
+                Some(definition.body.clone())
+            }
+            _ => None,
+        })
+        .expect("the module holds `lemma`");
+    let Subterm::Func(Func { telescope }) = &*handed else {
+        panic!("a function literal");
+    };
+    assert_eq!(telescope.proofs(), [false, true]);
+    assert_eq!(telescope.labels(), ["Q", "k"]);
 }
 
 /// A module that declares a name twice reaches no walk over a baseline: `three` respelled as a second `identity`, a name the baseline holds at a place the edit leaves alone and no unit in scope declares, so the clause that would answer is [`declares_a_held_name`]'s reading of the baseline's places.

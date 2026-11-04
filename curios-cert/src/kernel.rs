@@ -49,6 +49,9 @@ pub use sort::*;
 mod spend;
 use spend::*;
 
+mod stating;
+pub(crate) use stating::*;
+
 mod whnf;
 pub(crate) use whnf::*;
 
@@ -184,10 +187,6 @@ pub enum Error {
         declared: Plicity,
         written: Plicity,
     },
-    /// A binder that states it binds a proof, or a definition marked one, at a type that is no proposition and no function into one. A mark is what the closed machine reads to bind a substituend unreduced, and what an environment reads to hold a name with nothing to unfold to, so one is held to what no judgment reads the value of.
-    NoProof(Term),
-    /// A definition stating its value inhabits a sort its value does not inhabit: `stated` where the value is at `reached`. What a definition states of its value's sort is what every judgment asking a binder of it its sort reads before anything is reduced, so it is held to the sort its value has, as a proof mark is held to its type.
-    ValueSort { stated: Term, reached: Term },
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
@@ -338,20 +337,6 @@ impl fmt::Display for Displayed<'_> {
                 "this declaration leaves {stated} sorts to its caller, past the {} one declaration may",
                 UniverseContext::QUALITY_LIMIT,
             ),
-            Error::NoProof(type_) => {
-                let type_ = notation.term(type_);
-                write!(
-                    formatter,
-                    "a binder states it binds a proof at `{type_}`, which is no proposition"
-                )
-            }
-            Error::ValueSort { stated, reached } => {
-                let (stated, reached) = (notation.term(stated), notation.term(reached));
-                write!(
-                    formatter,
-                    "a definition states its value inhabits `{stated}`, where it inhabits `{reached}`"
-                )
-            }
             Error::NotAMotive { stated, refusal } => {
                 let stated = notation.term(stated);
                 write!(
@@ -1003,6 +988,11 @@ impl<'s> Kernel<'s> {
     /// Register an `induct` declaration's registry entry, refused where one already stands under `name`.
     pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) -> Result<(), Error> {
         self.globals.declare_induct(name, declaration)
+    }
+
+    /// Hold `declaration` in place of the module's own `induct` entry under `name`, which the walk registered with no payload stating a proof: the declaration that declares it was judged, and states its own.
+    pub(crate) fn restate_induct(&mut self, name: &Global, declaration: &InductDecl) {
+        self.globals.restate_induct(name, declaration);
     }
 
     /// Register a `struct` declaration's registry entry, refused where one already stands under `name`.

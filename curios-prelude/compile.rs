@@ -193,12 +193,14 @@ fn unit(
         sharing.structures()
     );
 
-    let (certification, anf) = certified(root, &core, predecessors, prepared.anchors());
+    let (core, certification, anf) = certified(root, &core, predecessors, prepared.anchors());
+    // What the kernel stated rebuilt the nodes whose marks it changed, which are consed with the rest: the table holds every node the module shared, so a node the kernel handed back as it was costs nothing.
+    let core = core.shared(&sharing);
 
     Unit::new(prepared, core, anf, traces, certification)
 }
 
-/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the kernel that walked it: the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the kernel does not accept or erasure cannot erase is no prelude.
+/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the kernel that walked it: the module as the kernel stated it, the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the kernel does not accept or erasure cannot erase is no prelude.
 ///
 /// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
 fn certified(
@@ -206,7 +208,7 @@ fn certified(
     core: &Definitions,
     predecessors: &[&Unit],
     anchors: &Anchors,
-) -> (Certification, ErasedUnit) {
+) -> (Definitions, Certification, ErasedUnit) {
     // Meta-free before the kernel walks it; projecting here is also what validates that claim at the boundary that certifies the root.
     let zonked = Zonked::project(core)
         .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the kernel: {refusal}"));
@@ -224,6 +226,8 @@ fn certified(
         Rechecked {
             verdicts: refusals,
             certification,
+            definitions,
+            entrypoint: _,
         },
         mut kernel,
     ) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
@@ -248,6 +252,8 @@ fn certified(
         "/{root} certified: {} items accepted by the kernel",
         core.items.len()
     );
+    // The root is the module the kernel stated, so every mark it carries is the walk's own.
+    let stated = zonked.map(|_| definitions);
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
     let cores = predecessors
@@ -270,7 +276,7 @@ fn certified(
         &mut kernel,
         Erasures::of(&cores, &places, &certifications, &erased)
             .fixed(&vec![true; predecessors.len()]),
-        &zonked,
+        &stated,
     )
     .unwrap_or_else(|error| {
         panic!(
@@ -284,7 +290,7 @@ fn certified(
         )
     });
 
-    (certification, anf)
+    (stated.into_definitions(), certification, anf)
 }
 
 /// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.

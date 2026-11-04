@@ -783,9 +783,9 @@ fn a_group_stating_a_sort_its_context_does_not_leave_is_refused() {
     );
 }
 
-/// The sort a definition states its value inhabits is read at each assignment of the sorts its declaration leaves, though no scan before the judgment reads it: one past those sorts is a sort no assignment states, and is refused where the value's own sort is put beside it.
+/// The sort the walk states a definition's value inhabits is the one every assignment of the sorts its declaration leaves reaches, whatever the module says: `T : Type = Nat`, leaving one sort, is stated `Type 0`, though the module says a sort past those it leaves.
 #[test]
-fn a_value_sort_past_the_sorts_a_declaration_leaves_is_refused() {
+fn a_value_sort_is_stated_as_every_assignment_reaches_it() {
     let item = match generic(&named("T"), 1, Term::type_ground(), nat()) {
         Item::Let(definition) => Item::Let(Box::new(Definition {
             value_sort: Some(left(1)),
@@ -794,15 +794,18 @@ fn a_value_sort_past_the_sorts_a_declaration_leaves_is_refused() {
         item => item,
     };
 
-    let verdicts = verdicts(&definitions(vec![item], []));
-
-    assert!(
-        verdicts.iter().any(|verdict| matches!(
-            at_sorts(verdict),
-            Some((sorts, Error::ValueSort { .. })) if sorts == [Quality::Prop]
-        )),
-        "{verdicts:?}",
+    let rechecked = fixture_certified(
+        &definitions(vec![item], []),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
     );
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    let Item::Let(definition) = &rechecked.definitions.items[0] else {
+        panic!("the module holds one definition");
+    };
+    assert_eq!(definition.value_sort, Some(Term::type_ground()));
 }
 
 /// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::positivity::refusal_tests` puts the same declaration to the elaborator under this name. Rename both or neither.

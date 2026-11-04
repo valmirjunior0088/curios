@@ -24,7 +24,7 @@ use {
 #[curios_archive::archived]
 struct Produced {
     text: Rc<PreparedText>,
-    /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration reads where it stands.
+    /// Elaborated and zonked, as the kernel handed it back: elaboration's items, with every proof mark and value sort the kernel stated of them. This is what a successor's elaboration and the kernel's walk over it read where it stands.
     ///
     /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
     #[archived_with(curios_core::WithoutItems)]
@@ -334,7 +334,7 @@ impl Unit {
         self.unit.text()
     }
 
-    /// This unit's elaborated module — what the kernel judges, and what a successor's elaboration reads rather than re-checks.
+    /// This unit's elaborated module as the kernel handed it back — what a successor's elaboration and judgment read rather than re-check.
     pub fn core(&self) -> &Definitions {
         self.unit.core()
     }

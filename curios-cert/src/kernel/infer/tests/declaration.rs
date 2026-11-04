@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        Atom, DefinitionKind, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseParam,
     },
@@ -152,9 +152,16 @@ fn a_definition_checks_under_its_own_constraints() {
         }],
     };
     let mut kernel = kernel();
-    assert_eq!(
-        check_definition(&mut kernel, &name, &type_, &body, false, None, &constrained),
-        Ok(()),
+    assert!(
+        check_definition(
+            &mut kernel,
+            &name,
+            &DefinitionKind::Authored,
+            &type_,
+            &body,
+            &constrained
+        )
+        .is_ok()
     );
 
     let unconstrained = UniverseContext {
@@ -167,10 +174,9 @@ fn a_definition_checks_under_its_own_constraints() {
         check_definition(
             &mut kernel,
             &name,
+            &DefinitionKind::Authored,
             &type_,
             &body,
-            false,
-            None,
             &unconstrained
         ),
         Err(Error::Mismatch { .. }),

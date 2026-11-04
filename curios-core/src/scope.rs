@@ -538,7 +538,7 @@ pub fn stamp_declaration_instance<B: Bound>(
 ///
 /// **Never a local's identity.** That is minted by the compilation that closed the scope, and a stored scope keeping it would carry a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
 ///
-/// **`proof` is stated once, when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
+/// **`proof` is stated when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. Each checker states it for its own run, and the certifier states it again of every module it judges, so a stored scope says what the certifier stated. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Label {

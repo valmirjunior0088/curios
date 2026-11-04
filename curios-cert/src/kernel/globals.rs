@@ -533,6 +533,13 @@ impl<'s> Environment<'s> {
         Ok(())
     }
 
+    /// Hold `declaration` under `name` in place of the module's own entry registered there: the same family, stating what the walk read of its payloads where the declaration that declares it was judged (`kernel::stating`).
+    pub(super) fn restate_induct(&mut self, name: &Global, declaration: &InductDecl) {
+        if let Some(held) = self.inducts.get_mut(name) {
+            *held = declaration.clone();
+        }
+    }
+
     /// [`Environment::declare_induct`] for a `struct` registry entry.
     pub(super) fn declare_struct(
         &mut self,

@@ -1140,6 +1140,14 @@ fn judged(
             None => format!("the kernel refused the entrypoint: {refusal}"),
         }));
     }
+    // The program as the kernel stated it, the one it is erased from.
+    let program = Zonked::project(&Program {
+        definitions: rechecked.definitions,
+        entrypoint: rechecked
+            .entrypoint
+            .expect("a program's walk checks the term it closes with"),
+    })
+    .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
     let erased = erasing.map(|text| {
@@ -1364,6 +1372,8 @@ pub(crate) fn compile_lowered(
         );
         return Err(refuse(&lowered, refusal));
     }
+    // The unit is the module the kernel stated, so every mark it carries is the walk's own.
+    let core = core.map(|_| rechecked.definitions);
 
     let places = predecessors.places();
     let certifications = predecessors.certifications();

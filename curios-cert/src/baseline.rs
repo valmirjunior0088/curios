@@ -14,9 +14,9 @@ use {
     super::{Globals, Held, held, induct_alike, struct_alike},
     curios_common::{Digest, Qualifier, digest},
     curios_core::{
-        Certification, Concluded, Definition, Definitions, Global, InductDecl, Item, ItemRun,
-        Nominal, Places, Polarity, Reads, RecDefinition, RecItem, Sharing, StructDecl, Totality,
-        UniverseContext, Variance,
+        Certification, Concluded, Definition, DefinitionKind, Definitions, Global, InductDecl,
+        Item, ItemRun, Nominal, Places, Polarity, Reads, RecDefinition, RecItem, Sharing,
+        StructDecl, Totality, UniverseContext, Variance,
     },
     std::collections::{BTreeMap, HashMap},
 };
@@ -54,7 +54,7 @@ impl<'a> Baseline<'a> {
             )
     }
 
-    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, each marked a proof or not as the baseline's is, and the same registry entries under each name. Elaboration's other stamps take no part, as they take none where an environment is asked whether a declaration is its own; the proof mark does, being the one an environment reads a name by.
+    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, and the same registry entries under each name. Elaboration's stamps take no part, its proof marks and value sorts among them: the walk states those of every item it judges or takes by its own reading of the terms (`kernel::stating`), so an item whose terms are the baseline's is stated as the baseline's was.
     ///
     /// Each form is compared by a function that destructures it whole ([`definition_alike`], [`group_alike`]), so a field added to the representation is classified there or does not compile. That is the rule and not a courtesy: comparing by the fields someone thought of is how the `rec` form came to be compared by its group and its members' names and marks, and silently not by the universe context its members' levels mean, which admitted Hurkens' paradox through a group adopted under constraints no walk assumed.
     pub(crate) fn holds(&self, item: &Item) -> bool {
@@ -78,25 +78,29 @@ impl<'a> Baseline<'a> {
 
 /// Whether a `let` item is the baseline's: everything a judgment reads of a name in scope, the definition destructured whole so that what is left out is left out on purpose.
 ///
-/// What is read is what [`Held`] publishes — the type, the body, the stated value sort and the universe context — and the proof mark, which decides whether a body is published at all. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name; and the island, which is elaboration's record.
+/// What is read is the type, the body, the universe context and whether the declaration wrote the definition, which every statement the walk makes of the definition is read off. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name, and what else a kind says, which no judgment reads; the island, which is elaboration's record; and the proof mark and the value sort, which the walk states of the definition itself.
 fn definition_alike(this: &Definition, that: &Definition) -> bool {
     let Definition {
         name,
         universe_context,
-        proof,
-        value_sort,
         type_,
         body,
-        kind: _,
+        kind,
         island: _,
+        proof: _,
+        value_sort: _,
     } = this;
 
     *name == that.name
         && *universe_context == that.universe_context
-        && *proof == that.proof
-        && *value_sort == that.value_sort
         && *type_ == that.type_
         && *body == that.body
+        && authored(kind) == authored(&that.kind)
+}
+
+/// Whether a declaration wrote a definition of `kind`, which is what the walk reads of a kind where it states the definition a proof ([`check_definition`](crate::check_definition)).
+fn authored(kind: &DefinitionKind) -> bool {
+    matches!(kind, DefinitionKind::Authored)
 }
 
 /// Whether a `rec` item is the baseline's: the universe context its members' levels mean, the group's own scopes, which hold every member's type and body, and each member by what is read of one.
@@ -118,16 +122,16 @@ fn group_alike(this: &RecItem, that: &RecItem) -> bool {
             .all(|(this, that)| member_alike(this, that))
 }
 
-/// Whether a group's member is the baseline's. Its terms are the group's, so what is left is the name it is exported under and the mark deciding whether its body is published; the rest is what [`definition_alike`] leaves out, for the reasons stated there.
+/// Whether a group's member is the baseline's. Its terms are the group's, so what is left is the name it is exported under and whether the declaration wrote it; the rest is what [`definition_alike`] leaves out, for the reasons stated there.
 fn member_alike(this: &RecDefinition, that: &RecDefinition) -> bool {
     let RecDefinition {
         name,
-        proof,
-        kind: _,
+        kind,
         island: _,
+        proof: _,
     } = this;
 
-    *name == that.name && *proof == that.proof
+    *name == that.name && authored(kind) == authored(&that.kind)
 }
 
 /// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context by what it is compared by ([`UniverseContext::inequalities`]), the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
@@ -248,7 +252,7 @@ impl Readable<'_> {
         });
         let part = (
             sharing.share(self.held.type_),
-            // Held by both parts: the publication is read by `Sort::of` with nothing run and `hold_value_sort` holds a stated sort to it, so a verdict may rest on it whichever read the asking walk recorded, and covering it twice refuses an adoption that would have stood rather than standing on one that would not.
+            // Held by both parts: the publication is read by `Sort::of` with nothing run, and a reader's own value sort is stated through it, so a verdict may rest on it whichever read the asking walk recorded, and covering it twice refuses an adoption that would have stood rather than standing on one that would not.
             self.held.value_sort.map(|sort| sharing.share(sort)),
             self.held.universes.inequalities(),
             family,

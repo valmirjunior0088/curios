@@ -55,18 +55,19 @@ mod variance_tests;
 
 use {
     super::{
-        Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited, bytes_of,
-        check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
-        check_struct_decl, define_as_stated, free_locals_of, held_digest, open_positions_of,
-        open_quality, positivity_vectors, read_digest, rewrite_universe_levels, universe_metas,
-        universe_verdict, variance_vectors,
+        Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Stated, Totals, Unvisited,
+        bytes_of, carried_marks, check_definition, check_entrypoint, check_induct_decl,
+        check_positions, check_rec_group, check_struct_decl, define_as_stated, free_locals_of,
+        held_digest, open_positions_of, open_quality, positivity_vectors, read_digest,
+        rewrite_universe_levels, state_definition, state_rec_group, stated_entrypoint,
+        stated_marks, universe_metas, universe_verdict, unstated_entry, variance_vectors,
     },
     curios_analysis::{Declarations, PositivityRefusal},
     curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
-        Abroad, Bound, Certification, Certified, Changes, Concluded, Definitions, Entrypoint,
-        Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId, Notation, Places, Polarity,
-        Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext,
+        Abroad, Bound, Certification, Certified, Changes, Concluded, Definition, Definitions,
+        Entrypoint, Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId, Notation,
+        Places, Polarity, Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality,
         Variance, Zonked,
     },
     std::{
@@ -104,13 +105,17 @@ impl Verdict {
     }
 }
 
-/// What one whole-module walk reached: every refusal, and the record of what it concluded about the definitions it judged.
+/// What one whole-module walk reached: every refusal, the record of what it concluded about the definitions it judged, and the module as it stated it.
 #[derive(Debug)]
 pub struct Rechecked {
     /// Every refusal the walk reached; empty exactly when the kernel accepted the module.
     pub verdicts: Vec<Verdict>,
     /// Each judged definition's totality, closed over everything it mentions, and each accepted registry entry's polarity vector — what a later walk reads once the unit is in its scope. A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
     pub certification: Certification,
+    /// The module handed in, with what this walk stated of each item it judged or took in place of what the module said (`kernel::stating`): which binders and payloads bind a proof, which names are proofs, and the sort a type-valued definition's value inhabits. An item it did not judge again, adopted or never visited, states what the walk that filed the baseline stated of the baseline's item in its place, under its own binders' names (`kernel::stating::carried_marks`), and every other part of every item is the module's. What a unit stores and erases, so the walk over a later unit reads this one by what this walk stated.
+    pub definitions: Definitions,
+    /// The term a program closes with, as the walk stated its binders where it checked it, and `None` for a unit: what a program is erased from.
+    pub entrypoint: Option<Entrypoint>,
 }
 
 /// Re-check `module` with the independent kernel, with `globals` already in scope.
@@ -247,17 +252,6 @@ pub fn recheck_definitions_verdicts_uncached(
         globals,
     )
     .verdicts
-}
-
-/// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
-/// The metavariable a definition's stated value sort holds, which no judgment meets: the walk converts the stated sort with the value's and never types it, so one that reduction discards would stand unrefused.
-fn stated_sort_metavar(sort: &Term) -> Option<MetavarId> {
-    let mut found = None;
-    sort.any_metavar(&mut |id: MetavarId| {
-        found = Some(id);
-        true
-    });
-    found
 }
 
 fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
@@ -462,6 +456,8 @@ fn verdicts_within<'s>(
             return Rechecked {
                 verdicts: redeclared,
                 certification: Certification::default(),
+                definitions: definitions.clone(),
+                entrypoint: entry.cloned(),
             };
         }
     }
@@ -589,18 +585,10 @@ fn verdicts_within<'s>(
         for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
             let sorts = definition.universe_context.quality_count;
-            let stated = definition.value_sort.as_ref();
             if let Some(error) = universe_residue(&definition.type_, sorts)
                 .or_else(|| universe_residue(&definition.body, sorts))
                 .or_else(|| universe_escape(&definition.type_, count))
                 .or_else(|| universe_escape(&definition.body, count))
-                .or_else(|| {
-                    stated
-                        .and_then(stated_sort_metavar)
-                        .map(|id| Error::NotCore(Term::hole(id)))
-                })
-                .or_else(|| stated.and_then(|sort| universe_residue(sort, sorts)))
-                .or_else(|| stated.and_then(|sort| universe_escape(sort, count)))
             {
                 verdicts.push(Verdict {
                     name: Some(definition.name),
@@ -628,8 +616,9 @@ fn verdicts_within<'s>(
     }
 
     // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The environment refuses a name it holds, which the refusal above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform. Over a baseline the entries of the declarations the walk does not visit are the baseline's, which answers for each from the start.
+    // Each family stating no payload a proof, until the declaration that declares it is judged and states its own (`kernel::stating`): the walk reads nothing a module says of a mark.
     for (name, declaration) in &inducts {
-        if let Err(error) = kernel.declare_induct(name, declaration) {
+        if let Err(error) = kernel.declare_induct(name, &unstated_entry(declaration)) {
             verdicts.push(Verdict {
                 name: Some(*name),
                 error,
@@ -664,6 +653,16 @@ fn verdicts_within<'s>(
     let mut taken = BTreeMap::<Global, HeldReads>::new();
     // The names of the declarations the walk has settled, judged or adopted: what a record a store holds may be held to.
     let mut settled = BTreeSet::<Global>::new();
+    // The module as the walk states it, settled item by item: an item it judges or takes as it states it, and every other as the baseline's walk stated it. An item of the baseline's the elaborator made again arrives saying what the elaborator stated, so it takes what that walk stated of the item the baseline holds in its place, keeping its own names and places (`kernel::stating`). It is what the walk digests a declaration of its own unit by, so a read is told by what this kernel stated and never by what a module arriving says.
+    let mut stated = definitions.clone();
+    if let (Some(over), Some(changed)) = (over, &changed) {
+        for place in changed.touched.difference(&changed.items) {
+            let item = &definitions.items[*place];
+            if let Some(held) = held_item(over.baseline, item) {
+                put(&mut stated, *place, carried_marks(item, held));
+            }
+        }
+    }
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Definitions::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
     for place in &walk {
@@ -692,6 +691,10 @@ fn verdicts_within<'s>(
                 variances.insert(name, vector);
             }
             adopting.adopted(item);
+            // Its families stand as the baseline's walk stated them, as the item does.
+            for (name, declaration) in carried(&stated.items[*place]).0 {
+                kernel.restate_induct(&name, &declaration);
+            }
             settled.extend(item.declared_names().into_iter().copied());
             continue;
         }
@@ -702,6 +705,7 @@ fn verdicts_within<'s>(
             && let Some(records) = {
                 let now = Settled {
                     definitions,
+                    stated: &stated,
                     places: over.places,
                     baseline: over.baseline,
                     settled: &settled,
@@ -712,8 +716,9 @@ fn verdicts_within<'s>(
                 stored(candidates, globals, kernel, &now, *place, item)
             }
         {
-            let refusals = take(kernel, item);
+            let (taken_item, refusals) = take(kernel, item);
             verdicts.extend(refusals);
+            put(&mut stated, *place, taken_item);
             for (name, record) in records {
                 reads.insert(name, (**record).clone());
                 let made = record.made().expect("a record taken is complete");
@@ -731,7 +736,7 @@ fn verdicts_within<'s>(
             }
             if let Some(adopting) = &mut adopting {
                 adopting.judged(
-                    (definitions, over.places),
+                    (&stated, over.places),
                     item,
                     |name| totals.partial(kernel, name),
                     &polarities,
@@ -745,16 +750,22 @@ fn verdicts_within<'s>(
         // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the kernel is read beside its cost in the elaborator by the same key.
         curios_profile::profile!("certify_declaration", group = %item.describe());
 
-        match item {
+        // What the walk states of the item's binders and of its families' payloads, before the closed machine runs on any of its terms; its families are held as stated from here on.
+        kernel.restore_budget();
+        let marked = stated_marks(kernel, item);
+        for (name, declaration) in carried(&marked).0 {
+            kernel.restate_induct(&name, &declaration);
+        }
+
+        let item = match marked {
             Item::Let(definition) => {
                 let before = kernel.partial_groups();
                 let outcome = check_definition(
                     kernel,
                     &definition.name,
+                    &definition.kind,
                     &definition.type_,
                     &definition.body,
-                    definition.proof,
-                    definition.value_sort.as_ref(),
                     &definition.universe_context,
                 );
                 // Whether the definition holds a group that does not descend, noted where the group was typed — see `Kernel::definition_encloses_partial`.
@@ -762,62 +773,83 @@ fn verdicts_within<'s>(
                     kernel.note_enclosing_partial(&definition.name);
                 }
 
-                if let Err(error) = outcome {
-                    verdicts.push(Verdict {
-                        name: Some(definition.name),
-                        error,
-                    });
-                    if let Err(error) = define_as_stated(
-                        kernel,
-                        &definition.name,
-                        &definition.type_,
-                        &definition.body,
-                        definition.proof,
-                        definition.value_sort.as_ref(),
-                        &definition.universe_context,
-                    ) {
+                let (proof, value_sort) = match outcome {
+                    Ok(Stated { proof, value_sort }) => (proof, value_sort),
+                    Err(error) => {
                         verdicts.push(Verdict {
                             name: Some(definition.name),
                             error,
                         });
-                    }
-                }
-            }
-            Item::Rec(rec) => {
-                let members = rec
-                    .definitions
-                    .iter()
-                    .map(|definition| (definition.name, definition.proof))
-                    .collect::<Vec<_>>();
-                let universes = rec.universe_context.clone();
-
-                let outcome = check_rec_group(kernel, &members, &rec.group, &universes);
-
-                if let Err(error) = outcome {
-                    verdicts.push(Verdict {
-                        name: item_name,
-                        error,
-                    });
-                    // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
-                    for (member, (name, proof)) in members.iter().enumerate() {
+                        // A refused definition stands at its type with its body, and unfolds.
                         if let Err(error) = define_as_stated(
                             kernel,
-                            name,
-                            &rec.group.member_type(member),
-                            &Term::rec_proj(rec.group.clone(), member),
-                            *proof,
+                            &definition.name,
+                            &definition.type_,
+                            &definition.body,
+                            false,
                             None,
-                            &universes,
+                            &definition.universe_context,
                         ) {
                             verdicts.push(Verdict {
-                                name: item_name,
+                                name: Some(definition.name),
                                 error,
                             });
                         }
+
+                        (false, None)
                     }
-                }
+                };
+
+                Item::Let(Box::new(Definition {
+                    proof,
+                    value_sort,
+                    ..*definition
+                }))
             }
-        }
+            Item::Rec(mut rec) => {
+                let members = rec
+                    .definitions
+                    .iter()
+                    .map(|definition| (definition.name, &definition.kind))
+                    .collect::<Vec<_>>();
+                let universes = rec.universe_context.clone();
+
+                let proofs = match check_rec_group(kernel, &members, &rec.group, &universes) {
+                    Ok(proofs) => proofs,
+                    Err(error) => {
+                        verdicts.push(Verdict {
+                            name: item_name,
+                            error,
+                        });
+                        // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
+                        for (member, (name, _)) in members.iter().enumerate() {
+                            if let Err(error) = define_as_stated(
+                                kernel,
+                                name,
+                                &rec.group.member_type(member),
+                                &Term::rec_proj(rec.group.clone(), member),
+                                false,
+                                None,
+                                &universes,
+                            ) {
+                                verdicts.push(Verdict {
+                                    name: item_name,
+                                    error,
+                                });
+                            }
+                        }
+
+                        vec![false; members.len()]
+                    }
+                };
+                for (definition, proof) in rec.definitions.iter_mut().zip(proofs) {
+                    definition.proof = proof;
+                }
+
+                Item::Rec(rec)
+            }
+        };
+        let item = &item;
 
         let (drained, failure) = kernel.take_checked();
         if let Some(error) = failure {
@@ -856,9 +888,10 @@ fn verdicts_within<'s>(
         );
 
         // How the item came out against the baseline's, for the declarations that read it.
+        put(&mut stated, *place, item.clone());
         if let (Some(adopting), Some(over)) = (&mut adopting, over) {
             adopting.judged(
-                (definitions, over.places),
+                (&stated, over.places),
                 item,
                 |name| totals.partial(kernel, name),
                 &polarities,
@@ -871,7 +904,9 @@ fn verdicts_within<'s>(
     kernel.at(usize::MAX);
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it.
-    if let Some(entry) = entry {
+    kernel.restore_budget();
+    let entry = entry.map(|entry| stated_entrypoint(kernel, entry));
+    if let Some(entry) = &entry {
         let checked = match &entry.type_ {
             Some(type_) => check_entrypoint(kernel, &entry.body, type_),
             None => Err(Error::UntypedEntry),
@@ -956,6 +991,8 @@ fn verdicts_within<'s>(
     Rechecked {
         verdicts,
         certification,
+        definitions: stated,
+        entrypoint: entry,
     }
 }
 
@@ -1065,6 +1102,8 @@ fn revised(
 ///
 /// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
 struct Changed {
+    /// The places the module holds another item at than the baseline does, or every place where the two modules are not one a version of the other.
+    touched: BTreeSet<usize>,
     /// The places of the items whose terms or registry entries are not the baseline's.
     items: BTreeSet<usize>,
     /// The names the baseline declared and the module does not.
@@ -1132,6 +1171,7 @@ impl Changed {
         let mut changed = Changed {
             visited: BTreeSet::new(),
             visited_names: HashSet::new(),
+            touched,
             items,
             lost,
             redeclares,
@@ -1253,7 +1293,10 @@ fn read_stands(
 
 /// What a walk has settled where it asks whether a record a store holds stands: its module, where the module holds each name, the baseline beneath it, the names settled so far, and the verdicts and vectors it holds of them.
 struct Settled<'w> {
+    /// The module as it arrived, whose items a store files its records by.
     definitions: &'w Definitions,
+    /// The module as the walk has stated it so far, which a part of it is digested in.
+    stated: &'w Definitions,
     places: &'w Places,
     baseline: Baseline<'w>,
     settled: &'w BTreeSet<Global>,
@@ -1348,7 +1391,7 @@ fn stands(
                     .as_ref()
                     .map(|(_, variances)| variances.as_slice()),
             );
-            return held_digest(now.definitions, now.places, read, verdict, body)
+            return held_digest(now.stated, now.places, read, verdict, body)
                 .ok()
                 .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
         }
@@ -1366,7 +1409,7 @@ fn stands(
                 ),
                 (false, false) => return None,
             };
-            return held_digest(now.definitions, now.places, read, verdict, body)
+            return held_digest(now.stated, now.places, read, verdict, body)
                 .ok()
                 .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
         }
@@ -1391,49 +1434,80 @@ fn stands(
             .all(|(read, recorded)| digest(read, true).is_some_and(|now| now == *recorded))
 }
 
-/// Take the verdict a store's records hold of `item`: each name stands at its type with its real body, as the walk leaves an item it does not judge, and what the walk refuses of it is handed back.
-fn take(kernel: &mut Kernel, item: &Item) -> Vec<Verdict> {
+/// Take the verdict a store's records hold of `item`: what the walk states of it, as it states what it judges, and each name standing at its type with its real body, as the walk leaves an item it does not judge; what the walk refuses of it is handed back with it.
+fn take(kernel: &mut Kernel, item: &Item) -> (Item, Vec<Verdict>) {
     let mut refusals = Vec::new();
-    let mut defined = |name: &Global,
-                       type_: &Term,
-                       body: &Term,
-                       proof: bool,
-                       value_sort: Option<&Term>,
-                       universes: &UniverseContext| {
-        if let Err(error) =
-            define_as_stated(kernel, name, type_, body, proof, value_sort, universes)
-        {
-            refusals.push(Verdict {
-                name: Some(*name),
-                error,
-            });
-        }
-    };
-    match item {
-        Item::Let(definition) => defined(
-            &definition.name,
-            &definition.type_,
-            &definition.body,
-            definition.proof,
-            definition.value_sort.as_ref(),
-            &definition.universe_context,
-        ),
-        Item::Rec(rec) => {
-            let universes = rec.universe_context.clone();
-            for (member, definition) in rec.definitions.iter().enumerate() {
-                defined(
-                    &definition.name,
-                    &rec.group.member_type(member),
-                    &Term::rec_proj(rec.group.clone(), member),
-                    definition.proof,
-                    None,
-                    &universes,
-                );
-            }
-        }
+    kernel.restore_budget();
+    let stated = stated_marks(kernel, item);
+    for (name, declaration) in carried(&stated).0 {
+        kernel.restate_induct(&name, &declaration);
     }
 
-    refusals
+    let stated = match stated {
+        Item::Let(definition) => {
+            let (proof, value_sort) = match state_definition(
+                kernel,
+                &definition.name,
+                &definition.kind,
+                &definition.type_,
+                &definition.body,
+                &definition.universe_context,
+            ) {
+                Ok(Stated { proof, value_sort }) => (proof, value_sort),
+                Err(error) => {
+                    refusals.push(Verdict {
+                        name: Some(definition.name),
+                        error,
+                    });
+                    (false, None)
+                }
+            };
+
+            Item::Let(Box::new(Definition {
+                proof,
+                value_sort,
+                ..*definition
+            }))
+        }
+        Item::Rec(mut rec) => {
+            let members = rec
+                .definitions
+                .iter()
+                .map(|definition| (definition.name, &definition.kind))
+                .collect::<Vec<_>>();
+            let proofs = state_rec_group(kernel, &members, &rec.group, &rec.universe_context)
+                .unwrap_or_else(|error| {
+                    refusals.push(Verdict {
+                        name: members.first().map(|(name, _)| *name),
+                        error,
+                    });
+                    vec![false; members.len()]
+                });
+            for (definition, proof) in rec.definitions.iter_mut().zip(proofs) {
+                definition.proof = proof;
+            }
+
+            Item::Rec(rec)
+        }
+    };
+
+    (stated, refusals)
+}
+
+/// The item `baseline` holds where it holds the first name `item` declares: the one whose statements an item the walk does not judge takes.
+fn held_item<'b>(baseline: Baseline<'b>, item: &Item) -> Option<&'b Item> {
+    let name = item.declared_names().into_iter().next()?;
+    let place = baseline.places.place(name)?;
+
+    Some(&baseline.definitions.items[place.item()])
+}
+
+/// `item` at `place` of `definitions`, in place of what it held there and at the place it had: a version keeps sharing its other items with the module it was made from.
+fn put(definitions: &mut Definitions, place: usize, item: Item) {
+    match definitions.items.is_version() {
+        true => definitions.items.replace(place, item),
+        false => definitions.items[place] = item,
+    }
 }
 
 /// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the names that record calls partial, and the polarity vector of each registry entry the item declares.

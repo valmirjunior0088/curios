@@ -28,7 +28,7 @@ use {
     super::{
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
-    crate::{foreign_signature, hold_proof, spine},
+    crate::{foreign_signature, spine},
     curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
@@ -934,7 +934,6 @@ fn under_bindings<T>(
                 infer_type(kernel, &type_)?;
                 let partial = kernel.partial_groups();
                 check(kernel, &value, &type_)?;
-                hold_proof(kernel, tail.binds_proof(index), &type_)?;
                 let binder = kernel.fresh(tail.hint(index));
                 kernel.bind(&binder, &type_, &value, kernel.partial_groups() > partial);
                 binders.push(Term::free_var(&binder));
@@ -1032,7 +1031,6 @@ fn check_lambda(
                         expected: Box::new(theirs),
                     });
                 }
-                hold_proof(kernel, walk.binds_proof(), &mine)?;
                 let binder = kernel.advance_assumed(&mut walk, &theirs);
                 if parameters {
                     kernel.bind_parameter(&binder);
@@ -1193,7 +1191,6 @@ fn infer_telescope(
         while let Some((_, domain)) = cursor.entry() {
             let mark = cursor.mark().expect("a mark stands at an entry");
             infer_type(kernel, &domain)?;
-            hold_proof(kernel, cursor.binds_proof(), &domain)?;
 
             let binder = kernel.advance_assumed(&mut cursor, &domain);
             if let Some(argument) = arguments.get(entries.len()) {
