@@ -78,9 +78,9 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         }
     }
 
-    /// One character on the current line. A fresh line pays its indentation here, lazily, so a blank line stays blank; a following run holds a space back until something follows it.
+    /// One character on the current line. A fresh line pays its indentation here, lazily, so a blank line stays blank; a space is held back until something follows it on the line, so no line ends in one.
     fn put(&mut self, char: char) -> Result<(), fmt::Error> {
-        if char == ' ' && self.following.is_some() {
+        if char == ' ' {
             self.spaces += 1;
             return Ok(());
         }
@@ -565,7 +565,9 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| (&mut item.printer, flat)));
             }
-            Printer::Indent(inner) | Printer::Group(inner) => stack.push((inner, flat)),
+            Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
+                stack.push((inner, flat))
+            }
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
             Printer::Deferred(_) => unreachable!("forced above"),
         }
@@ -766,6 +768,8 @@ fn fits(
                 filling,
                 strict,
             }),
+            // Mandatory where it is taken, as a hard line is: no group holding one renders flat, and beyond the group it may end the line.
+            Printer::OwnLine(_) => return !inside,
             // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group.
             Printer::Group(inner) => stack.push(Measured {
                 node: inner,
@@ -831,10 +835,10 @@ fn run<'b, 'c>(
             Step::Print(mut printer, flat) => match &mut printer {
                 Printer::Text(text) => state.text(text)?,
                 Printer::Named { text, written } => {
-                    let start = state.written;
                     state.text(text)?;
+                    // Counted back from the end: the spaces held before the name and a fresh line's indentation are written with its first character, and are no part of it.
                     state.annotations.push(Annotation {
-                        start,
+                        start: state.written - text.len(),
                         end: state.written,
                         name: mem::take(text),
                         written: written.take(),
@@ -853,6 +857,16 @@ fn run<'b, 'c>(
                     state.indent_by += state.indent_step;
                     stack.push(Step::Dedent);
                     stack.push(Step::Print(inner.take(), flat));
+                }
+                // Nothing written on the line yet is the line it wants; otherwise it takes the next, a level deeper, the level dropped once it is printed.
+                Printer::OwnLine(inner) if state.should_indent => {
+                    stack.push(Step::Print(inner.take(), flat));
+                }
+                Printer::OwnLine(inner) => {
+                    state.indent_by += state.indent_step;
+                    stack.push(Step::Dedent);
+                    stack.push(Step::Print(inner.take(), flat));
+                    state.line_ends(&mut stack)?;
                 }
                 Printer::Deferred(thunk) => {
                     if let Some(thunk) = thunk.take() {
@@ -984,6 +998,15 @@ fn run<'b, 'c>(
         state.pay(false)?;
     }
 
+    // A document that is not following an original keeps the spaces it ends with, since a fragment's trailing space is the caller's to join on; a formatted text ends with none.
+    if state.following.is_none() && state.spaces > 0 {
+        let held = mem::take(&mut state.spaces);
+        for _ in 0..held {
+            state.formatter.write_char(' ')?;
+        }
+        state.written += held;
+    }
+
     // A document that ends without a newline still owes the comment riding its last line.
     if !state.suffix.is_empty() {
         let suffix = mem::take(&mut state.suffix);
@@ -1048,7 +1071,9 @@ pub fn each_named(
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
-            Printer::Indent(inner) | Printer::Group(inner) => stack.push(inner),
+            Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
+                stack.push(inner)
+            }
             Printer::Text(_)
             | Printer::Line { .. }
             | Printer::IfBreak { .. }

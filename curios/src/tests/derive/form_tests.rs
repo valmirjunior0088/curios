@@ -1,6 +1,6 @@
 //! The derived witness's form: the transient it lowers to and its expansion, and what the compiler refuses in its place, as it refuses a written witness.
 
-use crate::tests::{core, core_elab, error};
+use crate::tests::{core, core_elab, error, unlaid};
 
 #[test]
 fn the_stages_show_the_transient_and_its_expansion() {
@@ -12,7 +12,10 @@ fn the_stages_show_the_transient_and_its_expansion() {
         "#;
 
     let lowered = core(source);
-    assert!(lowered.contains("#{node = Derive} ?"), "{lowered}");
+    assert!(
+        unlaid(&lowered).contains(&unlaid("#{node = Derive} ?")),
+        "{lowered}"
+    );
     let elaborated = core_elab(source);
     assert!(!elaborated.contains("node = Derive"), "{elaborated}");
     assert!(elaborated.contains("Spell/call"), "{elaborated}");
@@ -185,7 +188,9 @@ fn a_derived_witness_lowers_to_the_derive_transient() {
 
     let lowered = core(source);
     assert_eq!(
-        lowered.matches("#{node = Derive} ?").count(),
+        unlaid(&lowered)
+            .matches(&unlaid("#{node = Derive} ?"))
+            .count(),
         2,
         "{lowered}"
     );

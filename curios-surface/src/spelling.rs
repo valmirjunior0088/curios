@@ -8,7 +8,7 @@ use {
         written_entries,
     },
     curios_abi::{ForeignFunction, stdio},
-    curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry},
+    curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bind, Bound, ConceptDecl, Cursor, Definition, DefinitionKind, Definitions,
         Field, Free, Func, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon,
@@ -82,6 +82,8 @@ pub struct Spelling {
     core_text: bool,
     /// Whether a term is written whole, however far its tree outgrows its graph: Core text a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
     whole: bool,
+    /// Whether Core text is written as a text of its own — a file, a dump — rather than as a term inside a sentence: each decorator on a line of its own above what it decorates, at the workspace's line width ([`Spelling::written_as_text`]).
+    as_text: bool,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
     form_scope: Option<Rc<FormScope>>,
 }
@@ -425,6 +427,16 @@ impl Spelling {
         self.whole
     }
 
+    /// Whether Core text is written as a text of its own, each decorator on a line of its own.
+    pub fn writes_as_text(&self) -> bool {
+        self.as_text
+    }
+
+    /// The width a render under this spelling lays its groups out against: a text's is the workspace's line width, and a term a sentence quotes has none unless its caller sets one ([`Spelled::within`]).
+    fn width(&self) -> Option<usize> {
+        self.as_text.then_some(LINE_WIDTH)
+    }
+
     /// The spelling Core text proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
     pub fn core_text() -> Self {
         Self {
@@ -436,6 +448,12 @@ impl Spelling {
     /// This spelling writing every term whole, eliding nothing, as Core text a reader reads back is written: a dump is read about the compiler and bounded as a report is, since a term's tree can outgrow any print — a tower of sixty pairs is a type of 2⁶⁰ leaves.
     pub fn written_whole(mut self) -> Self {
         self.whole = true;
+        self
+    }
+
+    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a kernel's refusal does: a decorator takes a line of its own, and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line, and the text is rendered at [`LINE_WIDTH`], since a group holding a decorator breaks.
+    pub fn written_as_text(mut self) -> Self {
+        self.as_text = true;
         self
     }
 
@@ -478,7 +496,7 @@ impl<'a, T> Spelled<'a, T> {
         Self {
             value,
             spelling: Rc::clone(spelling),
-            width: None,
+            width: spelling.width(),
         }
     }
 
@@ -1823,8 +1841,10 @@ fn print_items(
     formatter: &mut fmt::Formatter<'_>,
     spelling: &Rc<Spelling>,
 ) -> fmt::Result {
-    let write =
-        |formatter: &mut fmt::Formatter<'_>, printer: Printer| run_printer(printer, formatter, 4);
+    let write = |formatter: &mut fmt::Formatter<'_>, printer: Printer| match spelling.width() {
+        Some(width) => run_printer_within(printer, formatter, 4, width),
+        None => run_printer(printer, formatter, 4),
+    };
     let implied = Implied::of(definitions);
     for (index, item) in definitions.items.iter().enumerate() {
         if implied.omitted.contains(&index) {
@@ -1933,6 +1953,7 @@ fn foreign_declared(
     }
 
     decorated(
+        spelling,
         fields,
         flat([
             pure("foreign "),
@@ -1970,6 +1991,7 @@ fn test_declared(definition: &Definition, spelling: &Rc<Spelling>) -> Option<Pri
     }
 
     Some(decorated(
+        spelling,
         island_field(definition, spelling).into_iter().collect(),
         flat([
             pure("test "),
@@ -2118,6 +2140,7 @@ impl Member<'_> {
                 };
 
                 decorated(
+                    spelling,
                     fields,
                     flat([pure(keyword), print_definition(self.definition, spelling)]),
                     true,
@@ -2180,7 +2203,7 @@ impl Member<'_> {
             ));
         }
 
-        decorated(fields, flat([pure(and), form]), true)
+        decorated(frame.spelling, fields, flat([pure(and), form]), true)
     }
 }
 

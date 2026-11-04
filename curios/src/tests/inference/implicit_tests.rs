@@ -1,6 +1,6 @@
 //! Solving an implicit argument from what the call site already fixes.
 
-use crate::tests::{core_elab, error, run, typecheck_within};
+use crate::tests::{core_elab, error, run, typecheck_within, unlaid};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
@@ -211,7 +211,9 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
         .expect("the row is printed");
 
     assert!(
-        row.contains("/std/Eq/Eq/refl)(@%NatType, @#{field = Struct(/Q, 0)} (/f(n)).0)"),
+        unlaid(row).contains(&unlaid(
+            "/std/Eq/Eq/refl)(@%NatType, @#{field = Struct(/Q, 0)} (/f(n)).0)"
+        )),
         "{row}"
     );
     assert!(!row.contains("node = Rec"), "{row}");
@@ -248,7 +250,9 @@ fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection
         .expect("the row is printed");
 
     assert!(
-        row.contains("/std/Eq/Eq/refl)(@%NatType, @#{field = Struct(/P, 0)} (p).0)"),
+        unlaid(row).contains(&unlaid(
+            "/std/Eq/Eq/refl)(@%NatType, @#{field = Struct(/P, 0)} (p).0)"
+        )),
         "{row}"
     );
     assert!(!row.contains(" + 1; "), "{row}");

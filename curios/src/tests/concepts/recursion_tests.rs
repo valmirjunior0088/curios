@@ -9,12 +9,24 @@ use {
     curios_common::fill,
 };
 
-/// The line of `elaborated` declaring `name`, decorator and all: what says whether a witness is a definition or a group of one, a group of one being declared under `#{node = Rec}`.
-fn declaration<'a>(elaborated: &'a str, name: &str) -> &'a str {
-    elaborated
-        .lines()
-        .find(|line| line.contains(&format!("let {name} :")))
-        .unwrap_or_else(|| panic!("{name} is declared:\n{elaborated}"))
+/// The head of the declaration of `name` in `elaborated`, with the decorator standing above it where it has one: what says whether a witness is a definition or a group of one, a group of one being declared under `#{node = Rec}`. A decorator begins at the line's start, and a block it opens continues on indented lines down to the head.
+fn declaration(elaborated: &str, name: &str) -> String {
+    let lines = elaborated.lines().collect::<Vec<_>>();
+    let head = lines
+        .iter()
+        .position(|line| line.contains(&format!("let {name} :")))
+        .unwrap_or_else(|| panic!("{name} is declared:\n{elaborated}"));
+    let start = (0..head)
+        .rev()
+        .find(|&above| lines[above].starts_with("#{"))
+        .filter(|&above| {
+            lines[above + 1..head]
+                .iter()
+                .all(|line| line.starts_with(' '))
+        })
+        .unwrap_or(head);
+
+    lines[start..=head].join("\n")
 }
 
 // A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.

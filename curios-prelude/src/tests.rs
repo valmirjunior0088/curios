@@ -405,7 +405,8 @@ fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
             let spelling = Rc::new(
                 curios_surface::Spelling::core_text()
                     .with_form_scope(Rc::clone(&scope))
-                    .written_whole(),
+                    .written_whole()
+                    .written_as_text(),
             );
             let written = unit.core();
             let text = written.spelled(&spelling).to_string();

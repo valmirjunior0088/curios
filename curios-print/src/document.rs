@@ -39,6 +39,8 @@ pub enum Printer {
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
     Indent(Box<Printer>),
+    /// Emitted on a line of its own: where something is already written on the line, a newline and the document one indentation level deeper; at the start of a line, the document as it stands. Its break is mandatory where it is taken, so the fits scan fails on it as on a hard [`Printer::Line`] and no group containing one renders flat.
+    OwnLine(Box<Printer>),
     /// A document not built yet.
     ///
     /// The one closure variant, and it earns its place: a printer for a recursive IR is written as a recursive function, so *building* a document descends as deep as the term even though [`run_printer`](crate::run_printer) does not. Deferring a child turns that descent into work on the interpreter's stack — the builder is called when the interpreter reaches it, from a frame one deep rather than `n`.
@@ -82,7 +84,7 @@ impl Printer {
             Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Fill { items, .. } => items.is_empty(),
-            Printer::Indent(inner) | Printer::Group(inner) => {
+            Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
             }
             // Holds a thunk, never a child document.
@@ -114,7 +116,9 @@ impl Drop for Printer {
                 Printer::Fill { items, .. } => {
                     pending.extend(mem::take(items).into_iter().map(|item| item.printer));
                 }
-                Printer::Indent(inner) | Printer::Group(inner) => pending.push(inner.take()),
+                Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
+                    pending.push(inner.take())
+                }
                 Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}
                 Printer::IfBreak { .. } => {}

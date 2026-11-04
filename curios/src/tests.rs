@@ -259,6 +259,13 @@ fn core(source: &str) -> String {
     printed.expect("the pipeline emits the lowered Core stage")
 }
 
+/// `text` with its whitespace taken out: what a Core printout holds read past how it is laid out, since a decorator stands on a line of its own above what it decorates and a list holding one breaks, so a test asks about the terms and not where their lines break.
+fn unlaid(text: &str) -> String {
+    text.chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
+}
+
 /// The elaborated Core printout of `source`, observed as [`core`] observes the lowered one.
 fn core_elab(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");

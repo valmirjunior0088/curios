@@ -30,14 +30,30 @@
         match guard: (x7) => /sys/Bool/Holds(k(0))
         end
     | true =>
-        let w: #{node = InductType} /sys/Bool/True() =
-            match c: (x8) => #{node = InductType} /sys/Bool/True()
+        let w:
+            #{node = InductType}
+            /sys/Bool/True() =
+            match c: (x8) =>
+                #{node = InductType}
+                /sys/Bool/True()
             | false =>
-                #{node = Variant} /sys/Bool/True/qed()
+                #{node = Variant}
+                /sys/Bool/True/qed()
             | true =>
                 let u: /sys/Bool/Holds(k(0)) =
-                    #{node = Variant} /sys/Bool/True/qed();
-                #{node = Variant} /sys/Bool/True/qed()
+                    #{node = Variant}
+                    /sys/Bool/True/qed();
+                #{node = Variant}
+                /sys/Bool/True/qed()
             end;
-        #{node = Variant} /sys/Bool/True/qed()
-    end)(false, (n2: %NatType) => n2, (n3: %NatType) => %NatEql(n3, 1), 0, 1, #{node = Variant} /sys/Bool/True/qed())
+        #{node = Variant}
+        /sys/Bool/True/qed()
+    end)(
+    false,
+    (n2: %NatType) => n2,
+    (n3: %NatType) => %NatEql(n3, 1),
+    0,
+    1,
+    #{node = Variant}
+    /sys/Bool/True/qed()
+)

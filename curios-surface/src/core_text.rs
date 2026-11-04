@@ -56,8 +56,11 @@ mod tuple;
 use tuple::*;
 
 use {
+    crate::Spelling,
     curios_core::{Subterm, Term},
-    curios_print::{Printer, flat, pure, sep_flat},
+    curios_print::{
+        Printer, flat, group, hard_line, indent, line, own_line, pure, sep_flat, soft_line,
+    },
 };
 
 /// `term` written as Core text under `frame`, with no bound on its descent: [`sub`] is the guarded door every child goes through.
@@ -98,14 +101,19 @@ impl Frame<'_> {
     /// [`decorated`] in Core text proper, and `node` as it stands in a reader's spelling, which writes no decorator.
     pub fn decorated(&self, fields: Vec<Decoration>, node: Printer, primary: bool) -> Printer {
         match self.core_text() {
-            true => decorated(fields, node, primary),
+            true => decorated(self.spelling, fields, node, primary),
             false => node,
         }
     }
 }
 
-/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it.
-pub fn decorated(fields: Vec<Decoration>, node: Printer, primary: bool) -> Printer {
+/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it. Where `spelling` writes Core text as a text of its own, the decorator takes a line of its own and `node` the line beneath it ([`Spelling::written_as_text`]).
+pub fn decorated(
+    spelling: &Spelling,
+    fields: Vec<Decoration>,
+    node: Printer,
+    primary: bool,
+) -> Printer {
     if fields.is_empty() {
         return node;
     }
@@ -113,27 +121,40 @@ pub fn decorated(fields: Vec<Decoration>, node: Printer, primary: bool) -> Print
         true => node,
         false => flat([pure("("), node, pure(")")]),
     };
+    let decorator = hugged("#{", decoration_fields(fields), "}");
 
-    flat([pure("#{"), decoration_fields(fields), pure("} "), node])
+    match spelling.writes_as_text() {
+        true => own_line(flat([decorator, hard_line(), node])),
+        false => flat([decorator, pure(" "), node]),
+    }
 }
 
-/// A decorator's fields, or a nested struct literal's, as `label = value`, a comma apart.
-pub fn decoration_fields(fields: Vec<Decoration>) -> Printer {
-    sep_flat(
-        fields
-            .into_iter()
-            .map(|(label, value)| flat([pure(label), pure(" = "), value]))
-            .collect::<Vec<_>>(),
-        || pure(", "),
-    )
+/// A decorator's fields, or a nested struct literal's, each as `label = value`: the items of a list that stays on one line where it fits and otherwise takes a line for each, so a value that spans lines opens a block.
+pub fn decoration_fields(fields: Vec<Decoration>) -> Vec<Printer> {
+    fields
+        .into_iter()
+        .map(|(label, value)| flat([pure(label), pure(" = "), value]))
+        .collect()
 }
 
 /// A struct-valued field's value: the fields of it that differ from the template's, between braces.
 pub fn nested(fields: Vec<Decoration>) -> Printer {
-    flat([pure("{"), decoration_fields(fields), pure("}")])
+    hugged("{", decoration_fields(fields), "}")
 }
 
 /// A list-valued field's value: its entries between brackets.
 pub fn bracketed(entries: Vec<Printer>) -> Printer {
-    flat([pure("["), sep_flat(entries, || pure(", ")), pure("]")])
+    hugged("[", entries, "]")
+}
+
+/// `items` a comma apart between `open` and `close`: on one line where they fit, and otherwise each on a line of its own a level deeper, with `close` on the last one's.
+fn hugged(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
+    group(flat([
+        pure(open),
+        indent(flat([
+            soft_line(),
+            sep_flat(items, || flat([pure(","), line()])),
+        ])),
+        pure(close),
+    ]))
 }

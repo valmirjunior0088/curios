@@ -1,11 +1,29 @@
 -- A `Prop`-sorted family carried no size condition, so `Bad` held a payload that quantified over the sort `Bad` was in, and the payload's declared type names `Bad` nowhere, so strict positivity had nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one did, and at the identity it handed back the scrutinee. The declaration is refused where it is sized: its payload does not fit under `Prop` at level zero.
-#{absent = [/Bad/c]} induct /Bad: pub Prop
+#{absent = [/Bad/c]}
+induct /Bad: pub Prop
 | c(f: (A: Prop) -> (x: A) -> A)
 end
-#{node = Rec} (let bad: (b: #{node = InductType} /Bad()) -> /sys/Bool/False =
-    (b2: #{node = InductType} /Bad()) =>
+#{node = Rec}
+(let bad: (
+    b:
+        #{node = InductType}
+        /Bad()
+) -> /sys/Bool/False =
+    (
+        b2:
+            #{node = InductType}
+            /Bad()
+    ) =>
         match b2: (x2) => /sys/Bool/False
         | c(f) =>
-            bad(f(#{node = InductType} /Bad())(b2))
+            bad(
+                f(
+                    #{node = InductType}
+                    /Bad()
+                )(b2)
+            )
         end;
-bad(#{node = Variant} /Bad/c((A: Prop) => (x: A) => x)))
+bad(
+    #{node = Variant}
+    /Bad/c((A: Prop) => (x: A) => x)
+))

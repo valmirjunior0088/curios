@@ -303,3 +303,26 @@ fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
         ["a", "b"]
     );
 }
+
+#[test]
+fn a_block_on_its_own_line_breaks_only_after_written_text_and_one_level_deeper() {
+    let block = || own_line(flat([pure("a"), hard_line(), pure("b")]));
+
+    assert_eq!(render(flat([pure("x: "), block()]), None), "x:\n  a\n  b");
+    assert_eq!(render(block(), None), "a\nb");
+    assert_eq!(
+        render(
+            group(flat([pure("f("), soft_line(), block(), pure(")")])),
+            Some(80)
+        ),
+        "f(\na\nb)"
+    );
+}
+
+#[test]
+fn no_line_ends_in_a_space_and_a_document_keeps_the_spaces_it_ends_with() {
+    assert_eq!(
+        render(flat([pure("a "), hard_line(), pure("b ")]), None),
+        "a\nb "
+    );
+}

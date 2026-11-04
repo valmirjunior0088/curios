@@ -35,7 +35,7 @@ pub struct DumpScope<'a> {
 }
 
 impl DumpScope<'_> {
-    /// What a dump of Core is written under: Core text proper, a test's and a foreign row's forms made against the units before it.
+    /// What a dump of Core is written under: Core text proper, as a text of its own, a test's and a foreign row's forms made against the units before it.
     pub fn spelling(&self) -> Spelling {
         let units = self.predecessors.placed();
         let scope = FormScope::over(
@@ -43,7 +43,9 @@ impl DumpScope<'_> {
             units.iter().map(|(definitions, ..)| *definitions),
         );
 
-        Spelling::core_text().with_form_scope(Rc::new(scope))
+        Spelling::core_text()
+            .with_form_scope(Rc::new(scope))
+            .written_as_text()
     }
 }
 

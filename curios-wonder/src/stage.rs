@@ -178,7 +178,9 @@ fn last_unit(
                                 .map(|unit| unit.core())
                                 .chain(before.iter().map(Unit::core)),
                         );
-                        let spelling = Spelling::core_text().with_form_scope(Rc::new(scope));
+                        let spelling = Spelling::core_text()
+                            .with_form_scope(Rc::new(scope))
+                            .written_as_text();
 
                         read(last, &Rc::new(spelling))
                     })

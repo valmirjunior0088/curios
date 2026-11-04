@@ -3,10 +3,2497 @@
 -- This was admitted while a group bound universe parameters of its own. The four were then read two ways — as the item's by `check_group`, and as the group's by every scope walk, which shadowed them — so an instance of the carrier left the record's field types spelled in the *reader's* parameters, under the reader's constraints, `u ≤ 0` and `w ≤ 0`, where the four products quantify over `Type 0` and stand at `Type 0`. Those are the impredicative products the paradox needs, and nothing re-certified the group on the reading side: `synth_neutral` instantiated the carrier's scheme, which *is* the bare projection, and `infer`'s projection rule reduced that to the record and read the field type off it, a reduction and not a judgment.
 -- A group binds no universe now, so the four are the carrier's under every reader and an instance substitutes them with every other level the carrier binds. The reader's `Type 0` claim meets a product that inhabits `Type 1`, and the comparison refuses it.
 struct /Boxed: pub Type { proof: /sys/Bool/False }
-#{universe_context = {parameter_count = 4, constraints = [u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x]}} let /carrier : #{node = Rec} (let x2: #{level = x} Type =
-    {bottom: #{level = w} Type, universe: #{level = w} Type, over: (S: #{level = v} Type, F: (p: (s: S) -> #{level = u} Type) -> #{level = u} Type) -> #{level = w} Type, pi: (S2: #{level = v} Type, F2: (x: S2) -> #{level = u} Type) -> #{level = w} Type};
-x2) =
-    ((A: #{level = u} Type) -> A, (X: #{level = u} Type, f: (t: (s: (s2: X) -> #{level = u} Type) -> #{level = u} Type) -> X) -> (s3: (s4: X) -> #{level = u} Type) -> #{level = u} Type, (S: #{level = v} Type, F: (p: (s5: S) -> #{level = u} Type) -> #{level = u} Type) => (p2: (s6: S) -> #{level = u} Type) -> F(p2), (S2: #{level = v} Type, F2: (x: S2) -> #{level = u} Type) => (x2: S2) -> F2(x2));
-#{universe_context = {parameter_count = 4, constraints = [u <= 0, w <= 0, 1 <= v]}} let /paradox : /sys/Bool/False =
-    #{field = Struct(/Boxed, 0)} (((p: (s: (X: Type, f: (t: (s2: (s3: X) -> Type) -> Type) -> X) -> (s4: (s5: X) -> Type) -> Type) -> Type, h1: (x: (X2: Type, f2: (t2: (s6: (s7: X2) -> Type) -> Type) -> X2) -> (s8: (s9: X2) -> Type) -> Type) -> (h: ((s10: (X3: Type, f3: (t3: (s11: (s12: X3) -> Type) -> Type) -> X3) -> (s13: (s14: X3) -> Type) -> Type) => s10((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t4: (s15: (s16: (X4: Type, f4: (t5: (s17: (s18: X4) -> Type) -> Type) -> X4) -> (s19: (s20: X4) -> Type) -> Type) -> Type) -> Type) => ((t6: (s21: (s22: (X5: Type, f5: (t7: (s23: (s24: X5) -> Type) -> Type) -> X5) -> (s25: (s26: X5) -> Type) -> Type) -> Type) -> Type) => (X6: Type, f6: (t8: (s27: (s28: X6) -> Type) -> Type) -> X6) => (p2: (s29: X6) -> Type) => t6((x2: (X7: Type, f7: (t9: (s30: (s31: X7) -> Type) -> Type) -> X7) -> (s32: (s33: X7) -> Type) -> Type) => p2(f6(x2(X6, f6)))))(t4)))(x)(p)) -> p(x)) => h1(((t10: (s34: (s35: (X8: Type, f8: (t11: (s36: (s37: X8) -> Type) -> Type) -> X8) -> (s38: (s39: X8) -> Type) -> Type) -> Type) -> Type) => (X9: Type, f9: (t12: (s40: (s41: X9) -> Type) -> Type) -> X9) => (p3: (s42: X9) -> Type) => t10((x3: (X10: Type, f10: (t13: (s43: (s44: X10) -> Type) -> Type) -> X10) -> (s45: (s46: X10) -> Type) -> Type) => p3(f9(x3(X9, f9)))))((p4: (s47: (X11: Type, f11: (t14: (s48: (s49: X11) -> Type) -> Type) -> X11) -> (s50: (s51: X11) -> Type) -> Type) -> Type) => (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3((X12: Type, f12: (t15: (s52: (s53: X12) -> Type) -> Type) -> X12) -> (s54: (s55: X12) -> Type) -> Type, (x4: (X13: Type, f13: (t16: (s56: (s57: X13) -> Type) -> Type) -> X13) -> (s58: (s59: X13) -> Type) -> Type) => (h2: ((s60: (X14: Type, f14: (t17: (s61: (s62: X14) -> Type) -> Type) -> X14) -> (s63: (s64: X14) -> Type) -> Type) => s60((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t18: (s65: (s66: (X15: Type, f15: (t19: (s67: (s68: X15) -> Type) -> Type) -> X15) -> (s69: (s70: X15) -> Type) -> Type) -> Type) -> Type) => ((t20: (s71: (s72: (X16: Type, f16: (t21: (s73: (s74: X16) -> Type) -> Type) -> X16) -> (s75: (s76: X16) -> Type) -> Type) -> Type) -> Type) => (X17: Type, f17: (t22: (s77: (s78: X17) -> Type) -> Type) -> X17) => (p5: (s79: X17) -> Type) => t20((x5: (X18: Type, f18: (t23: (s80: (s81: X18) -> Type) -> Type) -> X18) -> (s82: (s83: X18) -> Type) -> Type) => p5(f17(x5(X17, f17)))))(t18)))(x4)(p4)) -> p4(x4))))((x6: (X19: Type, f19: (t24: (s84: (s85: X19) -> Type) -> Type) -> X19) -> (s86: (s87: X19) -> Type) -> Type) => (h22: ((s88: (X20: Type, f20: (t25: (s89: (s90: X20) -> Type) -> Type) -> X20) -> (s91: (s92: X20) -> Type) -> Type) => s88((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t26: (s93: (s94: (X21: Type, f21: (t27: (s95: (s96: X21) -> Type) -> Type) -> X21) -> (s97: (s98: X21) -> Type) -> Type) -> Type) -> Type) => ((t28: (s99: (s100: (X22: Type, f22: (t29: (s101: (s102: X22) -> Type) -> Type) -> X22) -> (s103: (s104: X22) -> Type) -> Type) -> Type) -> Type) => (X23: Type, f23: (t30: (s105: (s106: X23) -> Type) -> Type) -> X23) => (p6: (s107: X23) -> Type) => t28((x7: (X24: Type, f24: (t31: (s108: (s109: X24) -> Type) -> Type) -> X24) -> (s110: (s111: X24) -> Type) -> Type) => p6(f23(x7(X23, f23)))))(t26)))(x6)((y: (X25: Type, f25: (t32: (s112: (s113: X25) -> Type) -> Type) -> X25) -> (s114: (s115: X25) -> Type) -> Type) => p(((t33: (s116: (s117: (X26: Type, f26: (t34: (s118: (s119: X26) -> Type) -> Type) -> X26) -> (s120: (s121: X26) -> Type) -> Type) -> Type) -> Type) => (X27: Type, f27: (t35: (s122: (s123: X27) -> Type) -> Type) -> X27) => (p7: (s124: X27) -> Type) => t33((x8: (X28: Type, f28: (t36: (s125: (s126: X28) -> Type) -> Type) -> X28) -> (s127: (s128: X28) -> Type) -> Type) => p7(f27(x8(X27, f27)))))(((s129: (X29: Type, f29: (t37: (s130: (s131: X29) -> Type) -> Type) -> X29) -> (s132: (s133: X29) -> Type) -> Type) => s129((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t38: (s134: (s135: (X30: Type, f30: (t39: (s136: (s137: X30) -> Type) -> Type) -> X30) -> (s138: (s139: X30) -> Type) -> Type) -> Type) -> Type) => ((t40: (s140: (s141: (X31: Type, f31: (t41: (s142: (s143: X31) -> Type) -> Type) -> X31) -> (s144: (s145: X31) -> Type) -> Type) -> Type) -> Type) => (X32: Type, f32: (t42: (s146: (s147: X32) -> Type) -> Type) -> X32) => (p8: (s148: X32) -> Type) => t40((x9: (X33: Type, f33: (t43: (s149: (s150: X33) -> Type) -> Type) -> X33) -> (s151: (s152: X33) -> Type) -> Type) => p8(f32(x9(X32, f32)))))(t38)))(y))))) => h1(((t44: (s153: (s154: (X34: Type, f34: (t45: (s155: (s156: X34) -> Type) -> Type) -> X34) -> (s157: (s158: X34) -> Type) -> Type) -> Type) -> Type) => (X35: Type, f35: (t46: (s159: (s160: X35) -> Type) -> Type) -> X35) => (p9: (s161: X35) -> Type) => t44((x10: (X36: Type, f36: (t47: (s162: (s163: X36) -> Type) -> Type) -> X36) -> (s164: (s165: X36) -> Type) -> Type) => p9(f35(x10(X35, f35)))))(((s166: (X37: Type, f37: (t48: (s167: (s168: X37) -> Type) -> Type) -> X37) -> (s169: (s170: X37) -> Type) -> Type) => s166((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t49: (s171: (s172: (X38: Type, f38: (t50: (s173: (s174: X38) -> Type) -> Type) -> X38) -> (s175: (s176: X38) -> Type) -> Type) -> Type) -> Type) => ((t51: (s177: (s178: (X39: Type, f39: (t52: (s179: (s180: X39) -> Type) -> Type) -> X39) -> (s181: (s182: X39) -> Type) -> Type) -> Type) -> Type) => (X40: Type, f40: (t53: (s183: (s184: X40) -> Type) -> Type) -> X40) => (p10: (s185: X40) -> Type) => t51((x11: (X41: Type, f41: (t54: (s186: (s187: X41) -> Type) -> Type) -> X41) -> (s188: (s189: X41) -> Type) -> Type) => p10(f40(x11(X40, f40)))))(t49)))(x6)))(h22)))((y2: (X42: Type, f42: (t55: (s190: (s191: X42) -> Type) -> Type) -> X42) -> (s192: (s193: X42) -> Type) -> Type) => (h3: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2((X43: Type, f43: (t56: (s194: (s195: X43) -> Type) -> Type) -> X43) -> (s196: (s197: X43) -> Type) -> Type, (p11: (s198: (X44: Type, f44: (t57: (s199: (s200: X44) -> Type) -> Type) -> X44) -> (s201: (s202: X44) -> Type) -> Type) -> Type) => (h4: ((s203: (X45: Type, f45: (t58: (s204: (s205: X45) -> Type) -> Type) -> X45) -> (s206: (s207: X45) -> Type) -> Type) => s203((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t59: (s208: (s209: (X46: Type, f46: (t60: (s210: (s211: X46) -> Type) -> Type) -> X46) -> (s212: (s213: X46) -> Type) -> Type) -> Type) -> Type) => ((t61: (s214: (s215: (X47: Type, f47: (t62: (s216: (s217: X47) -> Type) -> Type) -> X47) -> (s218: (s219: X47) -> Type) -> Type) -> Type) -> Type) => (X48: Type, f48: (t63: (s220: (s221: X48) -> Type) -> Type) -> X48) => (p12: (s222: X48) -> Type) => t61((x12: (X49: Type, f49: (t64: (s223: (s224: X49) -> Type) -> Type) -> X49) -> (s225: (s226: X49) -> Type) -> Type) => p12(f48(x12(X48, f48)))))(t59)))(y2)(p11)) -> p11(((t65: (s227: (s228: (X50: Type, f50: (t66: (s229: (s230: X50) -> Type) -> Type) -> X50) -> (s231: (s232: X50) -> Type) -> Type) -> Type) -> Type) => (X51: Type, f51: (t67: (s233: (s234: X51) -> Type) -> Type) -> X51) => (p13: (s235: X51) -> Type) => t65((x13: (X52: Type, f52: (t68: (s236: (s237: X52) -> Type) -> Type) -> X52) -> (s238: (s239: X52) -> Type) -> Type) => p13(f51(x13(X51, f51)))))(((s240: (X53: Type, f53: (t69: (s241: (s242: X53) -> Type) -> Type) -> X53) -> (s243: (s244: X53) -> Type) -> Type) => s240((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t70: (s245: (s246: (X54: Type, f54: (t71: (s247: (s248: X54) -> Type) -> Type) -> X54) -> (s249: (s250: X54) -> Type) -> Type) -> Type) -> Type) => ((t72: (s251: (s252: (X55: Type, f55: (t73: (s253: (s254: X55) -> Type) -> Type) -> X55) -> (s255: (s256: X55) -> Type) -> Type) -> Type) -> Type) => (X56: Type, f56: (t74: (s257: (s258: X56) -> Type) -> Type) -> X56) => (p14: (s259: X56) -> Type) => t72((x14: (X57: Type, f57: (t75: (s260: (s261: X57) -> Type) -> Type) -> X57) -> (s262: (s263: X57) -> Type) -> Type) => p14(f56(x14(X56, f56)))))(t70)))(y2))))) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0, (x15: (X58: Type, f58: (t76: (s264: (s265: X58) -> Type) -> Type) -> X58) -> (s266: (s267: X58) -> Type) -> Type) => (h23: ((s268: (X59: Type, f59: (t77: (s269: (s270: X59) -> Type) -> Type) -> X59) -> (s271: (s272: X59) -> Type) -> Type) => s268((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t78: (s273: (s274: (X60: Type, f60: (t79: (s275: (s276: X60) -> Type) -> Type) -> X60) -> (s277: (s278: X60) -> Type) -> Type) -> Type) -> Type) => ((t80: (s279: (s280: (X61: Type, f61: (t81: (s281: (s282: X61) -> Type) -> Type) -> X61) -> (s283: (s284: X61) -> Type) -> Type) -> Type) -> Type) => (X62: Type, f62: (t82: (s285: (s286: X62) -> Type) -> Type) -> X62) => (p15: (s287: X62) -> Type) => t80((x16: (X63: Type, f63: (t83: (s288: (s289: X63) -> Type) -> Type) -> X63) -> (s290: (s291: X63) -> Type) -> Type) => p15(f62(x16(X62, f62)))))(t78)))(x15)((y3: (X64: Type, f64: (t84: (s292: (s293: X64) -> Type) -> Type) -> X64) -> (s294: (s295: X64) -> Type) -> Type) => (h5: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2((X65: Type, f65: (t85: (s296: (s297: X65) -> Type) -> Type) -> X65) -> (s298: (s299: X65) -> Type) -> Type, (p16: (s300: (X66: Type, f66: (t86: (s301: (s302: X66) -> Type) -> Type) -> X66) -> (s303: (s304: X66) -> Type) -> Type) -> Type) => (h6: ((s305: (X67: Type, f67: (t87: (s306: (s307: X67) -> Type) -> Type) -> X67) -> (s308: (s309: X67) -> Type) -> Type) => s305((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t88: (s310: (s311: (X68: Type, f68: (t89: (s312: (s313: X68) -> Type) -> Type) -> X68) -> (s314: (s315: X68) -> Type) -> Type) -> Type) -> Type) => ((t90: (s316: (s317: (X69: Type, f69: (t91: (s318: (s319: X69) -> Type) -> Type) -> X69) -> (s320: (s321: X69) -> Type) -> Type) -> Type) -> Type) => (X70: Type, f70: (t92: (s322: (s323: X70) -> Type) -> Type) -> X70) => (p17: (s324: X70) -> Type) => t90((x17: (X71: Type, f71: (t93: (s325: (s326: X71) -> Type) -> Type) -> X71) -> (s327: (s328: X71) -> Type) -> Type) => p17(f70(x17(X70, f70)))))(t88)))(y3)(p16)) -> p16(((t94: (s329: (s330: (X72: Type, f72: (t95: (s331: (s332: X72) -> Type) -> Type) -> X72) -> (s333: (s334: X72) -> Type) -> Type) -> Type) -> Type) => (X73: Type, f73: (t96: (s335: (s336: X73) -> Type) -> Type) -> X73) => (p18: (s337: X73) -> Type) => t94((x18: (X74: Type, f74: (t97: (s338: (s339: X74) -> Type) -> Type) -> X74) -> (s340: (s341: X74) -> Type) -> Type) => p18(f73(x18(X73, f73)))))(((s342: (X75: Type, f75: (t98: (s343: (s344: X75) -> Type) -> Type) -> X75) -> (s345: (s346: X75) -> Type) -> Type) => s342((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t99: (s347: (s348: (X76: Type, f76: (t100: (s349: (s350: X76) -> Type) -> Type) -> X76) -> (s351: (s352: X76) -> Type) -> Type) -> Type) -> Type) => ((t101: (s353: (s354: (X77: Type, f77: (t102: (s355: (s356: X77) -> Type) -> Type) -> X77) -> (s357: (s358: X77) -> Type) -> Type) -> Type) -> Type) => (X78: Type, f78: (t103: (s359: (s360: X78) -> Type) -> Type) -> X78) => (p19: (s361: X78) -> Type) => t101((x19: (X79: Type, f79: (t104: (s362: (s363: X79) -> Type) -> Type) -> X79) -> (s364: (s365: X79) -> Type) -> Type) => p19(f78(x19(X78, f78)))))(t99)))(y3))))) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0)) => (h32: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2((X80: Type, f80: (t105: (s366: (s367: X80) -> Type) -> Type) -> X80) -> (s368: (s369: X80) -> Type) -> Type, (p20: (s370: (X81: Type, f81: (t106: (s371: (s372: X81) -> Type) -> Type) -> X81) -> (s373: (s374: X81) -> Type) -> Type) -> Type) => (h7: ((s375: (X82: Type, f82: (t107: (s376: (s377: X82) -> Type) -> Type) -> X82) -> (s378: (s379: X82) -> Type) -> Type) => s375((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t108: (s380: (s381: (X83: Type, f83: (t109: (s382: (s383: X83) -> Type) -> Type) -> X83) -> (s384: (s385: X83) -> Type) -> Type) -> Type) -> Type) => ((t110: (s386: (s387: (X84: Type, f84: (t111: (s388: (s389: X84) -> Type) -> Type) -> X84) -> (s390: (s391: X84) -> Type) -> Type) -> Type) -> Type) => (X85: Type, f85: (t112: (s392: (s393: X85) -> Type) -> Type) -> X85) => (p21: (s394: X85) -> Type) => t110((x20: (X86: Type, f86: (t113: (s395: (s396: X86) -> Type) -> Type) -> X86) -> (s397: (s398: X86) -> Type) -> Type) => p21(f85(x20(X85, f85)))))(t108)))(x15)(p20)) -> p20(((t114: (s399: (s400: (X87: Type, f87: (t115: (s401: (s402: X87) -> Type) -> Type) -> X87) -> (s403: (s404: X87) -> Type) -> Type) -> Type) -> Type) => (X88: Type, f88: (t116: (s405: (s406: X88) -> Type) -> Type) -> X88) => (p22: (s407: X88) -> Type) => t114((x21: (X89: Type, f89: (t117: (s408: (s409: X89) -> Type) -> Type) -> X89) -> (s410: (s411: X89) -> Type) -> Type) => p22(f88(x21(X88, f88)))))(((s412: (X90: Type, f90: (t118: (s413: (s414: X90) -> Type) -> Type) -> X90) -> (s415: (s416: X90) -> Type) -> Type) => s412((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t119: (s417: (s418: (X91: Type, f91: (t120: (s419: (s420: X91) -> Type) -> Type) -> X91) -> (s421: (s422: X91) -> Type) -> Type) -> Type) -> Type) => ((t121: (s423: (s424: (X92: Type, f92: (t122: (s425: (s426: X92) -> Type) -> Type) -> X92) -> (s427: (s428: X92) -> Type) -> Type) -> Type) -> Type) => (X93: Type, f93: (t123: (s429: (s430: X93) -> Type) -> Type) -> X93) => (p23: (s431: X93) -> Type) => t121((x22: (X94: Type, f94: (t124: (s432: (s433: X94) -> Type) -> Type) -> X94) -> (s434: (s435: X94) -> Type) -> Type) => p23(f93(x22(X93, f93)))))(t119)))(x15))))) => h32((y4: (X95: Type, f95: (t125: (s436: (s437: X95) -> Type) -> Type) -> X95) -> (s438: (s439: X95) -> Type) -> Type) => (h8: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2((X96: Type, f96: (t126: (s440: (s441: X96) -> Type) -> Type) -> X96) -> (s442: (s443: X96) -> Type) -> Type, (p24: (s444: (X97: Type, f97: (t127: (s445: (s446: X97) -> Type) -> Type) -> X97) -> (s447: (s448: X97) -> Type) -> Type) -> Type) => (h9: ((s449: (X98: Type, f98: (t128: (s450: (s451: X98) -> Type) -> Type) -> X98) -> (s452: (s453: X98) -> Type) -> Type) => s449((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t129: (s454: (s455: (X99: Type, f99: (t130: (s456: (s457: X99) -> Type) -> Type) -> X99) -> (s458: (s459: X99) -> Type) -> Type) -> Type) -> Type) => ((t131: (s460: (s461: (X100: Type, f100: (t132: (s462: (s463: X100) -> Type) -> Type) -> X100) -> (s464: (s465: X100) -> Type) -> Type) -> Type) -> Type) => (X101: Type, f101: (t133: (s466: (s467: X101) -> Type) -> Type) -> X101) => (p25: (s468: X101) -> Type) => t131((x23: (X102: Type, f102: (t134: (s469: (s470: X102) -> Type) -> Type) -> X102) -> (s471: (s472: X102) -> Type) -> Type) => p25(f101(x23(X101, f101)))))(t129)))(y4)(p24)) -> p24(((t135: (s473: (s474: (X103: Type, f103: (t136: (s475: (s476: X103) -> Type) -> Type) -> X103) -> (s477: (s478: X103) -> Type) -> Type) -> Type) -> Type) => (X104: Type, f104: (t137: (s479: (s480: X104) -> Type) -> Type) -> X104) => (p26: (s481: X104) -> Type) => t135((x24: (X105: Type, f105: (t138: (s482: (s483: X105) -> Type) -> Type) -> X105) -> (s484: (s485: X105) -> Type) -> Type) => p26(f104(x24(X104, f104)))))(((s486: (X106: Type, f106: (t139: (s487: (s488: X106) -> Type) -> Type) -> X106) -> (s489: (s490: X106) -> Type) -> Type) => s486((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t140: (s491: (s492: (X107: Type, f107: (t141: (s493: (s494: X107) -> Type) -> Type) -> X107) -> (s495: (s496: X107) -> Type) -> Type) -> Type) -> Type) => ((t142: (s497: (s498: (X108: Type, f108: (t143: (s499: (s500: X108) -> Type) -> Type) -> X108) -> (s501: (s502: X108) -> Type) -> Type) -> Type) -> Type) => (X109: Type, f109: (t144: (s503: (s504: X109) -> Type) -> Type) -> X109) => (p27: (s505: X109) -> Type) => t142((x25: (X110: Type, f110: (t145: (s506: (s507: X110) -> Type) -> Type) -> X110) -> (s508: (s509: X110) -> Type) -> Type) => p27(f109(x25(X109, f109)))))(t140)))(y4))))) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0)(h23)((p28: (s510: (X111: Type, f111: (t146: (s511: (s512: X111) -> Type) -> Type) -> X111) -> (s513: (s514: X111) -> Type) -> Type) -> Type) => (h42: ((s515: (X112: Type, f112: (t147: (s516: (s517: X112) -> Type) -> Type) -> X112) -> (s518: (s519: X112) -> Type) -> Type) => s515((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t148: (s520: (s521: (X113: Type, f113: (t149: (s522: (s523: X113) -> Type) -> Type) -> X113) -> (s524: (s525: X113) -> Type) -> Type) -> Type) -> Type) => ((t150: (s526: (s527: (X114: Type, f114: (t151: (s528: (s529: X114) -> Type) -> Type) -> X114) -> (s530: (s531: X114) -> Type) -> Type) -> Type) -> Type) => (X115: Type, f115: (t152: (s532: (s533: X115) -> Type) -> Type) -> X115) => (p29: (s534: X115) -> Type) => t150((x26: (X116: Type, f116: (t153: (s535: (s536: X116) -> Type) -> Type) -> X116) -> (s537: (s538: X116) -> Type) -> Type) => p29(f115(x26(X115, f115)))))(t148)))(((t154: (s539: (s540: (X117: Type, f117: (t155: (s541: (s542: X117) -> Type) -> Type) -> X117) -> (s543: (s544: X117) -> Type) -> Type) -> Type) -> Type) => (X118: Type, f118: (t156: (s545: (s546: X118) -> Type) -> Type) -> X118) => (p30: (s547: X118) -> Type) => t154((x27: (X119: Type, f119: (t157: (s548: (s549: X119) -> Type) -> Type) -> X119) -> (s550: (s551: X119) -> Type) -> Type) => p30(f118(x27(X118, f118)))))(((s552: (X120: Type, f120: (t158: (s553: (s554: X120) -> Type) -> Type) -> X120) -> (s555: (s556: X120) -> Type) -> Type) => s552((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t159: (s557: (s558: (X121: Type, f121: (t160: (s559: (s560: X121) -> Type) -> Type) -> X121) -> (s561: (s562: X121) -> Type) -> Type) -> Type) -> Type) => ((t161: (s563: (s564: (X122: Type, f122: (t162: (s565: (s566: X122) -> Type) -> Type) -> X122) -> (s567: (s568: X122) -> Type) -> Type) -> Type) -> Type) => (X123: Type, f123: (t163: (s569: (s570: X123) -> Type) -> Type) -> X123) => (p31: (s571: X123) -> Type) => t161((x28: (X124: Type, f124: (t164: (s572: (s573: X124) -> Type) -> Type) -> X124) -> (s574: (s575: X124) -> Type) -> Type) => p31(f123(x28(X123, f123)))))(t159)))(x15)))(p28)) => h32((y5: (X125: Type, f125: (t165: (s576: (s577: X125) -> Type) -> Type) -> X125) -> (s578: (s579: X125) -> Type) -> Type) => p28(((t166: (s580: (s581: (X126: Type, f126: (t167: (s582: (s583: X126) -> Type) -> Type) -> X126) -> (s584: (s585: X126) -> Type) -> Type) -> Type) -> Type) => (X127: Type, f127: (t168: (s586: (s587: X127) -> Type) -> Type) -> X127) => (p32: (s588: X127) -> Type) => t166((x29: (X128: Type, f128: (t169: (s589: (s590: X128) -> Type) -> Type) -> X128) -> (s591: (s592: X128) -> Type) -> Type) => p32(f127(x29(X127, f127)))))(((s593: (X129: Type, f129: (t170: (s594: (s595: X129) -> Type) -> Type) -> X129) -> (s596: (s597: X129) -> Type) -> Type) => s593((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t171: (s598: (s599: (X130: Type, f130: (t172: (s600: (s601: X130) -> Type) -> Type) -> X130) -> (s602: (s603: X130) -> Type) -> Type) -> Type) -> Type) => ((t173: (s604: (s605: (X131: Type, f131: (t174: (s606: (s607: X131) -> Type) -> Type) -> X131) -> (s608: (s609: X131) -> Type) -> Type) -> Type) -> Type) => (X132: Type, f132: (t175: (s610: (s611: X132) -> Type) -> Type) -> X132) => (p33: (s612: X132) -> Type) => t173((x30: (X133: Type, f133: (t176: (s613: (s614: X133) -> Type) -> Type) -> X133) -> (s615: (s616: X133) -> Type) -> Type) => p33(f132(x30(X132, f132)))))(t171)))(y5))))(h42)))((p34: (s617: (X134: Type, f134: (t177: (s618: (s619: X134) -> Type) -> Type) -> X134) -> (s620: (s621: X134) -> Type) -> Type) -> Type) => (h10: ((s622: (X135: Type, f135: (t178: (s623: (s624: X135) -> Type) -> Type) -> X135) -> (s625: (s626: X135) -> Type) -> Type) => s622((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t179: (s627: (s628: (X136: Type, f136: (t180: (s629: (s630: X136) -> Type) -> Type) -> X136) -> (s631: (s632: X136) -> Type) -> Type) -> Type) -> Type) => ((t181: (s633: (s634: (X137: Type, f137: (t182: (s635: (s636: X137) -> Type) -> Type) -> X137) -> (s637: (s638: X137) -> Type) -> Type) -> Type) -> Type) => (X138: Type, f138: (t183: (s639: (s640: X138) -> Type) -> Type) -> X138) => (p35: (s641: X138) -> Type) => t181((x31: (X139: Type, f139: (t184: (s642: (s643: X139) -> Type) -> Type) -> X139) -> (s644: (s645: X139) -> Type) -> Type) => p35(f138(x31(X138, f138)))))(t179)))(((t185: (s646: (s647: (X140: Type, f140: (t186: (s648: (s649: X140) -> Type) -> Type) -> X140) -> (s650: (s651: X140) -> Type) -> Type) -> Type) -> Type) => (X141: Type, f141: (t187: (s652: (s653: X141) -> Type) -> Type) -> X141) => (p36: (s654: X141) -> Type) => t185((x32: (X142: Type, f142: (t188: (s655: (s656: X142) -> Type) -> Type) -> X142) -> (s657: (s658: X142) -> Type) -> Type) => p36(f141(x32(X141, f141)))))((p37: (s659: (X143: Type, f143: (t189: (s660: (s661: X143) -> Type) -> Type) -> X143) -> (s662: (s663: X143) -> Type) -> Type) -> Type) => (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3((X144: Type, f144: (t190: (s664: (s665: X144) -> Type) -> Type) -> X144) -> (s666: (s667: X144) -> Type) -> Type, (x33: (X145: Type, f145: (t191: (s668: (s669: X145) -> Type) -> Type) -> X145) -> (s670: (s671: X145) -> Type) -> Type) => (h11: ((s672: (X146: Type, f146: (t192: (s673: (s674: X146) -> Type) -> Type) -> X146) -> (s675: (s676: X146) -> Type) -> Type) => s672((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t193: (s677: (s678: (X147: Type, f147: (t194: (s679: (s680: X147) -> Type) -> Type) -> X147) -> (s681: (s682: X147) -> Type) -> Type) -> Type) -> Type) => ((t195: (s683: (s684: (X148: Type, f148: (t196: (s685: (s686: X148) -> Type) -> Type) -> X148) -> (s687: (s688: X148) -> Type) -> Type) -> Type) -> Type) => (X149: Type, f149: (t197: (s689: (s690: X149) -> Type) -> Type) -> X149) => (p38: (s691: X149) -> Type) => t195((x34: (X150: Type, f150: (t198: (s692: (s693: X150) -> Type) -> Type) -> X150) -> (s694: (s695: X150) -> Type) -> Type) => p38(f149(x34(X149, f149)))))(t193)))(x33)(p37)) -> p37(x33))))(p34)) => ((p39: (s696: (X151: Type, f151: (t199: (s697: (s698: X151) -> Type) -> Type) -> X151) -> (s699: (s700: X151) -> Type) -> Type) -> Type, h12: (x35: (X152: Type, f152: (t200: (s701: (s702: X152) -> Type) -> Type) -> X152) -> (s703: (s704: X152) -> Type) -> Type) -> (h13: ((s705: (X153: Type, f153: (t201: (s706: (s707: X153) -> Type) -> Type) -> X153) -> (s708: (s709: X153) -> Type) -> Type) => s705((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t202: (s710: (s711: (X154: Type, f154: (t203: (s712: (s713: X154) -> Type) -> Type) -> X154) -> (s714: (s715: X154) -> Type) -> Type) -> Type) -> Type) => ((t204: (s716: (s717: (X155: Type, f155: (t205: (s718: (s719: X155) -> Type) -> Type) -> X155) -> (s720: (s721: X155) -> Type) -> Type) -> Type) -> Type) => (X156: Type, f156: (t206: (s722: (s723: X156) -> Type) -> Type) -> X156) => (p40: (s724: X156) -> Type) => t204((x36: (X157: Type, f157: (t207: (s725: (s726: X157) -> Type) -> Type) -> X157) -> (s727: (s728: X157) -> Type) -> Type) => p40(f156(x36(X156, f156)))))(t202)))(x35)(p39)) -> p39(x35)) => h12(((t208: (s729: (s730: (X158: Type, f158: (t209: (s731: (s732: X158) -> Type) -> Type) -> X158) -> (s733: (s734: X158) -> Type) -> Type) -> Type) -> Type) => (X159: Type, f159: (t210: (s735: (s736: X159) -> Type) -> Type) -> X159) => (p41: (s737: X159) -> Type) => t208((x37: (X160: Type, f160: (t211: (s738: (s739: X160) -> Type) -> Type) -> X160) -> (s740: (s741: X160) -> Type) -> Type) => p41(f159(x37(X159, f159)))))((p42: (s742: (X161: Type, f161: (t212: (s743: (s744: X161) -> Type) -> Type) -> X161) -> (s745: (s746: X161) -> Type) -> Type) -> Type) => (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3((X162: Type, f162: (t213: (s747: (s748: X162) -> Type) -> Type) -> X162) -> (s749: (s750: X162) -> Type) -> Type, (x38: (X163: Type, f163: (t214: (s751: (s752: X163) -> Type) -> Type) -> X163) -> (s753: (s754: X163) -> Type) -> Type) => (h14: ((s755: (X164: Type, f164: (t215: (s756: (s757: X164) -> Type) -> Type) -> X164) -> (s758: (s759: X164) -> Type) -> Type) => s755((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t216: (s760: (s761: (X165: Type, f165: (t217: (s762: (s763: X165) -> Type) -> Type) -> X165) -> (s764: (s765: X165) -> Type) -> Type) -> Type) -> Type) => ((t218: (s766: (s767: (X166: Type, f166: (t219: (s768: (s769: X166) -> Type) -> Type) -> X166) -> (s770: (s771: X166) -> Type) -> Type) -> Type) -> Type) => (X167: Type, f167: (t220: (s772: (s773: X167) -> Type) -> Type) -> X167) => (p43: (s774: X167) -> Type) => t218((x39: (X168: Type, f168: (t221: (s775: (s776: X168) -> Type) -> Type) -> X168) -> (s777: (s778: X168) -> Type) -> Type) => p43(f167(x39(X167, f167)))))(t216)))(x38)(p42)) -> p42(x38))))((x40: (X169: Type, f169: (t222: (s779: (s780: X169) -> Type) -> Type) -> X169) -> (s781: (s782: X169) -> Type) -> Type) => (h24: ((s783: (X170: Type, f170: (t223: (s784: (s785: X170) -> Type) -> Type) -> X170) -> (s786: (s787: X170) -> Type) -> Type) => s783((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t224: (s788: (s789: (X171: Type, f171: (t225: (s790: (s791: X171) -> Type) -> Type) -> X171) -> (s792: (s793: X171) -> Type) -> Type) -> Type) -> Type) => ((t226: (s794: (s795: (X172: Type, f172: (t227: (s796: (s797: X172) -> Type) -> Type) -> X172) -> (s798: (s799: X172) -> Type) -> Type) -> Type) -> Type) => (X173: Type, f173: (t228: (s800: (s801: X173) -> Type) -> Type) -> X173) => (p44: (s802: X173) -> Type) => t226((x41: (X174: Type, f174: (t229: (s803: (s804: X174) -> Type) -> Type) -> X174) -> (s805: (s806: X174) -> Type) -> Type) => p44(f173(x41(X173, f173)))))(t224)))(x40)((y6: (X175: Type, f175: (t230: (s807: (s808: X175) -> Type) -> Type) -> X175) -> (s809: (s810: X175) -> Type) -> Type) => p39(((t231: (s811: (s812: (X176: Type, f176: (t232: (s813: (s814: X176) -> Type) -> Type) -> X176) -> (s815: (s816: X176) -> Type) -> Type) -> Type) -> Type) => (X177: Type, f177: (t233: (s817: (s818: X177) -> Type) -> Type) -> X177) => (p45: (s819: X177) -> Type) => t231((x42: (X178: Type, f178: (t234: (s820: (s821: X178) -> Type) -> Type) -> X178) -> (s822: (s823: X178) -> Type) -> Type) => p45(f177(x42(X177, f177)))))(((s824: (X179: Type, f179: (t235: (s825: (s826: X179) -> Type) -> Type) -> X179) -> (s827: (s828: X179) -> Type) -> Type) => s824((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t236: (s829: (s830: (X180: Type, f180: (t237: (s831: (s832: X180) -> Type) -> Type) -> X180) -> (s833: (s834: X180) -> Type) -> Type) -> Type) -> Type) => ((t238: (s835: (s836: (X181: Type, f181: (t239: (s837: (s838: X181) -> Type) -> Type) -> X181) -> (s839: (s840: X181) -> Type) -> Type) -> Type) -> Type) => (X182: Type, f182: (t240: (s841: (s842: X182) -> Type) -> Type) -> X182) => (p46: (s843: X182) -> Type) => t238((x43: (X183: Type, f183: (t241: (s844: (s845: X183) -> Type) -> Type) -> X183) -> (s846: (s847: X183) -> Type) -> Type) => p46(f182(x43(X182, f182)))))(t236)))(y6))))) => h12(((t242: (s848: (s849: (X184: Type, f184: (t243: (s850: (s851: X184) -> Type) -> Type) -> X184) -> (s852: (s853: X184) -> Type) -> Type) -> Type) -> Type) => (X185: Type, f185: (t244: (s854: (s855: X185) -> Type) -> Type) -> X185) => (p47: (s856: X185) -> Type) => t242((x44: (X186: Type, f186: (t245: (s857: (s858: X186) -> Type) -> Type) -> X186) -> (s859: (s860: X186) -> Type) -> Type) => p47(f185(x44(X185, f185)))))(((s861: (X187: Type, f187: (t246: (s862: (s863: X187) -> Type) -> Type) -> X187) -> (s864: (s865: X187) -> Type) -> Type) => s861((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t247: (s866: (s867: (X188: Type, f188: (t248: (s868: (s869: X188) -> Type) -> Type) -> X188) -> (s870: (s871: X188) -> Type) -> Type) -> Type) -> Type) => ((t249: (s872: (s873: (X189: Type, f189: (t250: (s874: (s875: X189) -> Type) -> Type) -> X189) -> (s876: (s877: X189) -> Type) -> Type) -> Type) -> Type) => (X190: Type, f190: (t251: (s878: (s879: X190) -> Type) -> Type) -> X190) => (p48: (s880: X190) -> Type) => t249((x45: (X191: Type, f191: (t252: (s881: (s882: X191) -> Type) -> Type) -> X191) -> (s883: (s884: X191) -> Type) -> Type) => p48(f190(x45(X190, f190)))))(t247)))(x40)))(h24)))((y7: (X192: Type, f192: (t253: (s885: (s886: X192) -> Type) -> Type) -> X192) -> (s887: (s888: X192) -> Type) -> Type) => p34(((t254: (s889: (s890: (X193: Type, f193: (t255: (s891: (s892: X193) -> Type) -> Type) -> X193) -> (s893: (s894: X193) -> Type) -> Type) -> Type) -> Type) => (X194: Type, f194: (t256: (s895: (s896: X194) -> Type) -> Type) -> X194) => (p49: (s897: X194) -> Type) => t254((x46: (X195: Type, f195: (t257: (s898: (s899: X195) -> Type) -> Type) -> X195) -> (s900: (s901: X195) -> Type) -> Type) => p49(f194(x46(X194, f194)))))(((s902: (X196: Type, f196: (t258: (s903: (s904: X196) -> Type) -> Type) -> X196) -> (s905: (s906: X196) -> Type) -> Type) => s902((#{universes = {levels = [0, 1, 1, 2]}} /carrier).1, (t259: (s907: (s908: (X197: Type, f197: (t260: (s909: (s910: X197) -> Type) -> Type) -> X197) -> (s911: (s912: X197) -> Type) -> Type) -> Type) -> Type) => ((t261: (s913: (s914: (X198: Type, f198: (t262: (s915: (s916: X198) -> Type) -> Type) -> X198) -> (s917: (s918: X198) -> Type) -> Type) -> Type) -> Type) => (X199: Type, f199: (t263: (s919: (s920: X199) -> Type) -> Type) -> X199) => (p50: (s921: X199) -> Type) => t261((x47: (X200: Type, f200: (t264: (s922: (s923: X200) -> Type) -> Type) -> X200) -> (s924: (s925: X200) -> Type) -> Type) => p50(f199(x47(X199, f199)))))(t259)))(y7))), h10))(#{node = StructType} /Boxed())).0;
-#{universes = {levels = [0, 1, 0, 0]}} /paradox
+#{
+    universe_context = {
+        parameter_count = 4,
+        constraints = [u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x]}}
+let /carrier :
+    #{node = Rec}
+    (let x2:
+        #{level = x}
+        Type =
+        {
+                bottom:
+                    #{level = w}
+                    Type,
+                universe:
+                    #{level = w}
+                    Type,
+                over: (
+                    S:
+                        #{level = v}
+                        Type,
+                    F: (
+                        p: (s: S) ->
+                            #{level = u}
+                            Type
+                    ) ->
+                        #{level = u}
+                        Type
+                ) ->
+                    #{level = w}
+                    Type,
+                pi: (
+                    S2:
+                        #{level = v}
+                        Type,
+                    F2: (x: S2) ->
+                        #{level = u}
+                        Type
+                ) ->
+                    #{level = w}
+                    Type
+        };
+    x2) =
+    (
+        (
+            A:
+                #{level = u}
+                Type
+        ) -> A,
+        (
+            X:
+                #{level = u}
+                Type,
+            f: (
+                t: (
+                    s: (s2: X) ->
+                        #{level = u}
+                        Type
+                ) ->
+                    #{level = u}
+                    Type
+            ) -> X
+        ) -> (
+            s3: (s4: X) ->
+                #{level = u}
+                Type
+        ) ->
+            #{level = u}
+            Type,
+        (
+            S:
+                #{level = v}
+                Type,
+            F: (
+                p: (s5: S) ->
+                    #{level = u}
+                    Type
+            ) ->
+                #{level = u}
+                Type
+        ) =>
+            (
+                p2: (s6: S) ->
+                    #{level = u}
+                    Type
+            ) -> F(p2),
+        (
+            S2:
+                #{level = v}
+                Type,
+            F2: (x: S2) ->
+                #{level = u}
+                Type
+        ) =>
+            (x2: S2) -> F2(x2)
+    );
+#{universe_context = {parameter_count = 4, constraints = [u <= 0, w <= 0, 1 <= v]}}
+let /paradox : /sys/Bool/False =
+    #{field = Struct(/Boxed, 0)}
+    (((
+        p: (
+            s: (X: Type, f: (t: (s2: (s3: X) -> Type) -> Type) -> X) -> (
+                s4: (s5: X) -> Type
+            ) -> Type
+        ) -> Type,
+        h1: (
+            x: (X2: Type, f2: (t2: (s6: (s7: X2) -> Type) -> Type) -> X2) -> (
+                s8: (s9: X2) -> Type
+            ) -> Type
+        ) -> (
+            h: ((
+                s10: (X3: Type, f3: (t3: (s11: (s12: X3) -> Type) -> Type) -> X3) -> (
+                    s13: (s14: X3) -> Type
+                ) -> Type
+            ) =>
+                s10(
+                    (
+                        #{universes = {levels = [0, 1, 1, 2]}}
+                        /carrier).1,
+                    (
+                        t4: (
+                            s15: (
+                                s16: (
+                                    X4: Type,
+                                    f4: (t5: (s17: (s18: X4) -> Type) -> Type) -> X4
+                                ) -> (s19: (s20: X4) -> Type) -> Type
+                            ) -> Type
+                        ) -> Type
+                    ) =>
+                        ((
+                            t6: (
+                                s21: (
+                                    s22: (
+                                        X5: Type,
+                                        f5: (t7: (s23: (s24: X5) -> Type) -> Type) -> X5
+                                    ) -> (s25: (s26: X5) -> Type) -> Type
+                                ) -> Type
+                            ) -> Type
+                        ) =>
+                            (X6: Type, f6: (t8: (s27: (s28: X6) -> Type) -> Type) -> X6) =>
+                                (p2: (s29: X6) -> Type) =>
+                                    t6(
+                                        (
+                                            x2: (
+                                                X7: Type,
+                                                f7: (t9: (s30: (s31: X7) -> Type) -> Type) -> X7
+                                            ) -> (s32: (s33: X7) -> Type) -> Type
+                                        ) =>
+                                            p2(f6(x2(X6, f6)))
+                                    ))(t4)
+                ))(x)(p)
+        ) -> p(x)
+    ) =>
+        h1(
+            ((
+                t10: (
+                    s34: (
+                        s35: (X8: Type, f8: (t11: (s36: (s37: X8) -> Type) -> Type) -> X8) -> (
+                            s38: (s39: X8) -> Type
+                        ) -> Type
+                    ) -> Type
+                ) -> Type
+            ) =>
+                (X9: Type, f9: (t12: (s40: (s41: X9) -> Type) -> Type) -> X9) =>
+                    (p3: (s42: X9) -> Type) =>
+                        t10(
+                            (
+                                x3: (
+                                    X10: Type,
+                                    f10: (t13: (s43: (s44: X10) -> Type) -> Type) -> X10
+                                ) -> (s45: (s46: X10) -> Type) -> Type
+                            ) =>
+                                p3(f9(x3(X9, f9)))
+                        ))(
+                (
+                    p4: (
+                        s47: (X11: Type, f11: (t14: (s48: (s49: X11) -> Type) -> Type) -> X11) -> (
+                            s50: (s51: X11) -> Type
+                        ) -> Type
+                    ) -> Type
+                ) =>
+                    (
+                        #{universes = {levels = [0, 1, 1, 2]}}
+                        /carrier).3(
+                        (X12: Type, f12: (t15: (s52: (s53: X12) -> Type) -> Type) -> X12) -> (
+                            s54: (s55: X12) -> Type
+                        ) -> Type,
+                        (
+                            x4: (
+                                X13: Type,
+                                f13: (t16: (s56: (s57: X13) -> Type) -> Type) -> X13
+                            ) -> (s58: (s59: X13) -> Type) -> Type
+                        ) =>
+                            (
+                                h2: ((
+                                    s60: (
+                                        X14: Type,
+                                        f14: (t17: (s61: (s62: X14) -> Type) -> Type) -> X14
+                                    ) -> (s63: (s64: X14) -> Type) -> Type
+                                ) =>
+                                    s60(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t18: (
+                                                s65: (
+                                                    s66: (
+                                                        X15: Type,
+                                                        f15: (
+                                                            t19: (s67: (s68: X15) -> Type) -> Type
+                                                        ) -> X15
+                                                    ) -> (s69: (s70: X15) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t20: (
+                                                    s71: (
+                                                        s72: (
+                                                            X16: Type,
+                                                            f16: (
+                                                                t21: (
+                                                                    s73: (s74: X16) -> Type
+                                                                ) -> Type
+                                                            ) -> X16
+                                                        ) -> (s75: (s76: X16) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X17: Type,
+                                                    f17: (
+                                                        t22: (s77: (s78: X17) -> Type) -> Type
+                                                    ) -> X17
+                                                ) =>
+                                                    (p5: (s79: X17) -> Type) =>
+                                                        t20(
+                                                            (
+                                                                x5: (
+                                                                    X18: Type,
+                                                                    f18: (
+                                                                        t23: (
+                                                                            s80: (s81: X18) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X18
+                                                                ) -> (
+                                                                    s82: (s83: X18) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p5(f17(x5(X17, f17)))
+                                                        ))(t18)
+                                    ))(x4)(p4)
+                            ) -> p4(x4)
+                    )
+            )
+        )(
+            (
+                x6: (X19: Type, f19: (t24: (s84: (s85: X19) -> Type) -> Type) -> X19) -> (
+                    s86: (s87: X19) -> Type
+                ) -> Type
+            ) =>
+                (
+                    h22: ((
+                        s88: (X20: Type, f20: (t25: (s89: (s90: X20) -> Type) -> Type) -> X20) -> (
+                            s91: (s92: X20) -> Type
+                        ) -> Type
+                    ) =>
+                        s88(
+                            (
+                                #{universes = {levels = [0, 1, 1, 2]}}
+                                /carrier).1,
+                            (
+                                t26: (
+                                    s93: (
+                                        s94: (
+                                            X21: Type,
+                                            f21: (t27: (s95: (s96: X21) -> Type) -> Type) -> X21
+                                        ) -> (s97: (s98: X21) -> Type) -> Type
+                                    ) -> Type
+                                ) -> Type
+                            ) =>
+                                ((
+                                    t28: (
+                                        s99: (
+                                            s100: (
+                                                X22: Type,
+                                                f22: (
+                                                    t29: (s101: (s102: X22) -> Type) -> Type
+                                                ) -> X22
+                                            ) -> (s103: (s104: X22) -> Type) -> Type
+                                        ) -> Type
+                                    ) -> Type
+                                ) =>
+                                    (
+                                        X23: Type,
+                                        f23: (t30: (s105: (s106: X23) -> Type) -> Type) -> X23
+                                    ) =>
+                                        (p6: (s107: X23) -> Type) =>
+                                            t28(
+                                                (
+                                                    x7: (
+                                                        X24: Type,
+                                                        f24: (
+                                                            t31: (s108: (s109: X24) -> Type) -> Type
+                                                        ) -> X24
+                                                    ) -> (s110: (s111: X24) -> Type) -> Type
+                                                ) =>
+                                                    p6(f23(x7(X23, f23)))
+                                            ))(t26)
+                        ))(x6)(
+                        (
+                            y: (
+                                X25: Type,
+                                f25: (t32: (s112: (s113: X25) -> Type) -> Type) -> X25
+                            ) -> (s114: (s115: X25) -> Type) -> Type
+                        ) =>
+                            p(
+                                ((
+                                    t33: (
+                                        s116: (
+                                            s117: (
+                                                X26: Type,
+                                                f26: (
+                                                    t34: (s118: (s119: X26) -> Type) -> Type
+                                                ) -> X26
+                                            ) -> (s120: (s121: X26) -> Type) -> Type
+                                        ) -> Type
+                                    ) -> Type
+                                ) =>
+                                    (
+                                        X27: Type,
+                                        f27: (t35: (s122: (s123: X27) -> Type) -> Type) -> X27
+                                    ) =>
+                                        (p7: (s124: X27) -> Type) =>
+                                            t33(
+                                                (
+                                                    x8: (
+                                                        X28: Type,
+                                                        f28: (
+                                                            t36: (s125: (s126: X28) -> Type) -> Type
+                                                        ) -> X28
+                                                    ) -> (s127: (s128: X28) -> Type) -> Type
+                                                ) =>
+                                                    p7(f27(x8(X27, f27)))
+                                            ))(
+                                    ((
+                                        s129: (
+                                            X29: Type,
+                                            f29: (t37: (s130: (s131: X29) -> Type) -> Type) -> X29
+                                        ) -> (s132: (s133: X29) -> Type) -> Type
+                                    ) =>
+                                        s129(
+                                            (
+                                                #{universes = {levels = [0, 1, 1, 2]}}
+                                                /carrier).1,
+                                            (
+                                                t38: (
+                                                    s134: (
+                                                        s135: (
+                                                            X30: Type,
+                                                            f30: (
+                                                                t39: (
+                                                                    s136: (s137: X30) -> Type
+                                                                ) -> Type
+                                                            ) -> X30
+                                                        ) -> (s138: (s139: X30) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                ((
+                                                    t40: (
+                                                        s140: (
+                                                            s141: (
+                                                                X31: Type,
+                                                                f31: (
+                                                                    t41: (
+                                                                        s142: (s143: X31) -> Type
+                                                                    ) -> Type
+                                                                ) -> X31
+                                                            ) -> (s144: (s145: X31) -> Type) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    (
+                                                        X32: Type,
+                                                        f32: (
+                                                            t42: (s146: (s147: X32) -> Type) -> Type
+                                                        ) -> X32
+                                                    ) =>
+                                                        (p8: (s148: X32) -> Type) =>
+                                                            t40(
+                                                                (
+                                                                    x9: (
+                                                                        X33: Type,
+                                                                        f33: (
+                                                                            t43: (
+                                                                                s149: (
+                                                                                    s150: X33
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X33
+                                                                    ) -> (
+                                                                        s151: (s152: X33) -> Type
+                                                                    ) -> Type
+                                                                ) =>
+                                                                    p8(f32(x9(X32, f32)))
+                                                            ))(t38)
+                                        ))(y)
+                                )
+                            )
+                    )
+                ) =>
+                    h1(
+                        ((
+                            t44: (
+                                s153: (
+                                    s154: (
+                                        X34: Type,
+                                        f34: (t45: (s155: (s156: X34) -> Type) -> Type) -> X34
+                                    ) -> (s157: (s158: X34) -> Type) -> Type
+                                ) -> Type
+                            ) -> Type
+                        ) =>
+                            (X35: Type, f35: (t46: (s159: (s160: X35) -> Type) -> Type) -> X35) =>
+                                (p9: (s161: X35) -> Type) =>
+                                    t44(
+                                        (
+                                            x10: (
+                                                X36: Type,
+                                                f36: (
+                                                    t47: (s162: (s163: X36) -> Type) -> Type
+                                                ) -> X36
+                                            ) -> (s164: (s165: X36) -> Type) -> Type
+                                        ) =>
+                                            p9(f35(x10(X35, f35)))
+                                    ))(
+                            ((
+                                s166: (
+                                    X37: Type,
+                                    f37: (t48: (s167: (s168: X37) -> Type) -> Type) -> X37
+                                ) -> (s169: (s170: X37) -> Type) -> Type
+                            ) =>
+                                s166(
+                                    (
+                                        #{universes = {levels = [0, 1, 1, 2]}}
+                                        /carrier).1,
+                                    (
+                                        t49: (
+                                            s171: (
+                                                s172: (
+                                                    X38: Type,
+                                                    f38: (
+                                                        t50: (s173: (s174: X38) -> Type) -> Type
+                                                    ) -> X38
+                                                ) -> (s175: (s176: X38) -> Type) -> Type
+                                            ) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        ((
+                                            t51: (
+                                                s177: (
+                                                    s178: (
+                                                        X39: Type,
+                                                        f39: (
+                                                            t52: (s179: (s180: X39) -> Type) -> Type
+                                                        ) -> X39
+                                                    ) -> (s181: (s182: X39) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            (
+                                                X40: Type,
+                                                f40: (
+                                                    t53: (s183: (s184: X40) -> Type) -> Type
+                                                ) -> X40
+                                            ) =>
+                                                (p10: (s185: X40) -> Type) =>
+                                                    t51(
+                                                        (
+                                                            x11: (
+                                                                X41: Type,
+                                                                f41: (
+                                                                    t54: (
+                                                                        s186: (s187: X41) -> Type
+                                                                    ) -> Type
+                                                                ) -> X41
+                                                            ) -> (s188: (s189: X41) -> Type) -> Type
+                                                        ) =>
+                                                            p10(f40(x11(X40, f40)))
+                                                    ))(t49)
+                                ))(x6)
+                        )
+                    )(h22)
+        ))(
+        (
+            y2: (X42: Type, f42: (t55: (s190: (s191: X42) -> Type) -> Type) -> X42) -> (
+                s192: (s193: X42) -> Type
+            ) -> Type
+        ) =>
+            (
+                h3: (
+                    #{universes = {levels = [0, 1, 1, 2]}}
+                    /carrier).2(
+                    (X43: Type, f43: (t56: (s194: (s195: X43) -> Type) -> Type) -> X43) -> (
+                        s196: (s197: X43) -> Type
+                    ) -> Type,
+                    (
+                        p11: (
+                            s198: (
+                                X44: Type,
+                                f44: (t57: (s199: (s200: X44) -> Type) -> Type) -> X44
+                            ) -> (s201: (s202: X44) -> Type) -> Type
+                        ) -> Type
+                    ) =>
+                        (
+                            h4: ((
+                                s203: (
+                                    X45: Type,
+                                    f45: (t58: (s204: (s205: X45) -> Type) -> Type) -> X45
+                                ) -> (s206: (s207: X45) -> Type) -> Type
+                            ) =>
+                                s203(
+                                    (
+                                        #{universes = {levels = [0, 1, 1, 2]}}
+                                        /carrier).1,
+                                    (
+                                        t59: (
+                                            s208: (
+                                                s209: (
+                                                    X46: Type,
+                                                    f46: (
+                                                        t60: (s210: (s211: X46) -> Type) -> Type
+                                                    ) -> X46
+                                                ) -> (s212: (s213: X46) -> Type) -> Type
+                                            ) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        ((
+                                            t61: (
+                                                s214: (
+                                                    s215: (
+                                                        X47: Type,
+                                                        f47: (
+                                                            t62: (s216: (s217: X47) -> Type) -> Type
+                                                        ) -> X47
+                                                    ) -> (s218: (s219: X47) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            (
+                                                X48: Type,
+                                                f48: (
+                                                    t63: (s220: (s221: X48) -> Type) -> Type
+                                                ) -> X48
+                                            ) =>
+                                                (p12: (s222: X48) -> Type) =>
+                                                    t61(
+                                                        (
+                                                            x12: (
+                                                                X49: Type,
+                                                                f49: (
+                                                                    t64: (
+                                                                        s223: (s224: X49) -> Type
+                                                                    ) -> Type
+                                                                ) -> X49
+                                                            ) -> (s225: (s226: X49) -> Type) -> Type
+                                                        ) =>
+                                                            p12(f48(x12(X48, f48)))
+                                                    ))(t59)
+                                ))(y2)(p11)
+                        ) -> p11(
+                            ((
+                                t65: (
+                                    s227: (
+                                        s228: (
+                                            X50: Type,
+                                            f50: (t66: (s229: (s230: X50) -> Type) -> Type) -> X50
+                                        ) -> (s231: (s232: X50) -> Type) -> Type
+                                    ) -> Type
+                                ) -> Type
+                            ) =>
+                                (
+                                    X51: Type,
+                                    f51: (t67: (s233: (s234: X51) -> Type) -> Type) -> X51
+                                ) =>
+                                    (p13: (s235: X51) -> Type) =>
+                                        t65(
+                                            (
+                                                x13: (
+                                                    X52: Type,
+                                                    f52: (
+                                                        t68: (s236: (s237: X52) -> Type) -> Type
+                                                    ) -> X52
+                                                ) -> (s238: (s239: X52) -> Type) -> Type
+                                            ) =>
+                                                p13(f51(x13(X51, f51)))
+                                        ))(
+                                ((
+                                    s240: (
+                                        X53: Type,
+                                        f53: (t69: (s241: (s242: X53) -> Type) -> Type) -> X53
+                                    ) -> (s243: (s244: X53) -> Type) -> Type
+                                ) =>
+                                    s240(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t70: (
+                                                s245: (
+                                                    s246: (
+                                                        X54: Type,
+                                                        f54: (
+                                                            t71: (s247: (s248: X54) -> Type) -> Type
+                                                        ) -> X54
+                                                    ) -> (s249: (s250: X54) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t72: (
+                                                    s251: (
+                                                        s252: (
+                                                            X55: Type,
+                                                            f55: (
+                                                                t73: (
+                                                                    s253: (s254: X55) -> Type
+                                                                ) -> Type
+                                                            ) -> X55
+                                                        ) -> (s255: (s256: X55) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X56: Type,
+                                                    f56: (
+                                                        t74: (s257: (s258: X56) -> Type) -> Type
+                                                    ) -> X56
+                                                ) =>
+                                                    (p14: (s259: X56) -> Type) =>
+                                                        t72(
+                                                            (
+                                                                x14: (
+                                                                    X57: Type,
+                                                                    f57: (
+                                                                        t75: (
+                                                                            s260: (
+                                                                                s261: X57
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X57
+                                                                ) -> (
+                                                                    s262: (s263: X57) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p14(f56(x14(X56, f56)))
+                                                        ))(t70)
+                                    ))(y2)
+                            )
+                        )
+                )
+            ) -> (
+                #{universes = {levels = [0, 1, 1, 2]}}
+                /carrier).0,
+        (
+            x15: (X58: Type, f58: (t76: (s264: (s265: X58) -> Type) -> Type) -> X58) -> (
+                s266: (s267: X58) -> Type
+            ) -> Type
+        ) =>
+            (
+                h23: ((
+                    s268: (X59: Type, f59: (t77: (s269: (s270: X59) -> Type) -> Type) -> X59) -> (
+                        s271: (s272: X59) -> Type
+                    ) -> Type
+                ) =>
+                    s268(
+                        (
+                            #{universes = {levels = [0, 1, 1, 2]}}
+                            /carrier).1,
+                        (
+                            t78: (
+                                s273: (
+                                    s274: (
+                                        X60: Type,
+                                        f60: (t79: (s275: (s276: X60) -> Type) -> Type) -> X60
+                                    ) -> (s277: (s278: X60) -> Type) -> Type
+                                ) -> Type
+                            ) -> Type
+                        ) =>
+                            ((
+                                t80: (
+                                    s279: (
+                                        s280: (
+                                            X61: Type,
+                                            f61: (t81: (s281: (s282: X61) -> Type) -> Type) -> X61
+                                        ) -> (s283: (s284: X61) -> Type) -> Type
+                                    ) -> Type
+                                ) -> Type
+                            ) =>
+                                (
+                                    X62: Type,
+                                    f62: (t82: (s285: (s286: X62) -> Type) -> Type) -> X62
+                                ) =>
+                                    (p15: (s287: X62) -> Type) =>
+                                        t80(
+                                            (
+                                                x16: (
+                                                    X63: Type,
+                                                    f63: (
+                                                        t83: (s288: (s289: X63) -> Type) -> Type
+                                                    ) -> X63
+                                                ) -> (s290: (s291: X63) -> Type) -> Type
+                                            ) =>
+                                                p15(f62(x16(X62, f62)))
+                                        ))(t78)
+                    ))(x15)(
+                    (
+                        y3: (X64: Type, f64: (t84: (s292: (s293: X64) -> Type) -> Type) -> X64) -> (
+                            s294: (s295: X64) -> Type
+                        ) -> Type
+                    ) =>
+                        (
+                            h5: (
+                                #{universes = {levels = [0, 1, 1, 2]}}
+                                /carrier).2(
+                                (
+                                    X65: Type,
+                                    f65: (t85: (s296: (s297: X65) -> Type) -> Type) -> X65
+                                ) -> (s298: (s299: X65) -> Type) -> Type,
+                                (
+                                    p16: (
+                                        s300: (
+                                            X66: Type,
+                                            f66: (t86: (s301: (s302: X66) -> Type) -> Type) -> X66
+                                        ) -> (s303: (s304: X66) -> Type) -> Type
+                                    ) -> Type
+                                ) =>
+                                    (
+                                        h6: ((
+                                            s305: (
+                                                X67: Type,
+                                                f67: (
+                                                    t87: (s306: (s307: X67) -> Type) -> Type
+                                                ) -> X67
+                                            ) -> (s308: (s309: X67) -> Type) -> Type
+                                        ) =>
+                                            s305(
+                                                (
+                                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                                    /carrier).1,
+                                                (
+                                                    t88: (
+                                                        s310: (
+                                                            s311: (
+                                                                X68: Type,
+                                                                f68: (
+                                                                    t89: (
+                                                                        s312: (s313: X68) -> Type
+                                                                    ) -> Type
+                                                                ) -> X68
+                                                            ) -> (s314: (s315: X68) -> Type) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    ((
+                                                        t90: (
+                                                            s316: (
+                                                                s317: (
+                                                                    X69: Type,
+                                                                    f69: (
+                                                                        t91: (
+                                                                            s318: (
+                                                                                s319: X69
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X69
+                                                                ) -> (
+                                                                    s320: (s321: X69) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        (
+                                                            X70: Type,
+                                                            f70: (
+                                                                t92: (
+                                                                    s322: (s323: X70) -> Type
+                                                                ) -> Type
+                                                            ) -> X70
+                                                        ) =>
+                                                            (p17: (s324: X70) -> Type) =>
+                                                                t90(
+                                                                    (
+                                                                        x17: (
+                                                                            X71: Type,
+                                                                            f71: (
+                                                                                t93: (
+                                                                                    s325: (
+                                                                                        s326: X71
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X71
+                                                                        ) -> (
+                                                                            s327: (
+                                                                                s328: X71
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) =>
+                                                                        p17(f70(x17(X70, f70)))
+                                                                ))(t88)
+                                            ))(y3)(p16)
+                                    ) -> p16(
+                                        ((
+                                            t94: (
+                                                s329: (
+                                                    s330: (
+                                                        X72: Type,
+                                                        f72: (
+                                                            t95: (s331: (s332: X72) -> Type) -> Type
+                                                        ) -> X72
+                                                    ) -> (s333: (s334: X72) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            (
+                                                X73: Type,
+                                                f73: (
+                                                    t96: (s335: (s336: X73) -> Type) -> Type
+                                                ) -> X73
+                                            ) =>
+                                                (p18: (s337: X73) -> Type) =>
+                                                    t94(
+                                                        (
+                                                            x18: (
+                                                                X74: Type,
+                                                                f74: (
+                                                                    t97: (
+                                                                        s338: (s339: X74) -> Type
+                                                                    ) -> Type
+                                                                ) -> X74
+                                                            ) -> (s340: (s341: X74) -> Type) -> Type
+                                                        ) =>
+                                                            p18(f73(x18(X73, f73)))
+                                                    ))(
+                                            ((
+                                                s342: (
+                                                    X75: Type,
+                                                    f75: (
+                                                        t98: (s343: (s344: X75) -> Type) -> Type
+                                                    ) -> X75
+                                                ) -> (s345: (s346: X75) -> Type) -> Type
+                                            ) =>
+                                                s342(
+                                                    (
+                                                        #{universes = {levels = [0, 1, 1, 2]}}
+                                                        /carrier).1,
+                                                    (
+                                                        t99: (
+                                                            s347: (
+                                                                s348: (
+                                                                    X76: Type,
+                                                                    f76: (
+                                                                        t100: (
+                                                                            s349: (
+                                                                                s350: X76
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X76
+                                                                ) -> (
+                                                                    s351: (s352: X76) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        ((
+                                                            t101: (
+                                                                s353: (
+                                                                    s354: (
+                                                                        X77: Type,
+                                                                        f77: (
+                                                                            t102: (
+                                                                                s355: (
+                                                                                    s356: X77
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X77
+                                                                    ) -> (
+                                                                        s357: (s358: X77) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            (
+                                                                X78: Type,
+                                                                f78: (
+                                                                    t103: (
+                                                                        s359: (s360: X78) -> Type
+                                                                    ) -> Type
+                                                                ) -> X78
+                                                            ) =>
+                                                                (p19: (s361: X78) -> Type) =>
+                                                                    t101(
+                                                                        (
+                                                                            x19: (
+                                                                                X79: Type,
+                                                                                f79: (
+                                                                                    t104: (
+                                                                                        s362: (
+                                                                                            s363: X79
+                                                                                        ) -> Type
+                                                                                    ) -> Type
+                                                                                ) -> X79
+                                                                            ) -> (
+                                                                                s364: (
+                                                                                    s365: X79
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) =>
+                                                                            p19(f78(x19(X78, f78)))
+                                                                    ))(t99)
+                                                ))(y3)
+                                        )
+                                    )
+                            )
+                        ) -> (
+                            #{universes = {levels = [0, 1, 1, 2]}}
+                            /carrier).0
+                )
+            ) =>
+                (
+                    h32: (
+                        #{universes = {levels = [0, 1, 1, 2]}}
+                        /carrier).2(
+                        (X80: Type, f80: (t105: (s366: (s367: X80) -> Type) -> Type) -> X80) -> (
+                            s368: (s369: X80) -> Type
+                        ) -> Type,
+                        (
+                            p20: (
+                                s370: (
+                                    X81: Type,
+                                    f81: (t106: (s371: (s372: X81) -> Type) -> Type) -> X81
+                                ) -> (s373: (s374: X81) -> Type) -> Type
+                            ) -> Type
+                        ) =>
+                            (
+                                h7: ((
+                                    s375: (
+                                        X82: Type,
+                                        f82: (t107: (s376: (s377: X82) -> Type) -> Type) -> X82
+                                    ) -> (s378: (s379: X82) -> Type) -> Type
+                                ) =>
+                                    s375(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t108: (
+                                                s380: (
+                                                    s381: (
+                                                        X83: Type,
+                                                        f83: (
+                                                            t109: (
+                                                                s382: (s383: X83) -> Type
+                                                            ) -> Type
+                                                        ) -> X83
+                                                    ) -> (s384: (s385: X83) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t110: (
+                                                    s386: (
+                                                        s387: (
+                                                            X84: Type,
+                                                            f84: (
+                                                                t111: (
+                                                                    s388: (s389: X84) -> Type
+                                                                ) -> Type
+                                                            ) -> X84
+                                                        ) -> (s390: (s391: X84) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X85: Type,
+                                                    f85: (
+                                                        t112: (s392: (s393: X85) -> Type) -> Type
+                                                    ) -> X85
+                                                ) =>
+                                                    (p21: (s394: X85) -> Type) =>
+                                                        t110(
+                                                            (
+                                                                x20: (
+                                                                    X86: Type,
+                                                                    f86: (
+                                                                        t113: (
+                                                                            s395: (
+                                                                                s396: X86
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X86
+                                                                ) -> (
+                                                                    s397: (s398: X86) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p21(f85(x20(X85, f85)))
+                                                        ))(t108)
+                                    ))(x15)(p20)
+                            ) -> p20(
+                                ((
+                                    t114: (
+                                        s399: (
+                                            s400: (
+                                                X87: Type,
+                                                f87: (
+                                                    t115: (s401: (s402: X87) -> Type) -> Type
+                                                ) -> X87
+                                            ) -> (s403: (s404: X87) -> Type) -> Type
+                                        ) -> Type
+                                    ) -> Type
+                                ) =>
+                                    (
+                                        X88: Type,
+                                        f88: (t116: (s405: (s406: X88) -> Type) -> Type) -> X88
+                                    ) =>
+                                        (p22: (s407: X88) -> Type) =>
+                                            t114(
+                                                (
+                                                    x21: (
+                                                        X89: Type,
+                                                        f89: (
+                                                            t117: (
+                                                                s408: (s409: X89) -> Type
+                                                            ) -> Type
+                                                        ) -> X89
+                                                    ) -> (s410: (s411: X89) -> Type) -> Type
+                                                ) =>
+                                                    p22(f88(x21(X88, f88)))
+                                            ))(
+                                    ((
+                                        s412: (
+                                            X90: Type,
+                                            f90: (t118: (s413: (s414: X90) -> Type) -> Type) -> X90
+                                        ) -> (s415: (s416: X90) -> Type) -> Type
+                                    ) =>
+                                        s412(
+                                            (
+                                                #{universes = {levels = [0, 1, 1, 2]}}
+                                                /carrier).1,
+                                            (
+                                                t119: (
+                                                    s417: (
+                                                        s418: (
+                                                            X91: Type,
+                                                            f91: (
+                                                                t120: (
+                                                                    s419: (s420: X91) -> Type
+                                                                ) -> Type
+                                                            ) -> X91
+                                                        ) -> (s421: (s422: X91) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                ((
+                                                    t121: (
+                                                        s423: (
+                                                            s424: (
+                                                                X92: Type,
+                                                                f92: (
+                                                                    t122: (
+                                                                        s425: (s426: X92) -> Type
+                                                                    ) -> Type
+                                                                ) -> X92
+                                                            ) -> (s427: (s428: X92) -> Type) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    (
+                                                        X93: Type,
+                                                        f93: (
+                                                            t123: (
+                                                                s429: (s430: X93) -> Type
+                                                            ) -> Type
+                                                        ) -> X93
+                                                    ) =>
+                                                        (p23: (s431: X93) -> Type) =>
+                                                            t121(
+                                                                (
+                                                                    x22: (
+                                                                        X94: Type,
+                                                                        f94: (
+                                                                            t124: (
+                                                                                s432: (
+                                                                                    s433: X94
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X94
+                                                                    ) -> (
+                                                                        s434: (s435: X94) -> Type
+                                                                    ) -> Type
+                                                                ) =>
+                                                                    p23(f93(x22(X93, f93)))
+                                                            ))(t119)
+                                        ))(x15)
+                                )
+                            )
+                    )
+                ) =>
+                    h32(
+                        (
+                            y4: (
+                                X95: Type,
+                                f95: (t125: (s436: (s437: X95) -> Type) -> Type) -> X95
+                            ) -> (s438: (s439: X95) -> Type) -> Type
+                        ) =>
+                            (
+                                h8: (
+                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                    /carrier).2(
+                                    (
+                                        X96: Type,
+                                        f96: (t126: (s440: (s441: X96) -> Type) -> Type) -> X96
+                                    ) -> (s442: (s443: X96) -> Type) -> Type,
+                                    (
+                                        p24: (
+                                            s444: (
+                                                X97: Type,
+                                                f97: (
+                                                    t127: (s445: (s446: X97) -> Type) -> Type
+                                                ) -> X97
+                                            ) -> (s447: (s448: X97) -> Type) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        (
+                                            h9: ((
+                                                s449: (
+                                                    X98: Type,
+                                                    f98: (
+                                                        t128: (s450: (s451: X98) -> Type) -> Type
+                                                    ) -> X98
+                                                ) -> (s452: (s453: X98) -> Type) -> Type
+                                            ) =>
+                                                s449(
+                                                    (
+                                                        #{universes = {levels = [0, 1, 1, 2]}}
+                                                        /carrier).1,
+                                                    (
+                                                        t129: (
+                                                            s454: (
+                                                                s455: (
+                                                                    X99: Type,
+                                                                    f99: (
+                                                                        t130: (
+                                                                            s456: (
+                                                                                s457: X99
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X99
+                                                                ) -> (
+                                                                    s458: (s459: X99) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        ((
+                                                            t131: (
+                                                                s460: (
+                                                                    s461: (
+                                                                        X100: Type,
+                                                                        f100: (
+                                                                            t132: (
+                                                                                s462: (
+                                                                                    s463: X100
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X100
+                                                                    ) -> (
+                                                                        s464: (s465: X100) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            (
+                                                                X101: Type,
+                                                                f101: (
+                                                                    t133: (
+                                                                        s466: (s467: X101) -> Type
+                                                                    ) -> Type
+                                                                ) -> X101
+                                                            ) =>
+                                                                (p25: (s468: X101) -> Type) =>
+                                                                    t131(
+                                                                        (
+                                                                            x23: (
+                                                                                X102: Type,
+                                                                                f102: (
+                                                                                    t134: (
+                                                                                        s469: (
+                                                                                            s470: X102
+                                                                                        ) -> Type
+                                                                                    ) -> Type
+                                                                                ) -> X102
+                                                                            ) -> (
+                                                                                s471: (
+                                                                                    s472: X102
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) =>
+                                                                            p25(
+                                                                                f101(
+                                                                                    x23(X101, f101)
+                                                                                )
+                                                                            )
+                                                                    ))(t129)
+                                                ))(y4)(p24)
+                                        ) -> p24(
+                                            ((
+                                                t135: (
+                                                    s473: (
+                                                        s474: (
+                                                            X103: Type,
+                                                            f103: (
+                                                                t136: (
+                                                                    s475: (s476: X103) -> Type
+                                                                ) -> Type
+                                                            ) -> X103
+                                                        ) -> (s477: (s478: X103) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X104: Type,
+                                                    f104: (
+                                                        t137: (s479: (s480: X104) -> Type) -> Type
+                                                    ) -> X104
+                                                ) =>
+                                                    (p26: (s481: X104) -> Type) =>
+                                                        t135(
+                                                            (
+                                                                x24: (
+                                                                    X105: Type,
+                                                                    f105: (
+                                                                        t138: (
+                                                                            s482: (
+                                                                                s483: X105
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X105
+                                                                ) -> (
+                                                                    s484: (s485: X105) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p26(f104(x24(X104, f104)))
+                                                        ))(
+                                                ((
+                                                    s486: (
+                                                        X106: Type,
+                                                        f106: (
+                                                            t139: (
+                                                                s487: (s488: X106) -> Type
+                                                            ) -> Type
+                                                        ) -> X106
+                                                    ) -> (s489: (s490: X106) -> Type) -> Type
+                                                ) =>
+                                                    s486(
+                                                        (
+                                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                                            /carrier).1,
+                                                        (
+                                                            t140: (
+                                                                s491: (
+                                                                    s492: (
+                                                                        X107: Type,
+                                                                        f107: (
+                                                                            t141: (
+                                                                                s493: (
+                                                                                    s494: X107
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X107
+                                                                    ) -> (
+                                                                        s495: (s496: X107) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            ((
+                                                                t142: (
+                                                                    s497: (
+                                                                        s498: (
+                                                                            X108: Type,
+                                                                            f108: (
+                                                                                t143: (
+                                                                                    s499: (
+                                                                                        s500: X108
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X108
+                                                                        ) -> (
+                                                                            s501: (
+                                                                                s502: X108
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                (
+                                                                    X109: Type,
+                                                                    f109: (
+                                                                        t144: (
+                                                                            s503: (
+                                                                                s504: X109
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X109
+                                                                ) =>
+                                                                    (p27: (s505: X109) -> Type) =>
+                                                                        t142(
+                                                                            (
+                                                                                x25: (
+                                                                                    X110: Type,
+                                                                                    f110: (
+                                                                                        t145: (
+                                                                                            s506: (
+                                                                                                s507: X110
+                                                                                            ) -> Type
+                                                                                        ) -> Type
+                                                                                    ) -> X110
+                                                                                ) -> (
+                                                                                    s508: (
+                                                                                        s509: X110
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) =>
+                                                                                p27(
+                                                                                    f109(
+                                                                                        x25(
+                                                                                            X109,
+                                                                                            f109
+                                                                                        )
+                                                                                    )
+                                                                                )
+                                                                        ))(t140)
+                                                    ))(y4)
+                                            )
+                                        )
+                                )
+                            ) -> (
+                                #{universes = {levels = [0, 1, 1, 2]}}
+                                /carrier).0
+                    )(h23)(
+                        (
+                            p28: (
+                                s510: (
+                                    X111: Type,
+                                    f111: (t146: (s511: (s512: X111) -> Type) -> Type) -> X111
+                                ) -> (s513: (s514: X111) -> Type) -> Type
+                            ) -> Type
+                        ) =>
+                            (
+                                h42: ((
+                                    s515: (
+                                        X112: Type,
+                                        f112: (t147: (s516: (s517: X112) -> Type) -> Type) -> X112
+                                    ) -> (s518: (s519: X112) -> Type) -> Type
+                                ) =>
+                                    s515(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t148: (
+                                                s520: (
+                                                    s521: (
+                                                        X113: Type,
+                                                        f113: (
+                                                            t149: (
+                                                                s522: (s523: X113) -> Type
+                                                            ) -> Type
+                                                        ) -> X113
+                                                    ) -> (s524: (s525: X113) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t150: (
+                                                    s526: (
+                                                        s527: (
+                                                            X114: Type,
+                                                            f114: (
+                                                                t151: (
+                                                                    s528: (s529: X114) -> Type
+                                                                ) -> Type
+                                                            ) -> X114
+                                                        ) -> (s530: (s531: X114) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X115: Type,
+                                                    f115: (
+                                                        t152: (s532: (s533: X115) -> Type) -> Type
+                                                    ) -> X115
+                                                ) =>
+                                                    (p29: (s534: X115) -> Type) =>
+                                                        t150(
+                                                            (
+                                                                x26: (
+                                                                    X116: Type,
+                                                                    f116: (
+                                                                        t153: (
+                                                                            s535: (
+                                                                                s536: X116
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X116
+                                                                ) -> (
+                                                                    s537: (s538: X116) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p29(f115(x26(X115, f115)))
+                                                        ))(t148)
+                                    ))(
+                                    ((
+                                        t154: (
+                                            s539: (
+                                                s540: (
+                                                    X117: Type,
+                                                    f117: (
+                                                        t155: (s541: (s542: X117) -> Type) -> Type
+                                                    ) -> X117
+                                                ) -> (s543: (s544: X117) -> Type) -> Type
+                                            ) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        (
+                                            X118: Type,
+                                            f118: (
+                                                t156: (s545: (s546: X118) -> Type) -> Type
+                                            ) -> X118
+                                        ) =>
+                                            (p30: (s547: X118) -> Type) =>
+                                                t154(
+                                                    (
+                                                        x27: (
+                                                            X119: Type,
+                                                            f119: (
+                                                                t157: (
+                                                                    s548: (s549: X119) -> Type
+                                                                ) -> Type
+                                                            ) -> X119
+                                                        ) -> (s550: (s551: X119) -> Type) -> Type
+                                                    ) =>
+                                                        p30(f118(x27(X118, f118)))
+                                                ))(
+                                        ((
+                                            s552: (
+                                                X120: Type,
+                                                f120: (
+                                                    t158: (s553: (s554: X120) -> Type) -> Type
+                                                ) -> X120
+                                            ) -> (s555: (s556: X120) -> Type) -> Type
+                                        ) =>
+                                            s552(
+                                                (
+                                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                                    /carrier).1,
+                                                (
+                                                    t159: (
+                                                        s557: (
+                                                            s558: (
+                                                                X121: Type,
+                                                                f121: (
+                                                                    t160: (
+                                                                        s559: (s560: X121) -> Type
+                                                                    ) -> Type
+                                                                ) -> X121
+                                                            ) -> (
+                                                                s561: (s562: X121) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    ((
+                                                        t161: (
+                                                            s563: (
+                                                                s564: (
+                                                                    X122: Type,
+                                                                    f122: (
+                                                                        t162: (
+                                                                            s565: (
+                                                                                s566: X122
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X122
+                                                                ) -> (
+                                                                    s567: (s568: X122) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        (
+                                                            X123: Type,
+                                                            f123: (
+                                                                t163: (
+                                                                    s569: (s570: X123) -> Type
+                                                                ) -> Type
+                                                            ) -> X123
+                                                        ) =>
+                                                            (p31: (s571: X123) -> Type) =>
+                                                                t161(
+                                                                    (
+                                                                        x28: (
+                                                                            X124: Type,
+                                                                            f124: (
+                                                                                t164: (
+                                                                                    s572: (
+                                                                                        s573: X124
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X124
+                                                                        ) -> (
+                                                                            s574: (
+                                                                                s575: X124
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) =>
+                                                                        p31(f123(x28(X123, f123)))
+                                                                ))(t159)
+                                            ))(x15)
+                                    )
+                                )(p28)
+                            ) =>
+                                h32(
+                                    (
+                                        y5: (
+                                            X125: Type,
+                                            f125: (
+                                                t165: (s576: (s577: X125) -> Type) -> Type
+                                            ) -> X125
+                                        ) -> (s578: (s579: X125) -> Type) -> Type
+                                    ) =>
+                                        p28(
+                                            ((
+                                                t166: (
+                                                    s580: (
+                                                        s581: (
+                                                            X126: Type,
+                                                            f126: (
+                                                                t167: (
+                                                                    s582: (s583: X126) -> Type
+                                                                ) -> Type
+                                                            ) -> X126
+                                                        ) -> (s584: (s585: X126) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X127: Type,
+                                                    f127: (
+                                                        t168: (s586: (s587: X127) -> Type) -> Type
+                                                    ) -> X127
+                                                ) =>
+                                                    (p32: (s588: X127) -> Type) =>
+                                                        t166(
+                                                            (
+                                                                x29: (
+                                                                    X128: Type,
+                                                                    f128: (
+                                                                        t169: (
+                                                                            s589: (
+                                                                                s590: X128
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X128
+                                                                ) -> (
+                                                                    s591: (s592: X128) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p32(f127(x29(X127, f127)))
+                                                        ))(
+                                                ((
+                                                    s593: (
+                                                        X129: Type,
+                                                        f129: (
+                                                            t170: (
+                                                                s594: (s595: X129) -> Type
+                                                            ) -> Type
+                                                        ) -> X129
+                                                    ) -> (s596: (s597: X129) -> Type) -> Type
+                                                ) =>
+                                                    s593(
+                                                        (
+                                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                                            /carrier).1,
+                                                        (
+                                                            t171: (
+                                                                s598: (
+                                                                    s599: (
+                                                                        X130: Type,
+                                                                        f130: (
+                                                                            t172: (
+                                                                                s600: (
+                                                                                    s601: X130
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X130
+                                                                    ) -> (
+                                                                        s602: (s603: X130) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            ((
+                                                                t173: (
+                                                                    s604: (
+                                                                        s605: (
+                                                                            X131: Type,
+                                                                            f131: (
+                                                                                t174: (
+                                                                                    s606: (
+                                                                                        s607: X131
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X131
+                                                                        ) -> (
+                                                                            s608: (
+                                                                                s609: X131
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                (
+                                                                    X132: Type,
+                                                                    f132: (
+                                                                        t175: (
+                                                                            s610: (
+                                                                                s611: X132
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X132
+                                                                ) =>
+                                                                    (p33: (s612: X132) -> Type) =>
+                                                                        t173(
+                                                                            (
+                                                                                x30: (
+                                                                                    X133: Type,
+                                                                                    f133: (
+                                                                                        t176: (
+                                                                                            s613: (
+                                                                                                s614: X133
+                                                                                            ) -> Type
+                                                                                        ) -> Type
+                                                                                    ) -> X133
+                                                                                ) -> (
+                                                                                    s615: (
+                                                                                        s616: X133
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) =>
+                                                                                p33(
+                                                                                    f132(
+                                                                                        x30(
+                                                                                            X132,
+                                                                                            f132
+                                                                                        )
+                                                                                    )
+                                                                                )
+                                                                        ))(t171)
+                                                    ))(y5)
+                                            )
+                                        )
+                                )(h42)
+                    )
+    )(
+        (
+            p34: (
+                s617: (X134: Type, f134: (t177: (s618: (s619: X134) -> Type) -> Type) -> X134) -> (
+                    s620: (s621: X134) -> Type
+                ) -> Type
+            ) -> Type
+        ) =>
+            (
+                h10: ((
+                    s622: (
+                        X135: Type,
+                        f135: (t178: (s623: (s624: X135) -> Type) -> Type) -> X135
+                    ) -> (s625: (s626: X135) -> Type) -> Type
+                ) =>
+                    s622(
+                        (
+                            #{universes = {levels = [0, 1, 1, 2]}}
+                            /carrier).1,
+                        (
+                            t179: (
+                                s627: (
+                                    s628: (
+                                        X136: Type,
+                                        f136: (t180: (s629: (s630: X136) -> Type) -> Type) -> X136
+                                    ) -> (s631: (s632: X136) -> Type) -> Type
+                                ) -> Type
+                            ) -> Type
+                        ) =>
+                            ((
+                                t181: (
+                                    s633: (
+                                        s634: (
+                                            X137: Type,
+                                            f137: (
+                                                t182: (s635: (s636: X137) -> Type) -> Type
+                                            ) -> X137
+                                        ) -> (s637: (s638: X137) -> Type) -> Type
+                                    ) -> Type
+                                ) -> Type
+                            ) =>
+                                (
+                                    X138: Type,
+                                    f138: (t183: (s639: (s640: X138) -> Type) -> Type) -> X138
+                                ) =>
+                                    (p35: (s641: X138) -> Type) =>
+                                        t181(
+                                            (
+                                                x31: (
+                                                    X139: Type,
+                                                    f139: (
+                                                        t184: (s642: (s643: X139) -> Type) -> Type
+                                                    ) -> X139
+                                                ) -> (s644: (s645: X139) -> Type) -> Type
+                                            ) =>
+                                                p35(f138(x31(X138, f138)))
+                                        ))(t179)
+                    ))(
+                    ((
+                        t185: (
+                            s646: (
+                                s647: (
+                                    X140: Type,
+                                    f140: (t186: (s648: (s649: X140) -> Type) -> Type) -> X140
+                                ) -> (s650: (s651: X140) -> Type) -> Type
+                            ) -> Type
+                        ) -> Type
+                    ) =>
+                        (X141: Type, f141: (t187: (s652: (s653: X141) -> Type) -> Type) -> X141) =>
+                            (p36: (s654: X141) -> Type) =>
+                                t185(
+                                    (
+                                        x32: (
+                                            X142: Type,
+                                            f142: (
+                                                t188: (s655: (s656: X142) -> Type) -> Type
+                                            ) -> X142
+                                        ) -> (s657: (s658: X142) -> Type) -> Type
+                                    ) =>
+                                        p36(f141(x32(X141, f141)))
+                                ))(
+                        (
+                            p37: (
+                                s659: (
+                                    X143: Type,
+                                    f143: (t189: (s660: (s661: X143) -> Type) -> Type) -> X143
+                                ) -> (s662: (s663: X143) -> Type) -> Type
+                            ) -> Type
+                        ) =>
+                            (
+                                #{universes = {levels = [0, 1, 1, 2]}}
+                                /carrier).3(
+                                (
+                                    X144: Type,
+                                    f144: (t190: (s664: (s665: X144) -> Type) -> Type) -> X144
+                                ) -> (s666: (s667: X144) -> Type) -> Type,
+                                (
+                                    x33: (
+                                        X145: Type,
+                                        f145: (t191: (s668: (s669: X145) -> Type) -> Type) -> X145
+                                    ) -> (s670: (s671: X145) -> Type) -> Type
+                                ) =>
+                                    (
+                                        h11: ((
+                                            s672: (
+                                                X146: Type,
+                                                f146: (
+                                                    t192: (s673: (s674: X146) -> Type) -> Type
+                                                ) -> X146
+                                            ) -> (s675: (s676: X146) -> Type) -> Type
+                                        ) =>
+                                            s672(
+                                                (
+                                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                                    /carrier).1,
+                                                (
+                                                    t193: (
+                                                        s677: (
+                                                            s678: (
+                                                                X147: Type,
+                                                                f147: (
+                                                                    t194: (
+                                                                        s679: (s680: X147) -> Type
+                                                                    ) -> Type
+                                                                ) -> X147
+                                                            ) -> (
+                                                                s681: (s682: X147) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    ((
+                                                        t195: (
+                                                            s683: (
+                                                                s684: (
+                                                                    X148: Type,
+                                                                    f148: (
+                                                                        t196: (
+                                                                            s685: (
+                                                                                s686: X148
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X148
+                                                                ) -> (
+                                                                    s687: (s688: X148) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        (
+                                                            X149: Type,
+                                                            f149: (
+                                                                t197: (
+                                                                    s689: (s690: X149) -> Type
+                                                                ) -> Type
+                                                            ) -> X149
+                                                        ) =>
+                                                            (p38: (s691: X149) -> Type) =>
+                                                                t195(
+                                                                    (
+                                                                        x34: (
+                                                                            X150: Type,
+                                                                            f150: (
+                                                                                t198: (
+                                                                                    s692: (
+                                                                                        s693: X150
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X150
+                                                                        ) -> (
+                                                                            s694: (
+                                                                                s695: X150
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) =>
+                                                                        p38(f149(x34(X149, f149)))
+                                                                ))(t193)
+                                            ))(x33)(p37)
+                                    ) -> p37(x33)
+                            )
+                    )
+                )(p34)
+            ) =>
+                ((
+                    p39: (
+                        s696: (
+                            X151: Type,
+                            f151: (t199: (s697: (s698: X151) -> Type) -> Type) -> X151
+                        ) -> (s699: (s700: X151) -> Type) -> Type
+                    ) -> Type,
+                    h12: (
+                        x35: (
+                            X152: Type,
+                            f152: (t200: (s701: (s702: X152) -> Type) -> Type) -> X152
+                        ) -> (s703: (s704: X152) -> Type) -> Type
+                    ) -> (
+                        h13: ((
+                            s705: (
+                                X153: Type,
+                                f153: (t201: (s706: (s707: X153) -> Type) -> Type) -> X153
+                            ) -> (s708: (s709: X153) -> Type) -> Type
+                        ) =>
+                            s705(
+                                (
+                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                    /carrier).1,
+                                (
+                                    t202: (
+                                        s710: (
+                                            s711: (
+                                                X154: Type,
+                                                f154: (
+                                                    t203: (s712: (s713: X154) -> Type) -> Type
+                                                ) -> X154
+                                            ) -> (s714: (s715: X154) -> Type) -> Type
+                                        ) -> Type
+                                    ) -> Type
+                                ) =>
+                                    ((
+                                        t204: (
+                                            s716: (
+                                                s717: (
+                                                    X155: Type,
+                                                    f155: (
+                                                        t205: (s718: (s719: X155) -> Type) -> Type
+                                                    ) -> X155
+                                                ) -> (s720: (s721: X155) -> Type) -> Type
+                                            ) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        (
+                                            X156: Type,
+                                            f156: (
+                                                t206: (s722: (s723: X156) -> Type) -> Type
+                                            ) -> X156
+                                        ) =>
+                                            (p40: (s724: X156) -> Type) =>
+                                                t204(
+                                                    (
+                                                        x36: (
+                                                            X157: Type,
+                                                            f157: (
+                                                                t207: (
+                                                                    s725: (s726: X157) -> Type
+                                                                ) -> Type
+                                                            ) -> X157
+                                                        ) -> (s727: (s728: X157) -> Type) -> Type
+                                                    ) =>
+                                                        p40(f156(x36(X156, f156)))
+                                                ))(t202)
+                            ))(x35)(p39)
+                    ) -> p39(x35)
+                ) =>
+                    h12(
+                        ((
+                            t208: (
+                                s729: (
+                                    s730: (
+                                        X158: Type,
+                                        f158: (t209: (s731: (s732: X158) -> Type) -> Type) -> X158
+                                    ) -> (s733: (s734: X158) -> Type) -> Type
+                                ) -> Type
+                            ) -> Type
+                        ) =>
+                            (
+                                X159: Type,
+                                f159: (t210: (s735: (s736: X159) -> Type) -> Type) -> X159
+                            ) =>
+                                (p41: (s737: X159) -> Type) =>
+                                    t208(
+                                        (
+                                            x37: (
+                                                X160: Type,
+                                                f160: (
+                                                    t211: (s738: (s739: X160) -> Type) -> Type
+                                                ) -> X160
+                                            ) -> (s740: (s741: X160) -> Type) -> Type
+                                        ) =>
+                                            p41(f159(x37(X159, f159)))
+                                    ))(
+                            (
+                                p42: (
+                                    s742: (
+                                        X161: Type,
+                                        f161: (t212: (s743: (s744: X161) -> Type) -> Type) -> X161
+                                    ) -> (s745: (s746: X161) -> Type) -> Type
+                                ) -> Type
+                            ) =>
+                                (
+                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                    /carrier).3(
+                                    (
+                                        X162: Type,
+                                        f162: (t213: (s747: (s748: X162) -> Type) -> Type) -> X162
+                                    ) -> (s749: (s750: X162) -> Type) -> Type,
+                                    (
+                                        x38: (
+                                            X163: Type,
+                                            f163: (
+                                                t214: (s751: (s752: X163) -> Type) -> Type
+                                            ) -> X163
+                                        ) -> (s753: (s754: X163) -> Type) -> Type
+                                    ) =>
+                                        (
+                                            h14: ((
+                                                s755: (
+                                                    X164: Type,
+                                                    f164: (
+                                                        t215: (s756: (s757: X164) -> Type) -> Type
+                                                    ) -> X164
+                                                ) -> (s758: (s759: X164) -> Type) -> Type
+                                            ) =>
+                                                s755(
+                                                    (
+                                                        #{universes = {levels = [0, 1, 1, 2]}}
+                                                        /carrier).1,
+                                                    (
+                                                        t216: (
+                                                            s760: (
+                                                                s761: (
+                                                                    X165: Type,
+                                                                    f165: (
+                                                                        t217: (
+                                                                            s762: (
+                                                                                s763: X165
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X165
+                                                                ) -> (
+                                                                    s764: (s765: X165) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        ((
+                                                            t218: (
+                                                                s766: (
+                                                                    s767: (
+                                                                        X166: Type,
+                                                                        f166: (
+                                                                            t219: (
+                                                                                s768: (
+                                                                                    s769: X166
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X166
+                                                                    ) -> (
+                                                                        s770: (s771: X166) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            (
+                                                                X167: Type,
+                                                                f167: (
+                                                                    t220: (
+                                                                        s772: (s773: X167) -> Type
+                                                                    ) -> Type
+                                                                ) -> X167
+                                                            ) =>
+                                                                (p43: (s774: X167) -> Type) =>
+                                                                    t218(
+                                                                        (
+                                                                            x39: (
+                                                                                X168: Type,
+                                                                                f168: (
+                                                                                    t221: (
+                                                                                        s775: (
+                                                                                            s776: X168
+                                                                                        ) -> Type
+                                                                                    ) -> Type
+                                                                                ) -> X168
+                                                                            ) -> (
+                                                                                s777: (
+                                                                                    s778: X168
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) =>
+                                                                            p43(
+                                                                                f167(
+                                                                                    x39(X167, f167)
+                                                                                )
+                                                                            )
+                                                                    ))(t216)
+                                                ))(x38)(p42)
+                                        ) -> p42(x38)
+                                )
+                        )
+                    )(
+                        (
+                            x40: (
+                                X169: Type,
+                                f169: (t222: (s779: (s780: X169) -> Type) -> Type) -> X169
+                            ) -> (s781: (s782: X169) -> Type) -> Type
+                        ) =>
+                            (
+                                h24: ((
+                                    s783: (
+                                        X170: Type,
+                                        f170: (t223: (s784: (s785: X170) -> Type) -> Type) -> X170
+                                    ) -> (s786: (s787: X170) -> Type) -> Type
+                                ) =>
+                                    s783(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t224: (
+                                                s788: (
+                                                    s789: (
+                                                        X171: Type,
+                                                        f171: (
+                                                            t225: (
+                                                                s790: (s791: X171) -> Type
+                                                            ) -> Type
+                                                        ) -> X171
+                                                    ) -> (s792: (s793: X171) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t226: (
+                                                    s794: (
+                                                        s795: (
+                                                            X172: Type,
+                                                            f172: (
+                                                                t227: (
+                                                                    s796: (s797: X172) -> Type
+                                                                ) -> Type
+                                                            ) -> X172
+                                                        ) -> (s798: (s799: X172) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X173: Type,
+                                                    f173: (
+                                                        t228: (s800: (s801: X173) -> Type) -> Type
+                                                    ) -> X173
+                                                ) =>
+                                                    (p44: (s802: X173) -> Type) =>
+                                                        t226(
+                                                            (
+                                                                x41: (
+                                                                    X174: Type,
+                                                                    f174: (
+                                                                        t229: (
+                                                                            s803: (
+                                                                                s804: X174
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X174
+                                                                ) -> (
+                                                                    s805: (s806: X174) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p44(f173(x41(X173, f173)))
+                                                        ))(t224)
+                                    ))(x40)(
+                                    (
+                                        y6: (
+                                            X175: Type,
+                                            f175: (
+                                                t230: (s807: (s808: X175) -> Type) -> Type
+                                            ) -> X175
+                                        ) -> (s809: (s810: X175) -> Type) -> Type
+                                    ) =>
+                                        p39(
+                                            ((
+                                                t231: (
+                                                    s811: (
+                                                        s812: (
+                                                            X176: Type,
+                                                            f176: (
+                                                                t232: (
+                                                                    s813: (s814: X176) -> Type
+                                                                ) -> Type
+                                                            ) -> X176
+                                                        ) -> (s815: (s816: X176) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X177: Type,
+                                                    f177: (
+                                                        t233: (s817: (s818: X177) -> Type) -> Type
+                                                    ) -> X177
+                                                ) =>
+                                                    (p45: (s819: X177) -> Type) =>
+                                                        t231(
+                                                            (
+                                                                x42: (
+                                                                    X178: Type,
+                                                                    f178: (
+                                                                        t234: (
+                                                                            s820: (
+                                                                                s821: X178
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X178
+                                                                ) -> (
+                                                                    s822: (s823: X178) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p45(f177(x42(X177, f177)))
+                                                        ))(
+                                                ((
+                                                    s824: (
+                                                        X179: Type,
+                                                        f179: (
+                                                            t235: (
+                                                                s825: (s826: X179) -> Type
+                                                            ) -> Type
+                                                        ) -> X179
+                                                    ) -> (s827: (s828: X179) -> Type) -> Type
+                                                ) =>
+                                                    s824(
+                                                        (
+                                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                                            /carrier).1,
+                                                        (
+                                                            t236: (
+                                                                s829: (
+                                                                    s830: (
+                                                                        X180: Type,
+                                                                        f180: (
+                                                                            t237: (
+                                                                                s831: (
+                                                                                    s832: X180
+                                                                                ) -> Type
+                                                                            ) -> Type
+                                                                        ) -> X180
+                                                                    ) -> (
+                                                                        s833: (s834: X180) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) =>
+                                                            ((
+                                                                t238: (
+                                                                    s835: (
+                                                                        s836: (
+                                                                            X181: Type,
+                                                                            f181: (
+                                                                                t239: (
+                                                                                    s837: (
+                                                                                        s838: X181
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X181
+                                                                        ) -> (
+                                                                            s839: (
+                                                                                s840: X181
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                (
+                                                                    X182: Type,
+                                                                    f182: (
+                                                                        t240: (
+                                                                            s841: (
+                                                                                s842: X182
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X182
+                                                                ) =>
+                                                                    (p46: (s843: X182) -> Type) =>
+                                                                        t238(
+                                                                            (
+                                                                                x43: (
+                                                                                    X183: Type,
+                                                                                    f183: (
+                                                                                        t241: (
+                                                                                            s844: (
+                                                                                                s845: X183
+                                                                                            ) -> Type
+                                                                                        ) -> Type
+                                                                                    ) -> X183
+                                                                                ) -> (
+                                                                                    s846: (
+                                                                                        s847: X183
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) =>
+                                                                                p46(
+                                                                                    f182(
+                                                                                        x43(
+                                                                                            X182,
+                                                                                            f182
+                                                                                        )
+                                                                                    )
+                                                                                )
+                                                                        ))(t236)
+                                                    ))(y6)
+                                            )
+                                        )
+                                )
+                            ) =>
+                                h12(
+                                    ((
+                                        t242: (
+                                            s848: (
+                                                s849: (
+                                                    X184: Type,
+                                                    f184: (
+                                                        t243: (s850: (s851: X184) -> Type) -> Type
+                                                    ) -> X184
+                                                ) -> (s852: (s853: X184) -> Type) -> Type
+                                            ) -> Type
+                                        ) -> Type
+                                    ) =>
+                                        (
+                                            X185: Type,
+                                            f185: (
+                                                t244: (s854: (s855: X185) -> Type) -> Type
+                                            ) -> X185
+                                        ) =>
+                                            (p47: (s856: X185) -> Type) =>
+                                                t242(
+                                                    (
+                                                        x44: (
+                                                            X186: Type,
+                                                            f186: (
+                                                                t245: (
+                                                                    s857: (s858: X186) -> Type
+                                                                ) -> Type
+                                                            ) -> X186
+                                                        ) -> (s859: (s860: X186) -> Type) -> Type
+                                                    ) =>
+                                                        p47(f185(x44(X185, f185)))
+                                                ))(
+                                        ((
+                                            s861: (
+                                                X187: Type,
+                                                f187: (
+                                                    t246: (s862: (s863: X187) -> Type) -> Type
+                                                ) -> X187
+                                            ) -> (s864: (s865: X187) -> Type) -> Type
+                                        ) =>
+                                            s861(
+                                                (
+                                                    #{universes = {levels = [0, 1, 1, 2]}}
+                                                    /carrier).1,
+                                                (
+                                                    t247: (
+                                                        s866: (
+                                                            s867: (
+                                                                X188: Type,
+                                                                f188: (
+                                                                    t248: (
+                                                                        s868: (s869: X188) -> Type
+                                                                    ) -> Type
+                                                                ) -> X188
+                                                            ) -> (
+                                                                s870: (s871: X188) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) -> Type
+                                                ) =>
+                                                    ((
+                                                        t249: (
+                                                            s872: (
+                                                                s873: (
+                                                                    X189: Type,
+                                                                    f189: (
+                                                                        t250: (
+                                                                            s874: (
+                                                                                s875: X189
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X189
+                                                                ) -> (
+                                                                    s876: (s877: X189) -> Type
+                                                                ) -> Type
+                                                            ) -> Type
+                                                        ) -> Type
+                                                    ) =>
+                                                        (
+                                                            X190: Type,
+                                                            f190: (
+                                                                t251: (
+                                                                    s878: (s879: X190) -> Type
+                                                                ) -> Type
+                                                            ) -> X190
+                                                        ) =>
+                                                            (p48: (s880: X190) -> Type) =>
+                                                                t249(
+                                                                    (
+                                                                        x45: (
+                                                                            X191: Type,
+                                                                            f191: (
+                                                                                t252: (
+                                                                                    s881: (
+                                                                                        s882: X191
+                                                                                    ) -> Type
+                                                                                ) -> Type
+                                                                            ) -> X191
+                                                                        ) -> (
+                                                                            s883: (
+                                                                                s884: X191
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) =>
+                                                                        p48(f190(x45(X190, f190)))
+                                                                ))(t247)
+                                            ))(x40)
+                                    )
+                                )(h24)
+                    ))(
+                    (
+                        y7: (
+                            X192: Type,
+                            f192: (t253: (s885: (s886: X192) -> Type) -> Type) -> X192
+                        ) -> (s887: (s888: X192) -> Type) -> Type
+                    ) =>
+                        p34(
+                            ((
+                                t254: (
+                                    s889: (
+                                        s890: (
+                                            X193: Type,
+                                            f193: (
+                                                t255: (s891: (s892: X193) -> Type) -> Type
+                                            ) -> X193
+                                        ) -> (s893: (s894: X193) -> Type) -> Type
+                                    ) -> Type
+                                ) -> Type
+                            ) =>
+                                (
+                                    X194: Type,
+                                    f194: (t256: (s895: (s896: X194) -> Type) -> Type) -> X194
+                                ) =>
+                                    (p49: (s897: X194) -> Type) =>
+                                        t254(
+                                            (
+                                                x46: (
+                                                    X195: Type,
+                                                    f195: (
+                                                        t257: (s898: (s899: X195) -> Type) -> Type
+                                                    ) -> X195
+                                                ) -> (s900: (s901: X195) -> Type) -> Type
+                                            ) =>
+                                                p49(f194(x46(X194, f194)))
+                                        ))(
+                                ((
+                                    s902: (
+                                        X196: Type,
+                                        f196: (t258: (s903: (s904: X196) -> Type) -> Type) -> X196
+                                    ) -> (s905: (s906: X196) -> Type) -> Type
+                                ) =>
+                                    s902(
+                                        (
+                                            #{universes = {levels = [0, 1, 1, 2]}}
+                                            /carrier).1,
+                                        (
+                                            t259: (
+                                                s907: (
+                                                    s908: (
+                                                        X197: Type,
+                                                        f197: (
+                                                            t260: (
+                                                                s909: (s910: X197) -> Type
+                                                            ) -> Type
+                                                        ) -> X197
+                                                    ) -> (s911: (s912: X197) -> Type) -> Type
+                                                ) -> Type
+                                            ) -> Type
+                                        ) =>
+                                            ((
+                                                t261: (
+                                                    s913: (
+                                                        s914: (
+                                                            X198: Type,
+                                                            f198: (
+                                                                t262: (
+                                                                    s915: (s916: X198) -> Type
+                                                                ) -> Type
+                                                            ) -> X198
+                                                        ) -> (s917: (s918: X198) -> Type) -> Type
+                                                    ) -> Type
+                                                ) -> Type
+                                            ) =>
+                                                (
+                                                    X199: Type,
+                                                    f199: (
+                                                        t263: (s919: (s920: X199) -> Type) -> Type
+                                                    ) -> X199
+                                                ) =>
+                                                    (p50: (s921: X199) -> Type) =>
+                                                        t261(
+                                                            (
+                                                                x47: (
+                                                                    X200: Type,
+                                                                    f200: (
+                                                                        t264: (
+                                                                            s922: (
+                                                                                s923: X200
+                                                                            ) -> Type
+                                                                        ) -> Type
+                                                                    ) -> X200
+                                                                ) -> (
+                                                                    s924: (s925: X200) -> Type
+                                                                ) -> Type
+                                                            ) =>
+                                                                p50(f199(x47(X199, f199)))
+                                                        ))(t259)
+                                    ))(y7)
+                            )
+                        ),
+                    h10
+                )
+    )(
+        #{node = StructType}
+        /Boxed()
+    )).0;
+#{universes = {levels = [0, 1, 0, 0]}}
+/paradox

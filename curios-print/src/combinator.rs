@@ -59,6 +59,11 @@ pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
 }
 
+/// `printer` on a line of its own: where something is already written on the current line, a newline and `printer` one indentation level deeper; at the start of a line, `printer` as it stands, so a block placed where a line begins anyway costs no blank line and no extra level. No [`group`] containing one renders flat.
+pub fn own_line(printer: Printer) -> Printer {
+    Printer::OwnLine(Box::new(printer))
+}
+
 /// A soft separator: a single space when the enclosing [`group`] renders flat, a newline (plus indentation) when it breaks — or unconditionally, when no group encloses it.
 pub fn line() -> Printer {
     Printer::Line {

@@ -1,6 +1,6 @@
 //! What an arm learns from a guard: the dual its false arm proves, a bound across the successor seam, and the definition the guard answers.
 
-use crate::tests::{core_elab, error, run};
+use crate::tests::{core_elab, error, run, unlaid};
 
 // A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the two have to meet through their canonical forms — every operand reduced, on both sides. That is the form each checker's `refined_reduct` brings a probed value and an entry's key to, which is what keeps them reaching the same occurrences when `&&` leaves its right operand as written behind a stuck left. The connectives are tagged in `Term::head_key`: untagged, an operator-spelled scrutinee would register a key nothing looks up, and not even `x && g(7)` itself would refine.
 //
@@ -354,8 +354,8 @@ fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
     );
 
     assert!(
-        elaborated.contains("#{result = Ambient(%NatType)} match false")
-            && elaborated.contains("#{result = Ambient(%NatType)} match true"),
+        unlaid(&elaborated).contains(&unlaid("#{result = Ambient(%NatType)} match false"))
+            && unlaid(&elaborated).contains(&unlaid("#{result = Ambient(%NatType)} match true")),
         "{elaborated}"
     );
 }
