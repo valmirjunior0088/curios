@@ -251,6 +251,13 @@ impl InductDecl {
         self.constructors.signatures_mut()
     }
 
+    /// Which of `tag`'s *payload* binders bind a proof, as the declaration states it ([`Scope::binds_proof`](crate::Scope::binds_proof)): the constructor signature's marks past the leading `params.len()` declaration parameters, in payload order. `None` if `tag` is not a constructor of this inductive.
+    pub fn payload_proofs(&self, tag: &Atom) -> Option<Vec<bool>> {
+        let param_count = self.param_count();
+        self.constructor(tag)
+            .map(|param| param.telescope.proofs().split_off(param_count))
+    }
+
     /// The canonical plicities of `tag`'s *payload* binders — the constructor signature plicities past the leading `params.len()` declaration parameters, paralleling the telescope [`Self::instantiate`] peels. `None` if `tag` is not a constructor of this inductive.
     pub fn payload_plicities(&self, tag: &Atom) -> Option<Vec<Plicity>> {
         let param_count = self.param_count();

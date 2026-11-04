@@ -64,6 +64,9 @@ pub trait ClosedHost: Reducer {
         tag: &Atom,
     ) -> Result<Option<Vec<Term>>, ReduceError>;
 
+    /// Which payloads of the constructor `tag` of the family `family` its declaration states are proofs ([`InductDecl::payload_proofs`](crate::InductDecl::payload_proofs)), in payload order: what an arm firing on one of its values binds unreduced. Empty where the host holds no such entry, which binds every payload reduced and costs what a proof left unmarked does. A mark decides no reduct, so asking it is no read of the family.
+    fn payload_proofs(&self, family: &Global, tag: &Atom) -> Vec<bool>;
+
     /// What this host's closed runs have answered, for as long as a closed term's value stands with it: the machine reads and writes it at every run, and the host discards it where what a name unfolds to may have changed.
     fn closed_memo(&mut self) -> &mut ClosedMemo;
 }
@@ -1050,13 +1053,12 @@ impl Machine {
                         .find(|(candidate, _)| candidate == &ctor.tag)
                         .filter(|(_, arm)| arm.arity() == ctor.payload.len())
                     {
+                        let written = host.payload_proofs(&ctor.name, &ctor.tag);
                         return self.args(
                             host,
                             Args {
                                 originals: ctor.payload.clone(),
-                                written: (0..arm.arity())
-                                    .map(|position| arm.body.binds_proof(position))
-                                    .collect(),
+                                written,
                                 done: Vec::with_capacity(ctor.payload.len()),
                                 next: 0,
                                 item_demand: Demand::Whnf,

@@ -8,6 +8,8 @@ struct Host {
     minted: u64,
     /// What this host reads for a payload off a scrutinee's type: nothing, unless a test states one.
     stated: Option<Vec<Term>>,
+    /// Which payloads of any constructor this host's entries state are proofs: none, unless a test states some.
+    proofs: Vec<bool>,
     memo: ClosedMemo,
 }
 
@@ -19,6 +21,7 @@ impl Host {
             by_category: BTreeMap::new(),
             minted: 0,
             stated: None,
+            proofs: Vec::new(),
             memo: ClosedMemo::default(),
         }
     }
@@ -64,6 +67,10 @@ impl ClosedHost for Host {
         _tag: &crate::Atom,
     ) -> Result<Option<Vec<Term>>, ReduceError> {
         Ok(self.stated.clone())
+    }
+
+    fn payload_proofs(&self, _family: &Global, _tag: &crate::Atom) -> Vec<bool> {
+        self.proofs.clone()
     }
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
@@ -546,7 +553,7 @@ fn a_body_that_reads_a_proof_binder_demands_it() {
     );
 }
 
-/// A `let` binds a value at a proof binder as written, and an arm a payload at one: neither tail below reads what it binds, and each answers over a term no budget reduces. Unmarked, each evaluates it first and is refused.
+/// A `let` binds a value at a proof binder as written, and an arm a payload its constructor's declaration states is a proof, which the machine asks its host: neither tail below reads what it binds, and each answers over a term no budget reduces. Unmarked, each evaluates it first and is refused.
 #[test]
 fn a_let_and_an_arm_bind_a_proof_as_written() {
     let x = binder(0, "x");
@@ -559,50 +566,25 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
         // A second arm, so this is a match that reads its scrutinee: with one arm naming no payload it is that arm's body, and nothing is bound.
         [("box", vec![x], nat(5)), ("empty", Vec::new(), nat(6))],
     );
-
-    let marked = |term: &Term| match Term::unwrap_or_clone(term.clone()) {
-        Subterm::Let(Let { bindings, tail }) => Term::from(Subterm::Let(Let {
-            bindings,
-            tail: tail.with_proofs(&[true]),
-        })),
-        Subterm::Match(Match {
-            head,
-            result,
-            cases:
-                Cases::Induct {
-                    cases,
-                    default,
-                    stated,
-                },
-        }) => Term::from(Subterm::Match(Match {
-            head,
-            result,
-            cases: Cases::Induct {
-                stated,
-                cases: cases
-                    .into_iter()
-                    .map(|(tag, arm)| {
-                        let plicities = arm.plicities().to_vec();
-                        let proofs = vec![true; arm.arity()];
-                        (
-                            tag,
-                            InductArm::new(arm.body.with_proofs(&proofs), plicities),
-                        )
-                    })
-                    .collect(),
-                default,
-            },
-        })),
-        other => panic!("neither a `let` nor a match: {other:?}"),
+    let Subterm::Let(Let { bindings, tail }) = Term::unwrap_or_clone(block.clone()) else {
+        panic!("a `let`");
+    };
+    let marked = Term::from(Subterm::Let(Let {
+        bindings,
+        tail: tail.with_proofs(&[true]),
+    }));
+    let proving = || Host {
+        proofs: vec![true],
+        ..Host::new(100_000)
     };
 
-    for term in [block, matched] {
-        assert_eq!(
-            reduce_closed(&mut Host::new(100_000), marked(&term), Demand::Forced),
-            Ok(nat(5))
-        );
+    for (marked, unmarked, mut host) in [
+        (marked, block, Host::new(100_000)),
+        (matched.clone(), matched, proving()),
+    ] {
+        assert_eq!(reduce_closed(&mut host, marked, Demand::Forced), Ok(nat(5)));
         assert!(
-            reduce_closed(&mut Host::new(100_000), term, Demand::Forced)
+            reduce_closed(&mut Host::new(100_000), unmarked, Demand::Forced)
                 .is_err_and(|refusal| refusal.is_exhausted())
         );
     }

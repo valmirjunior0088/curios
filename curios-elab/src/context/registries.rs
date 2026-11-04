@@ -4,7 +4,7 @@ use {
     crate::{Answered, Classified, Context, Declared, Error, Question, Vectors, Witness},
     curios_common::{Mount, Qualifier},
     curios_core::{
-        ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
+        Atom, ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
         UniverseContext, Variance, WitnessKey,
     },
     std::{
@@ -162,6 +162,15 @@ impl<'s> Context<'s> {
     pub(crate) fn remove_concept(&mut self, name: &Global) {
         self.typing.program.remove_concept(name);
         self.typing.caches.note_write();
+    }
+
+    /// Which payloads of the constructor `tag` of `family` its entry states are proofs, empty where no entry is held: what the closed machine binds an arm's payloads by. No question is asked, since a mark decides no judgment.
+    pub(crate) fn payload_proofs(&self, family: &Global, tag: &Atom) -> Vec<bool> {
+        self.typing
+            .program
+            .induct_decl(family)
+            .and_then(|declaration| declaration.payload_proofs(tag))
+            .unwrap_or_default()
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {

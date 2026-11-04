@@ -1269,7 +1269,6 @@ impl NominalSplit {
     ) -> Result<(Atom, InductArm), Error> {
         let arity = payload.len();
         let payload_plicities = payload.marks();
-        let payload_proofs = payload.proofs();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
         // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
@@ -1339,11 +1338,11 @@ impl NominalSplit {
         };
 
         let label_refs = labels.iter().collect::<Vec<_>>();
-        // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence). Each binder states what its payload's does of whether it binds a proof, which the constructor's declaration said when it was published.
+        // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence). Whether a payload is a proof is its constructor's to say, which the closed machine asks of its host where the arm fires.
         Ok((
             tag.clone(),
             InductArm::new(
-                Scope::close(Many(arity), &label_refs, body).with_proofs(&payload_proofs),
+                Scope::close(Many(arity), &label_refs, body),
                 payload_plicities,
             ),
         ))

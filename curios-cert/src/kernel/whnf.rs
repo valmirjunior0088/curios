@@ -59,6 +59,10 @@ impl ClosedHost for Kernel<'_> {
         self.value_at(name, universes)
     }
 
+    fn payload_proofs(&self, family: &Global, tag: &Atom) -> Vec<bool> {
+        self.payload_proofs(family, tag)
+    }
+
     fn closed_memo(&mut self) -> &mut ClosedMemo {
         self.closed_memo_mut()
     }

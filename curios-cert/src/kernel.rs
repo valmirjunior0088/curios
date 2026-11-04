@@ -1038,6 +1038,14 @@ impl<'s> Kernel<'s> {
         self.globals.induct_decl(name)
     }
 
+    /// Which payloads of the constructor `tag` of `family` its entry states are proofs, empty where no entry is held: what the closed machine binds an arm's payloads by. Noted as no read, since a mark decides no judgment.
+    pub(crate) fn payload_proofs(&self, family: &Global, tag: &Atom) -> Vec<bool> {
+        self.globals
+            .induct_decl(family)
+            .and_then(|declaration| declaration.payload_proofs(tag))
+            .unwrap_or_default()
+    }
+
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.reads.signature(name);
         self.globals.struct_decl(name)
