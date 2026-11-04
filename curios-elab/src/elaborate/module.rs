@@ -109,6 +109,42 @@ fn check_telescope_entries<B: Bound>(
     ))
 }
 
+/// A case's signature as [`check_telescope_entries`] walks a telescope, but for its leading entries, which are its family's parameters: each is the family's own, as its `arity` was elaborated and at the level `param_levels` read it at, entered under the mark the case binds it at, so only the payload and the targets are checked. Checking the case's copy of a parameter again would read it at levels of its own, which the family would then be generalized over.
+fn case_telescope_entries(
+    context: &mut Context,
+    arity: &Telescope<Telescope<()>>,
+    param_levels: &[Level],
+    signature: &Telescope<Vec<Term>>,
+) -> Result<(Members, Vec<Level>, Vec<Term>), Error> {
+    let mut entries = Vec::new();
+    let mut levels = Vec::new();
+    let mut family = arity.cursor();
+    let mut cursor = signature.cursor();
+    while let Some((_, written)) = cursor.entry() {
+        let mark = cursor.mark().expect("a mark stands at an entry");
+        let (type_, level) = match (family.entry(), param_levels.get(entries.len())) {
+            (Some((_, parameter)), Some(level)) => (parameter, level.clone()),
+            _ => {
+                let (rebuilt, sort) = check_is_sort(context, &written)?;
+                (rebuilt, sort.level)
+            }
+        };
+        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        if family.entry().is_some() {
+            family.advance(Term::free_var(&label));
+        }
+        context.enter(&label, &type_, mark);
+        entries.push((mark, label, type_));
+        levels.push(level);
+    }
+
+    Ok((
+        entries,
+        levels,
+        cursor.body().expect("a cursor past every entry"),
+    ))
+}
+
 /// A struct former's written type, elaborated as [`check_is_sort`] elaborates a type, with the level typing read each of its parameters at handed back beside it, in order: what the struct's parameters are sized by ([`elaborate_struct`]). A former with no parameter is declared at its result sort and hands back none.
 ///
 /// Its function type is walked by the walk every function type is, which reads each domain's sort, and around it this does what [`elaborate`] does around a term, as `elaborate_func_settle` does: the refusal placed at the term, the extent restamped, the settled node recorded. The elaboration cache is not consulted, a former's type being elaborated once.
@@ -151,9 +187,9 @@ fn assume_telescope_entries<B: Bound>(
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an index type lowered without the hidden arguments elaboration inserts (e.g. `Eq`'s `@A`, which its written application never states) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
 ///
 /// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked — index types may mention the group's own members (resolved through the assumed signatures), and the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. A name with no registry entry is an ordinary binding; no-op.
-fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), Error> {
+fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<Level>, Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Ok(());
+        return Ok(Vec::new());
     };
 
     let owned = |labels: Vec<&str>| {
@@ -174,13 +210,13 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
     };
 
     // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
-    let (param_entries, index_entries) = context.with_frame(|context| {
+    let (param_entries, param_levels, index_entries) = context.with_frame(|context| {
         // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
-        // A family's arity is typed and not sized, by either checker: its constructors' telescopes, which hold its parameters again, are.
-        let (params, _, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
+        // A family's arity is typed and not sized, by either checker: its constructors' telescopes, which hold its parameters again, are, at the levels read here.
+        let (params, levels, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
         let (indices, _, ()) = check_telescope_entries(context, inner)?;
 
-        Ok::<_, Error>((params, indices))
+        Ok::<_, Error>((params, levels, indices))
     })?;
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
@@ -205,11 +241,15 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
         },
     );
 
-    Ok(())
+    Ok(param_levels)
 }
 
-/// Rebuild a registry entry's constructor signatures with *elaborated* types — the second phase of the registry rebuild (see [`elaborate_induct_indices`]). Payload types may apply the inductive group's type constructors, so this runs from `elaborate_module_rec` only after the group's rebuilt bodies are defined; each terminal — the constructed `InductType` normal form — routes through `elaborate_induct_type`, which checks the parameters and the case's target indices against the already-rebuilt index telescope and returns another `InductType` node, the shape `case_target_indices` and the match elaborators rely on.
-fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result<(), Error> {
+/// Rebuild a registry entry's constructor signatures with *elaborated* types — the second phase of the registry rebuild (see [`elaborate_induct_indices`]), each opening with the family's parameters as that phase elaborated them, at the levels it read them at ([`case_telescope_entries`]). Payload types may apply the inductive group's type constructors, so this runs from `elaborate_module_rec` only after the group's rebuilt bodies are defined; each terminal — the constructed `InductType` normal form — routes through `elaborate_induct_type`, which checks the parameters and the case's target indices against the already-rebuilt index telescope and returns another `InductType` node, the shape `case_target_indices` and the match elaborators rely on.
+fn elaborate_induct_constructors(
+    context: &mut Context,
+    name: &Global,
+    param_levels: &[Level],
+) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
     };
@@ -225,7 +265,8 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
 
         let (entries, levels, targets) = context.with_frame(|context| {
             // Under the signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
-            let (entries, levels, targets) = check_telescope_entries(context, signature.clone())?;
+            let (entries, levels, targets) =
+                case_telescope_entries(context, &induct_decl.arity, param_levels, signature)?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -257,7 +298,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.push((
             tag.clone(),
-            // Each entry is rebuilt under the mark it had: elaboration re-checks the types and never changes the calling convention.
+            // Each entry is rebuilt under the mark it had: elaboration never changes the calling convention.
             InductParam {
                 telescope: Telescope::build_marked(entries, targets).relabel(&label_refs),
             },
@@ -487,6 +528,8 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item, Vectors), Error> {
+    let made = generated_constructor(context, def);
+    let def = made.as_ref().unwrap_or(def);
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
@@ -628,6 +671,18 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
     // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
     record_definition_totality(context, &definition, Totality::Total)?;
     Ok((Item::Let(Box::new(definition)), vectors))
+}
+
+/// A value constructor as its family's entry spells it, elaboration having left the entry as it is stored: the one spelling of a constructor from its declaration ([`Definition::constructors`]), which a reader of Core text makes it by too. Elaborating the lowering's own copy instead would read the family's parameters at levels of their own, apart from the ones the entry's case reads them at. `None` for any other definition.
+fn generated_constructor(context: &Context, def: &Definition) -> Option<Definition> {
+    let DefinitionKind::InductiveConstructor { owner, .. } = &def.kind else {
+        return None;
+    };
+    let declaration = context.induct_decl(&Global::Authored(*owner))?;
+
+    Definition::constructors(*owner, def.island, declaration)
+        .into_iter()
+        .find(|constructor| constructor.name == def.name)
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
@@ -1023,8 +1078,9 @@ fn elaborate_members(
     }
 
     // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
+    let mut param_levels = Vec::with_capacity(defs.len());
     for def in defs {
-        elaborate_induct_indices(context, &def.name)?;
+        param_levels.push(elaborate_induct_indices(context, &def.name)?);
     }
 
     // A body reads a member by its local alone and a signature through the member's slot, as `elaborate_rec` states.
@@ -1057,8 +1113,8 @@ fn elaborate_members(
     context.retry_parked()?;
 
     // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the bodies are defined.
-    for def in defs {
-        elaborate_induct_constructors(context, &def.name)?;
+    for (def, levels) in defs.iter().zip(&param_levels) {
+        elaborate_induct_constructors(context, &def.name, levels)?;
     }
     // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
     for (def, levels) in defs.iter().zip(&parameters) {

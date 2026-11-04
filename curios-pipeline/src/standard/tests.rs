@@ -1097,6 +1097,44 @@ fn std_former_derivation() {
     });
 }
 
+/// A case's signature opens with its family's parameters, each as the family declares it and hidden as a value constructor takes it: a plain or `@` one implicit, a `use` one a witness slot. A case that elaborated its own copy of a parameter would read it at levels of its own, which the family would then be generalized over.
+#[test]
+fn every_case_of_the_prelude_opens_with_its_familys_parameters() {
+    with_prelude(|prelude| {
+        let mut apart = Vec::new();
+        for root in prelude {
+            for (name, declaration) in root.core().induct_decls() {
+                for (tag, signature) in &declaration.constructors {
+                    let mut family = declaration.arity.cursor();
+                    let mut case = signature.telescope.cursor();
+                    for index in 0..declaration.param_count() {
+                        let (Some((_, expected)), Some(mark)) = (family.entry(), family.mark())
+                        else {
+                            break;
+                        };
+                        let hidden = match mark {
+                            curios_common::Plicity::Witness => curios_common::Plicity::Witness,
+                            _ => curios_common::Plicity::Implicit,
+                        };
+                        if case.entry().map(|(_, domain)| domain) != Some(expected)
+                            || case.mark() != Some(hidden)
+                        {
+                            apart.push(format!("{}/{tag}", name.faithful()));
+                            break;
+                        }
+                        let variable =
+                            Term::free_var(&curios_core::Free::local(index as u64, None));
+                        family.advance(variable.clone());
+                        case.advance(variable);
+                    }
+                }
+            }
+        }
+
+        assert_eq!(apart, Vec::<String>::new());
+    });
+}
+
 /// A unit supplied whole under `prefix`, holding one declaration.
 fn supplied(prefix: &str) -> RootSource {
     let mut modules = RootSource::supplied();

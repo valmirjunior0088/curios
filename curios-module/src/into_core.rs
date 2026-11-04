@@ -1873,109 +1873,23 @@ fn process_items(
                 // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that — a folded spelling reduces correctly, `curios-elab`'s `unfold_rec_apply` applying a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
                 lowered.items.push(FlatItem::Rec(type_flat_items));
 
-                // Step 2: constructor bindings. Each is a function whose body injects the variant, an intrinsic `Variant` normal form.
+                // Step 2: constructor bindings, each its family's case as the entry just lowered spells it ([`curios_core::Definition::constructors`]), which elaboration makes again from the entry it elaborates.
                 for u in group {
-                    for c in &u.cases {
-                        let name = curios_core::Global::Authored(
-                            context.prefixed(&u.label).with(&c.label),
-                        );
-                        context.record_import_scope(Some(&name));
-                        let lower = Lowerer::new(context, Some(name));
-
-                        // Output type term `T`, `T(A, ...)`, `T(target...)`, or — indexed with parameters — the case's full terminal `T(A, ...)(target...)`: a name ref applied the way a use site writes it, one call for the parameters and one for the target's index expressions. A `use` parameter has no name to write and is left out as a use site leaves it: the slot resolves to the constructor's own premise, the nearest witness in scope.
-                        let parameters: Vec<Argument> = u
-                            .params
-                            .iter()
-                            .filter_map(|param| {
-                                Some(Argument {
-                                    term: Subterm::Name(Name::from(vec![param.label.clone()?]))
-                                        .into(),
-                                    // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
-                                    plicity: param.plicity,
-                                })
-                            })
-                            .collect();
-                        let targets: Vec<Argument> = c
-                            .target
-                            .iter()
-                            .flatten()
-                            .map(|t| Argument {
-                                term: t.clone(),
-                                plicity: Plicity::Explicit,
-                            })
-                            .collect();
-                        let output_type: Term = [parameters, targets]
-                            .into_iter()
-                            .filter(|group| !group.is_empty())
-                            .fold(
-                                Subterm::Name(Name::from(vec![u.label.clone()])).into(),
-                                |head, arguments| Subterm::Apply(Apply { head, arguments }).into(),
-                            );
-
-                        // Constructor type: (params..., payload...) -> T. Every plain or `@` inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — and a `use` parameter stays a witness slot, while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
-                        let binders = lower.mint(
-                            u.params.iter().map(param_name).chain(
-                                c.payload
-                                    .iter()
-                                    .map(|param| param.label.clone().unwrap_or_default()),
-                            ),
-                        );
-                        let plicities = u
-                            .params
-                            .iter()
-                            .map(|param| constructor_plicity(param.plicity))
-                            .chain(c.payload.iter().map(|param| param.plicity))
-                            .collect::<Vec<_>>();
-                        let written = u
-                            .params
-                            .iter()
-                            .map(|param| &param.type_)
-                            .chain(c.payload.iter().map(|param| &param.type_))
-                            .collect::<Vec<_>>();
-                        let mut prefixes = lower.prefixes(&binders);
-                        let param_tys = written
-                            .iter()
-                            .enumerate()
-                            .map(|(i, t)| {
-                                let ty = prefixes.under(i, || lower.input_type(t))?;
-                                Ok((plicities[i], binders[i].1, ty))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?;
-                        let output = prefixes.under(binders.len(), || lower.term(&output_type))?;
-                        drop(prefixes);
-                        let payload_binders = &binders[u.params.len()..];
-                        let param_binders = &binders[..u.params.len()];
-                        // Erasure is sort-driven: `erase_func` drops the same proof/type payload params that `erase_variant` drops from the tuple — the constructor function's arity and its injected variant's arity stay in lockstep.
-                        let ctor_type =
-                            curios_core::Term::func_type_marked(param_tys.clone(), output);
-                        // Constructor body: (params..., payload...) => the variant's injection, an intrinsic `Variant` normal form.
-                        let args: Vec<curios_core::Term> = payload_binders
-                            .iter()
-                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
-                            .collect();
-                        let inject = curios_core::Term::variant(
-                            curios_core::Global::Authored(context.prefixed(&u.label)),
-                            param_binders
-                                .iter()
-                                .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id))),
-                            curios_core::Atom::from(c.label.as_str()),
-                            args,
-                        );
-                        // The value constructor carries the same calling convention as `ctor_type`: every inductive parameter is hidden, each payload keeps its declared mark.
-                        let ctor_body = curios_core::Term::func_marked(param_tys, inject);
-
+                    let owner = context.prefixed(&u.label);
+                    let constructors = curios_core::Definition::constructors(
+                        owner,
+                        context.island(),
+                        &lowered.induct_decls[&curios_core::Global::Authored(owner)],
+                    );
+                    for (c, constructor) in u.cases.iter().zip(constructors) {
+                        context.record_import_scope(Some(&constructor.name));
                         lowered.items.push(FlatItem::Let(FlatLet {
                             span: c.label.span().cloned(),
-                            kind: curios_core::DefinitionKind::InductiveConstructor {
-                                owner: context.prefixed(&u.label),
-                                tag: curios_core::Atom::from(c.label.as_str()),
-                            },
-                            name: curios_core::Global::Authored(
-                                context.prefixed(&u.label).with(&c.label),
-                            ),
-                            island: context.island(),
-                            type_: ctor_type,
-                            body: ctor_body,
+                            kind: constructor.kind,
+                            name: constructor.name,
+                            island: constructor.island,
+                            type_: constructor.type_,
+                            body: constructor.body,
                         }));
                     }
                 }

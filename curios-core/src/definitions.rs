@@ -8,10 +8,10 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, Scope,
-        Sharing, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId,
+        Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl, Items,
+        Lexicon, Many, Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable,
+        RecGroup, Scope, Sharing, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
+        UniverseContext, UniverseError, Variance, WitnessId,
     },
     curios_common::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
@@ -943,6 +943,29 @@ pub fn former_spelling(
         })
 }
 
+/// A telescope's entries opened over fresh locals, each under its mark, counted from zero under the hints the entries keep, with what the telescope ends in opened over them.
+fn opened<B: Bound>(mut cursor: Cursor<'_, B>) -> (Vec<(Plicity, Free, Term)>, B) {
+    let mut binders = Vec::new();
+    while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
+        let binder = Free::local(binders.len() as u64, hint);
+        cursor.advance(Term::free_var(&binder));
+        binders.push((mark, binder, domain));
+    }
+    let body = cursor
+        .body()
+        .expect("a cursor past every entry holds its payload");
+
+    (binders, body)
+}
+
+/// Each binder's variable, in order.
+fn variables(binders: &[(Plicity, Free, Term)]) -> Vec<Term> {
+    binders
+        .iter()
+        .map(|(_, binder, _)| Term::free_var(binder))
+        .collect()
+}
+
 impl Definition {
     /// What a finished module publishes of this definition: what its name unfolds to, and the sort that value inhabits where it states one.
     ///
@@ -981,6 +1004,51 @@ impl Definition {
             type_,
             body,
         }
+    }
+
+    /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
+    ///
+    /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
+    pub fn constructors(
+        owner: Qualifier,
+        island: Qualifier,
+        declaration: &InductDecl,
+    ) -> Vec<Self> {
+        let family = Global::Authored(owner);
+        let universes = declaration.universe_context.identity_instance();
+        let params = declaration.param_count();
+        declaration
+            .constructors
+            .iter()
+            .map(|(tag, signature)| {
+                let (binders, indices) = opened(signature.telescope.cursor());
+                let variables = variables(&binders);
+                let (leading, payload) = variables.split_at(params.min(variables.len()));
+                let type_ =
+                    Term::induct_type_at(family, universes.clone(), leading.to_vec(), indices);
+                let injection = Term::variant_at(
+                    family,
+                    universes.clone(),
+                    leading.to_vec(),
+                    tag.clone(),
+                    payload.to_vec(),
+                );
+
+                Self {
+                    name: Global::Authored(owner.with(tag.as_str())),
+                    universe_context: declaration.universe_context.clone(),
+                    kind: DefinitionKind::InductiveConstructor {
+                        owner,
+                        tag: tag.clone(),
+                    },
+                    island,
+                    value_sort: None,
+                    proof: false,
+                    type_: Term::func_type_marked(binders.clone(), type_),
+                    body: Term::func_marked(binders, injection),
+                }
+            })
+            .collect()
     }
 
     /// Every declaration this definition references.
