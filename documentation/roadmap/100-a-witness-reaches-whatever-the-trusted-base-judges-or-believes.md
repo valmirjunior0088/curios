@@ -1,6 +1,6 @@
 # A witness reaches whatever the trusted base judges or believes
 
-[The soundness board](../design/soundness/the-soundness-board.md) states that a witness reaches the claim through whatever the trusted base judges or believes, and that every proof of `False` found is a ticket on the board. Neither holds: the board puts a source program, or a module built by hand in Rust, each over the archived prelude (`Proof`, `xboard/src/support/ticket.rs`), so a proof of `False` that passes through an object one walk filed and a later walk read has no form to be put in. This specification resettles the board along what it answers for rather than adding a form beside the two it has: a ticket is data, a witness is a history of walks the compiler's own path runs, a module is written as Core text, the tests that guard a rule sit together beside it, and a hunt needs no worktree.
+[The soundness board](../design/soundness/the-soundness-board.md) states that a witness reaches the claim through whatever the trusted base judges or believes, and that every proof of `False` found is a ticket on the board. Neither holds: the board puts a source program, or a module built by hand and written as Core text, each over the archived prelude (`Proof`, `xboard/src/ticket.rs`), so a proof of `False` that passes through an object one walk filed and a later walk read has no form to be put in. This specification resettles the board along what it answers for rather than adding a form beside the two it has: a ticket is data, a witness is a history of walks the compiler's own path runs, a module is written as Core text, the tests that guard a rule sit together beside it, and a hunt needs no worktree.
 
 **Ready.** Every decision below was settled on 2026-11-03. The stages land in order.
 
@@ -77,7 +77,7 @@ Each stage lands under `cargo xtask workspace format` and `cargo xtask workspace
 
 ### 3. The board's records
 
-- `xboard/tickets/<part>/` with its `metadata.toml`, and each ticket's directory, `metadata.toml` and witness files; the loader and the words it holds, each checker's names stated once under `test-support`; the tickets embedded at build; `probe` reading a ticket's directory; `xboard/src/support/` undone into `xboard/src/`; `every_ticket_is_filed_under_its_title` and the allowance on `Status::Open` gone; the parts' retirement notes dropped.
+- `xboard/tickets/<part>/` with its `metadata.toml`, and each ticket's directory, `metadata.toml` and witness files; the loader and the words it holds, each checker's names stated once under `test-support`; the tickets embedded at build; `probe` reading a ticket's directory; `every_ticket_is_filed_under_its_title` and the allowance on `Status::Open` gone; the parts' retirement notes dropped.
 - `xboard/README.md` restated: a ticket is data; a witness is put by the layer that can put it; a probe reads a file; the rationale that a ticket's fields are Rust values rewritten. `.claude/rules/rust.md` loses the board's exception to the flat namespace; `.claude/rules/documentation.md`'s row, [The soundness board](../design/soundness/the-soundness-board.md) and every comment citing a ticket's file name `xboard/tickets/<part>/`.
 - Check: `cargo xboard report` gives every witness the verdict it gave before the stage; the board's own tests, a whole ticket read from its files among them.
 
