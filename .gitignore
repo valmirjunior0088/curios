@@ -8,6 +8,7 @@ node_modules/
 /.agents
 /.codex
 /.claude/worktrees
+/.claude/snapshots
 /.antigravitycli
 /.learn
 /editors/zed/grammars

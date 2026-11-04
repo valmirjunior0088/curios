@@ -1,6 +1,6 @@
 //! The soundness board, as a cargo subcommand, and the code that reads and runs it. The board itself is its records, `xboard/tickets/`, embedded when the binary is built (`build.rs`).
 //!
-//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named, or if a record breaks the words the loader knows. `cargo xboard probe` puts one program, one module written as Core text, or one ticket's directory to them, off the board: what a hunt asks before there is a ticket to commit.
+//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named, or if a record breaks the words the loader knows. `cargo xboard probe` puts one program, one module written as Core text, or one ticket by its `metadata.toml` to them, off the board: what a hunt asks before there is a ticket to commit.
 //!
 //! Why the board is built this way is the README's. Its modules read in the order a run uses them:
 //!
@@ -38,7 +38,6 @@ use {
     std::{
         collections::BTreeMap,
         fs,
-        io::{self, Read},
         path::{Path, PathBuf},
         process::ExitCode,
     },
@@ -71,13 +70,13 @@ enum Board {
     Report,
 
     #[command(
-        about = "Put one program, one module written as Core text, or one ticket's directory to the checkers as a proof of False, and say whether it was admitted",
+        about = "Put one program, one module written as Core text, or one ticket to the checkers as a proof of False, and say whether it was admitted",
         after_help = "Exits 0 where a proof was admitted, 1 where it was refused, and 2 where it could not be put."
     )]
     Probe {
         #[arg(
             value_name = "CANDIDATE",
-            help = "The file whose final term is the proof, over the standard library alone: Core text where its name ends in .crsc, and a program otherwise; a ticket's directory, every witness of it; - is standard input, a program"
+            help = "The file whose final term is the proof, over the standard library alone: a program where its name ends in .crs, and Core text where it ends in .crsc; or a ticket's metadata.toml, every witness of it, its texts read beside it"
         )]
         candidate: PathBuf,
     },
@@ -103,58 +102,66 @@ fn main() -> ExitCode {
                 false => ExitCode::SUCCESS,
             }
         }
-        Board::Probe { candidate } if candidate.is_dir() => match ticket_at(&candidate) {
-            Ok((part, ticket)) => {
-                let row = Row::put(&part, &ticket);
+        Board::Probe { candidate } => {
+            // As a search exits: found is success.
+            let admitted = match candidate_at(&candidate) {
+                Ok(Candidate::Proof(proof)) => {
+                    let probe = Probe::put(&proof);
+                    print!("{probe}");
 
-                print!("{row}");
-
-                // As a search exits: found is success.
-                match row.admitted() {
-                    true => ExitCode::SUCCESS,
-                    false => ExitCode::FAILURE,
+                    probe.admitted()
                 }
-            }
-            Err(why) => {
-                eprintln!("{why}");
+                Ok(Candidate::Ticket { part, ticket }) => {
+                    let row = Row::put(&part, &ticket);
+                    print!("{row}");
 
-                ExitCode::from(2)
-            }
-        },
-        Board::Probe { candidate } => match read(&candidate) {
-            Ok(text) => {
-                let probe = Probe::put(&match candidate.extension() == Some("crsc".as_ref()) {
-                    true => Proof::Module(text),
-                    false => Proof::Program(text),
-                });
-
-                print!("{probe}");
-
-                // As a search exits: found is success.
-                match probe.admitted() {
-                    true => ExitCode::SUCCESS,
-                    false => ExitCode::FAILURE,
+                    row.admitted()
                 }
-            }
-            Err(why) => {
-                eprintln!("{}: {why}", candidate.display());
+                Err(why) => {
+                    eprintln!("{why}");
 
-                ExitCode::from(2)
+                    return ExitCode::from(2);
+                }
+            };
+
+            match admitted {
+                true => ExitCode::SUCCESS,
+                false => ExitCode::FAILURE,
             }
-        },
+        }
     }
 }
 
-/// The candidate's text: the file at `candidate`, or standard input for `-`.
-fn read(candidate: &Path) -> io::Result<String> {
-    match candidate.as_os_str() == "-" {
-        true => {
-            let mut source = String::new();
-            io::stdin().read_to_string(&mut source)?;
+/// What a probe is handed, read off the file it is named by.
+enum Candidate {
+    /// A program or a module written as Core text, put over the prelude alone.
+    Proof(Proof),
+    /// A ticket, every witness of it, with the name of the part it is filed under.
+    Ticket { part: String, ticket: Ticket },
+}
 
-            Ok(source)
-        }
-        false => fs::read_to_string(candidate),
+/// The candidate at `path`: a program where its name ends in `.crs`, Core text where it ends in `.crsc`, and a ticket where it is a `metadata.toml`, read with the texts beside it as the board reads one it embeds.
+fn candidate_at(path: &Path) -> Result<Candidate, String> {
+    let text = || fs::read_to_string(path).map_err(|why| format!("{}: {why}", path.display()));
+    if path.file_name().is_some_and(|name| name == METADATA) {
+        let directory = path.parent().ok_or_else(|| {
+            format!(
+                "{}: a ticket's record stands in its directory",
+                path.display()
+            )
+        })?;
+        let (part, ticket) = ticket_at(directory)?;
+
+        return Ok(Candidate::Ticket { part, ticket });
+    }
+
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("crs") => Ok(Candidate::Proof(Proof::Program(text()?))),
+        Some("crsc") => Ok(Candidate::Proof(Proof::Module(text()?))),
+        _ => Err(format!(
+            "{}: a candidate is a program, `.crs`, Core text, `.crsc`, or a ticket's `{METADATA}`",
+            path.display()
+        )),
     }
 }
 

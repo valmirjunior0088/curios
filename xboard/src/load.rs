@@ -16,7 +16,7 @@ use {
 };
 
 /// What every record of the board is named.
-const METADATA: &str = "metadata.toml";
+pub(crate) const METADATA: &str = "metadata.toml";
 
 /// A part's record.
 #[derive(Deserialize)]
