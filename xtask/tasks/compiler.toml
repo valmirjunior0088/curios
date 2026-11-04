@@ -1,0 +1,13 @@
+description = "The compiler as it is released"
+
+[build]
+description = "Build the compiler as it is released"
+consumes = ["launcher.binary"]
+produces = { binary = "{target}/release/curios" }
+run = [["cargo", "build", "--release", "--package", "curios", "--keep-going"]]
+
+[test]
+description = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end"
+# The compiler under test is the one this file's build filed, named to the suite rather than found on PATH, where an installed one would answer instead.
+consumes = ["binary"]
+run = [["CURIOS={binary}", "node", "--test", "curios-browser/src/page.test.mjs", "curios-browser/src/runner.test.mjs"]]

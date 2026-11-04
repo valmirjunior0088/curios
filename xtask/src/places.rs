@@ -1,6 +1,6 @@
-//! Where the workspace and its build products live: the root every other path is derived from, what a `--release` build left behind, where a filed product and its dep-info go, and the triples a recipe builds for.
+//! Where the workspace and its build products live: the root every other path is derived from, cargo's target directory, and the triple this tool was built for — the two values the runner fills in a command without a declaration, and the root a relative path is read from.
 //!
-//! Nothing here runs anything or touches a file. A path is a fact about the tree; acting on one is a recipe's business.
+//! Nothing here runs anything or touches a file. A path is a fact about the tree; acting on one is a step's business.
 
 use std::{
     env,
@@ -14,7 +14,7 @@ pub(crate) fn root() -> &'static Path {
         .expect("xtask sits one level below the workspace root")
 }
 
-/// Where cargo puts what it builds, honoring the same override cargo itself honors.
+/// Where cargo puts what it builds, honoring the same override cargo itself honors: the task files' `{target}`.
 pub(crate) fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {
         Some(directory) => root().join(directory),
@@ -22,31 +22,5 @@ pub(crate) fn target_directory() -> PathBuf {
     }
 }
 
-/// What a `--release` build for the host left for `name`: the compiler `compiler build` files, which a step runs.
-pub(crate) fn released(name: &str) -> PathBuf {
-    target_directory().join("release").join(name)
-}
-
-/// What a `--release --target <triple>` build left for `name` — the file a recipe files or feeds onward.
-pub(crate) fn built(target: &str, name: &str) -> PathBuf {
-    target_directory().join(target).join("release").join(name)
-}
-
-/// A crate's filed build product for one triple: `<crate>/.artifacts/<triple>`, the triple as the file name, as `curios/build.rs` expects.
-pub(crate) fn artifact(crate_dir: &str, target: &str) -> PathBuf {
-    root().join(crate_dir).join(".artifacts").join(target)
-}
-
-/// What a filed build product was built from, beside it: `<crate>/.artifacts/<triple>.d`, the dep-info cargo wrote for it, as `curios/build.rs` reads it.
-pub(crate) fn dep_info(crate_dir: &str, target: &str) -> PathBuf {
-    root()
-        .join(crate_dir)
-        .join(".artifacts")
-        .join(format!("{target}.d"))
-}
-
-/// The triple this tool was built for: the host, which is the one triple every recipe builds for.
+/// The triple this tool was built for, which is the host: the task files' `{host}`.
 pub(crate) const HOST_TRIPLE: &str = env!("CURIOS_HOST_TRIPLE");
-
-/// The triple the browser bundle is built for: the bare Wasm target `wasm-bindgen` binds, which no host is.
-pub(crate) const BROWSER_TRIPLE: &str = "wasm32-unknown-unknown";

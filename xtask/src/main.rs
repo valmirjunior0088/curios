@@ -1,53 +1,34 @@
-//! The repository's steps, as `cargo xtask <subject> [action]`.
+//! The repository's steps, as `cargo xtask <task>`: a runner of the task files `xtask/tasks.toml` and `xtask/tasks/*.toml`.
 //!
-//! [`steps`] states every step once: what it is about, what it does, what it is run after and the one thing only it catches. A subject's actions, a bare subject's sequence and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step; why is `README.md`'s "A step is an action on a subject, stated once".
+//! **The files are the plan, and this crate holds only rules.** Every fact about what the repository runs — each step's commands, what it requires and consumes, the files it produces, the values its commands share — is written in the task files, and [`tree`] reads them, refusing before anything runs whatever is out of place or names nothing. What is left here holds for any such tree: [`schedule()`] takes what was asked and everything it runs after, in the order the files write them, [`runner`] performs the steps and reports each, [`values`] fills a command's braces, [`programs`] says what a command's words launch, and [`cli`] reads the command line off the tree. Why the steps are data and the runner is rules is `README.md`'s.
 //!
-//! `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it; an action a subject does not have is the parser's own error. `cargo xtask gate` runs every step of the table, which is the hand-off gate `/run-full-gate` runs, and a step that failed in it is run again by its subject and action.
+//! **Two commands are not tasks.** `release` cuts a release and `installer` renders the release's install script: each makes judgments of its own rather than running a plan, so each is Rust, and the reader refuses a task of either name.
 //!
-//! A step's recipe returns the [`Task`]s it needs done — cargo with flags, another tool in a tree, a file filed or written, the browser bindings generated — and does none of them: the [`runner`] alone performs them, each echoed as it runs. Why a step is a plan and nothing is a build script is `README.md`'s "A step is a plan the runner performs".
-//!
-//! `launcher build` builds `curios-native` in a `cargo` invocation of its own, as `README.md`'s "The launcher is built by a cargo of its own" decides. `curios/build.rs` embeds what the step copies to `curios/.artifacts/<triple>` and refuses to build without it, and every step whose selection builds `curios`, as cargo's own graph answers, runs after the launcher's build, while one that builds no `curios`, as the native host's lint, runs without it: the build costs nothing when nothing changed, since cargo decides whether the launcher needs rebuilding and [`file_with_dep_info()`](filing::file_with_dep_info) files it with the time cargo gave it, which moves only when cargo built it again.
-//!
-//! **The bindings generator is a program a contributor installs.** `bundle build` runs `wasm-bindgen` at the version `Cargo.lock` gives the crate; why it is the program and not the library it wraps is the README's decision.
-//!
-//! **The test runner is a tool a contributor installs.** A test step launches `cargo-nextest` before anything is built, and a launch that finds no such program is refused with the command that installs it, as every tool's is; why nextest is the README's decision.
-//!
-//! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes the build products git ignores, keeping untracked work and the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
-//!
-//! **A dependency of nothing, beside the compiler.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of the compiler, so it is a member the compiler's checks leave out of their selection, as they leave out the bench and the board, and its dependencies' features unify into no build of the compiler. Why is the README's decision.
+//! **A dependency of nothing, beside the compiler.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to run the workspace's steps, not to be part of the compiler, so it is a crate of the jig the compiler's checks leave out of their selection, as they leave out the bench and the board. Why is the README's decision.
 
 mod places;
 use places::*;
 
-mod tools;
-use tools::*;
-
 mod commands;
 use commands::*;
 
-mod filing;
-use filing::*;
+mod programs;
+use programs::*;
 
-mod trees;
-use trees::*;
+mod tree;
+use tree::*;
 
-mod tasks;
-use tasks::*;
+mod values;
+use values::*;
 
-mod checkout;
-use checkout::*;
-
-mod steps;
-use steps::*;
-
-mod subjects;
-use subjects::*;
-
-mod recipes;
-use recipes::*;
+mod schedule;
+use schedule::*;
 
 mod runner;
 use runner::*;
+
+mod cli;
+use cli::*;
 
 mod installer;
 use installer::*;
@@ -55,222 +36,25 @@ use installer::*;
 mod release;
 use release::*;
 
-use {
-    clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum},
-    std::{path::PathBuf, process::ExitCode},
-};
+use std::process::ExitCode;
 
-#[derive(Debug, Parser)]
-#[command(
-    name = "cargo xtask",
-    bin_name = "cargo xtask",
-    version,
-    about = "The repository's steps: a subject, then an action of it",
-    help_template = "\
-{name} {version}
-{about-with-newline}
-{usage-heading} {usage}
-
-{all-args}{after-help}"
-)]
-struct Cli {
-    #[command(subcommand)]
-    asked: Asked,
-}
-
-#[derive(Debug, Subcommand)]
-enum Asked {
-    #[command(flatten)]
-    About(About),
-
-    #[command(
-        about = "Run every step of the table, one after another and each after what it reads, formatting as a check; a step whose prerequisite did not pass is not run"
-    )]
-    Gate,
-
-    #[command(
-        about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
-    )]
-    Installer {
-        #[arg(
-            value_name = "VERSION",
-            help = "The release's version: the part of its tag after release/"
-        )]
-        version: String,
-    },
-
-    #[command(
-        about = "Bump the workspace version and bundled library's compiler minimum, commit them, tag the release, and push main and the tag"
-    )]
-    Release {
-        #[arg(
-            value_name = "BUMP",
-            help = "patch, minor, major, or the version itself; omitted, the three candidates are named"
-        )]
-        bump: Option<String>,
-    },
-
-    #[command(about = "Run one program under a profiling build, and fold what it filed")]
-    Profile {
-        #[arg(
-            value_name = "PATH",
-            default_value = "programs/hello_world.crs",
-            help = "Path to the .crs entrypoint file"
-        )]
-        source: PathBuf,
-
-        #[arg(
-            long,
-            value_enum,
-            default_value_t = BuildProfile::Debug,
-            help = "The cargo profile the compiler is built under"
-        )]
-        profile: BuildProfile,
-    },
-
-    #[command(about = "Run the prelude's build under a recorder, and fold what it filed")]
-    ProfilePrelude,
-
-    #[command(
-        about = "Remove the build products git ignores, keeping untracked work and the worktrees under .claude/worktrees"
-    )]
-    Clean,
-}
-
-/// A subject, bare or with one action of it. Each is described by the table ([`described`]), so none carries a description here.
-#[derive(Debug, Subcommand)]
-enum About {
-    Workspace {
-        #[command(subcommand)]
-        action: Option<WorkspaceAction>,
-    },
-
-    Instrumented {
-        #[command(subcommand)]
-        action: Option<InstrumentedAction>,
-    },
-
-    Compiler {
-        #[command(subcommand)]
-        action: Option<CompilerAction>,
-    },
-
-    Launcher {
-        #[command(subcommand)]
-        action: Option<LauncherAction>,
-    },
-
-    Bundle {
-        #[command(subcommand)]
-        action: Option<BundleAction>,
-    },
-
-    Docs {
-        #[command(subcommand)]
-        action: Option<DocsAction>,
-    },
-
-    Grammar {
-        #[command(subcommand)]
-        action: Option<GrammarAction>,
-    },
-
-    Vscode {
-        #[command(subcommand)]
-        action: Option<VscodeAction>,
-    },
-
-    Zed {
-        #[command(subcommand)]
-        action: Option<ZedAction>,
-    },
-
-    Tools {
-        #[command(subcommand)]
-        action: Option<ToolsAction>,
-    },
-}
-
-/// The steps a subject's command line asks for: every step about it where it stands bare, formatting as a check, and otherwise one action's, with what the person narrowed it by.
-fn selected<A: Asks>(subject: Subject, action: Option<A>) -> (Vec<Step>, Request) {
-    match action {
-        None => (Step::about(subject), Request::whole()),
-        Some(action) => {
-            let (action, request) = action.asked();
-
-            (Step::of(subject, action), request)
-        }
-    }
-}
-
-impl About {
-    /// The steps the command line asks for, and what narrows them where it names an action.
-    fn steps(self) -> (Vec<Step>, Request) {
-        match self {
-            About::Workspace { action } => selected(Subject::Workspace, action),
-            About::Instrumented { action } => selected(Subject::Instrumented, action),
-            About::Compiler { action } => selected(Subject::Compiler, action),
-            About::Launcher { action } => selected(Subject::Launcher, action),
-            About::Bundle { action } => selected(Subject::Bundle, action),
-            About::Docs { action } => selected(Subject::Docs, action),
-            About::Grammar { action } => selected(Subject::Grammar, action),
-            About::Vscode { action } => selected(Subject::Vscode, action),
-            About::Zed { action } => selected(Subject::Zed, action),
-            About::Tools { action } => selected(Subject::Tools, action),
-        }
-    }
-}
-
-/// The command line with each subject and each action described by the table: a subject by the steps it has, an action by what its steps do.
-fn described() -> clap::Command {
-    let mut command = Cli::command();
-
-    for subject in Subject::value_variants() {
-        let about = format!("{}: every step about it, or one action of it", subject.is());
-        command = command.mut_subcommand(spelled(*subject), |described| {
-            let mut described = described.about(about);
-            for action in Action::value_variants() {
-                let steps = Step::of(*subject, *action);
-                if steps.is_empty() {
-                    continue;
-                }
-
-                let does = steps
-                    .iter()
-                    .map(|step| step.row().does)
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                described = described.mut_subcommand(spelled(*action), |action| action.about(does));
-            }
-
-            described
-        });
-    }
-
-    command
-}
+#[cfg(test)]
+mod tests;
 
 fn main() -> ExitCode {
-    let asked = described().get_matches();
-    let asked = Cli::from_arg_matches(&asked)
-        .unwrap_or_else(|error| error.exit())
-        .asked;
+    let tree = match Tree::read() {
+        Ok(tree) => tree,
+        Err(refusal) => {
+            eprintln!("{refusal}");
 
-    let outcome = match asked {
-        Asked::About(about) => {
-            let (steps, request) = about.steps();
-
-            perform(&steps, &request)
+            return ExitCode::FAILURE;
         }
-        Asked::Gate => perform(Step::value_variants(), &Request::whole()),
-        Asked::Installer { version } => installer(&version),
+    };
+
+    let outcome = match asked(&command(&tree).get_matches()) {
+        Asked::Task { name, given } => perform(&tree, &name, &given),
         Asked::Release { bump } => release(bump.as_deref()),
-        Asked::Profile {
-            source,
-            profile: build,
-        } => profile(&source, build),
-        Asked::ProfilePrelude => profile_prelude(),
-        Asked::Clean => clean(),
+        Asked::Installer { version } => installer(&version),
     };
 
     match outcome {

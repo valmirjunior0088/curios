@@ -1,0 +1,12 @@
+description = "The slim launcher the compiler embeds"
+
+[build]
+description = "Build the slim launcher in a cargo invocation of its own and file it where the compiler embeds it: the one build of the launcher's crate as it ships"
+# A cargo of its own, so workspace feature unification cannot give the launcher what the compiler turns on, and its own target directory, so the two builds of `curios-native` never overwrite each other. The copies keep cargo's times, which move only when cargo built it again, so the compiler that embeds it is not built again for nothing; `curios/build.rs` reads the dep-info beside it to warn when the launcher is older than its sources.
+produces = { binary = "curios/.artifacts/{host}", dep-info = "curios/.artifacts/{host}.d" }
+run = [
+    ["cargo", "build", "--release", "--package", "curios-native", "--target", "{host}", "--keep-going"],
+    ["mkdir", "-p", "curios/.artifacts"],
+    ["cp", "-p", "{target}/{host}/release/curios-native", "{binary}"],
+    ["cp", "-p", "{target}/{host}/release/curios-native.d", "{dep-info}"],
+]

@@ -1,6 +1,6 @@
 //! The release dance: the version in `Cargo.toml`, the lock file beside it, the bundled standard library's compiler minimum, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
 //!
-//! **Invoking this recipe is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that origin has moved past, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
+//! **Invoking this command is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that origin has moved past, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
 //!
 //! **Nothing here builds, and nothing here undoes.** The check workflow runs on every push to `main` and has already had its say on the commits being released; the tag's own workflow builds and publishes without running it again. And removing a local commit or tag is destructive, so a failure past the commit prints what exists and what would undo it rather than doing it — that is the user's to ask for.
 //!
@@ -118,7 +118,7 @@ fn declared(document: &DocumentMut) -> Result<Version, String> {
 
 /// The version the argument names, refused unless it is above `current`.
 ///
-/// With no argument the refusal *is* the answer: a recipe cannot ask which bump was meant, so it names the version in the manifest and the three a word would reach, and stops. A release is not cut from a guess.
+/// With no argument the refusal *is* the answer: a command cannot ask which bump was meant, so it names the version in the manifest and the three a word would reach, and stops. A release is not cut from a guess.
 fn resolve(bump: Option<&str>, current: Version) -> Result<Version, String> {
     let [patch, minor, major] = current.bumps();
 

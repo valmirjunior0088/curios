@@ -1,117 +1,49 @@
-//! What a run reads off the plans before it starts anything.
+//! What a run reports, from task files of the test's own whose commands are `true` and `false`, which every platform this crate builds for has.
 
 use {super::*, crate::*};
 
-/// The steps a run of `asked` performs under `request`, in the order it performs them.
-fn scheduled(asked: &[Step], request: &Request) -> Vec<Step> {
-    schedule(asked, request, &Checkout::default())
-        .unwrap()
-        .into_iter()
-        .map(|planned| planned.step)
-        .collect()
+fn tree(steps: &str) -> Tree {
+    Tree::parse(&[
+        ("xtask/tasks.toml", "description = \"The top\"\n"),
+        ("xtask/tasks/a.toml", &format!("description = \"A\"\n{steps}")),
+    ])
+    .unwrap()
 }
 
-#[test]
-fn every_product_is_left_by_one_step_that_builds_or_installs_it() {
-    let producers = producers(&Checkout::default()).unwrap();
+fn group() -> Name {
+    vec!["a".to_string()]
+}
 
-    assert_eq!(
-        producers.keys().copied().collect::<Vec<_>>(),
-        [
-            Product::Launcher,
-            Product::Compiler,
-            Product::Bundle,
-            Product::Parser,
-            Product::Installed(Tree::Grammar),
-            Product::Installed(Tree::Vscode),
-        ]
+/// A step behind one that did not pass is not run, since what it reads is not there, and a step that reads nothing of the failure goes on.
+#[test]
+fn a_step_behind_one_that_failed_is_not_run_and_the_rest_go_on() {
+    let tree = tree(
+        "[broken]\ndescription = \"B\"\nrun = [[\"false\"]]\n[behind]\ndescription = \"Behind\"\nrequires = [\"broken\"]\nrun = [[\"true\"]]\n[apart]\ndescription = \"Apart\"\nrun = [[\"true\"]]\n",
     );
-    for step in producers.values() {
-        assert!(
-            matches!(step.row().action, Action::Build | Action::Install),
-            "{}",
-            spelled(*step)
-        );
-    }
-}
-
-/// The gate walks the rows as they stand: the table orders every step that leaves a product before each step that reads it.
-#[test]
-fn the_table_orders_every_producer_before_what_reads_it() {
-    assert_eq!(
-        scheduled(Step::value_variants(), &Request::whole()),
-        Step::value_variants()
-    );
-}
-
-/// The native host's lint builds no `curios`, so it reads no launcher, and runs without one being built.
-#[test]
-fn a_lint_of_the_native_host_builds_no_launcher() {
-    let request = Request::narrowed(Some("curios-native".to_string()), Vec::new(), Vec::new());
 
     assert_eq!(
-        scheduled(&Step::of(Subject::Workspace, Action::Lint), &request),
-        [Step::WorkspaceLint, Step::WorkspaceLintWeb]
+        perform(&tree, &group(), &Given::new()),
+        Err("failed: a broken; not run: a behind".to_string())
     );
 }
 
 #[test]
-fn a_lint_of_the_workspace_builds_the_launcher_first() {
+fn a_step_that_leaves_no_file_it_produces_fails() {
+    let tree = tree(
+        "[maker]\ndescription = \"M\"\nproduces = { out = \"xtask/.artifacts/never-written\" }\nrun = [[\"true\"]]\n",
+    );
+
     assert_eq!(
-        scheduled(
-            &Step::of(Subject::Workspace, Action::Lint),
-            &Request::whole()
-        ),
-        [
-            Step::LauncherBuild,
-            Step::WorkspaceLint,
-            Step::WorkspaceLintWeb
-        ]
+        perform(&tree, &group(), &Given::new()),
+        Err("failed: a maker".to_string())
     );
 }
 
 #[test]
-fn an_npm_script_runs_after_its_tree_s_install() {
-    assert_eq!(
-        scheduled(&[Step::VscodeTest], &Request::whole()),
-        [Step::VscodeInstall, Step::VscodeTest]
+fn a_run_of_steps_that_pass_passes() {
+    let tree = tree(
+        "[first]\ndescription = \"F\"\nrun = [[\"true\"], [\"true\"]]\n[second]\ndescription = \"S\"\nrequires = [\"first\"]\nrun = [[\"true\"]]\n",
     );
-}
 
-/// `zed test` hashes the parser `grammar build` generates, which the grammar's own tools generate.
-#[test]
-fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
-    assert_eq!(
-        scheduled(&[Step::ZedTest], &Request::whole()),
-        [Step::GrammarInstall, Step::GrammarBuild, Step::ZedTest]
-    );
-}
-
-/// A bare subject is its steps in the table's order, behind the steps that leave what they read and nothing else.
-#[test]
-fn a_bare_subject_brings_no_step_of_another_but_what_it_reads() {
-    assert_eq!(
-        scheduled(&Step::about(Subject::Compiler), &Request::whole()),
-        [Step::LauncherBuild, Step::CompilerBuild, Step::CompilerTest]
-    );
-}
-
-/// A step behind one that did not pass is not run, nor is one behind a step not run: what each reads is not there.
-#[test]
-fn a_step_behind_one_that_did_not_pass_is_not_run() {
-    let schedule = schedule(&[Step::ZedTest], &Request::whole(), &Checkout::default()).unwrap();
-    let zed = schedule
-        .iter()
-        .find(|planned| planned.step == Step::ZedTest)
-        .unwrap();
-
-    assert_eq!(
-        blocked(zed, &[Step::GrammarBuild], &[]),
-        Some(Step::GrammarBuild)
-    );
-    assert_eq!(
-        blocked(zed, &[], &[Step::GrammarBuild]),
-        Some(Step::GrammarBuild)
-    );
-    assert_eq!(blocked(zed, &[Step::BundleBuild], &[]), None);
+    assert_eq!(perform(&tree, &group(), &Given::new()), Ok(()));
 }

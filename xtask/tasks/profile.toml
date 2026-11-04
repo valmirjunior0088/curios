@@ -1,0 +1,26 @@
+description = "A run under a recorder, and the fold of what it filed"
+# The one place the stream's location is spelled: the compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift.
+variables.stream = "curios/.artifacts/profile.tsv"
+variables.program = { argument = "PATH", else = "programs/hello_world.crs", help = "The .crs entry file to run" }
+
+[debug]
+description = "Run one program under a profiling build in debug, the build iterating already has, so a question asked of a change costs the change; then fold what it filed"
+# Two invocations of one build: a stream is worth reading exactly when the run did not finish, and such a run never reaches its last step, so the fold is a pass of its own, by the compiler that wrote the stream.
+consumes = ["launcher.binary"]
+run = [
+    ["cargo", "run", "--package", "curios", "--features", "profile", "--", "--profile", "{stream}", "run", "{program}"],
+    ["cargo", "run", "--package", "curios", "--features", "profile", "--", "profile", "{stream}"],
+]
+
+[release]
+description = "Run one program under a profiling build in release, the shipped compiler's, whose timings a specification quotes; then fold what it filed"
+consumes = ["launcher.binary"]
+run = [
+    ["cargo", "run", "--release", "--package", "curios", "--features", "profile", "--", "--profile", "{stream}", "run", "{program}"],
+    ["cargo", "run", "--release", "--package", "curios", "--features", "profile", "--", "profile", "{stream}"],
+]
+
+[prelude]
+description = "Run the prelude's build under a recorder, its stream filed where the program says, and fold what it filed"
+# A program is asked, and no build is: a build script takes no argument, so the prelude's work runs again in a program beside it, in release, the level a build script's copy is compiled at.
+run = [["cargo", "run", "--release", "--package", "curios-prelude", "--bin", "profile-prelude", "--features", "profile"]]

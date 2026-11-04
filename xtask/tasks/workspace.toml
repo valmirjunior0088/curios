@@ -1,0 +1,42 @@
+description = "The Rust workspace, as it ships"
+# Every member but the jig's, whose names start with x: they ship nothing, and selected beside the compiler their dependencies would give its dependencies features no shipped compiler has.
+variables.shipped = ["--workspace", "--exclude", "x*"]
+# The edition every member inherits from `Cargo.toml`, which `rustfmt` is handed for what belongs to no package.
+variables.edition = "2024"
+# The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
+variables.loose = { run = ["git", "ls-files", "--", "programs/*.rs"] }
+# What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
+variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
+variables.expression = { flag = "-E", help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted" }
+
+[lint.rustfmt]
+description = "Fail on formatting drift in the workspace's Rust, the corpus's Rust twins included"
+run = [
+    ["cargo", "fmt", "--all", "--", "--check"],
+    ["rustfmt", "--edition", "{edition}", "--check", "{loose}"],
+]
+
+[lint.biome-format]
+description = "Fail on formatting drift in the JavaScript, JSON and CSS the workspace holds"
+run = [["biome", "format", "{web}"]]
+
+[lint.clippy]
+description = "Lint every target of the workspace as it ships, which elaborates, erases and certifies the whole standard library; alone refuses a loop over a hash's order"
+consumes = ["launcher.binary"]
+run = [["cargo", "clippy", "{shipped}", "--all-targets", "--keep-going"]]
+
+[lint.biome-lint]
+description = "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet"
+run = [["biome", "lint", "--error-on-warnings", "{web}"]]
+
+[test.suite]
+description = "Run the workspace's tests as it ships, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote"
+consumes = ["launcher.binary"]
+run = [["cargo", "nextest", "run", "{shipped}", "--all-targets", "--no-fail-fast", "--no-tests=warn", "{expression}"]]
+
+[test.binaryen-cache]
+description = "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash"
+run = [
+    ["cargo", "build", "--package", "curios-binaryen"],
+    ["CURIOS_BINARYEN_CACHED=1", "cargo", "clippy", "--package", "curios-binaryen", "--all-targets", "--keep-going"],
+]

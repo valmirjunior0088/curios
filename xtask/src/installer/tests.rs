@@ -1,4 +1,4 @@
-//! What a rendered installer holds, and which arguments the recipe refuses to bake in.
+//! What a rendered installer holds, and which arguments the command refuses to bake in.
 
 use {super::*, askama::Template};
 

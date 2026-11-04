@@ -107,7 +107,7 @@ One commit.
 
 ## Verification
 
-`cargo xtask workspace lint` and `cargo xtask workspace format`; the named `curios-package`, `curios-erase`, `curios-anf` and `curios` tests; `curios-prelude`'s corpus tests, since the link and ANF change. Then the check the two targets share: one package whose row has a gateway and a Curios root, its tests passing under `curios test` and under `curios test --target browser`.
+`cargo xtask workspace lint` and `cargo xtask format`; the named `curios-package`, `curios-erase`, `curios-anf` and `curios` tests; `curios-prelude`'s corpus tests, since the link and ANF change. Then the check the two targets share: one package whose row has a gateway and a Curios root, its tests passing under `curios test` and under `curios test --target browser`.
 
 ## Retirement
 

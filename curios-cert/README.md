@@ -90,7 +90,7 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 ## Measuring the certifier
 
-`cargo xtask profile-prelude` makes the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`, the work of `curios-prelude`'s build script run by the program beside it, so the stream holds each root's elaboration and its certification. The walk carries three kinds of span:
+`cargo xtask profile prelude` makes the fixed prelude under a record stream filed at `curios-prelude/.artifacts/profile.tsv`, the work of `curios-prelude`'s build script run by the program beside it, so the stream holds each root's elaboration and its certification. The walk carries three kinds of span:
 
 - **per item:** `certify_declaration`, grouped by `Item::describe` as the elaborator's `declaration` span is, so one item's cost in each checker is found under one key;
 - **per stage:** `universe_verdict`; `totals::seeded`, for what a unit mounted without a record leaves a walk to classify, and `check_positions` for (T) and (V); `check_entrypoint`; `check_induct_decl` and `check_struct_decl`; the shared `positivity_vectors` and `variance_vectors`, once for each declaration that declares a registry entry; and, at a store's address, `certify::candidates`, looking among the records a store holds of an item the walk would judge, and `judgments::complete`, completing a walk's records where its unit is filed. The residue and escape checks are `recheck_definitions`'s self time;

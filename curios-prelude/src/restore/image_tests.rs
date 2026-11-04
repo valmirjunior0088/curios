@@ -115,7 +115,7 @@ fn every_root_restores_the_record_its_establishing_walk_filed() {
 /// cargo test --release --package curios-prelude -- --ignored --nocapture stored_prelude_measurements
 /// ```
 ///
-/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile-prelude` files and need no probe, and the witness inventory is a term walk this does not do.
+/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile prelude` files and need no probe, and the witness inventory is a term walk this does not do.
 ///
 /// A range is two runs, and the spread between them is part of the figure.
 ///
@@ -231,7 +231,7 @@ fn stored_prelude_measurements() {
         }
 
         println!(
-            "\nNot measured here: the elaboration figures, which `cargo xtask profile-prelude` files, and the witness inventory, which is a term walk.\n"
+            "\nNot measured here: the elaboration figures, which `cargo xtask profile prelude` files, and the witness inventory, which is a term walk.\n"
         );
     });
 }

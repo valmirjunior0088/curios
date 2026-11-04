@@ -1,0 +1,10 @@
+description = "The workspace's Rust documentation"
+
+[build]
+description = "Build the workspace's Rust documentation, over private items and every feature; alone runs rustdoc, where a broken intra-doc link fails"
+# Private items, because these crates state their invariants on `pub(crate)` ones; past a crate that fails, so one run reports every crate's broken links. `target/doc/` has no landing page of its own, and the redirect copied there is what makes it a site.
+consumes = ["launcher.binary"]
+run = [
+    ["cargo", "doc", "--workspace", "--no-deps", "--document-private-items", "--all-features", "--keep-going"],
+    ["cp", "xtask/doc-index.html", "{target}/doc/index.html"],
+]

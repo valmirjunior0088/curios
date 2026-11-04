@@ -1,6 +1,6 @@
 //! The prelude's build under a recorder: `profile-prelude` does what this crate's build script does and files the stream of it at `.artifacts/profile.tsv` beside this crate's manifest, then files that stream's fold beside it, at `.artifacts/profile.folded.tsv`, and prints it.
 //!
-//! **The program that is asked.** A build script takes no argument, so nothing can ask one for a stream, and one that recorded for carrying its instrumentation would record every build. This stands beside `build.rs` and shares `compile.rs` with it, so what is measured is the build's own work, every root lowered, elaborated, erased and certified; `cargo xtask profile-prelude` runs it.
+//! **The program that is asked.** A build script takes no argument, so nothing can ask one for a stream, and one that recorded for carrying its instrumentation would record every build. This stands beside `build.rs` and shares `compile.rs` with it, so what is measured is the build's own work, every root lowered, elaborated, erased and certified; `cargo xtask profile prelude` runs it.
 //!
 //! The images it builds go to a directory of its own, removed when it is done: the ones the compiler embeds are the build script's.
 

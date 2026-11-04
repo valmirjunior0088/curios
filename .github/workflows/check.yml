@@ -20,7 +20,7 @@ env:
   NODE: 22
   WASM_BINDGEN: 0.2.129
 
-# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line, which runs first the steps that leave what it reads. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's, Node's and the bindings generator's are this file's, stated once above, the generator's held to `Cargo.lock` by a test.
+# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_gate_runs_has_a_job` there holds that these lines parse and together run every step the gate runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's, Node's and the bindings generator's are this file's, stated once above, the generator's held to `Cargo.lock` by a test.
 jobs:
   workspace:
     name: Workspace
@@ -44,8 +44,6 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
-      - name: Check formatting
-        run: cargo xtask workspace format --check
       - name: Lint
         run: cargo xtask workspace lint
       - name: Test
@@ -68,9 +66,9 @@ jobs:
           key: runtime-macos
           workspaces: .
       - name: Lint the runtime
-        run: cargo xtask workspace lint curios-native
+        run: cargo xtask native lint
       - name: Test the runtime
-        run: cargo xtask workspace test curios-native
+        run: cargo xtask native test
 
   instrumented:
     name: Instrumented
@@ -181,8 +179,6 @@ jobs:
         with:
           key: xtask
           workspaces: .
-      - name: Check formatting
-        run: cargo xtask grammar format --check
       - name: Lint
         run: cargo xtask grammar lint
       - name: Test
@@ -207,8 +203,6 @@ jobs:
         with:
           key: xtask
           workspaces: .
-      - name: Check formatting
-        run: cargo xtask vscode format --check
       - name: Lint
         run: cargo xtask vscode lint
       - name: Test
@@ -235,8 +229,6 @@ jobs:
           workspaces: |
             .
             editors/zed
-      - name: Check formatting
-        run: cargo xtask zed format --check
       - name: Lint
         run: cargo xtask zed lint
       - name: Build

@@ -4,10 +4,10 @@ Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` 
 
 ## Taking a profile
 
-The `profile` feature compiles the instrumentation in, and `--profile <PATH>` is what makes something listen. `cargo xtask profile <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what the run filed — in debug by default, and `--profile release` measures the shipped compiler:
+The `profile` feature compiles the instrumentation in, and `--profile <PATH>` is what makes something listen. `cargo xtask profile debug <PATH>` does both — it builds the compiler with the feature, runs `<PATH>` under it with a destination, and folds what the run filed — in debug, the build iterating already has, and `cargo xtask profile release <PATH>` measures the shipped compiler:
 
 ```sh
-cargo xtask profile programs/hello_world.crs
+cargo xtask profile debug programs/hello_world.crs
 ```
 
 The flag is not a mode, so it measures whatever the invocation does anyway — `run`, `test`, `document`, a package build — and it takes its destination rather than defaulting to one, so no path lives in the compiler. A stream is one file, whole: it grows for as long as its run records. A build with the feature on and nothing asked records nothing, which keeps `--all-features` across the gate from filing anything; instrumentation nobody listens to costs one relaxed atomic load per span.
@@ -18,10 +18,10 @@ Nothing waits for the end: each row is on disk before the step after it runs, so
 awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
 ```
 
-The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a module it shares with a program standing beside it, which runs the work again under the recorder and files the stream beside its crate, at `curios-prelude/.artifacts/profile.tsv`, and its fold beside the stream, at `profile.folded.tsv`. `cargo xtask profile-prelude` runs it, and prints the fold:
+The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a module it shares with a program standing beside it, which runs the work again under the recorder and files the stream beside its crate, at `curios-prelude/.artifacts/profile.tsv`, and its fold beside the stream, at `profile.folded.tsv`. `cargo xtask profile prelude` runs it, and prints the fold:
 
 ```sh
-cargo xtask profile-prelude
+cargo xtask profile prelude
 ```
 
 The program is `curios-prelude`'s `profile-prelude`, and its stream holds each root's elaboration, certification and erasure.

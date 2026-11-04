@@ -16,7 +16,7 @@ What is left of `/learn-curios` (`.claude/commands/learn-curios.md`), whose shap
 
 ## Verification
 
-Prose and agent configuration alone change, so the tree's check is `cargo xtask workspace format`.
+Prose and agent configuration alone change, so the tree's check is `cargo xtask format`.
 
 ## Completion and retirement
 

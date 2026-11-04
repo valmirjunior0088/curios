@@ -1,11 +1,10 @@
-//! How a program is spawned and echoed: a [`Tool`] a plan runs, cargo for the commands that are not steps, and any other program one of those names.
+//! How a program is spawned and echoed: a step's command, cargo for the commands outside the task files, and any other program one of those names.
 //!
-//! **A verb names how a program is reached.** [`launch_in`] runs a [`Tool`] from a directory, refused with what installs it where its program is not there, and is how the runner performs a plan's runs; [`cargo`] is the toolchain's cargo at the workspace root, for the commands outside the table; anything else is a [`Command`] handed to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
+//! **A verb names how a program is reached.** [`launch_in`] runs a command's words from a directory, refused with what installs its program where it is not there, and is how the runner performs a step's commands; [`cargo`] is the toolchain's cargo at the workspace root, for the commands outside the task files; anything else is a [`Command`] handed to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
 
 use {
-    crate::{Tool, root},
+    crate::{Launch, launch, missing, root},
     std::{
-        ffi::OsStr,
         io::ErrorKind,
         path::Path,
         process::{Command, Stdio},
@@ -90,12 +89,15 @@ fn execute(
     }
 }
 
-/// The toolchain's cargo at the workspace root, for a command that is not a step.
+/// The toolchain's cargo at the workspace root, for a command outside the task files.
 pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
-    launch_in(root(), Tool::Cargo, &[], arguments)
+    let mut words = vec!["cargo".to_string()];
+    words.extend(arguments.iter().map(|argument| argument.to_string()));
+
+    launch_in(root(), &words)
 }
 
-/// Run one command from the workspace root, echoing it first as a recipe would, and fail with its status.
+/// Run one command from the workspace root, echoing it first as a step's would be, and fail with its status.
 pub(crate) fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
     run_in(root(), command, arguments)
 }
@@ -107,25 +109,24 @@ pub(crate) fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> 
         .map_err(Failure::message)
 }
 
-/// Run `tool` from `directory` as [`run_in`] does, with `environment` set beside what it inherits. A program the system cannot find is refused with what installs the tool, since that is the only way it is ever looked for.
-pub(crate) fn launch_in(
-    directory: &Path,
-    tool: Tool,
-    environment: &[(&str, &OsStr)],
-    arguments: &[&str],
-) -> Result<(), String> {
-    let mut command = tool.command();
-    command.envs(environment.iter().copied());
+/// Run the command `words` from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with what installs it, since that is the only way it is ever looked for.
+pub(crate) fn launch_in(directory: &Path, words: &[String]) -> Result<(), String> {
+    let Launch {
+        program,
+        command,
+        arguments,
+    } = launch(words)?;
+    let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
 
-    execute(directory, command, arguments, Output::Streamed)
+    execute(directory, command, &arguments, Output::Streamed)
         .map(drop)
         .map_err(|failure| match failure {
-            Failure::Missing(_) => tool.missing(),
+            Failure::Missing(_) => missing(&program),
             Failure::Failed(message) => message,
         })
 }
 
-/// What a command printed, for a recipe that is asking rather than doing.
+/// What a command printed, for a caller that is asking rather than doing.
 ///
 /// A question's answer is the program's to read, so nothing is echoed and nothing reaches the terminal unless the command writes to stderr — which a failing one does, in its own words. The step verbs above are the other half: their output is the user's, and streaming it live is the whole point of them.
 pub(crate) fn ask(command: Command, arguments: &[&str]) -> Result<String, String> {

@@ -52,7 +52,7 @@ Settled 2026-10-13.
 
 ## Verification
 
-`cargo xtask workspace lint` and `cargo xtask workspace format` after each stage, with the stage's tests by name, and the whole workspace's tests once where both have landed. `mention/tests.rs`'s program loses the mark of each name a stage answers. Through a release build: `wonder --at` over a file of the library and a program of `programs/`, and a scripted session with the server — a document opened, a path's segment asked of, a pattern's constructor, a term's type, one declaration edited and another asked of — each answer shown.
+`cargo xtask workspace lint` and `cargo xtask format` after each stage, with the stage's tests by name, and the whole workspace's tests once where both have landed. `mention/tests.rs`'s program loses the mark of each name a stage answers. Through a release build: `wonder --at` over a file of the library and a program of `programs/`, and a scripted session with the server — a document opened, a path's segment asked of, a pattern's constructor, a term's type, one declaration edited and another asked of — each answer shown.
 
 ## Rejected
 

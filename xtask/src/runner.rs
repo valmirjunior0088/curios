@@ -1,167 +1,54 @@
-//! How the steps asked for are run, and the one place a plan's tasks are performed.
+//! How a run is performed, and the one place a step's commands are launched.
 //!
-//! **What a step is run after is read off its plan.** [`schedule`] plans the steps asked for, finds the one step that leaves each product their tasks read, plans that step too, and so on until nothing new is read; then it orders them in the table's order, each after the steps that leave what it reads. Every product is left by one step and the table orders every such step before what reads it, so a run walks the rows as they stand, and a step two others read from runs once.
-//!
-//! **A run reports every failure rather than the first.** [`perform`] runs the schedule on the terminal's own streams, each step to its end whatever the one before it did: a step's work is its plan's tasks, performed in order by [`act`] and by nothing else, and a step behind one that did not pass is not run, since what it reads is not there.
+//! **A run reports every failure rather than the first.** [`perform`] takes the schedule and runs each step to its end whatever the one before it did: a step's commands run in order, the first that fails failing the step, and a step whose produced files are not there afterwards fails too. A step behind one that did not pass is not run, since what it reads is not there; the steps that read nothing of the failure go on, and the end names what failed and what was not run.
 
 use {
-    crate::{Checkout, Product, Request, Step, Task, file_with_dep_info, launch_in, spelled},
-    clap::ValueEnum,
-    std::{
-        collections::{BTreeMap, VecDeque},
-        ffi::OsString,
-        fs,
-        time::Instant,
-    },
+    crate::{Given, Name, Tree, Values, launch_in, root, schedule, spelled},
+    std::time::Instant,
 };
 
 #[cfg(test)]
 mod tests;
 
-/// A step a run performs: its plan, and the steps that leave what the plan reads.
-#[derive(Debug)]
-pub(crate) struct Planned {
-    pub(crate) step: Step,
-    plan: Vec<Task>,
-    after: Vec<Step>,
-}
-
-/// The step that leaves each product, read off every step's plan.
-fn producers(checkout: &Checkout) -> Result<BTreeMap<Product, Step>, String> {
-    let mut producers = BTreeMap::new();
-    for step in Step::value_variants() {
-        for task in step.plan(&Request::whole(), checkout)? {
-            if let Some(product) = task.leaves()
-                && let Some(other) = producers.insert(product, *step)
-                && other != *step
-            {
-                return Err(format!(
-                    "{} and {} both leave {}",
-                    spelled(other),
-                    spelled(*step),
-                    product.path().display()
-                ));
-            }
-        }
-    }
-
-    Ok(producers)
-}
-
-/// The steps a run of `asked` performs under `request`, each with its plan: those asked for, planned as `request` narrows them, and the steps that leave what any of them reads, planned whole. They stand in the table's order, each after the steps that leave what it reads.
-pub(crate) fn schedule(
-    asked: &[Step],
-    request: &Request,
-    checkout: &Checkout,
-) -> Result<Vec<Planned>, String> {
-    let producers = producers(checkout)?;
-
-    let mut planned = BTreeMap::new();
-    let mut pending = asked
-        .iter()
-        .map(|step| (*step, request.clone()))
-        .collect::<VecDeque<_>>();
-    while let Some((step, request)) = pending.pop_front() {
-        if planned.contains_key(&(step as usize)) {
-            continue;
-        }
-
-        let plan = step.plan(&request, checkout)?;
-        let mut after = Vec::new();
-        for task in &plan {
-            for product in task.reads(checkout)? {
-                let producer = *producers.get(&product).ok_or_else(|| {
-                    format!(
-                        "{} reads {}, which no step leaves",
-                        spelled(step),
-                        product.path().display()
-                    )
-                })?;
-                if producer != step && !after.contains(&producer) {
-                    after.push(producer);
-                    pending.push_back((producer, Request::whole()));
-                }
-            }
-        }
-
-        planned.insert(step as usize, Planned { step, plan, after });
-    }
-
-    let mut ordered = Vec::<Planned>::new();
-    while !planned.is_empty() {
-        let ready = planned
-            .iter()
-            .find(|(_, candidate)| {
-                candidate
-                    .after
-                    .iter()
-                    .all(|producer| ordered.iter().any(|done| done.step == *producer))
-            })
-            .map(|(place, _)| *place);
-
-        match ready.and_then(|place| planned.remove(&place)) {
-            Some(next) => ordered.push(next),
-            None => {
-                return Err(format!(
-                    "these steps read what each other leaves: {}",
-                    planned
-                        .values()
-                        .map(|stuck| spelled(stuck.step))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ));
-            }
-        }
-    }
-
-    Ok(ordered)
-}
-
-/// The first step `planned` is run after that failed or was not run, where there is one: what `planned` reads is then not there.
-fn blocked(planned: &Planned, failed: &[Step], unrun: &[Step]) -> Option<Step> {
-    planned
-        .after
-        .iter()
-        .copied()
-        .find(|producer| failed.contains(producer) || unrun.contains(producer))
-}
-
-/// Run `asked` and what they read from, as `request` narrows them, each to its end whatever the one before it did, and say of each how it ended and in how long. A step lacking a tool it launches is refused with what installs it, and a step behind one that did not pass is not run, since what it reads is not there: the steps that read nothing of the failure go on, and the end names both lists.
-pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
-    let checkout = Checkout::default();
+/// Run `asked` and what it runs after, as `given` narrows it, and say of each step how it ended and in how long.
+pub(crate) fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
+    let values = Values::new(tree, given);
     let mut failed = Vec::new();
     let mut unrun = Vec::new();
 
-    for planned in schedule(asked, request, &checkout)? {
-        let step = planned.step;
-        if let Some(missing) = blocked(&planned, &failed, &unrun) {
+    for step in schedule(tree, asked, given) {
+        let name = spelled(&tree.steps[step].name);
+        let blocked = tree
+            .prerequisites(step)
+            .into_iter()
+            .find(|other| failed.contains(other) || unrun.contains(other));
+        if let Some(other) = blocked {
             eprintln!(
-                "{} not run: {} did not pass",
-                spelled(step),
-                spelled(missing)
+                "{name} not run: {} did not pass",
+                spelled(&tree.steps[other].name)
             );
             unrun.push(step);
             continue;
         }
 
         let started = Instant::now();
-        let outcome = planned.plan.iter().try_for_each(act);
+        let outcome = run(tree, &values, step);
         let took = started.elapsed().as_secs_f64();
 
         match outcome {
-            Ok(()) => eprintln!("{} passed in {took:.1}s", spelled(step)),
+            Ok(()) => eprintln!("{name} passed in {took:.1}s"),
             Err(message) => {
                 eprintln!("{message}");
-                eprintln!("{} failed in {took:.1}s", spelled(step));
+                eprintln!("{name} failed in {took:.1}s");
                 failed.push(step);
             }
         }
     }
 
-    let named = |steps: &[Step]| {
+    let named = |steps: &[usize]| {
         steps
             .iter()
-            .map(|step| spelled(*step))
+            .map(|step| spelled(&tree.steps[*step].name))
             .collect::<Vec<_>>()
             .join(", ")
     };
@@ -177,42 +64,24 @@ pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
     }
 }
 
-/// Perform `task`, saying what it does as it does it. A task that leaves a product is held to it: the product must be there afterwards, as the release reads back what it wrote.
-fn act(task: &Task) -> Result<(), String> {
-    match task {
-        Task::Run(run) => {
-            let arguments = run.spelled();
-            let environment = run
-                .environment
-                .iter()
-                .map(|(name, value)| (*name, OsString::from(value.spelled().concat())))
-                .collect::<Vec<_>>();
+/// Run one step's commands in order, then hold it to what it produces.
+fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
+    let step = &tree.steps[step];
+    let directory = root().join(step.dir.as_deref().unwrap_or(""));
 
-            launch_in(
-                &run.tree.directory(),
-                run.tool,
-                &environment
-                    .iter()
-                    .map(|(name, value)| (*name, value.as_os_str()))
-                    .collect::<Vec<_>>(),
-                &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
-            )?;
-        }
-        Task::File {
-            built,
-            product,
-            dep_info,
-        } => file_with_dep_info(built, &product.path(), dep_info)?,
-        Task::Write { path, text } => {
-            fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))?;
-            eprintln!("wrote {}", path.display());
+    for command in &step.run {
+        let Some(words) = values.command(command)? else {
+            continue;
+        };
+        launch_in(&directory, &words)?;
+    }
+
+    for produced in &step.produces {
+        let path = values.path(produced)?;
+        if !path.exists() {
+            return Err(format!("{} was not left", path.display()));
         }
     }
 
-    match task.leaves() {
-        Some(product) if !product.path().exists() => {
-            Err(format!("{} was not left", product.path().display()))
-        }
-        _ => Ok(()),
-    }
+    Ok(())
 }

@@ -39,7 +39,7 @@ pub(crate) fn validated(version: &str) -> Result<&str, String> {
     match !version.is_empty() && version.chars().all(admitted) {
         true => Ok(version),
         false => Err(format!(
-            "not a release version: {version:?}; the tag is release/<version> and the recipe takes the part after the slash"
+            "not a release version: {version:?}; the tag is release/<version> and the command takes the part after the slash"
         )),
     }
 }

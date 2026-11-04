@@ -2561,7 +2561,6 @@ version = "0.0.0"
 dependencies = [
  "askama",
  "clap",
- "serde_json",
  "toml_edit",
 ]
 
