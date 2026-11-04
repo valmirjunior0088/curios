@@ -22,9 +22,6 @@ install = "npm install --global npm@{version}"
 version = "0.2.129"
 install = "cargo install wasm-bindgen-cli --locked --version {version}"
 
-[programs.rustfmt]
-install = "rustup component add rustfmt"
-
 [gate]
 description = "Run every check the hand-off runs: each subject's steps, each after what it requires and consumes"
 requires = ["launcher", "workspace", "instrumented", "docs", "compiler", "bundle", "grammar", "vscode", "zed", "tools"]
