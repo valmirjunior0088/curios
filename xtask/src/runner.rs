@@ -5,9 +5,7 @@
 //! **A run reports every failure rather than the first.** [`perform`] runs the schedule on the terminal's own streams, each step to its end whatever the one before it did: a step's work is its plan's tasks, performed in order by [`act`] and by nothing else, and a step behind one that did not pass is not run, since what it reads is not there.
 
 use {
-    crate::{
-        Checkout, Product, Request, Step, Task, bindgen_web, file_with_dep_info, launch_in, spelled,
-    },
+    crate::{Checkout, Product, Request, Step, Task, file_with_dep_info, launch_in, spelled},
     clap::ValueEnum,
     std::{
         collections::{BTreeMap, VecDeque},
@@ -205,7 +203,6 @@ fn act(task: &Task) -> Result<(), String> {
             product,
             dep_info,
         } => file_with_dep_info(built, &product.path(), dep_info)?,
-        Task::Bindgen { module, product } => bindgen_web(module, &product.path())?,
         Task::Write { path, text } => {
             fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))?;
             eprintln!("wrote {}", path.display());

@@ -10,7 +10,6 @@ publish = false
 workspace = true
 
 [dependencies]
-wasm-bindgen-cli-support = { workspace = true }
 clap = { workspace = true }
 askama = { workspace = true }
 # For `release` alone: format-preserving edits of the workspace and standard-library manifests, so a bump sets only their version fields and the diff it produced can be read back and checked exactly.

@@ -4,9 +4,9 @@ The Curios compiler in the browser: the wasm-bindgen export of the pure compile 
 
 ## Design
 
-### Plain cargo plus the bindings generator as a library
+### Plain cargo plus the bindings generator
 
-**Decision.** The browser build is `cargo xtask bundle build`: `cargo build` for wasm32, then `--target web` bindings generation. No `wasm-pack`, and no `wasm-opt`: Binaryen optimization belongs only to the native `curios` product.
+**Decision.** The browser build is `cargo xtask bundle build`: `cargo build` for wasm32, then `wasm-bindgen --target web` bindings generation. No `wasm-pack`, and no `wasm-opt`: Binaryen optimization belongs only to the native `curios` product.
 
 **Rationale.** The build needs the compiler and the bindings generator, and a packager adds a second build system to version, cache and debug for no capability. Keeping Binaryen out keeps the browser artifact the pure pipeline's output, reproducible from the workspace toolchain alone.
 

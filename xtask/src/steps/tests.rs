@@ -10,6 +10,37 @@ use {
 /// The check workflow, whose jobs are the machines the steps run on.
 const WORKFLOW: &str = include_str!("../../../.github/workflows/check.yml");
 
+/// The release workflow, which builds the bundle a release ships.
+const RELEASE_WORKFLOW: &str = include_str!("../../../.github/workflows/release.yml");
+
+/// The lock file, which says what version of `wasm-bindgen` the bundle builds against.
+const LOCK: &str = include_str!("../../../Cargo.lock");
+
+/// The version a workflow installs the bindings generator at.
+fn bindgen_pin(workflow: &str) -> &str {
+    workflow
+        .lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_prefix("WASM_BINDGEN: "))
+        .expect("the workflow pins the bindings generator")
+}
+
+/// The generator must match the `wasm-bindgen` crate the bundle is built against exactly, so each workflow installs it at the lock's version, and a bump of the crate fails here until the pins follow.
+#[test]
+fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
+    let lock = LOCK.parse::<toml_edit::DocumentMut>().unwrap();
+    let locked = lock["package"]
+        .as_array_of_tables()
+        .unwrap()
+        .iter()
+        .find(|package| package["name"].as_str() == Some("wasm-bindgen"))
+        .and_then(|package| package["version"].as_str())
+        .unwrap();
+
+    assert_eq!(bindgen_pin(WORKFLOW), locked);
+    assert_eq!(bindgen_pin(RELEASE_WORKFLOW), locked);
+}
+
 /// The pairs the command line can spell: each subject's subcommand with each action under it.
 fn spellable() -> BTreeSet<(String, String)> {
     Cli::command()

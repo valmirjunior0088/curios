@@ -378,7 +378,7 @@ fn recorder_testing() -> Run {
     )
 }
 
-/// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it.
+/// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it by the `wasm-bindgen` program, at the version `Cargo.lock` gives the crate.
 fn bundle_build() -> Vec<Task> {
     vec![
         Run::cargo(
@@ -388,10 +388,23 @@ fn bundle_build() -> Vec<Task> {
             &["--target", BROWSER_TRIPLE, KEEP_GOING],
         )
         .into(),
-        Task::Bindgen {
-            module: built(BROWSER_TRIPLE, "curios_js.wasm"),
-            product: Product::Bundle,
-        },
+        Run::new(
+            Tool::WasmBindgen,
+            Tree::Workspace,
+            vec![
+                Arg::Text("--target".to_string()),
+                Arg::Text("web".to_string()),
+                Arg::Text("--out-dir".to_string()),
+                Arg::Text(Product::Bundle.path().to_string_lossy().into_owned()),
+                Arg::Text(
+                    built(BROWSER_TRIPLE, "curios_js.wasm")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+            ],
+        )
+        .leaving(Product::Bundle)
+        .into(),
     ]
 }
 

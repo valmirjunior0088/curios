@@ -10,6 +10,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  WASM_BINDGEN: 0.2.129
 
 # The toolchain is the one `rust-toolchain.toml` pins, with its targets, as the check workflow's is.
 jobs:
@@ -70,6 +71,10 @@ jobs:
         with:
           key: wasm32-unknown-unknown
           workspaces: .
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ env.WASM_BINDGEN }}
 
       - name: Build curios-js
         run: cargo xtask bundle build

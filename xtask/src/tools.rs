@@ -1,6 +1,6 @@
 //! The programs a step runs, and what a refusal says where one is not installed.
 //!
-//! **A tool is launched, never asked about.** A step runs a tool's program, and the spawn is the check: where the program is not there, the step is refused with what installs it, and where it is, nothing ran beforehand to find out. So what a step needs is what it runs as it was asked — a lint narrowed to one package launches no Biome and needs none. Cargo and rustfmt come with the toolchain `rust-toolchain.toml` pins; the rest a contributor installs, and which version of one a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners.
+//! **A tool is launched, never asked about.** A step runs a tool's program, and the spawn is the check: where the program is not there, the step is refused with what installs it, and where it is, nothing ran beforehand to find out. So what a step needs is what it runs as it was asked — a lint narrowed to one package launches no Biome and needs none. Cargo and rustfmt come with the toolchain `rust-toolchain.toml` pins; the rest a contributor installs, and which version of one a machine holds is the machine's: the check workflow pins nextest's, Biome's, Node's and the bindings generator's for its runners.
 
 use std::{env, process::Command};
 
@@ -13,6 +13,10 @@ pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";
 /// What installs Biome where it is absent: its npm package, the one spelling on every platform a clone with npm has.
 pub(crate) const BIOME_INSTALL: &str = "npm install --global @biomejs/biome";
 
+/// What installs the bindings generator where it is absent: at the version `Cargo.lock` gives `wasm-bindgen`, which the generator must match and refuses a module built against any other.
+pub(crate) const WASM_BINDGEN_INSTALL: &str =
+    "cargo install wasm-bindgen-cli --locked --version <the version Cargo.lock gives wasm-bindgen>";
+
 /// A program a step runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tool {
@@ -22,6 +26,7 @@ pub(crate) enum Tool {
     Biome,
     Node,
     Npm,
+    WasmBindgen,
 }
 
 impl Tool {
@@ -41,6 +46,7 @@ impl Tool {
             Tool::Biome => Command::new("biome"),
             Tool::Node => Command::new("node"),
             Tool::Npm => Command::new("npm"),
+            Tool::WasmBindgen => Command::new("wasm-bindgen"),
         }
     }
 
@@ -53,6 +59,7 @@ impl Tool {
             Tool::Biome => ("Biome", Some(BIOME_INSTALL)),
             Tool::Node => ("Node", None),
             Tool::Npm => ("npm", None),
+            Tool::WasmBindgen => ("wasm-bindgen", Some(WASM_BINDGEN_INSTALL)),
         };
 
         match install {

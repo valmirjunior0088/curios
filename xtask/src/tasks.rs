@@ -2,7 +2,7 @@
 //!
 //! **A plan describes, and the runner performs.** A step's recipe returns the tasks it needs done and does none of them, as a Curios program's `Io` describes a computation only its entry point performs ([Effects are descriptions, and the carrier has no eliminator](../../documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). So what a step runs is something read before it runs: every command line the runner echoes is one of these tasks spelled out, and nothing a step does happens outside one.
 //!
-//! **A task's fields are its whole contract.** There is a kind of task for each thing a step does that no other kind says: a tool run in a tree, a binary filed where a build script reads it, the browser's bindings generated, and a file written whole. The set is closed, so no task's reads and writes hide in a function nothing can inspect.
+//! **A task's fields are its whole contract.** There is a kind of task for each thing a step does that no other kind says: a tool run in a tree, a binary filed where a build script reads it, and a file written whole. The set is closed, so no task's reads and writes hide in a function nothing can inspect.
 //!
 //! **What a step reads is read off its tasks.** A [`Product`] is what one step leaves and another reads, and [`Task::reads`] names the products a task reads from its structure: a cargo or nextest run whose selection builds a package whose build script reads a product, as cargo's own graph answers; an npm script, which reads its tree's install; a product handed to a run as a value; and, for a run that finds one by a path it was not handed, the product it declares. The runner runs a step after the step that leaves each product its plan reads, so no table states an edge.
 
@@ -59,8 +59,6 @@ pub(crate) enum Task {
         product: Product,
         dep_info: PathBuf,
     },
-    /// The bindings `wasm-bindgen` generates for `module`, filed as `product`.
-    Bindgen { module: PathBuf, product: Product },
     /// `text` written to `path`, whole.
     Write { path: PathBuf, text: &'static str },
 }
@@ -258,7 +256,7 @@ impl Task {
     pub(crate) fn leaves(&self) -> Option<Product> {
         match self {
             Task::Run(run) => run.leaves,
-            Task::File { product, .. } | Task::Bindgen { product, .. } => Some(*product),
+            Task::File { product, .. } => Some(*product),
             Task::Write { .. } => None,
         }
     }
@@ -267,7 +265,7 @@ impl Task {
     pub(crate) fn reads(&self, checkout: &Checkout) -> Result<Vec<Product>, String> {
         match self {
             Task::Run(run) => run.reads(checkout),
-            Task::File { .. } | Task::Bindgen { .. } | Task::Write { .. } => Ok(Vec::new()),
+            Task::File { .. } | Task::Write { .. } => Ok(Vec::new()),
         }
     }
 }

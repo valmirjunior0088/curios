@@ -8,7 +8,7 @@
 //!
 //! `launcher build` builds `curios-native` in a `cargo` invocation of its own, as `README.md`'s "The launcher is built by a cargo of its own" decides. `curios/build.rs` embeds what the step copies to `curios/.artifacts/<triple>` and refuses to build without it, and every step whose selection builds `curios`, as cargo's own graph answers, runs after the launcher's build, while one that builds no `curios`, as the native host's lint, runs without it: the build costs nothing when nothing changed, since cargo decides whether the launcher needs rebuilding and [`file_with_dep_info()`](filing::file_with_dep_info) files it with the time cargo gave it, which moves only when cargo built it again.
 //!
-//! **The bindings generator is a dependency.** `bundle build` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
+//! **The bindings generator is a program a contributor installs.** `bundle build` runs `wasm-bindgen` at the version `Cargo.lock` gives the crate; why it is the program and not the library it wraps is the README's decision.
 //!
 //! **The test runner is a tool a contributor installs.** A test step launches `cargo-nextest` before anything is built, and a launch that finds no such program is refused with the command that installs it, as every tool's is; why nextest is the README's decision.
 //!

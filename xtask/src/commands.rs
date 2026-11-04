@@ -1,4 +1,4 @@
-//! How a program is spawned and echoed: a [`Tool`] a plan runs, cargo for the commands that are not steps, any other program one of those names, and the one generator called as the library it wraps rather than spawned.
+//! How a program is spawned and echoed: a [`Tool`] a plan runs, cargo for the commands that are not steps, and any other program one of those names.
 //!
 //! **A verb names how a program is reached.** [`launch_in`] runs a [`Tool`] from a directory, refused with what installs it where its program is not there, and is how the runner performs a plan's runs; [`cargo`] is the toolchain's cargo at the workspace root, for the commands outside the table; anything else is a [`Command`] handed to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
 
@@ -10,7 +10,6 @@ use {
         path::Path,
         process::{Command, Stdio},
     },
-    wasm_bindgen_cli_support::Bindgen,
 };
 
 #[cfg(test)]
@@ -131,25 +130,4 @@ pub(crate) fn launch_in(
 /// A question's answer is the program's to read, so nothing is echoed and nothing reaches the terminal unless the command writes to stderr — which a failing one does, in its own words. The step verbs above are the other half: their output is the user's, and streaming it live is the whole point of them.
 pub(crate) fn ask(command: Command, arguments: &[&str]) -> Result<String, String> {
     execute(root(), command, arguments, Output::Captured).map_err(Failure::message)
-}
-
-/// What `wasm-bindgen --target web --out-dir` does, called as the library it wraps and echoed as the command line it stands for. The command line emits the TypeScript declarations unless told not to, where the library does not unless told to; asking for them keeps the bundle's file set what the command line produced.
-pub(crate) fn bindgen_web(module: &Path, bundle: &Path) -> Result<(), String> {
-    eprintln!(
-        "wasm-bindgen --target web --out-dir {} {}",
-        bundle.display(),
-        module.display()
-    );
-
-    let mut bindgen = Bindgen::new();
-
-    bindgen
-        .input_path(module)
-        .web(true)
-        .map_err(|error| format!("{error:#}"))?
-        .typescript(true)
-        .generate(bundle)
-        .map_err(|error| format!("{error:#}"))?;
-
-    Ok(())
 }
