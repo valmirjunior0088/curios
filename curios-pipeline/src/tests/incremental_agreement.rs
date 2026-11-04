@@ -101,6 +101,21 @@ fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
     );
 }
 
+/// A lint on a `use` or a `mod` line stands in a text of its module's namespace: placed over a baseline where the whole compile places it, and with the line gone, gone with it — a recompile keeps no line a lint no longer stands in, so it stores what the whole compile stores.
+#[test]
+fn a_lint_on_a_use_or_a_mod_line_is_placed_as_the_whole_compile_places_it() {
+    const LINES: &str = "use /std/{Nat};\nuse /std/{Bool};\n\nmod Dead\n    let hidden: /std/Nat = 0;\nend\n\npub let one: Nat = 1;\n";
+    let baseline = unit_of(LINES);
+
+    for edited in [
+        LINES.replace("= 1;", "= 2;"),
+        LINES.replace("use /std/{Bool};\n", ""),
+        LINES.replace("mod Dead\n    let hidden: /std/Nat = 0;\nend\n\n", ""),
+    ] {
+        answers_as_the_whole_compile_does(&edited, &baseline);
+    }
+}
+
 /// `edited` compiled over `baseline` answers what compiling it whole answers: the same unit, stored alike, or the same refusal.
 fn answers_as_the_whole_compile_does(edited: &str, baseline: &Unit) {
     let whole = compile_modules(&mounted("lib", edited));

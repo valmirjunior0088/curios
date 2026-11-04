@@ -17,6 +17,9 @@ use {
 pub(super) struct UseSite {
     /// The module body the `use` is written in.
     pub body: Qualifier,
+    /// The `use` declaration it is part of, whole: the text its lint stands in.
+    pub line: Option<Span>,
+    /// What its lint underlines in that text.
     pub span: Option<Span>,
     pub what: UseSiteKind,
     /// A `pub use` is a re-export, which is its own use.
@@ -137,6 +140,11 @@ impl Anchoring {
         self.anchors.borrow().resolve(extent)
     }
 
+    /// Where each text this lowering has reached lies, as it stands now.
+    pub(super) fn anchors(&self) -> std::cell::Ref<'_, curios_core::Anchors> {
+        self.anchors.borrow()
+    }
+
     /// Where `name` was written, among the declarations this lowering has reached.
     pub(super) fn label(&self, name: &curios_core::Global) -> Option<Span> {
         curios_core::Anchors::label(&[&self.anchors.borrow()], name)
@@ -145,6 +153,38 @@ impl Anchoring {
     /// Record that `name` was written at `label`: where a report about it is placed when nothing in it is.
     pub(super) fn name(&self, name: curios_core::Global, label: curios_core::Extent) {
         self.anchors.borrow_mut().name(name, label);
+    }
+
+    /// The extent of `at` in `line`, a line of `module` that declares no item — a `use` declaration, or the name a `mod` line gives — sited as a text of the module's namespace for the report that stands on it.
+    pub(super) fn line(
+        &self,
+        module: Qualifier,
+        line: &Span,
+        at: &Span,
+    ) -> Option<curios_core::Extent> {
+        let anchor = curios_core::Anchor::of(curios_core::Anchored::Namespace(module));
+
+        self.anchors.borrow_mut().site(anchor, line).extent(at)
+    }
+
+    /// Forget every namespace text no lint of `lints` stands in: one sited for a lint this lowering no longer finds, or kept from a baseline whose line is gone. A namespace text is sited for a report and kept for as long as one stands in it.
+    pub(super) fn keep_lines<'l>(&self, lints: impl IntoIterator<Item = &'l Lint>) {
+        let placed = lints
+            .into_iter()
+            .filter_map(|lint| lint.at.map(|at| (at.anchor, at.stamp)))
+            .collect::<HashSet<_>>();
+        let mut anchors = self.anchors.borrow_mut();
+        let stale = anchors
+            .texts()
+            .map(|(key, _)| key)
+            .filter(|key| {
+                matches!(key.0.anchored(), curios_core::Anchored::Namespace(_))
+                    && !placed.contains(key)
+            })
+            .collect::<Vec<_>>();
+        for (anchor, stamp) in stale {
+            anchors.forget_text(anchor, stamp);
+        }
     }
 }
 
@@ -808,11 +848,6 @@ impl<'a> Context<'a> {
         let within = within.as_ref()?;
 
         Some(read(within.key(), within.text()))
-    }
-
-    /// The span `extent` lies on, among the declarations this lowering has reached.
-    pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
-        self.shared.anchoring.resolved(extent)
     }
 
     /// Lower what follows as the text of the source declaration `anchored` names, which `span` covers: every span written within it becomes an extent of it, so nothing the declaration lowers to says where in its file it stands.

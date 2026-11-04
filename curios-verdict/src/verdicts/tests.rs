@@ -440,6 +440,38 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
     );
 }
 
+/// A lint stores no copy of its source: it stands in a text of its unit, whose anchors hold that text once, beside the slot. So a library that leaves one binder unused files slots larger than its clean twin's by about the lint, not by the library's text again.
+#[test]
+fn a_lint_stores_no_copy_of_its_source() {
+    let source = |binders: &str| {
+        let mut text =
+            String::from("use /std/{Nat, Str};\n\npub let message: Str =\n    \"first\";\n");
+        for index in 0..200 {
+            text.push_str(
+                &("\npub let padding_".to_owned() + &index.to_string() + "(n: Nat) -> Nat = n;\n"),
+            );
+        }
+        text.push_str(&("\npub let dropped(".to_owned() + binders + ") -> Nat = n;\n"));
+        text
+    };
+    let filed = |name: &str, library: &str| {
+        let root = project(name);
+        write(&root, "shape/lib.crs", library);
+        folded(&root);
+
+        slots(&root).iter().map(Vec::len).sum::<usize>()
+    };
+    let clean = source("n: Nat");
+
+    let grown = filed("lint-filed", &source("n: Nat, unused: Nat")) - filed("lint-clean", &clean);
+
+    assert!(
+        grown < clean.len() / 4,
+        "one lint grew the slots by {grown} bytes, over a library of {} bytes",
+        clean.len()
+    );
+}
+
 /// The bytes of every slot the store at `root` holds.
 fn slots(root: &Path) -> Vec<Vec<u8>> {
     let mut slots = fs::read_dir(root.join(".curios").join("verdicts"))

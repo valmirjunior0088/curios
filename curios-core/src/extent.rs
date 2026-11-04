@@ -8,6 +8,8 @@
 //!
 //! **A declaration is anchored by its name, and one without a name by its module.** A `satisfy` declaration is anonymous, and the name it is known by is read off its signature once every item is lowered, so its terms are written under the anchor its module's unnamed declarations share and told apart by their texts' stamps: a text is found by its anchor and its stamp together.
 //!
+//! **A line that declares no item is a text of its module's namespace.** A `use` declaration, and the name a `mod` line gives, lower to no item, so no term holds a position in either; a report about one — a lint on an import nothing reads, or on a module nothing reaches — is placed in it all the same, as a text of the module's [`Anchored::Namespace`] anchor told apart by its stamp, sited where the report is made. A module never writes one such line twice: a repeated selector, glob or `mod` is refused.
+//!
 //! **An extent of a text that has since changed resolves to the declaration.** A term may outlive the text it was written in: a declaration a recompile keeps, a signature another declaration's term was instantiated from. Its extent then carries the stamp of the earlier text, which no text of its anchor answers to, and it resolves to where the declaration now stands rather than to offsets that no longer lie on what they were taken from — where the anchor has one text, which a named declaration's does. Otherwise it resolves to nothing, as an anchor no table holds does, and its report goes unplaced.
 //!
 //! **An anchor is a copyable identity**, interned once per process as a path is ([`curios_common::Qualifier`]) and for its reason: every occurrence of every term a lowering builds holds one. The table is bounded by the declarations and the modules a process names.
@@ -39,6 +41,8 @@ pub enum Anchored {
     Declaration(Qualifier),
     /// The declarations a module writes under no name, its `satisfy` items, each a text of this one anchor.
     Unnamed(Qualifier),
+    /// The lines a module writes that shape its namespace and declare no item — its `use` declarations, and the names its `mod` lines give — each a text of this one anchor, sited where a report stands on one.
+    Namespace(Qualifier),
     /// The term a program closes with.
     Entry,
 }

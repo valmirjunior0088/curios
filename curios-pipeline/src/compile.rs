@@ -33,6 +33,8 @@ use {
 #[derive(Debug, Clone, Default)]
 pub struct Findings {
     pub lints: Vec<Lint>,
+    /// Where the unit's texts lie, which every lint of it stands in.
+    pub anchors: Anchors,
     pub reached: BTreeSet<Qualifier>,
 }
 
@@ -41,6 +43,7 @@ impl Findings {
     pub fn of_text(text: &PreparedText) -> Self {
         Self {
             lints: text.lints().to_vec(),
+            anchors: text.anchors().clone(),
             reached: text.reached().clone(),
         }
     }
@@ -48,8 +51,17 @@ impl Findings {
     fn take(lowered: &mut LoweredEntry) -> Self {
         Self {
             lints: std::mem::take(&mut lowered.lints),
+            anchors: lowered.anchors.clone(),
             reached: std::mem::take(&mut lowered.reached),
         }
+    }
+
+    /// Each lint as a reader sees it, placed where the unit's texts lie now.
+    pub fn reports(&self) -> Vec<Report> {
+        self.lints
+            .iter()
+            .map(|lint| lint.report(&[&self.anchors]))
+            .collect()
     }
 
     /// Drop the `unused-binder` lint of every binder a proof the elaborator wrote read — see [`PreparedText::credit`].

@@ -13,7 +13,7 @@ use {
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
+    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -304,8 +304,8 @@ impl LoweredDeclaration {
                 let binder = lint.binder?;
 
                 Some(Unused {
-                    message: lint.report.message.clone(),
-                    at: context.extent(lint.report.span.as_ref()?)?,
+                    message: lint.message.clone(),
+                    at: lint.at?,
                     definition: place(&binder.declaration?)?,
                     ordinal: binder.ordinal,
                 })
@@ -769,11 +769,8 @@ impl<'a> Baseline<'a> {
         }
         context.report(declaration.lints.iter().map(|unused| Lint {
             kind: LintKind::UnusedBinder,
-            report: Report {
-                span: context.resolved(&unused.at),
-                message: unused.message.clone(),
-                notes: Vec::new(),
-            },
+            message: unused.message.clone(),
+            at: Some(unused.at),
             binder: Some(LintedBinder {
                 declaration: Some(names[unused.definition as usize]),
                 ordinal: unused.ordinal,

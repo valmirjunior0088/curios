@@ -327,7 +327,7 @@ pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
         .lints()
         .iter()
         .filter(|lint| lint.kind == LintKind::UnusedBinder)
-        .map(|lint| lint.report.message.clone())
+        .map(|lint| lint.message.clone())
         .collect()
 }
 

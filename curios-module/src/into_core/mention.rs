@@ -188,6 +188,8 @@ impl Text<'_> {
                     self.unit.lowered_item(item).each_term(&mut read);
                 }
             }
+            // A `use` or `mod` line lowers to no item, so no lowered term holds what it writes.
+            curios_core::Anchored::Namespace(_) => {}
         }
 
         // A definition's own name may stand in a term the lowering built around it, which is no use of it.

@@ -406,13 +406,13 @@ impl Reachability {
         }
     }
 
-    /// The `unused-declaration` lints of `items`, read off the items these say no root reaches: each dead declaration a reader wrote, and each private module every reportable declaration of which is dead, once, its subtree folded into it. `placed` gives the span an extent of one of the unit's declarations lies on, `child` whether a module declares a child of a label public, and `mod_spans` where each module was written.
+    /// The `unused-declaration` lints of `items`, read off the items these say no root reaches: each dead declaration a reader wrote, and each private module every reportable declaration of which is dead, once, its subtree folded into it. `child` gives whether a module declares a child of a label public, `mod_spans` where each module was written, and `place_module` where in its parent's namespace a module's lint stands.
     pub(super) fn lints(
         &self,
         items: Items<'_>,
-        placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
         child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
         mod_spans: &HashMap<Qualifier, Span>,
+        place_module: &dyn Fn(&Qualifier) -> Option<curios_core::Extent>,
     ) -> Vec<Lint> {
         // Every dead reportable name, and the ones a reader wrote, with where each is written.
         let mut dead_names = Vec::new();
@@ -472,7 +472,7 @@ impl Reachability {
 
         let mut lints = dead_modules
             .iter()
-            .map(|module| Lint::unused_module(module.last(), mod_spans[module].clone()))
+            .map(|module| Lint::unused_module(module.last(), place_module(module)))
             .collect::<Vec<_>>();
         lints.extend(
             written
@@ -483,11 +483,7 @@ impl Reachability {
                         .is_some_and(|name| dead_modules.iter().any(|dead| name.is_within(dead)))
                 })
                 .map(|(name, label)| {
-                    Lint::unused_declaration(
-                        name.qualifier().map_or("", Qualifier::last),
-                        placed(label)
-                            .expect("a name lies in the text its declaration was sited at"),
-                    )
+                    Lint::unused_declaration(name.qualifier().map_or("", Qualifier::last), *label)
                 }),
         );
         lints

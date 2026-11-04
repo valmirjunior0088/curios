@@ -270,7 +270,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     declaration: self.declaration,
                     ordinal: u32::try_from(ordinal).expect("a declaration's binders fit a u32"),
                 };
-                Lint::unused_binder(&candidate.name, &candidate.span, binder)
+                Lint::unused_binder(
+                    &candidate.name,
+                    self.context.extent(&candidate.span),
+                    binder,
+                )
             })
             .collect::<Vec<_>>();
         self.context.report(lints);

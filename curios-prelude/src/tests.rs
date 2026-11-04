@@ -63,8 +63,12 @@ fn every_authored_source_is_lint_clean() {
     });
     let lints = [&sys, &std]
         .iter()
-        .flat_map(|prepared| prepared.lints())
-        .map(|lint| lint.render())
+        .flat_map(|prepared| {
+            prepared
+                .lints()
+                .iter()
+                .map(|lint| lint.report(&[prepared.anchors()]).render())
+        })
         .collect::<Vec<_>>();
     assert!(
         lints.is_empty(),

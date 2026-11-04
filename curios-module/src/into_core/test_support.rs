@@ -348,7 +348,7 @@ pub(super) fn lints(src: &str) -> Vec<String> {
     .unwrap()
     .lints()
     .iter()
-    .map(|lint| format!("{}: {}", lint.kind.name(), lint.report.message))
+    .map(|lint| format!("{}: {}", lint.kind.name(), lint.message))
     .collect()
 }
 

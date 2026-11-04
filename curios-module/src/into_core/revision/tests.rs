@@ -397,7 +397,7 @@ fn a_witness_written_ahead_of_one_alike_takes_its_place() {
 fn lints_of(unit: &PreparedText) -> Vec<String> {
     unit.lints()
         .iter()
-        .map(|lint| format!("{:?}", lint.report))
+        .map(|lint| format!("{:?}", lint.report(&[unit.anchors()])))
         .collect()
 }
 

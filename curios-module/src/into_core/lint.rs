@@ -16,8 +16,6 @@ pub(super) struct Declarations<'a> {
     pub items: &'a [FlatItem],
     /// What was taken of each item where it was lowered — see [`LoweredItem`].
     pub facts: &'a [&'a LoweredItem],
-    /// The span an extent of one of the unit's declarations lies on.
-    pub placed: &'a dyn Fn(&curios_core::Extent) -> Option<Span>,
     pub entry: Option<&'a curios_core::Entrypoint>,
     pub table: &'a Scoped<'a, ModuleInfo>,
     pub public: &'a Scoped<'a, PublicInterface>,
@@ -25,6 +23,8 @@ pub(super) struct Declarations<'a> {
     pub own: &'a [Mount],
     /// Where each `mod` the unit declares was written, by the module it declares.
     pub mod_spans: &'a HashMap<Qualifier, Span>,
+    /// Where in its parent's namespace a module's lint stands.
+    pub place_module: &'a dyn Fn(&Qualifier) -> Option<curios_core::Extent>,
 }
 
 /// Every `unused-declaration` lint of the unit, in item order; the caller sorts.
@@ -33,12 +33,12 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
     let Declarations {
         items,
         facts,
-        placed,
         entry,
         table,
         public,
         own,
         mod_spans,
+        place_module,
     } = declarations;
 
     let nodes = (0..items.len()).collect::<Vec<_>>();
@@ -125,7 +125,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
 
     let mut lints = dead_modules
         .iter()
-        .map(|module| Lint::unused_module(module.last(), mod_spans[module].clone()))
+        .map(|module| Lint::unused_module(module.last(), place_module(module)))
         .collect::<Vec<_>>();
     lints.extend(
         dead.iter()
@@ -135,10 +135,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
                     .is_some_and(|name| dead_modules.iter().any(|dead| name.is_within(dead)))
             })
             .map(|(name, label)| {
-                Lint::unused_declaration(
-                    name.qualifier().map_or("", Qualifier::last),
-                    placed(label).expect("a name lies in the text its declaration was sited at"),
-                )
+                Lint::unused_declaration(name.qualifier().map_or("", Qualifier::last), **label)
             }),
     );
     lints

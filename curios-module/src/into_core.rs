@@ -1559,6 +1559,7 @@ fn process_items(
                             let full = use_item.name.with_label(item.label());
                             context.open_site(UseSite {
                                 body: context.prefix(),
+                                line: use_item.span.clone(),
                                 span: item.label().span().cloned(),
                                 what: UseSiteKind::Selector(item.label().clone()),
                                 exported: use_item.vis_pub,
@@ -1582,6 +1583,7 @@ fn process_items(
                     UseGroup::Glob => {
                         context.open_site(UseSite {
                             body: context.prefix(),
+                            line: use_item.span.clone(),
                             span: use_item.span.clone(),
                             what: UseSiteKind::Glob(format!("{}/*", use_item.name.join())),
                             exported: use_item.vis_pub,
@@ -3142,12 +3144,17 @@ fn into_core_unit_within(
         None => unused_declarations(&Declarations {
             items: &flat_items,
             facts: &facts,
-            placed: &|extent| shared.anchoring.resolved(extent),
             entry: entry.as_ref(),
             table: &table,
             public: &public,
             own: &own,
             mod_spans: &mod_spans,
+            place_module: &|module| {
+                let written = mod_spans.get(module)?;
+                shared
+                    .anchoring
+                    .line(module.without_last(), written, written)
+            },
         }),
         Some(_) => Vec::new(),
     };
@@ -3238,10 +3245,11 @@ fn into_core_unit_within(
             imports.entry(site.body).or_default().push(site);
         }
         for body in shared.closed() {
-            let lints = unused_imports(imports.remove(&body).unwrap_or_default())
-                .into_iter()
-                .chain(found.remove(&body).unwrap_or_default())
-                .collect::<Vec<_>>();
+            let lints =
+                unused_imports(imports.remove(&body).unwrap_or_default(), &shared.anchoring)
+                    .into_iter()
+                    .chain(found.remove(&body).unwrap_or_default())
+                    .collect::<Vec<_>>();
             match lints.is_empty() {
                 true => {
                     body_lints.remove(&body);
@@ -3260,56 +3268,6 @@ fn into_core_unit_within(
         }
         for body in &removed {
             body_lints.remove(body);
-        }
-        // A lint carried of a body the walk passed lies in the text its file is read as now: the source a restored baseline read it from is another, though its text is the one.
-        if baseline.is_some() {
-            let read = modules
-                .values()
-                .filter_map(|loaded| loaded.source.clone())
-                .filter_map(|source| Some((source.path.clone()?, source)))
-                .collect::<HashMap<_, _>>();
-            let now = |span: &Span| {
-                let source = read.get(span.source.path.as_ref()?)?;
-                (!Arc::ptr_eq(source, &span.source) && source.text == span.source.text)
-                    .then(|| Span::new(Arc::clone(source), span.start, span.end))
-            };
-            let moved = |lint: &Lint| {
-                lint.report
-                    .span
-                    .as_ref()
-                    .is_some_and(|span| now(span).is_some())
-                    || lint
-                        .report
-                        .notes
-                        .iter()
-                        .any(|note| now(&note.span).is_some())
-            };
-            let carried = body_lints
-                .iter()
-                .filter(|(_, lints)| lints.iter().any(moved))
-                .map(|(body, _)| *body)
-                .collect::<Vec<_>>();
-            for body in carried {
-                let Some(lints) = body_lints.get(&body) else {
-                    continue;
-                };
-                let lints = lints
-                    .iter()
-                    .map(|lint| {
-                        let mut lint = lint.clone();
-                        if let Some(span) = lint.report.span.as_ref().and_then(now) {
-                            lint.report.span = Some(span);
-                        }
-                        for note in &mut lint.report.notes {
-                            if let Some(span) = now(&note.span) {
-                                note.span = span;
-                            }
-                        }
-                        lint
-                    })
-                    .collect::<Vec<_>>();
-                body_lints.insert(body, Rc::new(lints));
-            }
         }
     }
 
@@ -3414,9 +3372,14 @@ fn into_core_unit_within(
             };
             let dead = state.lints(
                 now,
-                &|extent| shared.anchoring.resolved(extent),
                 &|module, label| table.get(module)?.get_child(label),
                 &mod_spans,
+                &|module| {
+                    let written = mod_spans.get(module)?;
+                    shared
+                        .anchoring
+                        .line(module.without_last(), written, written)
+                },
             );
             (OnceCell::from(Rc::new(state)), dead)
         }
@@ -3451,6 +3414,21 @@ fn into_core_unit_within(
         _ => OnceCell::new(),
     };
 
+    // Each line a lint stands in is kept, and every other namespace text goes: one a lint this lowering no longer finds was sited for, or one a baseline held of a line since gone.
+    shared.anchoring.keep_lines(
+        body_lints
+            .iter()
+            .flat_map(|(_, lints)| lints.iter())
+            .chain(&dead),
+    );
+    let lints = ordered(
+        body_lints
+            .iter()
+            .flat_map(|(_, lints)| lints.iter().cloned())
+            .chain(dead)
+            .collect(),
+        &shared.anchoring.anchors(),
+    );
     let unit = PreparedText {
         mounts: own.clone(),
         compiled: source.compiled(),
@@ -3475,13 +3453,7 @@ fn into_core_unit_within(
         imports: Recorded::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
-        lints: ordered(
-            body_lints
-                .iter()
-                .flat_map(|(_, lints)| lints.iter().cloned())
-                .chain(dead)
-                .collect(),
-        ),
+        lints,
         credited: BTreeSet::new(),
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
@@ -3720,13 +3692,20 @@ fn spellings_over(
 }
 
 /// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
-fn unused_imports(sites: Vec<UseSite>) -> Vec<Lint> {
+fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Lint> {
     sites
         .into_iter()
         .filter(|site| !site.used && !site.exported)
-        .map(|site| match &site.what {
-            UseSiteKind::Selector(label) => Lint::unused_import(label),
-            UseSiteKind::Glob(path) => Lint::unused_glob(site.span.as_ref(), path),
+        .map(|site| {
+            let at = site
+                .line
+                .as_ref()
+                .zip(site.span.as_ref())
+                .and_then(|(line, span)| anchoring.line(site.body, line, span));
+            match &site.what {
+                UseSiteKind::Selector(label) => Lint::unused_import(label, at),
+                UseSiteKind::Glob(path) => Lint::unused_glob(at, path),
+            }
         })
         .collect()
 }

@@ -49,7 +49,8 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
         .lints()
         .iter()
         .map(|lint| {
-            let span = lint.report.span.as_ref().expect("a lint is placed");
+            let report = lint.report(&[incremental.text().anchors()]);
+            let span = report.span.as_ref().expect("a lint is placed");
 
             span.source.path.clone().expect("in a file")
         })

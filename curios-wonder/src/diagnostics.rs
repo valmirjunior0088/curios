@@ -305,9 +305,9 @@ fn answered(checked: Result<Checked, CompileError>) -> Diagnosed {
 impl Diagnosed {
     /// A subject that lowered: whatever stopped it, then its lints, and what it reached.
     fn found(stopped: Option<CompileError>, findings: Findings) -> Self {
-        let Findings { lints, reached } = findings;
         let mut diagnostics = stopped.map(of_error).unwrap_or_default();
-        diagnostics.extend(lints.into_iter().map(Diagnosis::lint));
+        diagnostics.extend(findings.reports().into_iter().map(Diagnosis::lint));
+        let reached = findings.reached;
 
         Self {
             diagnostics,
