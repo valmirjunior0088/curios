@@ -825,7 +825,7 @@ fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {
-    match context.var_reduct(var.unwrap()) {
+    match var.as_free().and_then(|free| context.var_reduct(free)) {
         Some(next) => Reduce::Continue(next.clone()),
         None => Reduce::Break(Term::var(var)),
     }

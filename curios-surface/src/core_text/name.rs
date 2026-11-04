@@ -12,8 +12,8 @@ use {
     crate::{Apply, CoreText, CoreValue, Frame, escaped, sub},
     curios_common::{InfixOp, Span},
     curios_core::{
-        CalleeId, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId, MetavarOrigin,
-        Subterm, Term, Universes, Var, WitnessOrigin,
+        Binding, CalleeId, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
+        MetavarOrigin, Subterm, Term, Universes, Var, WitnessOrigin,
     },
     curios_print::{Printer, flat, pure, sep_flat},
 };
@@ -36,13 +36,13 @@ pub fn instance_written(Instance { name, universes }: Instance, frame: Frame) ->
 
 /// A variable: a free one by the word its binder is printed under, a bound one by its index.
 pub fn var_written(var: Var, frame: Frame) -> Printer {
-    match var.as_bound() {
-        Some(index) => frame.decorated(
+    match var.binding() {
+        Binding::Bound(index) => frame.decorated(
             vec![("binding", pure(format!("Bound({index})")))],
             pure("_"),
             true,
         ),
-        None => pure(frame.spelling.label(var.unwrap())),
+        Binding::Free(free) => pure(frame.spelling.label(free)),
     }
 }
 

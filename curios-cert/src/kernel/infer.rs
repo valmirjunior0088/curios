@@ -137,7 +137,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         //
         // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
         //
-        // A *bound* index reaching here is the other broken term, and it is refused rather than looked up: a term closed under the scopes above it has none, which the boundary holds every position to (`curios_core::open_positions_of`), and asking the scope for one would be asking `Var::unwrap` for a free occurrence it has not got. The depth is all the refusal can name, the index having no identity, and it is the rule's own as much as the boundary's — a rule that aborted where a boundary already refused would die before the verdict was read.
+        // A *bound* index reaching here is the other broken term, and it is refused rather than looked up: a term closed under the scopes above it has none, which the boundary holds every position to (`curios_core::open_positions_of`), and the scope holds no type for a variable with no identity to look one up by (`Var::as_free`). The depth is all the refusal can name, the index having no identity, and it is the rule's own as much as the boundary's — a rule that aborted where a boundary already refused would die before the verdict was read.
         Subterm::Var(var) => {
             let Some(free) = var.as_free() else {
                 return Err(Error::NotClosed {

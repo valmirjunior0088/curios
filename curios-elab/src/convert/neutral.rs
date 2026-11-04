@@ -386,7 +386,9 @@ pub fn synth_neutral(
 
     match &**term {
         Subterm::Var(var) => {
-            let name = var.unwrap();
+            let Some(name) = var.as_free() else {
+                return Ok(None);
+            };
             // Locally opened binders shadow the context.
             if let Some(type_) = opened.type_of(name) {
                 return Ok(Some(type_.clone()));

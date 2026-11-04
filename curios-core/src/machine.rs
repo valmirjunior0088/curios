@@ -510,7 +510,7 @@ impl Machine {
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Var(var) => match host.closed_body(var.unwrap()) {
+            Subterm::Var(var) => match var.as_free().and_then(|free| host.closed_body(free)) {
                 Some(body) => Ok(Step::Eval(body.clone(), demand)),
                 None => Ok(Step::Value(Term::var(var))),
             },

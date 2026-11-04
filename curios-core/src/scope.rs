@@ -106,10 +106,10 @@ impl Arity for Many {
 
 // === Var =====================================================================
 
-/// How a variable is bound: free, by its identity, or bound, by its de Bruijn index.
+/// How a variable is bound: free, by its identity, or bound, by its de Bruijn index. A reader that answers both cases matches on it ([`Var::binding`]); one that reads a free variable's identity asks [`Var::as_free`], and so answers a bound index as the case it is.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-enum Binding {
+pub enum Binding {
     Free(Free),
     Bound(usize),
 }
@@ -122,7 +122,7 @@ pub struct Var {
 }
 
 impl Var {
-    /// A free occurrence of `name` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
+    /// A free occurrence of `name`; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
     pub fn free(name: Free) -> Self {
         Self {
             binding: Binding::Free(name),
@@ -150,9 +150,9 @@ impl Var {
         }
     }
 
-    /// This occurrence's identity, asserting it is free. Callers hold a term something upstream has established is closed — the machine's gate ([`accelerable`](crate::accelerable)), or the boundary a module passed — where a bound index is that invariant broken rather than a case to handle; a reader that can be handed one answers through [`Var::as_free`] instead.
-    pub fn unwrap(&self) -> &Free {
-        self.as_free().expect("a free occurrence")
+    /// How this occurrence is bound.
+    pub fn binding(&self) -> &Binding {
+        &self.binding
     }
 }
 

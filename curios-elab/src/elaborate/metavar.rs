@@ -105,7 +105,10 @@ pub fn waits_as_reference(
     expected: &Term,
 ) -> Result<bool, Error> {
     let type_ = match &**term {
-        Subterm::Var(var) => context.assumption(var.unwrap()).cloned(),
+        Subterm::Var(var) => var
+            .as_free()
+            .and_then(|free| context.assumption(free))
+            .cloned(),
         Subterm::Transient(Transient::Name(name)) => context.declared_type(name).cloned(),
         Subterm::Transient(Transient::Method(method)) => method_type(context, method),
         _ => return Ok(false),
@@ -169,7 +172,10 @@ pub fn insert_implicits_on_check(
 
     let ift = ift.clone();
     let func_label = match &**term {
-        Subterm::Var(var) => CalleeId::Function(Mention::Local(*var.unwrap())),
+        Subterm::Var(var) => match var.as_free() {
+            Some(free) => CalleeId::Function(Mention::Local(*free)),
+            None => CalleeId::Anonymous,
+        },
         Subterm::Instance(instance) => CalleeId::Function(Mention::Declaration(instance.name)),
         Subterm::Transient(Transient::Method(Method { concept, field })) => CalleeId::Method {
             concept: *concept,

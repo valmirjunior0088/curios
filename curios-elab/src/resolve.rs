@@ -686,8 +686,9 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
 /// The type of a step-2 node: an assumption for a variable, or the projected field type for a projection (recursing on its head).
 fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
     match &**node {
-        Subterm::Var(var) => context
-            .assumption(var.unwrap())
+        Subterm::Var(var) => var
+            .as_free()
+            .and_then(|free| context.assumption(free))
             .cloned()
             .ok_or_else(|| context.unbound_variable(node.clone())),
         Subterm::Instance(Instance { name, universes }) => context

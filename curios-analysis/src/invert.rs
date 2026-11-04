@@ -317,10 +317,10 @@ impl<'f> Unifier<'f> {
 
         // Solve a flex arm binder against the rigid term it is forced to equal — forced because every decomposition step above it was injective. A binder already forced elsewhere is recorded again, not refused: the deletion rule in `consolidate` reconciles the two forcings by convertibility.
         if let Subterm::Var(var) = &*target
-            && var.as_bound().is_none()
-            && flex.iter().any(|bound| bound == var.unwrap())
+            && let Some(free) = var.as_free()
+            && flex.iter().any(|bound| bound == free)
         {
-            let binder = *var.unwrap();
+            let binder = *free;
 
             // At the top of a position a key-shaped actual is index refinement's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
             if (top && !solve_keys) && key_shaped(&actual)
@@ -355,7 +355,7 @@ impl<'f> Unifier<'f> {
 
             // The same rigid variable on both sides is trivially forced.
             (Subterm::Var(a), Subterm::Var(t))
-                if a.as_bound().is_none() && t.as_bound().is_none() && a.unwrap() == t.unwrap() =>
+                if a.as_free().is_some_and(|a| t.as_free() == Some(a)) =>
             {
                 Ok(Step::Ok)
             }

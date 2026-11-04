@@ -355,9 +355,10 @@ impl<'s> Eraser<'s> {
                 &curios_core::Mention::Declaration(instance.name),
                 Sorts::of(&instance.universes.qualities),
             ),
-            curios_core::Subterm::Var(var) => {
-                self.erase_name(&curios_core::Mention::Local(*var.unwrap()), Sorts::NONE)
-            }
+            curios_core::Subterm::Var(var) => match var.as_free() {
+                Some(free) => self.erase_name(&curios_core::Mention::Local(*free), Sorts::NONE),
+                None => unreachable!("a bound index survived certification into erasure"),
+            },
             curios_core::Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
             curios_core::Subterm::Match(m) => self.erase_match(context, m, hint),
             curios_core::Subterm::Variant(variant) => self.erase_variant(context, variant, hint),

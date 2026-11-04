@@ -229,7 +229,7 @@ fn elaborate_subterm(
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         // A binder, which no instance is chosen for: only a declaration is generalized.
-        Subterm::Var(var) => match context.assumption(var.unwrap()) {
+        Subterm::Var(var) => match var.as_free().and_then(|free| context.assumption(free)) {
             Some(type_) => (term.clone(), type_.clone()),
             None => return Err(context.unbound_variable(term.clone())),
         },

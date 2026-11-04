@@ -1319,7 +1319,9 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 
     match &**head {
         Subterm::Var(var) => {
-            let name = var.unwrap();
+            let Some(name) = var.as_free() else {
+                return Ok(());
+            };
             context.refine(name, value);
             if let Some(definition) = context.definition_body(name).cloned() {
                 refine_head(context, &definition, value)?;
