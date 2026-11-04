@@ -3,7 +3,7 @@
 //! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site `#{node = Bang} (action!; rest)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
 
 use {
-    super::{Decoration, reader_infix},
+    super::{Decoration, reader_infix, standalone_head},
     crate::{Frame, escape_character, lambda_parameters, sub, written_pattern},
     curios_core::{
         Ascribed, Bang, Func, Global, Infix, Matrix, Method, NumLit, Row, Subterm, Transient,
@@ -74,7 +74,8 @@ fn transient_written_as_core(
         Transient::Ascribed(Ascribed { term, type_ }) => {
             let mut fields = node("Ascribed");
             fields.push(("type_", sub(type_, frame)));
-            let primary = matches!(&*term, Subterm::Instance(_) | Subterm::Var(_));
+            // The term is the operand as it stands only where it writes no decorator of its own, which a second decorator would not attach to.
+            let primary = standalone_head(&term);
             frame.decorated(fields, sub(term, frame), primary)
         }
         Transient::Derive => frame.decorated(node("Derive"), pure("?"), true),

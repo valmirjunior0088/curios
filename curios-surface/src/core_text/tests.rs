@@ -151,7 +151,7 @@ fn a_type_formers_eta_form_is_written_as_its_lambda() {
         Term::induct_type(global(&["Sign"]), Vec::<Term>::new(), [Term::free_var(&x)]),
     );
 
-    assert_eq!(written(&lambda), "(x) => #{node = InductType} /Sign(x)");
+    assert_eq!(written(&lambda), "(x) => #{node = InductType} /Sign()(x)");
     assert_eq!(lambda.faithful().to_string(), "/Sign");
 }
 
@@ -193,7 +193,7 @@ fn a_method_named_by_its_path_is_its_path_under_its_node() {
     );
     assert_eq!(
         written(&goal),
-        "#{id = 3, origin = Witness({func = Method({concept = /std/Show/Show, field = \"show\"}), role = None})} ?"
+        "#{id = 3, origin = Witness {func = Method {concept = /std/Show/Show, field = \"show\"}, role = None}} ?"
     );
 }
 
@@ -257,7 +257,7 @@ fn a_family_is_written_in_its_form_and_its_constructors_are_left_to_it() {
 
     assert_eq!(
         module(bit(), constructors).faithful().to_string(),
-        "induct /Bit: Type\n| zero()\n| one()\nend;\n"
+        "induct /Bit: Type\n| zero()\n| one()\nend\n"
     );
 }
 
@@ -270,7 +270,7 @@ fn a_constructor_its_family_does_not_make_is_written_out() {
 
     let written = module(bit(), constructors).faithful().to_string();
     assert!(
-        written.contains("#{kind = InductiveConstructor({owner = /Bit, tag = one})} let /Bit/one"),
+        written.contains("#{kind = InductiveConstructor {owner = /Bit, tag = one}} let /Bit/one"),
         "{written}"
     );
     assert!(!written.contains("let /Bit/zero"), "{written}");
@@ -285,7 +285,7 @@ fn a_constructor_the_module_lacks_is_stated_absent() {
 
     assert_eq!(
         module(bit(), constructors).faithful().to_string(),
-        "#{absent = [/Bit/one]} induct /Bit: Type\n| zero()\n| one()\nend;\n"
+        "#{absent = [/Bit/one]} induct /Bit: Type\n| zero()\n| one()\nend\n"
     );
 }
 
@@ -317,6 +317,6 @@ fn a_record_is_written_in_its_form() {
 
     assert_eq!(
         definitions.faithful().to_string(),
-        "struct /Pair(A: Type, B: Type): pub Type { fst: A, snd: B };\n"
+        "struct /Pair(A: Type, B: Type): pub Type { fst: A, snd: B }\n"
     );
 }

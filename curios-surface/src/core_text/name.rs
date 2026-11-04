@@ -96,22 +96,20 @@ fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Printer {
         MetavarOrigin::Hole => pure("Hole"),
         MetavarOrigin::Goal => pure("Goal"),
         MetavarOrigin::Domain(binder) => flat([pure("Domain("), optional(binder), pure(")")]),
-        MetavarOrigin::Implicit(implicit) => flat([
-            pure("Implicit("),
-            nested(vec![
+        MetavarOrigin::Implicit(implicit) => variant_of_fields(
+            "Implicit",
+            vec![
                 ("func", callee_written(&implicit.func, frame)),
                 ("binder", optional(&implicit.binder)),
-            ]),
-            pure(")"),
-        ]),
-        MetavarOrigin::Witness(witness) => flat([
-            pure("Witness("),
-            nested(vec![
+            ],
+        ),
+        MetavarOrigin::Witness(witness) => variant_of_fields(
+            "Witness",
+            vec![
                 ("func", callee_written(&witness.func, frame)),
                 ("role", optional(&witness.role)),
-            ]),
-            pure(")"),
-        ]),
+            ],
+        ),
     }
 }
 
@@ -127,27 +125,30 @@ fn callee_written(callee: &CalleeId, frame: Frame) -> Printer {
             "Function",
             format!("Local({})", frame.spelling.label(local)),
         ),
-        CalleeId::Constructor { owner, tag } => flat([
-            pure("Constructor("),
-            nested(vec![
+        CalleeId::Constructor { owner, tag } => variant_of_fields(
+            "Constructor",
+            vec![
                 ("owner", pure(frame.spelling.symbol(owner))),
                 ("tag", pure(format!("\"{}\"", escaped(tag)))),
-            ]),
-            pure(")"),
-        ]),
-        CalleeId::Method { concept, field } => flat([
-            pure("Method("),
-            nested(vec![
+            ],
+        ),
+        CalleeId::Method { concept, field } => variant_of_fields(
+            "Method",
+            vec![
                 ("concept", pure(frame.spelling.symbol(concept))),
                 ("field", pure(format!("\"{}\"", escaped(field)))),
-            ]),
-            pure(")"),
-        ]),
+            ],
+        ),
         CalleeId::Witness(name) => named("Witness", frame.spelling.symbol(name)),
         CalleeId::Operator(op) => named("Operator", format!("{op:?}")),
         CalleeId::Anonymous => pure("Anonymous"),
         CalleeId::Structure(name) => named("Structure", frame.spelling.symbol(name)),
     }
+}
+
+/// A variant that holds fields, as a structure's literal is written: `Implicit { func = …, binder = None }`.
+fn variant_of_fields(variant: &str, fields: Vec<Decoration>) -> Printer {
+    flat([pure(format!("{variant} ")), nested(fields)])
 }
 
 /// An optional text as Core holds it: `None`, or the text under `Some`.

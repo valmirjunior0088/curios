@@ -624,6 +624,20 @@ fn universes_value(universes: &Universes, frame: Frame) -> Printer {
     universes_written(universes, frame).unwrap_or_else(|| pure("{}"))
 }
 
+/// Whether `intrinsic` is written with a list of operands after its name, which a call's own list could not then be read as: a carrier's type is its name alone.
+pub fn writes_operands(intrinsic: &Intrinsic) -> bool {
+    !matches!(
+        intrinsic,
+        Intrinsic::BoolType
+            | Intrinsic::NatType
+            | Intrinsic::ByteType
+            | Intrinsic::IntType
+            | Intrinsic::FltType
+            | Intrinsic::BytesType
+            | Intrinsic::HandleType
+    )
+}
+
 /// `%` and a variant's name, then its operands where it has any.
 fn called(name: &str, operands: Vec<Printer>) -> Printer {
     let head = format!("%{name}");

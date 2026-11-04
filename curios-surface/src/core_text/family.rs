@@ -28,7 +28,7 @@ fn nominal_name(name: &Global, universes: &Universes, frame: Frame) -> String {
     }
 }
 
-/// A family as the call of its former: its parameters, then its indices, each a call where it has any; in a reader's spelling, the bare name where it has neither.
+/// A family as the call of its former: its parameters, then its indices where it has any; in a reader's spelling, each list only where it holds any, and the bare name where it has neither.
 pub fn family_written(
     InductType {
         name,
@@ -43,7 +43,8 @@ pub fn family_written(
         .nominal_marks(&name, params.len() + indices.len());
     let offset = params.len();
     let mut call = vec![pure(nominal_name(&name, &universes, frame))];
-    if !params.is_empty() || (indices.is_empty() && frame.core_text()) {
+    // Core text writes the parameters' list even where it is empty, so the indices are the second list wherever there are any.
+    if !params.is_empty() || frame.core_text() {
         call.push(listed(
             "(".into(),
             false,

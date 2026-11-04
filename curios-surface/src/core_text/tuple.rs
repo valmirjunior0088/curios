@@ -31,21 +31,20 @@ pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> P
     listed("{".into(), false, items, "}")
 }
 
-/// A tuple: each field's value, under its label where it carries one.
+/// A tuple: each field's value, under its label where it carries one, a lone unlabelled one before a comma, which no parenthesized term ends with.
 pub fn tuple_written(Tuple { fields, names }: Tuple, frame: Frame) -> Printer {
     let mut names = names.into_iter().chain(std::iter::repeat(None));
-    listed(
-        "(".into(),
-        false,
-        fields
-            .into_iter()
-            .map(|field| match names.next().flatten() {
-                Some(name) => flat([pure(name), pure(" = "), sub(field, frame)]),
-                None => sub(field, frame),
-            })
-            .collect(),
-        ")",
-    )
+    let lone = fields.len() == 1;
+    let fields = fields
+        .into_iter()
+        .map(|field| match names.next().flatten() {
+            Some(name) => flat([pure(name), pure(" = "), sub(field, frame)]),
+            None if lone => flat([sub(field, frame), pure(",")]),
+            None => sub(field, frame),
+        })
+        .collect();
+
+    listed("(".into(), false, fields, ")")
 }
 
 /// A projection: its head between parentheses, then the field it reads.

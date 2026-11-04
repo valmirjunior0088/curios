@@ -3,6 +3,7 @@
 //! **A function is written as it binds**, its parameters under their marks — `@x`, `use w` — and a type former's η-form as the lambda it is. **A call is its head and its arguments under their marks**, the head parenthesized where it is a lambda or carries a decorator of its own. **A foreign call is the call of its `foreign` declaration under `#{node = Foreign}`**, the type a row that does not return is handed under `@`: the row it is made through is the one that declaration states.
 
 use {
+    super::writes_operands,
     crate::{
         Frame, call_arguments, lambda_parameters, listed, marked_arguments, parameter_types, sub,
     },
@@ -83,13 +84,15 @@ pub fn apply_written(Apply { head, arguments }: Apply, frame: Frame) -> Printer 
 }
 
 /// Whether `head` is a primary a call can follow as it is written: a name, a call, a projection, a variable, an intrinsic. A lambda would take the arguments into its body, and a decorated node would take the decorator over the call.
-fn standalone_head(head: &Term) -> bool {
+pub fn standalone_head(head: &Term) -> bool {
     match &**head {
         Subterm::Instance(instance) => instance.universes.is_empty(),
         Subterm::Var(var) => var.as_bound().is_none(),
         Subterm::Apply(_) => true,
         Subterm::Proj(projection) => matches!(projection.field, Field::Tuple(_) | Field::Label(_)),
-        Subterm::Intrinsic(intrinsic) => !matches!(intrinsic, Intrinsic::Nat(_)),
+        Subterm::Intrinsic(intrinsic) => {
+            !matches!(intrinsic, Intrinsic::Nat(_)) && writes_operands(intrinsic)
+        }
         _ => false,
     }
 }

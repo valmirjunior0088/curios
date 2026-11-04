@@ -1840,6 +1840,10 @@ fn print_items(
                     group: None,
                 };
                 write(formatter, member.written(&implied, spelling))?;
+                if definition.kind.nominal().is_some() {
+                    writeln!(formatter)?;
+                    continue;
+                }
             }
             Item::Rec(rec) => {
                 let mut context = Some(&rec.universe_context);
@@ -1858,6 +1862,14 @@ fn print_items(
                         write(formatter, pure("\n"))?;
                     }
                     write(formatter, member.written(&implied, spelling))?;
+                }
+                // A form closes on its own word or brace, and a `let` owes the `;` where it is the group's last member.
+                if definitions
+                    .last()
+                    .is_some_and(|last| last.kind.nominal().is_some())
+                {
+                    writeln!(formatter)?;
+                    continue;
                 }
             }
         }
@@ -2336,9 +2348,10 @@ fn definition_fields(
     if let Some(context) = universe_context {
         fields.push(("universe_context", context));
     }
+    // A variant that holds fields is written as a structure's literal is.
     let owned = |variant: &str, owner: &Qualifier, rest: String| {
         pure(format!(
-            "{variant}({{owner = {}{rest}}})",
+            "{variant} {{owner = {}{rest}}}",
             spelling.symbol(&Global::Authored(*owner))
         ))
     };

@@ -9,7 +9,8 @@ use {
     crate::{Frame, listed, plicity_mark, sub},
     curios_common::Plicity,
     curios_core::{
-        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, StructDecl, Telescope, Term,
+        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, StructDecl, Subterm, Telescope,
+        Term,
     },
     curios_print::{Printer, flat, pure},
 };
@@ -88,6 +89,14 @@ fn parameters(printers: Vec<Printer>) -> Printer {
     }
 }
 
+/// The sort a declaration's head lands in: bare where it is a sort, and between parentheses otherwise, where a name would read the field block after it as a literal of its own.
+fn result_sort_written(sort: Term, frame: Frame) -> Printer {
+    match &*sort {
+        Subterm::Sort(_) => sub(sort, frame),
+        _ => flat([pure("("), sub(sort, frame), pure(")")]),
+    }
+}
+
 /// A family's form: its head, then each case, then `end`.
 pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> Printer {
     let mut cursor = entry.arity.cursor();
@@ -124,7 +133,7 @@ pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> Print
         pure(": "),
         arrow,
         pure(if entry.rep_public { "pub " } else { "" }),
-        sub(entry.result_sort.clone(), frame),
+        result_sort_written(entry.result_sort.clone(), frame),
     ]);
     let cases = entry
         .constructors
@@ -259,7 +268,7 @@ pub fn record_declared(
         parameters(params),
         pure(": "),
         pure(if record.rep_public { "pub " } else { "" }),
-        sub(record.result_sort.clone(), frame),
+        result_sort_written(record.result_sort.clone(), frame),
         pure(" "),
         body,
     ]);
