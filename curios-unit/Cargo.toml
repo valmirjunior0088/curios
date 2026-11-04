@@ -16,6 +16,9 @@ profile = [
     "curios-module/profile",
 ]
 
+# `Unit::with_certification`: a unit holding another record, how the soundness board's histories withhold one. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
+
 [dependencies]
 curios-abi = { workspace = true }
 curios-archive = { workspace = true }

@@ -15,3 +15,7 @@ pub use verdicts::*;
 
 mod payload;
 pub use payload::*;
+
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_verdict::test_support::History` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

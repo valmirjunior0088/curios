@@ -28,6 +28,9 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{FileHash, Target, TreeHash},
     curios_common::{Fingerprint, Mount, Qualifier},

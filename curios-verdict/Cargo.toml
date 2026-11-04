@@ -11,6 +11,16 @@ workspace = true
 [features]
 # What restoring a unit from its slot and filing one cost, as spans beside the compilation's own.
 profile = ["curios-profile/enabled", "curios-pipeline/profile"]
+# `test_support::History`: units walked step by step over a store of their own, as builds walk them, for the soundness board. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = [
+    "dep:curios-prelude",
+    "dep:curios-surface",
+    "curios-common/test-support",
+    "curios-module/test-support",
+    "curios-package/test-support",
+    "curios-pipeline/test-support",
+    "curios-unit/test-support",
+]
 
 # Beside `curios-pipeline` and over `curios-package`, never under either: `Cache` is the pipeline's
 # trait and the store's layout is the package's, and the crate implementing one through the other
@@ -27,9 +37,19 @@ curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 # For the `ffi` rows a payload's record carries beside it: a reused payload still has to be linked, and what its imports are typed by cannot be read back off the module.
 curios-abi = { workspace = true }
+# A history's: the prelude every step is compiled over, and the reader its Core-text steps are read by.
+curios-prelude = { workspace = true, optional = true }
+curios-surface = { workspace = true, optional = true }
 
 # The payload suite files the bytes of a compiled module as a payload: the store digests a payload and never reads it, so any bytes stand in for machine code.
 [dev-dependencies]
 curios-wasm = { workspace = true }
 # The directory of its own every suite here works in, removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
+# What the history's own suite compiles it with, as the `test-support` feature hands it to another crate. Dev-dependency entries beside the normal ones, because the features must not reach a build that ships.
+curios-prelude = { workspace = true }
+curios-surface = { workspace = true }
+curios-module = { workspace = true, features = ["test-support"] }
+curios-package = { workspace = true, features = ["test-support"] }
+curios-pipeline = { workspace = true, features = ["test-support"] }
+curios-unit = { workspace = true, features = ["test-support"] }

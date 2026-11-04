@@ -11,6 +11,9 @@ workspace = true
 [features]
 profile = ["curios-profile/enabled", "curios-parse/profile", "curios-surface/profile"]
 
+# `RootSource::core_text`: a unit written as Core text, logged as read, for the soundness board's histories. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
+
 [dependencies]
 curios-archive = { workspace = true }
 curios-document = { workspace = true }

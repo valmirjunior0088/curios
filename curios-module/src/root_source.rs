@@ -714,6 +714,9 @@ pub fn identity(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 /// The entry program's mount: the empty prefix, which is what makes it the entry.
 fn entry_mount() -> Mount {
     Mount::new(Qualifier::empty(), RootKind::Ordinary)

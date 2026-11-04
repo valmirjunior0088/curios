@@ -1,5 +1,8 @@
 //! What one unit provides to its successors: what each stage produced for it, and the certifier's record of it.
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{
         Indexed, Kind, anchors_indexed, apart_parts, asked_indexed, digests, found, halved, halves,

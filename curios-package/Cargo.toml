@@ -14,6 +14,10 @@ workspace = true
 # and the write halves of one concern, which is why they sit together rather than a crate apart.
 # `/std`'s TOML codec is a guest library — it runs in the compiled program — and cannot serve the
 # driver; xtask's own `toml_edit` answers for `Cargo.toml`, which is not this format's business.
+[features]
+# `Store::alone`: a store sharing nothing the machine offers, which the soundness board's histories file in and rewrite records of. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
+
 [dependencies]
 curios-common = { workspace = true }
 curios-module = { workspace = true }

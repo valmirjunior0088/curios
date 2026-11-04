@@ -966,7 +966,9 @@ dependencies = [
  "curios-module",
  "curios-package",
  "curios-pipeline",
+ "curios-prelude",
  "curios-profile",
+ "curios-surface",
  "curios-unit",
  "curios-wasm",
 ]

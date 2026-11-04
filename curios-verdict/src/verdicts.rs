@@ -13,6 +13,9 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     crate::{Packs, opened, replace},
     curios_common::{Candidates, Qualifier, digest},
