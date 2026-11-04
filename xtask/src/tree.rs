@@ -15,7 +15,14 @@ use {
 };
 
 #[cfg(test)]
-mod tests;
+mod test_support;
+
+#[cfg(test)]
+mod layout_tests;
+#[cfg(test)]
+mod name_tests;
+#[cfg(test)]
+mod program_tests;
 
 /// The file whose group holds the files in [`DIRECTORY`], from the repository's root.
 const ROOT_FILE: &str = "xtask/tasks.toml";
