@@ -3,7 +3,7 @@ description = "The VS Code extension"
 [install]
 description = "Install the VS Code extension's tools from its lock file, exactly, as every run that reads them does"
 dir = "editors/vscode"
-produces = { installed = "editors/vscode/node_modules" }
+produces.installed = "editors/vscode/node_modules"
 run = [["npm", "clean-install"]]
 
 [lint.biome-format]

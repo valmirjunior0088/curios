@@ -2,7 +2,7 @@ description = "The browser bundle"
 
 [build]
 description = "Build the browser bundle for wasm32-unknown-unknown and generate its bindings"
-produces = { bindings = "curios-js/.artifacts/wasm32-unknown-unknown" }
+produces.bindings = "curios-js/.artifacts/wasm32-unknown-unknown"
 run = [
     ["cargo", "build", "--release", "--package", "curios-js", "--target", "wasm32-unknown-unknown", "--keep-going"],
     ["wasm-bindgen", "--target", "web", "--out-dir", "{bindings}", "{target}/wasm32-unknown-unknown/release/curios_js.wasm"],

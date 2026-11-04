@@ -3,7 +3,7 @@ description = "The tree-sitter grammars"
 [install]
 description = "Install the grammar's tools from its lock file, exactly, as every run that reads them does"
 dir = "editors/grammar"
-produces = { installed = "editors/grammar/node_modules" }
+produces.installed = "editors/grammar/node_modules"
 run = [["npm", "clean-install"]]
 
 [lint.biome-format]
@@ -18,7 +18,7 @@ run = [["biome", "lint", "--error-on-warnings", "editors/grammar"]]
 description = "Generate the parsers from the grammars, the program's into `src/` and Core text's into `core/src/`, where the repository commits them"
 dir = "editors/grammar"
 consumes = ["installed"]
-produces = { parser = "editors/grammar/src" }
+produces.parser = "editors/grammar/src"
 run = [["npm", "run", "generate"]]
 
 [test]

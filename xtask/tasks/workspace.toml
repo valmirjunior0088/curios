@@ -4,10 +4,11 @@ variables.shipped = ["--workspace", "--exclude", "x*"]
 # The edition every member inherits from `Cargo.toml`, which `rustfmt` is handed for what belongs to no package.
 variables.edition = "2024"
 # The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
-variables.loose = { run = ["git", "ls-files", "--", "programs/*.rs"] }
+variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
 variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
-variables.expression = { flag = "-E", help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted" }
+variables.expression.flag = "-E"
+variables.expression.help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted"
 
 [lint.rustfmt]
 description = "Fail on formatting drift in the workspace's Rust, the corpus's Rust twins included"

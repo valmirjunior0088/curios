@@ -3,7 +3,7 @@ description = "The compiler as it is released"
 [build]
 description = "Build the compiler as it is released"
 consumes = ["launcher.binary"]
-produces = { binary = "{target}/release/curios" }
+produces.binary = "{target}/release/curios"
 run = [["cargo", "build", "--release", "--package", "curios", "--keep-going"]]
 
 [test]
