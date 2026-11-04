@@ -853,15 +853,7 @@ fn verdicts_within<'s>(
         };
         let item = &item;
 
-        let (drained, failure) = kernel.take_checked();
-        if let Some(error) = failure {
-            verdicts.push(Verdict {
-                name: item_name,
-                error,
-            });
-        }
-
-        // The item's classification, then obligations (T) and (V) over the positions its check recorded. Every definition it mentions was judged before it and is classified already, so the set its positions are read against is closed where they are read.
+        // The item's classification. Every definition it mentions was judged before it and is classified already, so the set its positions are read against below is closed where they are read.
         totals.classify(kernel, item);
 
         // A group is judged as one item, so each of its members read what the group did; and what the classification read of what it mentions is the item's too.
@@ -869,12 +861,6 @@ fn verdicts_within<'s>(
         for name in item.declared_names() {
             reads.insert(*name, item_reads.clone());
             judged.push(*name);
-        }
-        if let Err(error) = check_positions(kernel, &drained, &totals, &mut local_memo) {
-            verdicts.push(Verdict {
-                name: item_name,
-                error,
-            });
         }
 
         // The registry entries the item's formers carry, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
@@ -888,6 +874,21 @@ fn verdicts_within<'s>(
             &mut polarities,
             &mut variances,
         );
+
+        // Obligations (T) and (V) over every position the item's judgment recorded, its entries' typings among them, so each is refused under the item that declares it rather than under the next one judged. An entry's positions reach only names declared before it, each classified by now.
+        let (drained, failure) = kernel.take_checked();
+        if let Some(error) = failure {
+            verdicts.push(Verdict {
+                name: item_name,
+                error,
+            });
+        }
+        if let Err(error) = check_positions(kernel, &drained, &totals, &mut local_memo) {
+            verdicts.push(Verdict {
+                name: item_name,
+                error,
+            });
+        }
 
         // How the item came out against the baseline's, for the declarations that read it.
         put(&mut stated, *place, item.clone());

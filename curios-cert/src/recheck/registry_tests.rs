@@ -4,10 +4,11 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
+    curios_common::{Plicity, Qualifier},
     curios_core::{
-        Definition, DefinitionKind, Definitions, Global, InductDecl, Intrinsic, Item, Level, Nat,
-        Telescope, Term, UniverseContext, UniverseParam, test_support::*,
+        Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam,
+        Intrinsic, Item, Level, Nat, Telescope, Term, UniverseContext, UniverseParam, Universes,
+        test_support::*,
     },
     curios_surface::Spelling,
     std::collections::BTreeMap,
@@ -191,4 +192,71 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "the registry's result sort was not applied to the levels the occurrence supplied: {verdicts:?}",
     );
+}
+
+/// What typing a registry entry records is checked under the item that declares it. A constructor's payload type is a type position, and `Carrier`'s, `((g : (Nat) -> Nat) => Nat)(reaches)`, is `Nat` once reduced and names the partial `reaches` as written: refused under `Carrier`, whether a definition follows it or it is the module's last.
+///
+/// Mutation-checked: with an item's positions drained before its entries are accepted, the refusal names the definition after `Carrier`, and no name where `Carrier` is last.
+#[test]
+fn an_entrys_obligation_is_reported_under_the_item_that_declares_it() {
+    let family = Global::Authored(Qualifier::from(["Carrier"]));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let payload = Term::apply(
+        Term::func(
+            [(
+                Free::local(930, Some("g")),
+                Term::func_type([(Free::local(931, Some("n")), nat.clone())], nat.clone()),
+            )],
+            nat.clone(),
+        ),
+        [Term::instance(
+            Global::Authored(Qualifier::from(["reaches"])),
+            Universes::default(),
+        )],
+    );
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build([(Free::local(932, Some("x")), payload)], Vec::new()),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let module = |followed: bool| {
+        let mut items = vec![diverging_sink(), reaching_definition()];
+        if followed {
+            items.push(authored(
+                &Global::Authored(Qualifier::from(["after"])),
+                nat.clone(),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            ));
+        }
+        declaring(
+            Definitions {
+                items: items.into(),
+            },
+            [(family, declaration.clone())],
+            [],
+            [],
+        )
+    };
+
+    for followed in [true, false] {
+        let verdicts = fixture_verdicts(&module(followed), 1_000_000, &Globals::default(), SYNTAX);
+
+        assert!(
+            verdicts.iter().any(|verdict| verdict.name == Some(family)
+                && matches!(verdict.error, Error::NotTotal { .. })),
+            "followed by a definition: {followed}; {verdicts:?}",
+        );
+    }
 }
