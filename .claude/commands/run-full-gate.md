@@ -9,7 +9,7 @@ The hand-off gate for code. Why the gate holds these steps and no others is `doc
 
 One command, `cargo xtask gate`: every step of the subjects the gate requires, one after another in the order it names them, each after what it requires and consumes; each subject's `lint` holds its formatting, and nothing writes. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the last line names what failed and what was not run.
 
-It needs, beyond cargo, `cargo-nextest`, Biome, Node, `npm` and the `wasm-bindgen` program, and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs. A step that lacks a tool, or has one the `programs` of `xtask/tasks.toml` do not admit, refuses before it builds, naming what installs it.
+It needs, beyond cargo, nextest, Biome, Node, `npm` and the `wasm-bindgen` program, and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs. A step that lacks a tool, or has one the `programs` of `xtask/tasks.toml` do not admit, refuses before it builds, naming what installs it.
 
 ## How it runs
 

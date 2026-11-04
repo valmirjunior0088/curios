@@ -34,7 +34,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.CARGO_NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
@@ -58,7 +58,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.CARGO_NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
@@ -79,7 +79,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.CARGO_NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
@@ -106,7 +106,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.CARGO_NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
@@ -251,7 +251,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.CARGO_NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: tools

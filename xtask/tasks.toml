@@ -1,9 +1,9 @@
 description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
 
 # The programs the steps launch beside the Rust toolchain, which `rust-toolchain.toml` pins: what version a run needs, held the first time a step launches each, and what installs it. The workflows read these pins to install each program on their runners.
-[programs.cargo-nextest]
+[programs.nextest]
 minimum = "0.9.149"
-install = "cargo install cargo-nextest --locked"
+install = "cargo install cargo-nextest --locked --version {version}"
 
 [programs.biome]
 # Exact, because a formatter's output moves between releases.

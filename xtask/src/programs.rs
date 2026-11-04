@@ -1,6 +1,6 @@
 //! What a command's words launch, what version of a program a run needs, and what a refusal says where a program is not installed or not the version the task files pin.
 //!
-//! **A command is the words a person would type.** Leading `NAME=value` words set the environment, as a shell reads them, and the next word names the program. `cargo` is the cargo that launched this run: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a step cannot resolve a second time and land somewhere else. `cargo nextest` is launched as nextest's own program, `cargo-nextest nextest`, as cargo itself launches it, so an absent one fails to spawn as every other program does.
+//! **A command is the words a person would type.** Leading `NAME=value` words set the environment, as a shell reads them, and the next word names the program. `cargo` is the cargo that launched this run: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a step cannot resolve a second time and land somewhere else. `cargo nextest` is launched as the program `nextest`, through its own executable, `cargo-nextest nextest`, as cargo itself launches it, so an absent one fails to spawn as every other program does.
 //!
 //! **A program is asked about where the files pin it, and nowhere else.** The task files' `programs` say what version a run needs of each program that is no part of the Rust toolchain, exact where output moves between releases and a minimum where it does not, and what installs it. The first time a step launches a pinned program in a run, [`check_version`] reads what it prints for `--version`; a program no step launches is never asked, so what a step needs is what it runs as it was asked. Where a program is not there, the launch is refused with what installs it.
 
@@ -39,7 +39,7 @@ pub(crate) fn launch(words: &[String]) -> Result<Launch, String> {
         .ok_or_else(|| "a command sets its environment and names no program".to_string())?;
 
     let (program, arguments) = match (program.as_str(), arguments) {
-        ("cargo", [nextest, rest @ ..]) if nextest == "nextest" => ("cargo-nextest", rest),
+        ("cargo", [nextest, rest @ ..]) if nextest == "nextest" => ("nextest", rest),
         (program, rest) => (program, rest),
     };
     let mut command = command_of(program);
@@ -58,10 +58,10 @@ pub(crate) fn launch(words: &[String]) -> Result<Launch, String> {
     })
 }
 
-/// The command that runs `program` as a step launches it, before the step's own arguments: nextest's is `cargo-nextest nextest`, and cargo's the one that launched this run.
+/// The command that runs `program` as a step launches it, before the step's own arguments: nextest's is its executable, `cargo-nextest nextest`, and cargo's the one that launched this run.
 fn command_of(program: &str) -> Command {
     match program {
-        "cargo-nextest" => {
+        "nextest" => {
             let mut command = Command::new("cargo-nextest");
             command.arg("nextest");
             command

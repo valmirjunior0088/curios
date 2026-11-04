@@ -43,12 +43,12 @@ fn an_equals_sign_after_the_program_is_an_argument() {
     );
 }
 
-/// Nextest is launched as its own program, so an absent one fails to spawn as every other program does.
+/// Nextest is launched through its own executable, so an absent one fails to spawn as every other program does.
 #[test]
-fn cargo_nextest_is_launched_as_its_own_program() {
+fn nextest_is_launched_through_its_own_executable() {
     let launch = launch(&words("cargo nextest run")).unwrap();
 
-    assert_eq!(launch.program, "cargo-nextest");
+    assert_eq!(launch.program, "nextest");
     assert_eq!(launch.command.get_program(), "cargo-nextest");
     assert_eq!(launch.command.get_args().collect::<Vec<_>>(), ["nextest"]);
     assert_eq!(launch.arguments, words("run"));
@@ -58,10 +58,10 @@ fn cargo_nextest_is_launched_as_its_own_program() {
 fn a_refusal_puts_the_fix_on_a_line_of_its_own() {
     assert_eq!(
         missing(
-            "cargo-nextest",
-            Some("cargo install cargo-nextest --locked")
+            "nextest",
+            Some("cargo install cargo-nextest --locked --version 0.9.149")
         ),
-        "cargo-nextest is needed, and it is not installed. Install it with:\n\n    cargo install cargo-nextest --locked"
+        "nextest is needed, and it is not installed. Install it with:\n\n    cargo install cargo-nextest --locked --version 0.9.149"
     );
 }
 
