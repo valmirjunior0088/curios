@@ -1,8 +1,4 @@
-use {
-    crate::{Date, Proof, Status, Ticket, Witness, false_type, refused},
-    curios_core::{Definitions, Free, Global, Intrinsic, Nat, Term, Universes},
-    curios_module::SYNTAX,
-};
+use crate::{Date, Proof, Status, Ticket, Witness, refused};
 
 pub(super) const TICKET: Ticket = Ticket {
     title: "An arm of a fold is typed with its scrutinee at the arm's case, and is taken at every tail",
@@ -31,7 +27,7 @@ pub(super) const TICKET: Ticket = Ticket {
         },
         Witness {
             what: "the fold whose identity arm is a hypothesis about its scrutinee, as a term",
-            proof: Proof::Module(an_identity_arm_typed_at_zero),
+            proof: Proof::Module(AN_IDENTITY_ARM_TYPED_AT_ZERO),
             expect: refused![kernel: curios_cert::Error::Mismatch { .. } in entry],
         },
     ],
@@ -86,43 +82,13 @@ const AN_IDENTITY_ARM_READS_A_LIST_AT_THE_EMPTY_ONE: &str = r#"
     f([1, 2], True/qed())
     "#;
 
-/// `((n, h : Holds(n == 2)) => match n : (_) => False | 0 => h | pred + 1; ih => ih end)(2, qed)`.
-///
 /// The kernel types the identity arm with `n` substituted by `0` through the arm and the locals it re-types, so `h` stands at `Holds(0 == 2)` and inhabits the motive; the cons arm hands its hypothesis back. Nothing the arm learned holds where reduction takes it: at the tail the fold is over `0` and the arm's `n` is `2`.
-fn an_identity_arm_typed_at_zero() -> (Definitions, Term) {
-    let n = Free::local(910, Some("n"));
-    let h = Free::local(911, Some("h"));
-    let pred = Free::local(912, Some("pred"));
-    let ih = Free::local(913, Some("ih"));
-
-    let two = || Term::intrinsic(Intrinsic::Nat(Nat::new(2usize)));
-    let holds = Term::apply(
-        Term::instance(
-            Global::Authored(SYNTAX.proof.holds.qualifier()),
-            Universes::default(),
-        ),
-        [Term::intrinsic(Intrinsic::NatEql(
-            Term::free_var(&n),
-            two(),
-        ))],
-    );
-    let qed = Term::variant(
-        Global::Authored(SYNTAX.proof.true_type.qualifier()),
-        Vec::<Term>::new(),
-        "qed",
-        Vec::<Term>::new(),
-    );
-
-    let fold = Term::nat_match(
-        Term::free_var(&n),
-        None,
-        false_type(),
-        Term::free_var(&h),
-        &pred,
-        &ih,
-        Term::free_var(&ih),
-    );
-    let forged = Term::func([(n, Term::intrinsic(Intrinsic::NatType)), (h, holds)], fold);
-
-    (Definitions::default(), Term::apply(forged, [two(), qed]))
-}
+const AN_IDENTITY_ARM_TYPED_AT_ZERO: &str = r#"
+    ((n: %NatType, h: /sys/Bool/Holds(%NatEql(n, 2))) =>
+        match n: (x) => /sys/Bool/False
+        | 0 =>
+            h
+        | pred + 1; ih =>
+            ih
+        end)(2, #{node = Variant} /sys/Bool/True/qed())
+    "#;

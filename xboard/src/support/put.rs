@@ -6,14 +6,11 @@ mod tests;
 use {
     crate::Proof,
     curios_cert::Verdict,
-    curios_common::{Qualifier, Report},
-    curios_core::{
-        Definition, Definitions, Free, Global, Item, Nominal, Program, RecItem, Term, Universes,
-        Zonked, ZonkedRefusal,
-    },
+    curios_common::Report,
+    curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
     curios_module::{RootSource, SYNTAX},
     curios_pipeline::{DEFAULT_BUDGET, Examined, test_support::*},
-    curios_surface::Spelling,
+    curios_surface::{CoreEntry, CoreFile, ReadError, Spelling, to_core},
     std::fmt,
 };
 
@@ -27,30 +24,13 @@ pub(crate) fn false_type() -> Term {
     Term::instance(false_name(), Universes::default())
 }
 
-/// The item a module built by hand declares the nominal `name` by: the former `entry` spells ([`Definition::former`]), carrying it, a family's in a group of its own as the lowering writes one. An entry is carried by its former and by nothing else, so a witness that wants a declaration and no definition of its own is handed the one its entry spells.
-pub(crate) fn declared(name: Global, entry: Nominal) -> Item {
-    let grouped = matches!(entry, Nominal::Inductive(_));
-    let island = name
-        .qualifier()
-        .map(|path| path.without_last())
-        .unwrap_or_default();
-    let former = Definition::former(name, island, entry);
-
-    match grouped {
-        // The former names its family nominally, so its group's binder is named by nothing, and a local counted from zero aliases nothing in a former's closed terms.
-        true => Item::Rec(RecItem::new(vec![(
-            Free::local(0, name.qualifier().map(Qualifier::last)),
-            former,
-        )])),
-        false => Item::Let(Box::new(former)),
-    }
-}
-
-/// One of the two checkers.
+/// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Checker {
-    /// `curios-elab`, which builds the module. A program the grammar refuses is counted here: no module exists for the kernel either way.
+    /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the kernel either way.
     Elaborator,
+    /// `curios-surface`'s reader, which builds the module Core text writes. Text that does not parse is counted here, as a program the grammar refuses is the elaborator's.
+    Reader,
     /// `curios-cert` and the layer it judges through: the trusted base.
     Kernel,
 }
@@ -59,6 +39,7 @@ impl fmt::Display for Checker {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Checker::Elaborator => "elaborator",
+            Checker::Reader => "reader",
             Checker::Kernel => "kernel",
         })
     }
@@ -69,6 +50,8 @@ impl fmt::Display for Checker {
 pub(crate) enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
+    /// Core text the reader built no module of: it did not parse, the reader refused it, or it closes otherwise than with a term stating no type. Held as the reader reports it.
+    Unread(String),
     /// The elaborator's error, with the diagnostic a compilation prints for it.
     Elaborator {
         error: curios_elab::Error,
@@ -133,6 +116,7 @@ impl Refusal {
     pub(crate) fn by(&self) -> Checker {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Checker::Elaborator,
+            Refusal::Unread(_) => Checker::Reader,
             Refusal::Unfinished(_) | Refusal::Kernel(_) => Checker::Kernel,
         }
     }
@@ -141,6 +125,7 @@ impl Refusal {
     pub(crate) fn named(&self) -> String {
         match self {
             Refusal::Text(_) => "text".to_string(),
+            Refusal::Unread(_) => "reader".to_string(),
             Refusal::Elaborator { error, .. } => {
                 let mut variants = error
                     .each()
@@ -170,9 +155,9 @@ impl Refusal {
 impl fmt::Display for Refusal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Refusal::Text(reported) | Refusal::Elaborator { reported, .. } => {
-                formatter.write_str(reported)
-            }
+            Refusal::Text(reported)
+            | Refusal::Unread(reported)
+            | Refusal::Elaborator { reported, .. } => formatter.write_str(reported),
             Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
             Refusal::Kernel(verdict) => {
                 write!(
@@ -188,7 +173,7 @@ impl fmt::Display for Refusal {
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
 pub(crate) enum Answer {
-    /// Refused before a module existed for the kernel to judge: by the program's text, or by the elaborator while it was building one.
+    /// Refused before a module existed for the kernel to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text.
     Unbuilt(Refusal),
     /// Judged by the kernel, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
     Judged(Vec<Refusal>),
@@ -267,16 +252,47 @@ fn put_module(definitions: Definitions, body: Term, type_: Term) -> Answer {
     })
 }
 
-impl Proof {
+/// Read `text` as Core text over the prelude, and put the module it writes to the kernel alone, with the prelude in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
+pub(crate) fn put_core_text(text: &str) -> Answer {
+    let unread = |reported: String| Answer::Unbuilt(Refusal::Unread(reported));
+    let file = match text.parse::<CoreFile>() {
+        Ok(file) => file,
+        Err(error) => return unread(error.format()),
+    };
+    match &file.entry {
+        Some(CoreEntry { type_: None, .. }) => {}
+        Some(CoreEntry { type_: Some(_), .. }) => {
+            return unread(
+                "the text states the type its term is put at, which the board states".to_string(),
+            );
+        }
+        None => return unread("the text closes with no term to put".to_string()),
+    }
+
+    match to_core(&file, Some(&prelude_form_scope())) {
+        Err(error) => unread(located(&error)),
+        Ok((definitions, entry)) => {
+            let body = entry.expect("an entry the text writes is read").body;
+
+            put_module(definitions, body, false_type())
+        }
+    }
+}
+
+/// The reader's refusal, at the place in the text it stands where it names one.
+fn located(error: &ReadError) -> String {
+    match &error.span {
+        Some(span) => Report::at(span.clone(), error.to_string()).render(),
+        None => error.to_string(),
+    }
+}
+
+impl Proof<'_> {
     /// Put the proof to the checkers at `False`.
     pub(crate) fn answer(&self) -> Answer {
         match self {
             Proof::Program(source) => put_program(source),
-            Proof::Module(build) => {
-                let (definitions, proof) = build();
-
-                put_module(definitions, proof, false_type())
-            }
+            Proof::Module(text) => put_core_text(text),
         }
     }
 }

@@ -1,12 +1,4 @@
-use {
-    crate::{Date, Proof, Status, Ticket, Witness, declared, refused},
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nominal, Scope,
-        Telescope, Term, UniverseContext, Universes,
-    },
-    curios_module::SYNTAX,
-};
+use crate::{Date, Proof, Status, Ticket, Witness, refused};
 
 pub(super) const TICKET: Ticket = Ticket {
     title: "A reduct read off a local's type outlives the arm that re-typed the local",
@@ -14,111 +6,28 @@ pub(super) const TICKET: Ticket = Ticket {
     status: Status::Fixed,
     witnesses: &[Witness {
         what: "a match on a proof fired inside an arm at the payload the arm's case states, and answered again after the arm",
-        proof: Proof::Module(a_reduct_read_under_an_arms_retyping),
+        proof: Proof::Module(A_REDUCT_READ_UNDER_AN_ARMS_RETYPING),
         expect: refused![kernel: curios_cert::Error::Mismatch { .. } in entry],
     }],
 };
 
-/// `induct Read : (Bool) -> Prop | mk(x : Bool) : (x) end`, and over `b : Bool` and `p : Read(b)`, with `read` standing for `match p at Read(b) : (_, _) => Bool | mk(x) => x end`: `((w : True) => (k : Holds(read)) => k)(match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end)(qed)`, closed at `false` and `Read/mk(false)`.
+/// `read` is the match on `p` that reads its payload back.
 ///
 /// A match on a proposition whose indices pin its payload fired on the type its scrutinee was assumed at, so `read` was `b` wherever `p : Read(b)` and named `p` and not `b`. The `true` arm of the match on `b` re-types `p` at `Read(true)`, where `read` was `true` and `Holds(read)` `True`, and the kernel remembered that reduct under `read`. Leaving the arm puts `p` back at `Read(b)` and drops no case equation, and the reducts remembered of terms naming a local were cleared on the way out only where one was dropped. So the `qed` after the match was checked at a `Holds(read)` that still answered `True`, for every `b`, and at `false` what it proved is `Holds(false)`. A bracket that closes an arm's re-typing now clears them as the re-typing does; and the match states the instance it eliminates, so the arm's case is a substitution into it and what is remembered inside the arm is remembered of another term. After the arm `Holds(read)` is `Holds(b)`, which `qed` does not inhabit.
-fn a_reduct_read_under_an_arms_retyping() -> (Definitions, Term) {
-    let family = Global::Authored(Qualifier::from(["Read"]));
-    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
-    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
-    let at = |index: Term| Term::induct_type(family, Vec::<Term>::new(), [index]);
-
-    let held = Free::local(940, Some("x"));
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::build(
-            [(Free::local(941, Some("i")), bool_type())],
-            (),
-        )),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build([(held, bool_type())], vec![Term::free_var(&held)]),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::prop(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let definitions = Definitions {
-        items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-    };
-
-    let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
-    let true_type = || Term::induct_type(truth, Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = || Term::variant(truth, Vec::<Term>::new(), "qed", Vec::<Term>::new());
-
-    let decided = Free::local(942, Some("b"));
-    let proof = Free::local(943, Some("p"));
-    let payload = Free::local(944, Some("x"));
-
-    // match p at Read(b) : (_, _) => Bool | mk(x) => x end
-    let read = Term::induct_match_scoped_marked(
-        Term::free_var(&proof),
-        Scope::constant(Many(2), bool_type()),
-        [(
-            "mk",
-            vec![(Plicity::Explicit, payload)],
-            Term::free_var(&payload),
-        )],
-        None,
-    )
-    .stating(at(Term::free_var(&decided)));
-    let holds_read = || {
-        Term::apply(
-            Term::instance(
-                Global::Authored(SYNTAX.proof.holds.qualifier()),
-                Universes::default(),
-            ),
-            [read.clone()],
-        )
-    };
-
-    // match b : (_) => True | false => qed | true => ((h : Holds(read)) => qed)(qed) end
-    let warmed = Term::bool_match(
-        Term::free_var(&decided),
-        None,
-        true_type(),
-        qed(),
-        Term::apply(
-            Term::func([(Free::local(945, Some("h")), holds_read())], qed()),
-            [qed()],
-        ),
-    );
-
-    // (w : True) => (k : Holds(read)) => k
-    let stated = Free::local(946, Some("k"));
-    let after = Term::func(
-        [(Free::local(947, Some("w")), true_type())],
-        Term::func([(stated, holds_read())], Term::free_var(&stated)),
-    );
-
-    let forged = Term::func(
-        [
-            (decided, bool_type()),
-            (proof, at(Term::free_var(&decided))),
-        ],
-        Term::apply(Term::apply(after, [warmed]), [qed()]),
-    );
-
-    (
-        definitions,
-        Term::apply(
-            forged,
-            [
-                literal(false),
-                Term::variant(family, Vec::<Term>::new(), "mk", [literal(false)]),
-            ],
-        ),
-    )
-}
+const A_REDUCT_READ_UNDER_AN_ARMS_RETYPING: &str = r#"
+    #{absent = [/Read/mk]} induct /Read: (i: %BoolType) -> pub Prop
+    | mk(x: %BoolType): (x)
+    end
+    ((b: %BoolType, p: #{node = InductType} /Read()(b)) => ((w: #{node = InductType} /sys/Bool/True()) => (k: /sys/Bool/Holds(#{cases = {stated = #{node = InductType} /Read()(b)}} match p: (x3, x4) => %BoolType
+                    | mk(x) =>
+                        x
+                    end)) => k)(match b: (x5) => #{node = InductType} /sys/Bool/True()
+            | false =>
+                #{node = Variant} /sys/Bool/True/qed()
+            | true =>
+                ((h: /sys/Bool/Holds(#{cases = {stated = #{node = InductType} /Read()(b)}} match p: (x6, x7) => %BoolType
+                        | mk(x2) =>
+                            x2
+                        end)) => #{node = Variant} /sys/Bool/True/qed())(#{node = Variant} /sys/Bool/True/qed())
+            end)(#{node = Variant} /sys/Bool/True/qed()))(false, #{node = Variant} /Read/mk(false))
+    "#;

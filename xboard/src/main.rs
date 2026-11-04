@@ -1,6 +1,6 @@
 //! The soundness board, as a cargo subcommand, and the board itself, one part of the judgment a module beside this one.
 //!
-//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named. `cargo xboard probe` puts one program to them as a proof of `False`, off the board: what a hunt asks before there is a ticket to write.
+//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named. `cargo xboard probe` puts one program, or one module written as Core text, to them as a proof of `False`, off the board: what a hunt asks before there is a ticket to write.
 
 #[cfg(test)]
 mod tests;
@@ -60,15 +60,15 @@ enum Board {
     Report,
 
     #[command(
-        about = "Put one program to the checkers as a proof of False, and say whether it was admitted",
-        after_help = "Exits 0 where the program was admitted, 1 where it was refused, and 2 where it could not be put."
+        about = "Put one program, or one module written as Core text, to the checkers as a proof of False, and say whether it was admitted",
+        after_help = "Exits 0 where the proof was admitted, 1 where it was refused, and 2 where it could not be put."
     )]
     Probe {
         #[arg(
-            value_name = "PROGRAM",
-            help = "The file whose final term is the proof, over the standard library alone; - is standard input"
+            value_name = "CANDIDATE",
+            help = "The file whose final term is the proof, over the standard library alone: Core text where its name ends in .crsc, and a program otherwise; - is standard input, a program"
         )]
-        program: PathBuf,
+        candidate: PathBuf,
     },
 }
 
@@ -84,9 +84,12 @@ fn main() -> ExitCode {
                 false => ExitCode::SUCCESS,
             }
         }
-        Board::Probe { program } => match read(&program) {
-            Ok(source) => {
-                let probe = Probe::put(&source);
+        Board::Probe { candidate } => match read(&candidate) {
+            Ok(text) => {
+                let probe = Probe::put(match candidate.extension() == Some("crsc".as_ref()) {
+                    true => Proof::Module(&text),
+                    false => Proof::Program(&text),
+                });
 
                 print!("{probe}");
 
@@ -97,7 +100,7 @@ fn main() -> ExitCode {
                 }
             }
             Err(why) => {
-                eprintln!("{}: {why}", program.display());
+                eprintln!("{}: {why}", candidate.display());
 
                 ExitCode::from(2)
             }
@@ -105,15 +108,15 @@ fn main() -> ExitCode {
     }
 }
 
-/// The program's text: the file at `program`, or standard input for `-`.
-fn read(program: &Path) -> io::Result<String> {
-    match program.as_os_str() == "-" {
+/// The candidate's text: the file at `candidate`, or standard input for `-`.
+fn read(candidate: &Path) -> io::Result<String> {
+    match candidate.as_os_str() == "-" {
         true => {
             let mut source = String::new();
             io::stdin().read_to_string(&mut source)?;
 
             Ok(source)
         }
-        false => fs::read_to_string(program),
+        false => fs::read_to_string(candidate),
     }
 }

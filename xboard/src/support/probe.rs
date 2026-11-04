@@ -1,24 +1,27 @@
-//! A probe: one program put to the checkers as a proof of `False`, off the board, and what they said of it.
+//! A probe: one program, or one module written as Core text, put to the checkers as a proof of `False`, off the board, and what they said of it.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Answer, Checker, false_name, put_program, refusers},
+    crate::{Answer, Checker, Proof, false_name, refusers},
     std::fmt,
 };
 
-/// What the checkers said of a program put to them at `False` and filed nowhere: the question a hunt asks before there is a ticket to write. The program is put exactly as the board puts a program witness, so what a probe shows admitted is what a ticket filed from it shows admitted.
+/// What the checkers said of a proof put to them at `False` and filed nowhere: the question a hunt asks before there is a ticket to write. The proof is put exactly as the board puts a witness of its form, so what a probe shows admitted is what a ticket filed from it shows admitted.
 #[derive(Debug)]
 pub(crate) struct Probe {
     answer: Answer,
+    /// What the proof's form put it to.
+    asked: [Checker; 2],
 }
 
 impl Probe {
-    /// Put the program `source` to both checkers, its final term as a proof of `False`.
-    pub(crate) fn put(source: &str) -> Probe {
+    /// Put `proof` to what its form puts it to, its term as a proof of `False`.
+    pub(crate) fn put(proof: Proof<'_>) -> Probe {
         Probe {
-            answer: put_program(source),
+            answer: proof.answer(),
+            asked: proof.asked(),
         }
     }
 
@@ -27,7 +30,7 @@ impl Probe {
         self.answer.admitted()
     }
 
-    /// What `checker` made of the program. The kernel is not asked where the elaborator built it no module to judge.
+    /// What `checker` made of the proof. The kernel is not asked where nothing built it a module to judge.
     fn said(&self, checker: Checker) -> &'static str {
         let refused = self
             .answer
@@ -43,7 +46,7 @@ impl Probe {
     }
 }
 
-/// The verdict in the report's words, what each checker made of the program, and every refusal as a compilation prints it.
+/// The verdict in the report's words, what each step the proof was put to made of it, and every refusal as its step reports it.
 impl fmt::Display for Probe {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.admitted() {
@@ -51,7 +54,7 @@ impl fmt::Display for Probe {
             false => writeln!(formatter, "REFUSED    by {}", refusers(&self.answer))?,
         }
 
-        for checker in [Checker::Elaborator, Checker::Kernel] {
+        for checker in self.asked {
             writeln!(
                 formatter,
                 "           {:<10}  {}",

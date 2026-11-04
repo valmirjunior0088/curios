@@ -10,18 +10,19 @@ workspace = true
 
 # Over the pipeline and the kernel, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
 [dependencies]
-# The module and the term a witness built by hand supplies.
+# The module a witness built by hand is read to, and the term it closes with.
 curios-core = { workspace = true }
-# The qualified name such a module declares an item under.
+# The qualified name an expected refusal stands in, and the report a reader's refusal is located by.
 curios-common = { workspace = true }
 # The error a witness expects of the kernel.
 curios-cert = { workspace = true }
 # The error a witness expects of the elaborator.
 curios-elab = { workspace = true }
-# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope.
+# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope, read over the prelude's declarations.
 curios-pipeline = { workspace = true, features = ["test-support"] }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
+# The program a witness's text is parsed as, the reader that makes a module of one written as Core text, and the spelling a kernel's refusal is printed in.
 curios-surface = { workspace = true }
 # The binary's subcommands, `report` and `probe`.
 clap = { workspace = true }

@@ -1,11 +1,4 @@
-use {
-    crate::{Date, Proof, Status, Ticket, Witness, declared, false_type, refused},
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definitions, Free, Global, InductDecl, InductParam, Nominal, Telescope, Term,
-        UniverseContext,
-    },
-};
+use crate::{Date, Proof, Status, Ticket, Witness, refused};
 
 pub(super) const TICKET: Ticket = Ticket {
     title: "A payload that quantifies over `Prop` is applied at its own family, and the application is graded below its constructor",
@@ -24,7 +17,7 @@ pub(super) const TICKET: Ticket = Ticket {
         },
         Witness {
             what: "the recursion on what the payload returns of the scrutinee, as a term",
-            proof: Proof::Module(a_payload_applied_at_its_own_family),
+            proof: Proof::Module(A_PAYLOAD_APPLIED_AT_ITS_OWN_FAMILY),
             expect: refused![kernel: curios_cert::Error::Oversized { .. }],
         },
     ],
@@ -50,89 +43,16 @@ const A_PAYLOAD_RETURNS_ITS_CONSTRUCTOR_BUILT_AGAIN: &str = r#"
     bad(Bad/c((A) => (x) => x))
     "#;
 
-/// `induct Bad : Prop | c(f : (A : Prop) -> (x : A) -> A) end` and `rec bad : (b : Bad) -> False = (b) => match b | c(f) => bad(f(Bad)(b)) end`, closed with `bad(Bad/c((A) => (x) => x))`.
-///
 /// A `Prop`-sorted family carried no size condition, so `Bad` held a payload that quantified over the sort `Bad` was in, and the payload's declared type names `Bad` nowhere, so strict positivity had nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one did, and at the identity it handed back the scrutinee. The declaration is refused where it is sized: its payload does not fit under `Prop` at level zero.
-fn a_payload_applied_at_its_own_family() -> (Definitions, Term) {
-    let family = Global::Authored(Qualifier::from(["Bad"]));
-    let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
-
-    // (A : Prop) -> (x : A) -> A
-    let proposition = Free::local(920, Some("A"));
-    let payload_type = Term::func_type(
-        [(proposition, Term::prop())],
-        Term::func_type(
-            [(Free::local(921, Some("x")), Term::free_var(&proposition))],
-            Term::free_var(&proposition),
-        ),
-    );
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("c"),
-            InductParam::new(
-                Telescope::build([(Free::local(922, Some("f")), payload_type)], Vec::new()),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::prop(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let definitions = Definitions {
-        items: vec![declared(family, Nominal::Inductive(declaration))].into(),
-    };
-
-    let member = Free::local(923, Some("bad"));
-    let subject = Free::local(924, Some("b"));
-    let payload = Free::local(925, Some("f"));
-
-    // (b) => match b | c(f) => bad(f(Bad)(b)) end
-    let body = Term::func(
-        [(subject, family_type.clone())],
-        Term::induct_match(
-            Term::free_var(&subject),
-            None,
-            false_type(),
-            [(
-                "c",
-                vec![payload],
-                Term::apply(
-                    Term::free_var(&member),
-                    [Term::apply(
-                        Term::apply(Term::free_var(&payload), [family_type.clone()]),
-                        [Term::free_var(&subject)],
-                    )],
-                ),
-            )],
-        ),
-    );
-
-    // (A) => (x) => x
-    let chosen = Free::local(926, Some("A"));
-    let handed = Free::local(927, Some("x"));
-    let identity = Term::func(
-        [(chosen, Term::prop())],
-        Term::func([(handed, Term::free_var(&chosen))], Term::free_var(&handed)),
-    );
-
-    let proof = Term::rec(
-        [(
-            member,
-            Term::func_type([(Free::local(928, Some("b")), family_type)], false_type()),
-            body,
-        )],
-        Term::apply(
-            Term::free_var(&member),
-            [Term::variant(family, Vec::<Term>::new(), "c", [identity])],
-        ),
-    );
-
-    (definitions, proof)
-}
+const A_PAYLOAD_APPLIED_AT_ITS_OWN_FAMILY: &str = r#"
+    #{absent = [/Bad/c]} induct /Bad: pub Prop
+    | c(f: (A: Prop) -> (x: A) -> A)
+    end
+    #{node = Rec} (let bad: (b: #{node = InductType} /Bad()) -> /sys/Bool/False =
+        (b2: #{node = InductType} /Bad()) =>
+            match b2: (x2) => /sys/Bool/False
+            | c(f) =>
+                bad(f(#{node = InductType} /Bad())(b2))
+            end;
+    bad(#{node = Variant} /Bad/c((A: Prop) => (x: A) => x)))
+    "#;

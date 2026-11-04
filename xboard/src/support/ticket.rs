@@ -1,8 +1,7 @@
 //! What is written on the board: a part of the judgment, the tickets filed under it, and the witnesses each carries.
 
 use {
-    crate::{Date, Expected},
-    curios_core::{Definitions, Term},
+    crate::{Checker, Date, Expected},
     std::fmt,
 };
 
@@ -44,25 +43,33 @@ pub(crate) struct Ticket {
 pub(crate) struct Witness {
     /// What is being put, in a few words.
     pub(crate) what: &'static str,
-    pub(crate) proof: Proof,
+    pub(crate) proof: Proof<'static>,
     /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass. Written by [`refused!`](crate::refused).
     pub(crate) expect: &'static [Expected],
 }
 
-/// The proof of `False` a witness alleges, in the form it is put. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
+/// The proof of `False` a witness alleges, by its text and the form it is written in, which says how it is put. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Proof {
+pub(crate) enum Proof<'t> {
     /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the kernel over the module it built.
-    Program(&'static str),
-    /// A module built by hand and the term it closes with, put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
-    Module(fn() -> (Definitions, Term)),
+    Program(&'t str),
+    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the prelude, and put to the kernel alone with the prelude in scope, through the walk a compilation puts a program to.
+    Module(&'t str),
 }
 
-impl Proof {
+impl Proof<'_> {
     fn kind(&self) -> &'static str {
         match self {
             Proof::Program(_) => "program",
             Proof::Module(_) => "module",
+        }
+    }
+
+    /// What the proof is put to, in the order it meets them: the step that builds its module, then the kernel.
+    pub(crate) fn asked(&self) -> [Checker; 2] {
+        match self {
+            Proof::Program(_) => [Checker::Elaborator, Checker::Kernel],
+            Proof::Module(_) => [Checker::Reader, Checker::Kernel],
         }
     }
 }

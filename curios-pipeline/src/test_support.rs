@@ -1,4 +1,4 @@
-//! The puts: a program, or a module, handed to the checkers with the fixed prelude in scope, for the soundness board and the suites that judge what it judges.
+//! The puts: a program, or a module, handed to the checkers with the fixed prelude in scope, and the scope Core text is read over to make such a module, for the soundness board and the suites that judge what it judges.
 //!
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
@@ -9,8 +9,14 @@ use {
     },
     curios_module::SYNTAX,
     curios_prelude::with_prelude,
+    curios_surface::FormScope,
     curios_unit::Predecessors,
 };
+
+/// The scope Core text is read over with the fixed prelude in front of it: the entries the prelude's formers carry and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.
+pub fn prelude_form_scope() -> FormScope {
+    with_prelude(|prelude| FormScope::over(SYNTAX, prelude.iter().map(|unit| unit.core())))
+}
 
 /// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`].
 pub fn typecheck_with_prelude(
