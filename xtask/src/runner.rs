@@ -6,8 +6,7 @@
 
 use {
     crate::{
-        Checkout, Product, Request, Step, Task, bindgen_web, file_with_inputs, launch_in, modified,
-        spelled,
+        Checkout, Product, Request, Step, Task, bindgen_web, file_with_inputs, launch_in, spelled,
     },
     clap::ValueEnum,
     std::{
@@ -210,19 +209,6 @@ fn act(task: &Task) -> Result<(), String> {
         Task::Write { path, text } => {
             fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))?;
             eprintln!("wrote {}", path.display());
-        }
-        Task::Keeps {
-            path,
-            during,
-            rewritten,
-        } => {
-            let before =
-                modified(path).ok_or_else(|| format!("{} is not there to keep", path.display()))?;
-            act(during)?;
-
-            if modified(path) != Some(before) {
-                return Err(format!("{rewritten}: {} was written again", path.display()));
-            }
         }
     }
 

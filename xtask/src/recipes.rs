@@ -419,7 +419,7 @@ fn docs_build() -> Vec<Task> {
 
 /// Hold that a second cargo mode reuses Binaryen's build.
 ///
-/// Nothing is removed first: the cache's key holds a hash of the build script, so the first build after an edit to it is the one from source, whichever step makes it, and this writes only what any build writes. Linting the package is another cargo mode with a build-script fingerprint of its own: it must find the cache and run no CMake, which the cache's marker says by keeping its modification time.
+/// Nothing is removed first: the cache's key holds a hash of the build script, so the first build after an edit to it is the one from source, whichever step makes it, and this writes only what any build writes. Linting the package is another cargo mode with a build-script fingerprint of its own: it must find the cache and run no CMake, which the build script refuses to do under [`BINARYEN_CACHED_ONLY`].
 fn binaryen_cache() -> Vec<Task> {
     let package = "curios-binaryen";
 
@@ -431,20 +431,14 @@ fn binaryen_cache() -> Vec<Task> {
             &[],
         )
         .into(),
-        Task::Keeps {
-            path: root()
-                .join(package)
-                .join(".artifacts")
-                .join(HOST_TRIPLE)
-                .join(BINARYEN_MARKER),
-            during: Box::new(linting(Some(package)).into()),
-            rewritten: "linting curios-binaryen rebuilt Binaryen",
-        },
+        linting(Some(package))
+            .with(BINARYEN_CACHED_ONLY, Arg::Text("1".to_string()))
+            .into(),
     ]
 }
 
-/// The file `curios-binaryen/build.rs` writes last into a cache entry, which is how it knows an entry is whole.
-const BINARYEN_MARKER: &str = "done";
+/// What `curios-binaryen/build.rs` reads to refuse building Binaryen from source, where a cache entry must already hold the build.
+const BINARYEN_CACHED_ONLY: &str = "CURIOS_BINARYEN_CACHED";
 
 /// The cargo profile [`profile`] builds the compiler under.
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]

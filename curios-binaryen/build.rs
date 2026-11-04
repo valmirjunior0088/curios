@@ -15,6 +15,11 @@ use {
     tar::Archive,
 };
 
+/// Set, a cache entry that does not hold this build is refused rather than filled: what the workspace's Binaryen check sets on a second cargo mode, which must reuse the entry the first one left.
+///
+/// Read and never declared with `rerun-if-env-changed`: a declared variable runs this script again whenever it comes or goes, and with it a rebuild of this crate and of everything that depends on it.
+const CACHED_ONLY: &str = "CURIOS_BINARYEN_CACHED";
+
 const BINARYEN_VERSION: &str = "version_133";
 const BINARYEN_SOURCE_SHA256: &str =
     "2f3e3d9edc56751499571da073a8a81943ca3fcbc08a945d2c619a7a1d4eb88b";
@@ -170,6 +175,12 @@ fn build(entry: &Path, out: &Path) {
         && library_in(&cached).is_some()
     {
         return;
+    }
+    if env::var_os(CACHED_ONLY).is_some() {
+        panic!(
+            "{CACHED_ONLY} is set and the Binaryen cache entry at {} does not hold this build: this cargo mode would build Binaryen again rather than reuse the build another left",
+            entry.display()
+        );
     }
 
     let _ = fs::remove_file(&done);
