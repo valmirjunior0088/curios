@@ -33,6 +33,8 @@ mod occurrence_tests;
 #[cfg(test)]
 mod plicity_tests;
 #[cfg(test)]
+mod positivity_tests;
+#[cfg(test)]
 mod proposition_tests;
 #[cfg(test)]
 mod reads_tests;

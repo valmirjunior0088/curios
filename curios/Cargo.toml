@@ -50,7 +50,8 @@ curios-pipeline = { workspace = true, features = ["test-support"] }
 curios-algebra = { workspace = true }
 # Where a totality refusal stands, erased as a proof or as a type, which the rules' suites hold a refusal to.
 curios-analysis = { workspace = true }
-curios-cert = { workspace = true }
+# Its test support too: a kernel error by name, which the rules' suites print a refusal by.
+curios-cert = { workspace = true, features = ["test-support"] }
 curios-core = { workspace = true }
 curios-cps = { workspace = true }
 # Its test support too: an error read beneath where it was raised, and by name, which the rules' suites hold a refusal to.

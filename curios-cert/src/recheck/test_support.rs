@@ -4152,6 +4152,27 @@ pub(super) fn written() -> Definitions {
     reading_definitions(nat(), Term::free_var)
 }
 
+/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
+pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
+    let file = text
+        .parse::<curios_surface::CoreFile>()
+        .unwrap_or_else(|error| panic!("{}", error.format()));
+    let (definitions, entry) =
+        curios_surface::to_core(&file, None).unwrap_or_else(|error| panic!("{error}"));
+    let program = Program {
+        definitions,
+        entrypoint: Entrypoint {
+            body: entry.expect("the text closes with its term").body,
+            type_: Some(Term::instance(
+                Global::Authored(SYNTAX.proof.false_type.qualifier()),
+                Universes::default(),
+            )),
+        },
+    };
+
+    fixture_verdicts(&program, BUDGET, &Globals::default(), SYNTAX)
+}
+
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
 pub(super) fn walked(definitions: &Definitions) -> Rechecked {
     let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);

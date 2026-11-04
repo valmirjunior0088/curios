@@ -23,7 +23,6 @@ mod plicity_tests;
 mod positivity_composition_tests;
 mod positivity_computed_type_tests;
 mod positivity_index_tests;
-mod positivity_kernel_tests;
 mod positivity_occurrence_tests;
 mod proposition_elimination_tests;
 mod proposition_tests;
