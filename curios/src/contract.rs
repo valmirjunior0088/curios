@@ -246,7 +246,7 @@ pub(crate) const DECLARATIONS: Contract = Contract {
 };
 
 pub(crate) const SERVER: Contract = Contract {
-    command: "server",
+    command: "wonder --server",
     accepts: Accepts::Nothing,
     own_file_only: false,
     access: Access::Write,
@@ -276,8 +276,8 @@ impl Mode {
                 Query::Stage(_) => &STAGE,
                 Query::At(_) => &AT,
                 Query::Declarations => &DECLARATIONS,
+                Query::Server => &SERVER,
             },
-            Mode::Server { .. } => &SERVER,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => &PROFILE,
         }
@@ -293,7 +293,6 @@ impl Mode {
             | Mode::Lint { subject, .. }
             | Mode::Wonder { subject, .. } => subject.as_deref(),
             Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
-            Mode::Server { .. } => None,
             // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
             #[cfg(feature = "profile")]
@@ -319,8 +318,7 @@ impl Mode {
             | Mode::Pin { .. }
             | Mode::Lint { .. }
             | Mode::Format { .. }
-            | Mode::Wonder { .. }
-            | Mode::Server { .. } => None,
+            | Mode::Wonder { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
@@ -347,8 +345,7 @@ impl Mode {
             | Mode::Document { elaboration, .. }
             | Mode::Test { elaboration, .. }
             | Mode::Lint { elaboration, .. }
-            | Mode::Wonder { elaboration, .. }
-            | Mode::Server { elaboration } => Some(elaboration),
+            | Mode::Wonder { elaboration, .. } => Some(elaboration),
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,

@@ -64,7 +64,7 @@ type mismatch
 - A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
 - Foreign declarations answered by a WebAssembly module the manifest names and pins by hash, folded into the executable by `curios compile`
-- Editor support over `curios server` — a tree-sitter grammar, with Zed and VS Code extensions
+- Editor support over `curios wonder --server` — a tree-sitter grammar, with Zed and VS Code extensions
 
 ## Try it
 

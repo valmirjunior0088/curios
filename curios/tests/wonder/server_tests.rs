@@ -30,7 +30,7 @@ impl Editor {
     fn launch(root: &Path) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
             .current_dir(root)
-            .args(["server"])
+            .args(["wonder", "--server"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

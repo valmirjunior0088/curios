@@ -245,7 +245,7 @@ pub(crate) enum Mode {
         manifest: ManifestFlag,
     },
 
-    /// Questions about a program, answered by the compilation that would build it. The subject is the one argument, read by the rule every command's is, and the query an option, so no word is ever both: an executable may be named as a query is, and a query added later takes no executable's name. With no query, the check — every diagnostic, goal and lint ([`Query::Check`]).
+    /// Questions about a program, answered by the compilation that would build it. The subject is the one argument, read by the rule every command's is, and the query an option, so no word is ever both: an executable may be named as a query is, and a query added later takes no executable's name. With no query, the check — every diagnostic, goal and lint ([`Query::Check`]); with `--server`, the same questions asked by an editor over a protocol, of the documents it hands over, so with no subject.
     #[command(about = "Ask what the compiler knows about a program; with no query, check it")]
     Wonder {
         #[command(flatten)]
@@ -254,15 +254,6 @@ pub(crate) enum Mode {
         #[arg(value_name = "SUBJECT", help = DIAGNOSTICS.subject_help())]
         subject: Option<String>,
 
-        #[command(flatten)]
-        elaboration: Elaboration,
-    },
-
-    /// The questions `wonder` answers, asked over a protocol: an editor hands it its documents, so its grammar holds no subject, and a word after it is refused as any argument nothing reads is.
-    #[command(
-        about = "Answer an editor over the language server protocol on standard input and output"
-    )]
-    Server {
         #[command(flatten)]
         elaboration: Elaboration,
     },
@@ -416,6 +407,8 @@ pub(crate) enum Query {
     /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
     At(Place),
     Declarations,
+    /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
+    Server,
 }
 
 impl Query {
@@ -477,9 +470,16 @@ impl Args for Query {
                     "Every definition a file declares, one row per line, in the order they are written",
                 ),
             ))
+            .arg(
+                flag(
+                    "server",
+                    "Answer an editor over the language server protocol on standard input and output, of the documents it hands over; takes no subject".to_string(),
+                )
+                .conflicts_with("subject"),
+            )
             .group(
                 ArgGroup::new(Self::GROUP)
-                    .args(["tests", "cost", "stage", "at", "declarations"])
+                    .args(["tests", "cost", "stage", "at", "declarations", "server"])
                     .multiple(false),
             )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
@@ -503,6 +503,8 @@ impl FromArgMatches for Query {
             Query::At(*place)
         } else if matches.get_flag("declarations") {
             Query::Declarations
+        } else if matches.get_flag("server") {
+            Query::Server
         } else {
             Query::Check
         })

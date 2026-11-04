@@ -6,7 +6,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [What a package is made of](#what-a-package-is-made-of)
 - [Subjects](#subjects)
 - [The surface](#the-surface)
-- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`pin`](#pin) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`server`](#server) · [`profile`](#profile)
+- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`pin`](#pin) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`profile`](#profile)
 - [The manifest](#the-manifest)
 - [Exit codes](#exit-codes)
 - [Flags](#flags)
@@ -71,7 +71,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Eleven commands, and `wonder`'s six queries — twelve commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
+Ten commands, and `wonder`'s seven queries — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
@@ -90,7 +90,7 @@ Eleven commands, and `wonder`'s six queries — twelve commands where the compil
 | [`wonder --stage`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | `<STAGE>`, the option's value | nothing | reads, files the units it compiled from disk |
 | [`wonder --at`](#wonder) | a file of a program or of a library | `<LINE>:<COLUMN>`, the option's value | nothing | reads, files the units it compiled from disk |
 | [`wonder --declarations`](#wonder) | a file of a program or of a library | — | nothing | reads, files the units it compiled from disk |
-| [`server`](#server) | — | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --server`](#wonder) | — | — | nothing | reads, files the units it compiled from disk |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
 `--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
@@ -327,6 +327,7 @@ There is one canonical style and no options to configure it. Formatting is verif
 | `--stage <STAGE>` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses, and is written where it is reached, so nothing a later stage does unmakes it: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 2 when written goals alone stopped it and 1 otherwise |
 | `--at <LINE>:<COLUMN>` | the name written at a place of the subject's file, as one row: the path its declaration is declared at, what it is declared as — `definition`, `inductive`, `constructor`, `structure`, `concept`, `method`, `witness` or `test` — and where the declaration's name is written, as `<file>:<line>:<column>`, a tab between each. Beneath the row, a blank line before each, come the declaration's head as its author wrote it and the prose above it, where it has any. Nothing where no name stands. A place is written as a diagnostic prints one, a line and a column each counted from one |
 | `--declarations` | every definition the subject's file declares, one such row per line, in the order they are written: a type's constructors after it, a concept's methods after it, and a witness under its head as it is written |
+| `--server` | every question the others answer, asked by an editor over the language server protocol on standard input and output: what an editor integration launches. It publishes a document's diagnostics as the document is edited, and every open document's when one is saved, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what that declaration states of it — its head and prose, as a hover — and what the document declares: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It takes no subject, since an editor hands it its documents, and one written beside it is refused where the line is parsed |
 
 No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--stage` and `--cost`, which both need a program and so refuse a file written as a module. For `--at` and `--declarations` it is that executable's entry file.
 
@@ -351,10 +352,6 @@ The stages, in the order the compiler passes them:
 | `cps-optm` | the program in continuation-passing style, after optimization |
 | `wasm` | the emitted WebAssembly module |
 | `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
-
-## `server`
-
-`curios server` is what an editor integration launches: the language server protocol, on standard input and output. It publishes a document's diagnostics as the document is edited, and every open document's when one is saved, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what that declaration states of it — its head and prose, as a hover — and what the document declares: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It answers the questions [`wonder`](#wonder) answers, asked over a protocol, so its grammar holds no subject: an editor hands it its documents, and a word after the command is refused as any argument nothing reads is.
 
 ## `profile`
 
@@ -557,7 +554,7 @@ An edit anywhere the program was built from is a miss, and so is a damaged or ha
 
 A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
-A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`server`](#server) says it once a session, in a log message to its client.
+A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`wonder --server`](#wonder) says it once a session, in a log message to its client.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

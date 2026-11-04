@@ -608,8 +608,8 @@ fn dispatch() -> Result<(), Failure> {
                 contract.admit_staged(subject, manifest, &here()?)?,
                 unfiled,
             )?,
+            Query::Server => serve(elaboration.budget, manifest)?,
         },
-        Mode::Server { elaboration } => serve(elaboration.budget, manifest)?,
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         #[cfg(feature = "profile")]
         Mode::Profile { stream } => {

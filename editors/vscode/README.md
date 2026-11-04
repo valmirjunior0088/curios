@@ -10,7 +10,7 @@ The extension does not ship a compiler. It runs the one you have:
 curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
 ```
 
-That installs `curios` into `~/.local/bin`. Any `curios` on your `PATH` will do — the language server is `curios server`, so the compiler you build with is the compiler whose diagnostics you see.
+That installs `curios` into `~/.local/bin`. Any `curios` on your `PATH` will do — the language server is `curios wonder --server`, so the compiler you build with is the compiler whose diagnostics you see.
 
 ## Settings
 
