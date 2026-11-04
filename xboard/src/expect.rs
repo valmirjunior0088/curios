@@ -1,7 +1,7 @@
 //! The refusal a witness expects once its flaw is closed, and whether what the checkers said meets it.
 
 use {
-    crate::{Answer, Checker, Refusal, Witness, declared_in, raised, standing_at},
+    crate::{Answer, Checker, Refusal, Witness, standing_at},
     curios_common::{Qualifier, test_support::Variants},
     curios_core::Global,
     std::fmt,
@@ -44,9 +44,11 @@ impl Expected {
             |name: Option<&Global>| self.within.as_ref().is_none_or(|within| within.holds(name));
 
         match (self.by, refusal) {
-            (Checker::Elaborator, Refusal::Elaborator { error, .. }) => error
-                .each()
-                .any(|member| named(raised(member).variant_name()) && stands(declared_in(member))),
+            (Checker::Elaborator, Refusal::Elaborator { error, .. }) => {
+                error.each().any(|member| {
+                    named(member.raised().variant_name()) && stands(member.declared_in())
+                })
+            }
             (Checker::Reader, Refusal::Read { error, .. }) => named(error.refusal.variant_name()),
             (Checker::Kernel, Refusal::Kernel(verdict)) => {
                 named(verdict.error.variant_name()) && stands(verdict.name.as_ref())

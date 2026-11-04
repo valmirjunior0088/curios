@@ -1,12 +1,13 @@
 //! A proposition taken apart into data: the sort the guard reads off a motive however the motive is spelled, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
+//!
+//! Its kernel counterparts are `curios-cert/src/kernel/infer/eliminate/large_elimination_tests.rs` and `curios-cert/src/kernel/infer/eliminate/proof_match_tests.rs`.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_elab::Error};
 
 // The guard reads the result's sort off the motive typed under its own binders, and a motive is held to land in a sort there. `F(i)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the motive would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. Typed at the binder `i` it lands in no sort, and the match is refused at its motive before either arm is read. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same motive to the kernel under this name.
 #[test]
 fn a_motive_whose_sort_its_index_decides_is_no_motive() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True};
 
@@ -22,15 +23,13 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
         let read(t: Q(false)) -> Nat = match t : (i, _) => F(i) | qa() => True/qed() | qb() => 7 end;
 
         /std/print("unreachable")
-        "#,
-        "inferred: S(i)",
-    );
+        "#).by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "(/S)(i)"));
 }
 
 // A clash is concluded between two forcings of one binder only where they do not convert. `refl(@A)` forces `A` to `Nat` and to `Id(Nat)`, which are one type through `Id`'s definition, so the deletion rule keeps one and the arm stays mandatory: excused, `absurd(TEq/refl(@Nat))` is a closed inhabitant of `False`.
 #[test]
 fn two_spellings_of_one_type_forced_on_one_binder_do_not_clash() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Nat};
         use /std/Bool/{False};
@@ -47,15 +46,16 @@ fn two_spellings_of_one_type_forced_on_one_binder_do_not_clash() {
 
         /std/print("unreachable")
         "#,
-        "is not provably impossible at the scrutinee's indices",
-    );
+    )
+    .by_elaborator_in("/absurd", |error| {
+        matches!(error, Error::MatrixUncovered { indexed: true, .. })
+    });
 }
 
 // The shared walk pins a binder only where a target is the binder itself, and does not descend into a constructor: at a proposition `Tag/t(0)` and `Tag/t(7)` are one value, so `P(Tag/t(0))` and `P(Tag/t(7))` are one type and `mk(@a)` holds a payload no index recovers. Read through the constructor, `read` would answer `0` and `7` at two calls that convert, `apart` would equate them, and the transport would prove `Holds(7 == 0)`. `curios-analysis`'s `invert::tests::a_binder_under_a_constructor_is_not_pinned` holds the walk at the same target.
 #[test]
 fn a_payload_under_a_propositions_constructor_is_not_pinned() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Eq};
         use /std/Bool/{True, False, Holds};
 
@@ -74,16 +74,13 @@ fn a_payload_under_a_propositions_constructor_is_not_pinned() {
         let _forged: Holds(read(@Tag/t(7), P/mk(@7)) == 0) = Eq/subst((n: Nat) => Holds(n == 0), apart, True/qed());
 
         /std/print("unreachable")
-        "#,
-        "cannot eliminate the proposition 'P'",
-    );
+        "#).by_elaborator_in("/read", |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/P")));
 }
 
 // A guard's equation is settled with every equation inside it withheld, so a spelling settled under one inner case answers in no other. The guard is the match on `p`, which stands while `n` is open. Under the `0` arm of the split on `g(n)` the case equation makes `g(n)` and `g(g(n))` one, and the match on `p` fires to `k(0)`: a settlement that read that equation would spell the guard `k(0)` and answer it `true` under `j + 1` too, where the guard says `k(1)`, and at `k(m) = (m == 1)` that is `Holds(0 == 1)`. Withheld, the guard keeps its own spelling, `k(0)` is refused in the `0` arm, and nothing is settled for the next. The soundness board's elimination part holds the same guard settled under a split on a variable.
 #[test]
 fn a_guard_over_a_proof_match_is_settled_with_the_equations_inside_it_withheld() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Eq, Bool};
         use /std/Bool/{True, False, Holds};
 
@@ -106,15 +103,13 @@ fn a_guard_over_a_proof_match_is_settled_with_the_equations_inside_it_withheld()
         let _forged: Holds(0 == 1) = f((m: Nat) => m == 1, 1, Eq/refl(), True/qed());
 
         /std/print("unreachable")
-        "#,
-        "expected: Holds(k(0))",
-    );
+        "#).by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(k(0))"));
 }
 
 // A proposition sits at the level of what it quantifies over, so none ranges over the propositions of its own level. `A` quantifies over every proposition and would be one of them, the instantiation Abel and Coquand's cast that unfolds without end needs and the self-application `delta` writes; sized, `A` sits a level above the `P` it takes, and `x(A)` is refused.
 #[test]
 fn a_proposition_over_every_proposition_is_not_applied_at_itself() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Nat};
 
@@ -124,14 +119,16 @@ fn a_proposition_over_every_proposition_is_not_applied_at_itself() {
 
         /std/print("unreachable")
         "#,
-        "this Prop would need to be strictly below itself",
-    );
+    )
+    .by_elaborator_in("/delta", |error| {
+        matches!(error, Error::UniverseInconsistency { .. })
+    });
 }
 
 // Berardi's route, where proof irrelevance meets a proposition that decides something: `F` answers `True` at `Two/a()` and `False` at `Two/b()`, irrelevance makes the two one value, so `F(Two/a())` and `F(Two/b())` would be one type and `True/qed()` a proof of `False`. A universe is relevant, so a match into `Prop` is the large elimination the guard refuses, as one into `Nat` is. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same elimination to the kernel under this name.
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
-    rejected_by(
+    refused(
         r#"
         use /std/Bool/{False, True};
 
@@ -146,7 +143,10 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
 
         cast(True/qed())
         "#,
-        "cannot eliminate the proposition 'Two' into a relevant result",
+    )
+    .by_elaborator_in(
+        "/F",
+        |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Two")),
     );
 }
 
@@ -174,8 +174,10 @@ fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
 // A motive is a term, so the result an elimination states may be computed by one: a definition named in its place, a function value a local binds, or a family the caller hands in. Each is typed under the motive's binders before the guard reads its sort, so each is the large elimination the written `(_) => Prop` above is, and the caller's family is held at the `Type` its parameter states.
 #[test]
 fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
-    for source in [
-        r#"
+    for (at, source) in [
+        (
+            "/F",
+            r#"
         use /std/Bool/{False, True};
 
         induct Two: Prop
@@ -189,7 +191,10 @@ fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
 
         /std/print("unreachable")
         "#,
-        r#"
+        ),
+        (
+            "/F",
+            r#"
         use /std/Bool/{False, True};
 
         induct Two: Prop
@@ -203,7 +208,10 @@ fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
 
         /std/print("unreachable")
         "#,
-        r#"
+        ),
+        (
+            "/elim",
+            r#"
         induct Two: Prop
         | a()
         | b()
@@ -214,10 +222,11 @@ fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
 
         /std/print("unreachable")
         "#,
+        ),
     ] {
-        rejected_by(
-            source,
-            "cannot eliminate the proposition 'Two' into a relevant result",
+        refused(source).by_elaborator_in(
+            at,
+            |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Two")),
         );
     }
 }
@@ -239,10 +248,12 @@ fn a_tree_over_every_proposition_is_none_of_them_and_hands_back_no_label() {
         /std/print("unreachable")
         "#;
 
-    rejected_by(TREES, "this Prop would need to be strictly below itself");
-    rejected_by(
-        TREES,
-        "cannot eliminate the proposition 'T' into a relevant result",
+    refused(TREES).by_elaborator_in("/t", |error| {
+        matches!(error, Error::UniverseInconsistency { .. })
+    });
+    refused(TREES).by_elaborator_in(
+        "/label",
+        |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/T")),
     );
 }
 
@@ -293,13 +304,31 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
 
         /std/print("unreachable")
         "#;
-    for refused in [
-        "expected: Eq(@Nat)(Eq/subst(@Nat, @a, @b, (_) => Nat, p, v), v)",
-        "expected: Eq(@Nat)(match p | refl(@z) => v end, v)",
-        "expected: Eq(@Nat)(cast((_) => Nat, @a, @b, p, v), v)",
-        "expected: Eq(@Nat)(Eq/subst(@Nat, @a, @b, (_) => Nat, Eq/sym(@Nat, @b, @a, Eq/sym(@Nat, @a, @b, p)), v), v)",
-        "expected: Eq(@Nat)(cast((_) => Nat, @a, @b, Eq/trans(@Nat, @a, @b, @b, p, Eq/refl(@Nat, @b)), v), v)",
+    let refusals = refused(stands);
+    for (at, statement) in [
+        (
+            "/u_subst",
+            "/std/Eq/Eq(Nat)((/std/Eq/subst)(@Nat, @a, @b, (_) => Nat, p, v), v)",
+        ),
+        (
+            "/u_match",
+            "/std/Eq/Eq(Nat)(match p: (x, y, x2) => Nat | refl(@z) => v end, v)",
+        ),
+        (
+            "/u_lemma",
+            "/std/Eq/Eq(Nat)((/cast)((_) => Nat, @a, @b, p, v), v)",
+        ),
+        (
+            "/u_sym",
+            "/std/Eq/Eq(Nat)((/std/Eq/subst)(@Nat, @a, @b, (_) => Nat, (/std/Eq/sym)(@Nat, @b, @a, (/std/Eq/sym)(@Nat, @a, @b, p)), v), v)",
+        ),
+        (
+            "/u_trans",
+            "/std/Eq/Eq(Nat)((/cast)((_) => Nat, @a, @b, (/std/Eq/trans)(@Nat, @a, @b, @b, p, /std/Eq/Eq/refl(b)), v), v)",
+        ),
     ] {
-        rejected_by(stands, refused);
+        refusals.by_elaborator_in(at, |error| {
+            matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == statement)
+        });
     }
 }

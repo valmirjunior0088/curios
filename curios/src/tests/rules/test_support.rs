@@ -2,7 +2,147 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-use {crate::tests::run_text, curios_native::MockHost};
+use {
+    crate::tests::run_text,
+    curios_cert::Verdict,
+    curios_common::{Qualifier, test_support::Variants},
+    curios_core::{Global, Term},
+    curios_module::RootSource,
+    curios_native::MockHost,
+    curios_pipeline::{DEFAULT_BUDGET, EntryTail, Examined, Refused, test_support::*},
+    curios_surface::{Entrypoint, Spellable, Spelling},
+    std::{fmt, rc::Rc},
+};
+
+/// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the kernel's where the elaborator built it a module.
+pub(super) struct Refusals {
+    elaborator: Vec<curios_elab::Error>,
+    kernel: Vec<Verdict>,
+}
+
+/// Put `source` to both checkers at the program contract: what they refused it with, which must be something.
+pub(super) fn refused(source: &str) -> Refusals {
+    let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+    let refusals = match examine_with_prelude(
+        DEFAULT_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        EntryTail::Program,
+    ) {
+        Err(Refused {
+            error: Some(error), ..
+        }) => Refusals {
+            elaborator: vec![*error],
+            kernel: Vec::new(),
+        },
+        Err(Refused {
+            error: None,
+            reported,
+        }) => panic!("refused before the elaborator was asked:\n{reported}"),
+        Ok(Examined {
+            obligations,
+            verdicts,
+        }) => Refusals {
+            elaborator: obligations
+                .into_iter()
+                .map(|obligation| obligation.error)
+                .collect(),
+            kernel: verdicts,
+        },
+    };
+    assert!(
+        !refusals.elaborator.is_empty() || !refusals.kernel.is_empty(),
+        "admitted"
+    );
+
+    refusals
+}
+
+/// The declaration an absolute path names, as an error carries it.
+pub(super) fn global(path: &str) -> Global {
+    Global::Authored(Qualifier::from(
+        path.strip_prefix('/').expect("an absolute path").split('/'),
+    ))
+}
+
+/// `term`, a term an elaborator's error holds, as a rule's test pins it: every global by its absolute path, an intrinsic by its surface name, no universe instance and no metavariable's number, so the pin reads the term and not the order elaboration met its levels in, and on one line, each run of whitespace a space.
+pub(super) fn pinned(term: &Term) -> String {
+    term.spelled(&Rc::new(
+        Spelling::default()
+            .with_erased_universes()
+            .with_anonymous_metavars(),
+    ))
+    .to_string()
+    .split_whitespace()
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// Whether a refusal raised in `name`, a declaration or none for the term a program closes with, stands `at`: a declaration's absolute path, or `entry`.
+fn stands(name: Option<&Global>, at: &str) -> bool {
+    match (name, at) {
+        (None, "entry") => true,
+        (Some(name), at) if at.starts_with('/') => *name == global(at),
+        _ => false,
+    }
+}
+
+/// Where a refusal raised in `name` stands, as [`stands`] reads it.
+fn place(name: Option<&Global>) -> String {
+    name.map_or("entry".to_string(), |name| name.faithful().to_string())
+}
+
+impl Refusals {
+    /// Every error the elaborator refused the program with, still wrapped in where it was raised.
+    fn elaborated(&self) -> impl Iterator<Item = &curios_elab::Error> {
+        self.elaborator.iter().flat_map(curios_elab::Error::each)
+    }
+
+    /// The elaborator refused the program `at` by an error `pattern` holds of, read beneath what located it.
+    pub(super) fn by_elaborator_in(&self, at: &str, pattern: impl Fn(&curios_elab::Error) -> bool) {
+        assert!(
+            self.elaborated()
+                .any(|error| stands(error.declared_in(), at) && pattern(error.raised())),
+            "not refused so by the elaborator in `{at}`:\n{self}"
+        );
+    }
+}
+
+/// Each refusal by its checker, its variant and where it stands, with the terms a mismatch compares as [`pinned`] writes them: what a pattern is written from.
+impl fmt::Display for Refusals {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for error in self.elaborated() {
+            write!(
+                formatter,
+                "elaborator {} in {}",
+                error.raised().variant_name(),
+                place(error.declared_in())
+            )?;
+            if let curios_elab::Error::TypeMismatch {
+                inferred, expected, ..
+            } = error.raised()
+            {
+                write!(
+                    formatter,
+                    "\n  inferred: {}\n  expected: {}",
+                    pinned(inferred),
+                    pinned(expected)
+                )?;
+            }
+            writeln!(formatter)?;
+        }
+        for verdict in &self.kernel {
+            writeln!(
+                formatter,
+                "kernel {} in {}",
+                verdict.error.variant_name(),
+                place(verdict.name.as_ref())
+            )?;
+        }
+
+        Ok(())
+    }
+}
 
 /// Reject `source`, and by the diagnostic naming the rule under test.
 pub(super) fn rejected_by(source: &str, diagnostic: &str) {

@@ -1,31 +1,41 @@
 //! What an arm is checked at: its own case, and a hypothesis at the instance it was given.
+//!
+//! Its kernel counterpart is `curios-cert/src/kernel/infer/eliminate/scope_tests.rs`, and its tickets are `xboard/tickets/elimination/a_guards_reduced_spelling_is_settled_under_one_case_of_a_split_inside_its_arm_and_answers_outside_that_case/` and `xboard/tickets/conversion/a_reduct_read_off_a_locals_type_outlives_the_arm_that_re_typed_the_local/`.
 
-use super::test_support::*;
+use {super::test_support::*, curios_elab::Error};
 
 #[test]
 fn an_induction_hypothesis_is_typed_at_the_predecessor() {
-    rejected_by(INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE, "type mismatch");
+    refused(INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE).by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 #[test]
 fn a_dispatch_default_is_checked_at_its_scrutinee() {
-    rejected_by(DISPATCH_DEFAULT_AT_A_CASE, "type mismatch");
+    refused(DISPATCH_DEFAULT_AT_A_CASE).by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 #[test]
 fn a_boolean_arm_is_checked_at_its_own_case() {
-    rejected_by(BOOL_ARM_AT_THE_WRONG_CASE, "type mismatch");
+    refused(BOOL_ARM_AT_THE_WRONG_CASE).by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 #[test]
 fn a_dispatch_literal_arm_is_checked_at_that_literal() {
-    rejected_by(DISPATCH_LITERAL_AT_THE_WRONG_VALUE, "type mismatch");
+    refused(DISPATCH_LITERAL_AT_THE_WRONG_VALUE).by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // A guard's arm learns its own comparison and nothing stronger: `x <= y` at `true` is no `x < y`, which fails at `x = y`.
 #[test]
 fn a_guard_at_most_does_not_answer_the_strict_comparison() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Nat};
         use /std/Bool/{True, Holds};
@@ -35,15 +45,16 @@ fn a_guard_at_most_does_not_answer_the_strict_comparison() {
 
         /std/print(Nat/to_str(0))
         "#,
-        "type mismatch",
-    );
+    )
+    .by_elaborator_in("/strict", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // What a classification learned under an arm's equation lives as long as the arm: inside the `0` arm `f(h(x)) - f(0)` is zero, and after the match nothing says `h(x)` is.
 #[test]
 fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Eq};
         use /std/Bool/{True, Holds};
 
@@ -52,16 +63,13 @@ fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
             True/qed();
 
         /std/print(Nat/to_str(0))
-        "#,
-        "type mismatch",
-    );
+        "#).by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // What a guard's spelling settled under a split's re-typing answers is the split's: at `c = true` the operands are units and the guard is `k(0)`, inside a lambda there as anywhere in the arm, and after the split nothing says so. `curios-cert`'s `scope_tests` hold the kernel to the same terms.
 #[test]
 fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
@@ -75,16 +83,13 @@ fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() 
             end;
 
         /std/print(Nat/to_str(0))
-        "#,
-        "type mismatch",
-    );
+        "#).by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // The same guard settled in the arm of a split the operands are units in, and asked in the arm where they are numbers.
 #[test]
 fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
@@ -100,15 +105,13 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
             end;
 
         /std/print(Nat/to_str(0))
-        "#,
-        "type mismatch",
-    );
+        "#).by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // IEEE's `==` calls the two zeros equal where they are two terms, so a float equality's arm learns the comparison and no equation of its operands. Read as one, `eq_of_eql` would prove `+0.0` and `-0.0` one value, whose bytes differ.
 #[test]
 fn a_float_equality_arm_learns_no_equation_of_its_operands() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Flt, Eq};
         use /std/Bool/{True, Holds};
@@ -120,14 +123,17 @@ fn a_float_equality_arm_learns_no_equation_of_its_operands() {
 
         /std/print("unreachable")
         "#,
-        "expected: Eq(@Flt)(a, b)",
+    )
+    .by_elaborator_in(
+        "/eq_of_eql",
+        |error| matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(Flt)(a, b)"),
     );
 }
 
 // No order relates a NaN, so a float comparison that came back false states no mirror: under the false arm of `a < b`, `b <= a` is false wherever `a` is a NaN. Read as its dual, as a total order's is, the arm would hand `mirror` a proof of `1.0 <= +nan.0`, which is `False`.
 #[test]
 fn a_false_float_comparison_arm_learns_no_mirror() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Flt, Bool};
         use /std/Bool/{True, Holds};
@@ -139,14 +145,17 @@ fn a_false_float_comparison_arm_learns_no_mirror() {
 
         /std/print("unreachable")
         "#,
-        "expected: Holds(b <= a)",
+    )
+    .by_elaborator_in(
+        "/mirror",
+        |error| matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(b <= a)"),
     );
 }
 
 // A literal dispatch is `Nat`'s alone. Over a float it would read IEEE's `==`, which takes `-0.0` at the arm `0` while that arm's case states the scrutinee is the literal, `+0.0`: an arm proving `Eq()(f, +0.0)` would prove it of `-0.0`.
 #[test]
 fn a_literal_dispatch_reads_no_float() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Nat, Flt};
 
@@ -154,6 +163,6 @@ fn a_literal_dispatch_reads_no_float() {
 
         /std/print(Nat/to_str(tag(-0.0)))
         "#,
-        "expected Nat but got Flt",
-    );
+    )
+    .by_elaborator_in("/tag", |error| matches!(error, Error::NotNatType { .. }));
 }

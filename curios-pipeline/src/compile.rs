@@ -523,7 +523,7 @@ const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching 
 pub enum EntryTail {
     /// The authored entrypoint as a program: judged at `Io({})`, each of its tails run through `/std/Program`.
     Program,
-    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness, through [`examine_entrypoint`].
+    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness through [`examine_entrypoint`].
     False,
     /// The synthesized `Test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_module::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `Test/main([])`, which runs nothing and answers that every test held.
     ///
@@ -1223,7 +1223,7 @@ pub struct Examined {
     pub verdicts: Vec<Verdict>,
 }
 
-/// Put `entrypoint` to both checkers as a proof of the empty proposition — lowering, elaboration at `False`, the kernel — and hand back what each said rather than stopping at the first refusal.
+/// Put `entrypoint` to both checkers at what `tail` judges it at — the program contract, as a suite guarding a rule puts a program, or `False`, as the soundness board puts a witness — and hand back what each said rather than stopping at the first refusal: lowering, elaboration, the kernel.
 ///
 /// The program is put whole, its declarations and the term that closes it elaborated as one module and judged as one, with one difference from the compile path: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what [`check_entrypoint`] cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
 pub fn examine_entrypoint(
@@ -1232,6 +1232,7 @@ pub fn examine_entrypoint(
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
+    tail: EntryTail,
 ) -> Result<Examined, Refused> {
     let lowered =
         lower_entry(predecessors, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
@@ -1240,14 +1241,8 @@ pub fn examine_entrypoint(
                 reported,
             }
         })?;
-    let (_, elaborated) = elaborate_lowered(
-        budget,
-        predecessors,
-        syntax,
-        lowered,
-        EntryTail::False,
-        &mut |_| {},
-    );
+    let (_, elaborated) =
+        elaborate_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
     let ((program, _, _, _), obligations) = elaborated?;
 
     // The zonk evidence the kernel consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.

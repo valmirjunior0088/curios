@@ -9,7 +9,9 @@ use {
     curios_common::{Report, test_support::Variants},
     curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{DEFAULT_BUDGET, Examined, examine_entrypoint, recheck, test_support::*},
+    curios_pipeline::{
+        DEFAULT_BUDGET, EntryTail, Examined, examine_entrypoint, recheck, test_support::*,
+    },
     curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, Spelling, to_core},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
@@ -82,32 +84,6 @@ pub(crate) enum Refusal {
     Stopped { mount: String, reported: String },
 }
 
-/// The error an elaborator's report wraps in where it was raised: what a witness names.
-pub(crate) fn raised(error: &curios_elab::Error) -> &curios_elab::Error {
-    let mut error = error;
-
-    while let curios_elab::Error::Located { error: inner, .. }
-    | curios_elab::Error::InDeclaration { error: inner, .. }
-    | curios_elab::Error::InUnreachableArm { error: inner, .. }
-    | curios_elab::Error::InScope { error: inner, .. } = error
-    {
-        error = inner;
-    }
-
-    error
-}
-
-/// The declaration an elaborator's error was raised in, read beneath what located it: the innermost one a wrapper names, and none where it was raised at a program's closing term.
-pub(crate) fn declared_in(error: &curios_elab::Error) -> Option<&Global> {
-    match error {
-        curios_elab::Error::InDeclaration { names, error } => declared_in(error).or(names.first()),
-        curios_elab::Error::Located { error, .. }
-        | curios_elab::Error::InUnreachableArm { error, .. }
-        | curios_elab::Error::InScope { error, .. } => declared_in(error),
-        _ => None,
-    }
-}
-
 /// Where a refusal stands, as a report says it: in the declaration it names by its path, or at the closing term.
 pub(crate) fn standing_at(name: Option<&Global>) -> String {
     match name {
@@ -142,8 +118,8 @@ impl Refusal {
                     .map(|member| {
                         format!(
                             "`{}` {}",
-                            raised(member).variant_name(),
-                            standing_at(declared_in(member))
+                            member.raised().variant_name(),
+                            standing_at(member.declared_in())
                         )
                     })
                     .collect::<Vec<_>>();
@@ -227,6 +203,7 @@ fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
         &SYNTAX,
         &entrypoint,
         &RootSource::none(),
+        EntryTail::False,
     ) {
         Err(refused) => Answer::Unbuilt(match refused.error {
             Some(error) => Refusal::Elaborator {
