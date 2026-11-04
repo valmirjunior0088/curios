@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        Checkout, Product, Request, Step, Task, bindgen_web, file_with_inputs, launch_in, spelled,
+        Checkout, Product, Request, Step, Task, bindgen_web, file_with_dep_info, launch_in, spelled,
     },
     clap::ValueEnum,
     std::{
@@ -203,8 +203,8 @@ fn act(task: &Task) -> Result<(), String> {
         Task::File {
             built,
             product,
-            listed,
-        } => file_with_inputs(built, &product.path(), listed)?,
+            dep_info,
+        } => file_with_dep_info(built, &product.path(), dep_info)?,
         Task::Bindgen { module, product } => bindgen_web(module, &product.path())?,
         Task::Write { path, text } => {
             fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))?;

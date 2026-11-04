@@ -1,11 +1,10 @@
-//! Where the workspace and its build products live: the root every other path is derived from, what a `--release` build left behind, where a filed product and the list of its inputs go, and the triples a recipe builds for.
+//! Where the workspace and its build products live: the root every other path is derived from, what a `--release` build left behind, where a filed product and its dep-info go, and the triples a recipe builds for.
 //!
 //! Nothing here runs anything or touches a file. A path is a fact about the tree; acting on one is a recipe's business.
 
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
-    time::SystemTime,
 };
 
 /// The workspace root: this crate's manifest directory is one level below it.
@@ -38,17 +37,12 @@ pub(crate) fn artifact(crate_dir: &str, target: &str) -> PathBuf {
     root().join(crate_dir).join(".artifacts").join(target)
 }
 
-/// What a filed build product was built from, beside it: `<crate>/.artifacts/<triple>.inputs`, one workspace-relative path per line, as `curios/build.rs` reads it.
-pub(crate) fn inputs(crate_dir: &str, target: &str) -> PathBuf {
+/// What a filed build product was built from, beside it: `<crate>/.artifacts/<triple>.d`, the dep-info cargo wrote for it, as `curios/build.rs` reads it.
+pub(crate) fn dep_info(crate_dir: &str, target: &str) -> PathBuf {
     root()
         .join(crate_dir)
         .join(".artifacts")
-        .join(format!("{target}.inputs"))
-}
-
-/// When `path` was last written, or `None` for a path that is not there — a recipe deciding whether a filed product is older than what it was made from.
-pub(crate) fn modified(path: &Path) -> Option<SystemTime> {
-    fs::metadata(path).ok()?.modified().ok()
+        .join(format!("{target}.d"))
 }
 
 /// The triple this tool was built for: the host, which is the one triple every recipe builds for.

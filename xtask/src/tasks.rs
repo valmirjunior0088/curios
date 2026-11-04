@@ -53,11 +53,11 @@ impl Product {
 pub(crate) enum Task {
     /// A tool run in a tree.
     Run(Run),
-    /// A built binary filed as `product` the way [`file_with_inputs`](crate::file_with_inputs) files one, beside the list of its inputs at `listed`.
+    /// A built binary filed as `product` the way [`file_with_dep_info`](crate::file_with_dep_info) files one, beside the dep-info cargo wrote for it at `dep_info`.
     File {
         built: PathBuf,
         product: Product,
-        listed: PathBuf,
+        dep_info: PathBuf,
     },
     /// The bindings `wasm-bindgen` generates for `module`, filed as `product`.
     Bindgen { module: PathBuf, product: Product },

@@ -4,7 +4,11 @@
 //!
 //! The path is `.artifacts/<triple>` beside this crate rather than anywhere under Cargo's target tree, so `cargo clean` does not delete it and no build script has to reconstruct Cargo's internal directory layout to find it. `CARGO_MANIFEST_DIR` is a documented interface; `OUT_DIR`'s ancestry is not.
 
-use std::{env, fs, path::Path, path::PathBuf, time::SystemTime};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 /// When `path` was last modified, or `None` if it cannot be read.
 ///
@@ -13,17 +17,54 @@ fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 
+/// The sources a dep-info file lists, or `None` where it is not one.
+///
+/// The format is Makefile syntax — `<binary>: <source> <source> …` on its first line, a space inside a path escaped as `\ ` — and it is a documented interface: cargo writes the file beside what it built for exactly this kind of reader. A relative path is the workspace's, as cargo writes one under `build.dep-info-basedir`.
+fn dep_info_sources(text: &str, workspace: &Path) -> Option<Vec<PathBuf>> {
+    let (_, listed) = text.lines().next()?.split_once(": ")?;
+
+    let mut sources = Vec::new();
+    let mut current = String::new();
+    let mut characters = listed.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => match characters.next() {
+                Some(' ') => current.push(' '),
+                Some(other) => {
+                    current.push('\\');
+                    current.push(other);
+                }
+                None => current.push('\\'),
+            },
+            ' ' if !current.is_empty() => sources.push(std::mem::take(&mut current)),
+            ' ' => {}
+            _ => current.push(character),
+        }
+    }
+    if !current.is_empty() {
+        sources.push(current);
+    }
+
+    Some(
+        sources
+            .into_iter()
+            .map(|source| workspace.join(source))
+            .collect(),
+    )
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let target_triple = env::var("TARGET").unwrap();
     let artifacts = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join(".artifacts");
     let launcher = artifacts.join(&target_triple);
-    let inputs = artifacts.join(format!("{target_triple}.inputs"));
+    let dep_info = artifacts.join(format!("{target_triple}.d"));
 
     // The triple is the *file name* so two cross-target builds in one checkout cannot overwrite each other. A launcher of the wrong architecture passes both of `bundle.rs`'s guards — it is slim and carries no backend marker — so the failure would reach a user as a bundled executable that does not run, rather than as a build error here.
+    //
+    // The dep-info is read and not watched: cargo writes it again on every build of the launcher, fresh or not, so watching it would run this script after every `launcher build`; the launcher's own time moves whenever what the dep-info lists does.
     println!("cargo:rerun-if-changed={}", launcher.display());
-    println!("cargo:rerun-if-changed={}", inputs.display());
 
     // `cargo::error` needs the *two*-colon form. `cargo:error` is parsed as an unknown metadata key and discarded without a word, so the single-colon spelling everywhere else in this file is not a style this line may be made to match.
     if !launcher.is_file() {
@@ -35,23 +76,21 @@ fn main() {
 
     // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
     //
-    // The sources are what `cargo xtask launcher build` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. The recipe refreshes the launcher's timestamp when a listed file is newer but the bytes did not change, so the comparison below is against exactly the listed files — the recipe's own set — and never leaves a warning `cargo xtask launcher build` cannot clear.
+    // The sources are what cargo's dep-info for the binary lists — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — filed beside the launcher by `cargo xtask launcher build`. Both are filed with the times cargo gave them, so a launcher cargo built again after an edit is newer than what it read, whether or not its bytes moved, and the warning below is one `cargo xtask launcher build` always clears. The dep-info names no registry crate, so a dependency bump is not watched here: it reaches the launcher through `xtask`, where every step that builds this crate runs the launcher's build first, and only a bare `cargo build` of this crate after a bump embeds the old launcher without a word.
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")
         .to_path_buf();
-    let Ok(listed) = fs::read_to_string(&inputs) else {
+    let Some(sources) = fs::read_to_string(&dep_info)
+        .ok()
+        .and_then(|text| dep_info_sources(&text, &workspace))
+    else {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher's inputs are not filed beside it; run `cargo xtask launcher build` to file them"
+            "cargo::warning=the {target_triple} runtime launcher's dep-info is not filed beside it; run `cargo xtask launcher build` to file it"
         );
         println!("cargo:rustc-env=CURIOS_NATIVE_BIN={}", launcher.display());
         return;
     };
-    let sources = listed
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(|line| workspace.join(line))
-        .collect::<Vec<_>>();
     for source in &sources {
         println!("cargo:rerun-if-changed={}", source.display());
     }

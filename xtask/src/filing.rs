@@ -1,131 +1,47 @@
-//! The copy discipline every filed artifact shares: a build product reaches `<crate>/.artifacts/` only when its bytes changed, beside the list of the sources it was built from.
+//! How a built binary is filed in `<crate>/.artifacts/`: copied with the dep-info cargo wrote beside it, both keeping the times cargo gave them.
 //!
-//! **This is a contract with another crate, not a step of one recipe.** `curios/build.rs` embeds what is filed here, reads the sidecar written beside it, and warns when a listed input is newer than the filed bytes — so what this module writes and what that build script reads have to agree.
+//! **This is a contract with another crate, not a step of one recipe.** `curios/build.rs` embeds what is filed here, reads the dep-info beside it, and warns when a listed source is newer than the filed binary — so what this module files and what that build script reads have to agree.
 
-use {
-    crate::{modified, root},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-        time::SystemTime,
-    },
-};
+use std::{fs, path::Path};
 
-/// File `built` at `filed`, skipping the copy when the filed bytes are already the built ones, and say whether it copied. Every step whose build embeds the launcher runs after the launcher's build, so filing must cost nothing when nothing changed: cargo already answers that for the build, and the skip is what keeps a repeated run from touching the file `curios/build.rs` watches.
+/// Copy `from` to `to`, giving the copy `from`'s modification time.
 ///
-/// The artifacts directory is the caller's to create — see [`file_with_inputs`], which writes there before this runs.
-fn file(built: &Path, filed: &Path) -> Result<bool, String> {
-    let bytes =
-        fs::read(built).map_err(|error| format!("cannot read {}: {error}", built.display()))?;
-
-    if fs::read(filed).is_ok_and(|current| current == bytes) {
-        eprintln!("up to date {}", filed.display());
-        return Ok(false);
-    }
-
-    fs::copy(built, filed).map_err(|error| {
+/// The time is cargo's, so it moves only when cargo built the binary again: a run that rebuilt nothing leaves the file `curios/build.rs` watches as it was, and the compiler that embeds it is not built again for nothing.
+fn copy_keeping_time(from: &Path, to: &Path) -> Result<(), String> {
+    let cannot = |error: std::io::Error| {
         format!(
-            "cannot copy {} to {}: {error}",
-            built.display(),
-            filed.display()
+            "cannot file {} as {}: {error}",
+            from.display(),
+            to.display()
         )
-    })?;
+    };
 
-    eprintln!("filed {}", filed.display());
+    let built_at = fs::metadata(from)
+        .and_then(|metadata| metadata.modified())
+        .map_err(cannot)?;
+    fs::copy(from, to).map_err(cannot)?;
+    fs::File::options()
+        .write(true)
+        .open(to)
+        .and_then(|file| file.set_modified(built_at))
+        .map_err(cannot)?;
 
-    Ok(true)
-}
-
-/// File a built binary as [`file`](file()) does, beside the list of what it was built from, and keep the filed timestamp honest when the bytes did not change.
-///
-/// `curios/build.rs` cannot rebuild the launcher, so it warns when a listed input is newer than the filed file. The list is cargo's own dep-info for the binary — every source rustc read, so a test file it never read is not in it — plus the workspace lock file, for a dependency bump the dep-info does not see; it is rewritten only when it changed, since the build script watches it too. The same comparison decides here whether a byte-identical rebuild refreshes the timestamp: an edit that changed no launcher byte — a comment, say — would otherwise leave that warning standing for a command with nothing left to do. A run in which nothing is newer touches nothing, which is what keeps a repeated `cargo xtask build` from recompiling the compiler that embeds the launcher.
-pub(crate) fn file_with_inputs(built: &Path, filed: &Path, listed: &Path) -> Result<(), String> {
-    // Created before the first write rather than before the copy, because the sidecar is what reaches the directory first. `.artifacts/` is a build product and is not committed, so on a clean checkout — CI's, and any fresh clone's — nothing has created it.
-    let directory = filed.parent().expect("a filed artifact has a parent");
-    fs::create_dir_all(directory)
-        .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
-
-    let mut sources = dep_info_sources(&built.with_extension("d"))?;
-    sources.push(PathBuf::from("Cargo.lock"));
-
-    let list = sources
-        .iter()
-        .map(|source| format!("{}\n", source.display()))
-        .collect::<String>();
-    if fs::read_to_string(listed).is_ok_and(|current| current == list) {
-        eprintln!("up to date {}", listed.display());
-    } else {
-        fs::write(listed, list)
-            .map_err(|error| format!("cannot write {}: {error}", listed.display()))?;
-        eprintln!("filed {}", listed.display());
-    }
-
-    if file(built, filed)? {
-        return Ok(());
-    }
-
-    let newest = sources
-        .iter()
-        .filter_map(|source| modified(&root().join(source)))
-        .max();
-    if let (Some(filed_at), Some(newest)) = (modified(filed), newest)
-        && filed_at < newest
-    {
-        fs::File::options()
-            .write(true)
-            .open(filed)
-            .and_then(|file| file.set_modified(SystemTime::now()))
-            .map_err(|error| format!("cannot refresh {}: {error}", filed.display()))?;
-        eprintln!("refreshed {}", filed.display());
-    }
+    eprintln!("filed {}", to.display());
 
     Ok(())
 }
 
-/// The sources listed in the dep-info cargo wrote beside a built binary, relative to the workspace root where they lie under it.
-///
-/// The format is Makefile syntax — `<binary>: <source> <source> …` on one line, a space inside a path escaped as `\ ` — and it is a documented interface: cargo writes the file for exactly this kind of tool.
-fn dep_info_sources(dep_info: &Path) -> Result<Vec<PathBuf>, String> {
-    let text = fs::read_to_string(dep_info)
-        .map_err(|error| format!("cannot read {}: {error}", dep_info.display()))?;
-    let (_, listed) = text
-        .lines()
-        .next()
-        .and_then(|line| line.split_once(": "))
-        .ok_or_else(|| format!("{} is not a dep-info file", dep_info.display()))?;
+/// File the binary `built` at `filed` and the dep-info cargo wrote beside it at `dep_info`.
+pub(crate) fn file_with_dep_info(
+    built: &Path,
+    filed: &Path,
+    dep_info: &Path,
+) -> Result<(), String> {
+    // `.artifacts/` is a build product and is not committed, so on a clean checkout — CI's, and any fresh clone's — nothing has created it.
+    let directory = filed.parent().expect("a filed artifact has a parent");
+    fs::create_dir_all(directory)
+        .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
 
-    let mut sources = Vec::new();
-    let mut current = String::new();
-    let mut characters = listed.chars();
-    while let Some(character) = characters.next() {
-        match character {
-            '\\' => match characters.next() {
-                Some(' ') => current.push(' '),
-                Some(other) => {
-                    current.push('\\');
-                    current.push(other);
-                }
-                None => current.push('\\'),
-            },
-            ' ' if !current.is_empty() => sources.push(std::mem::take(&mut current)),
-            ' ' => {}
-            _ => current.push(character),
-        }
-    }
-    if !current.is_empty() {
-        sources.push(current);
-    }
-
-    let mut sources = sources
-        .into_iter()
-        .map(|source| {
-            let source = PathBuf::from(source);
-            source
-                .strip_prefix(root())
-                .map_or_else(|_| source.clone(), Path::to_path_buf)
-        })
-        .collect::<Vec<_>>();
-    sources.sort();
-    sources.dedup();
-    Ok(sources)
+    copy_keeping_time(built, filed)?;
+    copy_keeping_time(&built.with_extension("d"), dep_info)
 }

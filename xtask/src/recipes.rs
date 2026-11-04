@@ -7,7 +7,7 @@
 use {
     crate::{
         Arg, BROWSER_TRIPLE, Checkout, HOST_TRIPLE, Product, Run, Selection, Step, Task, Tool,
-        Tree, built, cargo, inputs, perform, root, run, target_directory, texts,
+        Tree, built, cargo, dep_info, perform, root, run, target_directory, texts,
     },
     std::{fs, path::Path, process::Command},
 };
@@ -230,7 +230,7 @@ fn launcher_build() -> Vec<Task> {
         Task::File {
             built: built(HOST_TRIPLE, LAUNCHER),
             product: Product::Launcher,
-            listed: inputs("curios", HOST_TRIPLE),
+            dep_info: dep_info("curios", HOST_TRIPLE),
         },
     ]
 }
