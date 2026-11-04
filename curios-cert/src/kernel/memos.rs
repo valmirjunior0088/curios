@@ -478,7 +478,7 @@ impl Memos {
         self.checked.begin_equations();
     }
 
-    /// Discard every remembered type and check, the declaration's and the scope's, and nothing else. Called where a refused walk takes back the positions it recorded (`Kernel::tried`): a hit records the position it answers and none inside its term, which the typing it stands for recorded, so a typing remembered in the walk would answer for positions no longer recorded. A reduct, a sort, an erased half and a verdict record nothing.
+    /// Discard every remembered type and check, the declaration's and the scope's, and nothing else. Called where a refused walk takes back the positions it recorded (`Kernel::tried`), and where a read ends (`Kernel::read`), whose typings recorded none: a hit records the position it answers and none inside its term, which the typing it stands for recorded, so a typing remembered there would answer for positions nothing recorded. A reduct, a sort, an erased half and a verdict record nothing.
     ///
     /// The typings remembered before the walk go too, though their positions stand. A refused walk outlives its refusal only at an arm no reduction takes, any other ending its item, so each typing lost costs one typing again there and nowhere else; keeping them would take a journal of what every walk remembers, kept for that one rare path.
     pub(super) fn discard_typings(&mut self) {

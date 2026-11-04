@@ -35,10 +35,15 @@ pub struct EnteredArm {
 
 impl<'s> Kernel<'s> {
     /// Run `read` over a reader of this kernel's terms, recording no erased position and no call while it reads.
+    ///
+    /// **What it typed is remembered while it reads, and for no walk after it.** A typing made while reading recorded no position and graded no call, and a hit stands for every one its typing records, so a walk answered from one would leave the term's positions unconstrained and its groups' local gate unasked. The typings go where the outermost read ends (`Memos::discard_typings`), as a refused walk's do; inside it the reader keeps the memo that types a shared term once.
     pub fn read<T>(&mut self, read: impl FnOnce(&mut Reader<'_, 's>) -> T) -> T {
         let outer = self.positions.hold_for_reading(true);
         let outcome = read(&mut Reader { kernel: self });
         self.positions.hold_for_reading(outer);
+        if !outer {
+            self.memos.discard_typings();
+        }
 
         outcome
     }

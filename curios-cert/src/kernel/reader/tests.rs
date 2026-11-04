@@ -5,8 +5,8 @@ use {
     curios_analysis::{Erased, test_support::*},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Telescope,
-        Term, UniverseContext, Universes,
+        Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Subterm,
+        Telescope, Term, Totality, UniverseContext, Universes,
     },
 };
 
@@ -151,6 +151,38 @@ fn a_reader_records_no_position() {
     let typed = kernel.read(|reader| reader.infer(&Term::free_var(&proof)));
     assert_eq!(typed, Ok(Term::free_var(&proposition)));
     assert!(kernel.take_checked().0.is_empty());
+}
+
+/// Nor does a walk take what a reader typed: `rec f(n : Nat) -> Type = f(n)` yields a sort and does not descend, and a reader types it recording no call, so the walk that types it afterwards types it again, grades the call and refuses it, with the memos on as with them off.
+///
+/// Mutation-checked: with the read's typings kept past it, the walk answers from the reader's and the group stands `Total`.
+#[test]
+fn a_walk_types_again_what_a_reader_typed() {
+    let f = binder(0, "f");
+    let n = binder(1, "n");
+    let group = Term::rec(
+        [(
+            f,
+            Term::func_type([(n, nat_type())], Term::type_ground()),
+            Term::func(
+                [(n, nat_type())],
+                Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(rec) = &*group else {
+        panic!("a group is stated: {group:?}");
+    };
+
+    for mut kernel in [kernel(), Kernel::uncached(100_000, SYNTAX)] {
+        assert!(kernel.read(|reader| reader.infer(&group)).is_ok());
+        assert!(matches!(
+            infer(&mut kernel, &group),
+            Err(Error::NotDescending { .. })
+        ));
+        assert_eq!(kernel.group_verdict(&rec.group), Some(Totality::Partial));
+    }
 }
 
 /// A case stands for its value inside the frame it was put in force in, as an arm is checked under it, and nowhere after: a variable scrutinee bound to the value, and an expression's equation recorded.
