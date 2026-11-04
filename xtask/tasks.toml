@@ -1,5 +1,26 @@
 description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
 
+# The programs the steps launch beside the Rust toolchain, which `rust-toolchain.toml` pins: what version a run needs, held the first time a step launches each, and what installs it. The workflows read these pins to install each program on their runners.
+[programs.cargo-nextest]
+minimum = "0.9.149"
+install = "cargo install cargo-nextest --locked"
+
+[programs.biome]
+# Exact, because a formatter's output moves between releases.
+version = "2.6.2"
+install = "npm install --global @biomejs/biome@{version}"
+
+[programs.node]
+minimum = "22"
+
+[programs.wasm-bindgen]
+# Exact, because the generator must match the `wasm-bindgen` crate `Cargo.lock` gives the bundle, which a test holds this to.
+version = "0.2.129"
+install = "cargo install wasm-bindgen-cli --locked --version {version}"
+
+[programs.rustfmt]
+install = "rustup component add rustfmt"
+
 [gate]
 description = "Run every check the hand-off runs: each subject's steps, each after what it requires and consumes"
 requires = ["launcher", "workspace", "instrumented", "docs", "compiler", "bundle", "grammar", "vscode", "zed", "tools"]

@@ -94,7 +94,7 @@ pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
     let mut words = vec!["cargo".to_string()];
     words.extend(arguments.iter().map(|argument| argument.to_string()));
 
-    launch_in(root(), &words)
+    launch_in(root(), launch(&words)?, None)
 }
 
 /// Run one command from the workspace root, echoing it first as a step's would be, and fail with its status.
@@ -109,19 +109,23 @@ pub(crate) fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> 
         .map_err(Failure::message)
 }
 
-/// Run the command `words` from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with what installs it, since that is the only way it is ever looked for.
-pub(crate) fn launch_in(directory: &Path, words: &[String]) -> Result<(), String> {
+/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with `install`, what the task files say installs it.
+pub(crate) fn launch_in(
+    directory: &Path,
+    launched: Launch,
+    install: Option<&str>,
+) -> Result<(), String> {
     let Launch {
         program,
         command,
         arguments,
-    } = launch(words)?;
+    } = launched;
     let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
 
     execute(directory, command, &arguments, Output::Streamed)
         .map(drop)
         .map_err(|failure| match failure {
-            Failure::Missing(_) => missing(&program),
+            Failure::Missing(_) => missing(&program, install),
             Failure::Failed(message) => message,
         })
 }

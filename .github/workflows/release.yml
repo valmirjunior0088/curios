@@ -10,7 +10,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  WASM_BINDGEN: 0.2.129
 
 # The toolchain is the one `rust-toolchain.toml` pins, with its targets, as the check workflow's is.
 jobs:
@@ -63,6 +62,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
 
       - name: Install the pinned toolchain
         run: rustup toolchain install

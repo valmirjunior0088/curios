@@ -1,0 +1,16 @@
+name: Read the programs' pins
+description: Sets each program the task files pin as a variable of the job's environment, named after the program in capitals, at the version or minimum `xtask/tasks.toml` states, so a step after this one installs it at that pin.
+runs:
+  using: composite
+  steps:
+    - shell: python3 {0}
+      run: |
+        import os, tomllib
+
+        with open("xtask/tasks.toml", "rb") as file:
+            programs = tomllib.load(file)["programs"]
+        with open(os.environ["GITHUB_ENV"], "a") as environment:
+            for name, program in programs.items():
+                pin = program.get("version", program.get("minimum"))
+                if pin is not None:
+                    environment.write(f"{name.upper().replace('-', '_')}={pin}\n")

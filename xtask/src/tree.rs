@@ -1,6 +1,6 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `programs`, and its steps and groups; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
 //! **A name is a path, and it names one thing.** A file's variables, produced files, steps and groups share one namespace, and a name declared twice in it is refused. Without a dot a name is the file's own; with dots it is a path from the top, as the command line spells it. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable or a produced file. Each resolves as the tree is read, so a name that names nothing, or the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
@@ -61,6 +61,8 @@ pub(crate) struct Tree {
     pub(crate) groups: BTreeMap<Name, Group>,
     pub(crate) variables: BTreeMap<Name, Variable>,
     pub(crate) produced: BTreeMap<Name, Produced>,
+    /// What the steps' commands launch, by the program's name, where the files say what version a run needs or what installs it.
+    pub(crate) programs: BTreeMap<String, Program>,
 }
 
 #[derive(Debug)]
@@ -94,6 +96,31 @@ pub(crate) struct Step {
 pub(crate) struct Produced {
     pub(crate) path: Word,
     pub(crate) producer: usize,
+}
+
+/// A program the steps launch, as the files declare it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Program {
+    pub(crate) pin: Option<Pin>,
+    /// What installs it, at its pin where it has one.
+    pub(crate) install: Option<String>,
+}
+
+/// The version of a program a run needs.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Pin {
+    /// This version and no other, as a formatter's, whose output moves between releases, or a generator matching a crate.
+    Exact(String),
+    /// This version or a later one.
+    Minimum(String),
+}
+
+impl Pin {
+    pub(crate) fn version(&self) -> &str {
+        match self {
+            Pin::Exact(version) | Pin::Minimum(version) => version,
+        }
+    }
 }
 
 /// A named value of a file, the same for the whole run.
@@ -329,6 +356,7 @@ impl Tree {
             groups: BTreeMap::new(),
             variables: BTreeMap::new(),
             produced: BTreeMap::new(),
+            programs: BTreeMap::new(),
         };
         let mut kinds = BTreeMap::<Name, Kind>::new();
         let mut written = Vec::new();
@@ -352,6 +380,23 @@ impl Tree {
                             tree.variables.insert(name, variable);
                         }
                     }
+                    "programs" => {
+                        let table = item.as_table_like().ok_or_else(|| {
+                            file.refuse(
+                                item.span(),
+                                "`programs` is a table of programs by name".to_string(),
+                            )
+                        })?;
+                        for (name, value) in table.iter() {
+                            let program = program_of(file, value)?;
+                            if tree.programs.insert(name.to_string(), program).is_some() {
+                                return Err(file.refuse(
+                                    table.key(name).and_then(|key| key.span()),
+                                    format!("program `{name}` is declared twice"),
+                                ));
+                            }
+                        }
+                    }
                     _ => {
                         let name = scoped(&file.scope, key);
                         if file.scope.is_empty() && COMMANDS.contains(&key) {
@@ -364,7 +409,7 @@ impl Tree {
                         let table = item.as_table_like().ok_or_else(|| {
                             file.refuse(
                                 span.clone(),
-                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, and its steps and groups as tables"),
+                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, `programs`, and its steps and groups as tables"),
                             )
                         })?;
                         tree.groups
@@ -750,7 +795,7 @@ fn walk<'a>(
                 return Err(file.refuse(
                     span,
                     match key {
-                        "variables" => "`variables` belongs at a file's top".to_string(),
+                        "variables" | "programs" => format!("`{key}` belongs at a file's top"),
                         _ if item.is_table() => {
                             format!("`{key}` is a table inside a step, which holds no tables")
                         }
@@ -838,6 +883,68 @@ fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Refusal> {
                 .ok_or_else(|| file.refuse(value.span(), "a word is a string".to_string()))
         })
         .collect()
+}
+
+/// The program `item` declares: a `version` it must be or a `minimum` it must reach, and the command that installs it, `{version}` in it the pin.
+fn program_of(file: &File<'_>, item: &Item) -> Result<Program, Refusal> {
+    let table = item.as_table_like().ok_or_else(|| {
+        file.refuse(
+            item.span(),
+            "a program is a table of its `version` or `minimum` and its `install`".to_string(),
+        )
+    })?;
+    if let Some((key, _)) = table
+        .iter()
+        .find(|(key, _)| !["version", "minimum", "install"].contains(key))
+    {
+        return Err(file.refuse(
+            table.key(key).and_then(|key| key.span()),
+            format!("`{key}` is no key of a program"),
+        ));
+    }
+    let text = |key: &str| -> Result<Option<String>, Refusal> {
+        table
+            .get(key)
+            .map(|item| text_of(file, item, key))
+            .transpose()
+    };
+
+    let pin = match (text("version")?, text("minimum")?) {
+        (Some(version), None) => Some(Pin::Exact(version)),
+        (None, Some(minimum)) => Some(Pin::Minimum(minimum)),
+        (None, None) => None,
+        (Some(_), Some(_)) => {
+            return Err(file.refuse(
+                item.span(),
+                "a program is pinned at a `version` or a `minimum`, not both".to_string(),
+            ));
+        }
+    };
+    if let Some(pin) = &pin
+        && !pin.version().split('.').all(|part| {
+            !part.is_empty() && part.chars().all(|character| character.is_ascii_digit())
+        })
+    {
+        return Err(file.refuse(
+            item.span(),
+            format!(
+                "a pin is numbers between dots, and `{}` is not",
+                pin.version()
+            ),
+        ));
+    }
+    let install = match (text("install")?, &pin) {
+        (Some(install), Some(pin)) => Some(install.replace("{version}", pin.version())),
+        (Some(install), None) if install.contains("{version}") => {
+            return Err(file.refuse(
+                item.span(),
+                "`{version}` is filled from a pin, and this program has none".to_string(),
+            ));
+        }
+        (install, _) => install,
+    };
+
+    Ok(Program { pin, install })
 }
 
 /// The variable `item` declares.

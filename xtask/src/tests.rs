@@ -161,16 +161,9 @@ fn the_workspace_s_biome_steps_reach_every_file_biome_reads_of_it() {
     }
 }
 
-/// The generator must match the `wasm-bindgen` crate the bundle is built against exactly, so each workflow installs it at the lock's version, and a bump of the crate fails here until the pins follow.
+/// The generator must match the `wasm-bindgen` crate the bundle is built against exactly, so the task files pin it at the lock's version, and a bump of the crate fails here until the pin follows.
 #[test]
 fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
-    let pin = |workflow: &'static str| {
-        workflow
-            .lines()
-            .map(str::trim)
-            .find_map(|line| line.strip_prefix("WASM_BINDGEN: "))
-            .expect("the workflow pins the bindings generator")
-    };
     let lock = LOCK.parse::<toml_edit::DocumentMut>().unwrap();
     let locked = lock["package"]
         .as_array_of_tables()
@@ -180,6 +173,51 @@ fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
         .and_then(|package| package["version"].as_str())
         .unwrap();
 
-    assert_eq!(pin(WORKFLOW), locked);
-    assert_eq!(pin(RELEASE_WORKFLOW), locked);
+    assert_eq!(
+        tree().programs["wasm-bindgen"].pin,
+        Some(Pin::Exact(locked.to_string()))
+    );
+}
+
+/// A workflow installs a program at the pin `./.github/actions/pins` sets in its job's environment, named as the action names it, so every pin a job reads is one the task files hold, read before the step that installs at it.
+#[test]
+fn every_pin_a_job_installs_at_is_read_from_the_task_files_first() {
+    let pinned = tree()
+        .programs
+        .iter()
+        .filter(|(_, program)| program.pin.is_some())
+        .map(|(name, _)| name.to_uppercase().replace('-', "_"))
+        .collect::<BTreeSet<_>>();
+
+    for workflow in [WORKFLOW, RELEASE_WORKFLOW] {
+        let jobs = workflow
+            .split_once("\njobs:\n")
+            .expect("a workflow has jobs")
+            .1;
+        let mut starts = jobs
+            .match_indices("\n  ")
+            .filter(|(at, _)| !jobs[at + 3..].starts_with(' '))
+            .map(|(at, _)| at)
+            .collect::<Vec<_>>();
+        starts.insert(0, 0);
+        starts.push(jobs.len());
+
+        for job in starts.windows(2).map(|bounds| &jobs[bounds[0]..bounds[1]]) {
+            let read = job.find("uses: ./.github/actions/pins");
+            for (at, _) in job.match_indices("${{ env.") {
+                let name = job[at + "${{ env.".len()..]
+                    .split_once(" }}")
+                    .expect("an expression is closed")
+                    .0;
+                assert!(
+                    pinned.contains(name),
+                    "a job reads `{name}`, which the task files do not pin"
+                );
+                assert!(
+                    read.is_some_and(|read| read < at),
+                    "a job reads `{name}` before it reads the pins"
+                );
+            }
+        }
+    }
 }

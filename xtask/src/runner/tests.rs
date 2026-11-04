@@ -5,7 +5,10 @@ use {super::*, crate::*};
 fn tree(steps: &str) -> Tree {
     Tree::parse(&[
         ("xtask/tasks.toml", "description = \"The top\"\n"),
-        ("xtask/tasks/a.toml", &format!("description = \"A\"\n{steps}")),
+        (
+            "xtask/tasks/a.toml",
+            &format!("description = \"A\"\n{steps}"),
+        ),
     ])
     .unwrap()
 }

@@ -15,12 +15,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NEXTEST: 0.9.149
-  BIOME: 2.6.2
-  NODE: 22
-  WASM_BINDGEN: 0.2.129
 
-# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_gate_runs_has_a_job` there holds that these lines parse and together run every step the gate runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's, Node's and the bindings generator's are this file's, stated once above, the generator's held to `Cargo.lock` by a test.
+# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_gate_runs_has_a_job` there holds that these lines parse and together run every step the gate runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; every other program's version is the task files' `programs`, which `./.github/actions/pins` reads into a job's environment before the steps that install it.
 jobs:
   workspace:
     name: Workspace
@@ -28,6 +24,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -37,7 +34,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.NEXTEST }}
+          tool: nextest@${{ env.CARGO_NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
@@ -56,11 +53,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.NEXTEST }}
+          tool: nextest@${{ env.CARGO_NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
@@ -76,11 +74,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.NEXTEST }}
+          tool: nextest@${{ env.CARGO_NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
@@ -99,6 +98,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -106,7 +106,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.NEXTEST }}
+          tool: nextest@${{ env.CARGO_NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
@@ -143,6 +143,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -166,6 +167,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -190,6 +192,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -216,6 +219,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
@@ -242,11 +246,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: nextest@${{ env.NEXTEST }}
+          tool: nextest@${{ env.CARGO_NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: tools
