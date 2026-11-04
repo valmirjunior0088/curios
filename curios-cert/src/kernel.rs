@@ -1453,13 +1453,17 @@ impl<'s> Kernel<'s> {
             None => {
                 self.positions.begin();
                 let outcome = erased_half(self, type_);
+                let classified = outcome.is_ok();
                 let erased = self.positions.settle(outcome);
-                self.memos.store_half(
-                    type_.clone(),
-                    self.has_refinements(),
-                    self.scope.prefix(),
-                    erased,
-                );
+                // A classification that failed is asked again where the type is met next: remembered, its `None` would read as a type no erased half holds, and the failure would go with whichever walk met it first — a refused one takes it back.
+                if classified {
+                    self.memos.store_half(
+                        type_.clone(),
+                        self.has_refinements(),
+                        self.scope.prefix(),
+                        erased,
+                    );
+                }
 
                 erased
             }

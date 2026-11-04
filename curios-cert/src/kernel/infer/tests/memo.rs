@@ -4,7 +4,8 @@ use {
     crate::kernel::infer::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{Intrinsic, Nat, Term},
+    curios_common::Qualifier,
+    curios_core::{Global, Intrinsic, Nat, Term, UniverseContext, Universes},
 };
 
 /// A local-free term's type is remembered for the declaration, so a term whose tree is exponential in its depth — a sum adding a shared subterm to itself sixty times over, the shape a reduct takes when each step mentions the one before it more than once — is typed in the size of its graph. At a depth the uncached kernel can afford, both give the same type.
@@ -240,4 +241,87 @@ fn a_term_typed_in_a_refused_walk_is_recorded_when_typed_again() {
         .scoped(|kernel| infer(kernel, &term))
         .expect("the lambda types");
     assert_eq!(judged(&mut scoped), alone);
+}
+
+/// `alias : Type 0 = ()`, defined into `kernel` as a refused definition stands: a type to `infer_type`, which reads its declared sort, and none to `Sort::of`, which reduces it to a value.
+fn defining_alias(kernel: &mut Kernel) -> Global {
+    let alias = Global::Authored(Qualifier::from(["alias"]));
+    kernel
+        .define(
+            &alias,
+            &Term::type_ground(),
+            &Term::tuple(Vec::<Term>::new()),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+
+    alias
+}
+
+/// `((z : alias) => 0)(())`, which checks `()` at `alias`: a position whose classification fails, recorded before the check refuses.
+fn checked_at(alias: Global, z: u32) -> Term {
+    Term::apply(
+        Term::func(
+            [(binder(z, "z"), Term::instance(alias, Universes::default()))],
+            nat(0),
+        ),
+        [Term::tuple(Vec::<Term>::new())],
+    )
+}
+
+/// `match not(true) | false => 0 | true => arm`: an arm no reduction takes, typed and refused, and withdrawn with what it recorded. Its scrutinee names no local, so no equation is in force inside it, and what it classifies is remembered for the declaration.
+fn never_taken(arm: Term) -> Term {
+    let c = binder(0, "c");
+    let not = Term::func(
+        [(c, bool_type())],
+        Term::bool_match(
+            Term::free_var(&c),
+            None,
+            bool_type(),
+            Term::intrinsic(Intrinsic::Bool(true)),
+            Term::intrinsic(Intrinsic::Bool(false)),
+        ),
+    );
+
+    Term::bool_match(
+        Term::apply(not, [Term::intrinsic(Intrinsic::Bool(true))]),
+        None,
+        nat_type(),
+        nat(0),
+        arm,
+    )
+}
+
+/// A classification that failed is asked again where its type is met next: a withdrawn arm checks a value at `alias` first, and the same check outside the match records the failure again, with the memos on as with them off.
+///
+/// Mutation-checked: with a failed classification remembered, the check outside the arm records nothing and raises nothing.
+#[test]
+fn a_classification_that_failed_in_a_withdrawn_arm_fails_again_outside_it() {
+    for mut kernel in [kernel(), Kernel::uncached(100_000, SYNTAX)] {
+        let alias = defining_alias(&mut kernel);
+        let term = Term::tuple([never_taken(checked_at(alias, 1)), checked_at(alias, 2)]);
+
+        assert!(
+            infer(&mut kernel, &term).is_err(),
+            "nothing inhabits `alias`"
+        );
+        assert!(matches!(
+            kernel.take_checked().1,
+            Some(Error::Unclassified(_))
+        ));
+    }
+}
+
+/// And a failure only a withdrawn arm met is withdrawn with it: an arm no reduction takes is one that was not typed, so nothing it classified, or could not, is the declaration's.
+#[test]
+fn a_classification_that_failed_only_in_a_withdrawn_arm_is_withdrawn_with_it() {
+    for mut kernel in [kernel(), Kernel::uncached(100_000, SYNTAX)] {
+        let alias = defining_alias(&mut kernel);
+
+        assert_eq!(
+            infer(&mut kernel, &never_taken(checked_at(alias, 1))),
+            Ok(nat_type())
+        );
+        assert!(kernel.take_checked().1.is_none());
+    }
 }
