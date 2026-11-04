@@ -133,6 +133,9 @@ impl fmt::Display for Refusals {
                 error.raised().variant_name(),
                 place(error.declared_in())
             )?;
+            if let curios_elab::Error::UninferredImplicit { bound, .. } = error.raised() {
+                write!(formatter, "\n  bound: {}", pinned(bound))?;
+            }
             if let curios_elab::Error::TypeMismatch {
                 inferred, expected, ..
             } = error.raised()

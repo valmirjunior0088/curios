@@ -1,6 +1,8 @@
 //! Eta at a function and a record: an expansion that drops a binder or swaps components is none, a literal's eta where no type directs it, and a struct's function fields.
+//!
+//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/eta.rs`.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_elab::Error};
 
 // Eta and untyped child positions. Conversion is type-directed, so eta is what converts `f` with `(x) => f(x)` and `p` with `(p.0, p.1)` without either side having to be written in that shape. Both rules are *accepting*, so each widens what counts as equal, and the two refusals beside them are what keep the acceptance from reading as "any two functions convert" and "any two records convert": drop the binder from the expansion and the equation dies, swap the components and it dies. Without them a `compare` that answered `true` at every Π and every Σ would satisfy the accepting rung and nothing here would notice.
 #[test]
@@ -13,18 +15,17 @@ fn converts_a_function_and_a_record_with_their_expansions() {
 
 #[test]
 fn an_expansion_that_drops_its_binder_is_not_eta() {
-    rejected_by(
-        AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA,
-        "type mismatch",
-    );
+    refused(AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA).by_elaborator_in("/dropped", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 #[test]
 fn an_expansion_that_swaps_its_components_is_not_eta() {
-    rejected_by(
-        AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA,
-        "type mismatch",
-    );
+    refused(AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA)
+        .by_elaborator_in("/swapped", |error| {
+            matches!(error, Error::TypeMismatch { .. })
+        });
 }
 
 // **Eta by a literal needs no type, so it holds where none directs it.** The elaborator fires eta by a side's shape at every goal, and the kernel by the goal's type, which a child it compares at `Type` does not have: a stuck elimination's arm, a projection's head, a lambda's body inside one, and — with no `match` written — the arms a definition unfolds to once a record's eta has projected its two calls. An expansion equal to its neutral at the goal was refused there, by the kernel alone, so conversion was no congruence in the trusted checker and the refusal reached the author as the kernel's. A lambda and a tuple literal against a neutral fire the rule by their own shape (`function_eta`, `tuple_eta`), as a struct literal always has.
@@ -37,18 +38,18 @@ fn a_literals_eta_holds_where_no_type_directs_it() {
 
 #[test]
 fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
-    rejected_by(
-        AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM,
-        "type mismatch",
-    );
+    refused(AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM)
+        .by_elaborator_in("/dropped", |error| {
+            matches!(error, Error::TypeMismatch { .. })
+        });
 }
 
 #[test]
 fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
-    rejected_by(
-        AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM,
-        "type mismatch",
-    );
+    refused(AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM)
+        .by_elaborator_in("/swapped", |error| {
+            matches!(error, Error::TypeMismatch { .. })
+        });
 }
 
 // **A literal's eta is taken against every neutral, one set in both checkers.** The kernel took it against a variable, a projection and a stuck application, and the elaborator against any term, so a literal against a stuck elimination elaborated and was refused by the kernel alone: a tuple literal and a lambda in a stuck elimination's arm, where no type directs the rule, a tuple literal there against a definition that unfolds to one, and a struct literal at the struct's own type. A neutral is every term whose head does not show its type, which is what a shape can tell where the goal states no type.
@@ -64,18 +65,18 @@ fn a_literals_eta_is_taken_against_a_stuck_elimination() {
 
 #[test]
 fn a_tuple_that_swaps_a_stuck_eliminations_components_is_not_its_eta() {
-    rejected_by(
-        A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA,
-        "type mismatch",
-    );
+    refused(A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA)
+        .by_elaborator_in("/apart", |error| {
+            matches!(error, Error::TypeMismatch { .. })
+        });
 }
 
 #[test]
 fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
-    rejected_by(
-        A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA,
-        "type mismatch",
-    );
+    refused(A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA)
+        .by_elaborator_in("/apart", |error| {
+            matches!(error, Error::TypeMismatch { .. })
+        });
 }
 
 // **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
@@ -114,5 +115,6 @@ fn two_struct_literals_compare_their_function_fields() {
 // Two recursions of one shape that part in their base case. Unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ.
 #[test]
 fn two_distinct_recursions_do_not_convert() {
-    rejected_by(DISTINCT_RECURSIONS_ARE_NOT_EQUAL, "type mismatch");
+    refused(DISTINCT_RECURSIONS_ARE_NOT_EQUAL)
+        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }

@@ -1,6 +1,8 @@
 //! Where irrelevance takes over from comparison: a function into a proposition and a record's proof component, and the relevant parts still compared.
+//!
+//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/irrelevance.rs`.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_elab::Error};
 
 // The composition the row named as unattacked — "eta at a function type whose codomain is a proposition, where the expansion's body lands at a `Prop`-sorted goal and irrelevance discharges it without comparing anything" — and at Π there is nothing to attack, because the shape cannot arise. `turn` tries irrelevance *before* it dispatches on the goal type's shape, and `func_sort` makes a Π into a proposition a proposition whatever it quantifies over, so the goal is discharged whole at the top and eta never opens a binder at all. Any two such functions are equal, which is this accepting rung.
 //
@@ -15,10 +17,8 @@ fn a_function_into_a_proposition_is_discharged_before_eta() {
 
 #[test]
 fn a_function_into_a_type_is_not_discharged_uncompared() {
-    rejected_by(
-        A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED,
-        "type mismatch",
-    );
+    refused(A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED)
+        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // The same composition where it *is* reachable, which is Σ rather than Π. `tuple_sort` makes a record a proposition only when every component is one, so `{Nat, Eq()(0, 0)}` stays relevant, irrelevance does not preempt eta, and eta is what hands the second component to a `Prop`-sorted goal. Both rules fire in one equation here — eta at Π opens the binder, eta at Σ splits the record — and only the relevant component is ever compared.
@@ -34,10 +34,8 @@ fn hands_a_records_proof_component_to_irrelevance() {
 
 #[test]
 fn still_compares_a_records_relevant_component() {
-    rejected_by(
-        ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT,
-        "type mismatch",
-    );
+    refused(ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT)
+        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. Both checkers compare fields and payloads at the telescope; compared at `Type`, every proof-carrying value built from a different proof of the same fact would be refused, and `Str/concat` would not associate. The four equations below are those shapes: a field, a payload, a standard-library constructor, and the string law.

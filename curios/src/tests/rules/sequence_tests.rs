@@ -1,8 +1,10 @@
 //! A sequence fold answers alike at every spelling of its operands: what `Bytes` and `List` operations decide over a symbolic value, and what their rows let a bound or a validity discharge.
+//!
+//! Its counterparts are `curios-core/src/spine/monoid_tests.rs`, the free-monoid step both checkers read a sequence by, and `curios-cert/src/kernel/infer/tests/intrinsic.rs`.
 
 use {
     super::test_support::*,
-    curios_cert::{Error, Verdict},
+    curios_cert::Verdict,
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
     curios_module::RootSource,
@@ -15,8 +17,7 @@ use {
 // The shapes a fold reads a `Bytes` value by: a fill of a successor opens with its atom, which is the cons `x[a, ..fill]`, and the same run spelled as a snoc ends with it. The two are one value at every count, so a strip or a byte split that told them apart would refute at the symbolic count what `n = 0` makes `true`, and `absurd(0, 7, qed)` would be a closed inhabitant of `False`. What holds them is that a chunk facing an element is handed on, never clashed: the comparison stays a stuck `==`.
 #[test]
 fn a_fill_and_its_snoc_spelling_are_never_told_apart() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Byte, Bytes};
         use /std/Bool/{True, False, Holds};
 
@@ -24,15 +25,13 @@ fn a_fill_and_its_snoc_spelling_are_never_told_apart() {
             h;
 
         absurd(0, 7, True/qed())
-        "#,
-        "inferred: Holds(x[a, ..Bytes/replicate(n, a)] == x[..Bytes/replicate(n, a), a])",
-    );
+        "#).by_elaborator_in("/absurd", |error| matches!(error, curios_elab::Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/sys/Bool/Holds(x[a, ..Bytes/replicate(n, a)] == x[..Bytes/replicate(n, a), a])"));
 }
 
 // A fill of a count nothing decides may be the empty value, so it is no clash against `x[]`, as a window of such a count is not (`a_window_that_may_be_empty_does_not_clash_with_the_empty_value`): the word strip reads it as one chunk of unknown length. Read as its leading atom, the arm would be excused and `absurd(0, 7, Eq/refl())` would prove `False`.
 #[test]
 fn a_fill_that_may_be_empty_does_not_clash_with_the_empty_value() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Eq, Nat, Byte, Bytes};
         use /std/Bool/{False};
@@ -42,15 +41,19 @@ fn a_fill_that_may_be_empty_does_not_clash_with_the_empty_value() {
 
         absurd(0, 7, Eq/refl())
         "#,
-        "is not provably impossible at the scrutinee's indices",
-    );
+    )
+    .by_elaborator_in("/absurd", |error| {
+        matches!(
+            error,
+            curios_elab::Error::MatrixUncovered { indexed: true, .. }
+        )
+    });
 }
 
 // Two windows of one base fuse only where the second begins where the first ends; across a gap of one the concatenation skips a byte the single window holds. Fused anyway, `fused` would hold of every base, and at `x[1, 2, 3]` it states `x[1, 3] == x[1, 2]`, which is `False`.
 #[test]
 fn two_windows_across_a_gap_are_not_one_window() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Bytes};
         use /std/Bool/{True, False, Holds};
 
@@ -63,16 +66,13 @@ fn two_windows_across_a_gap_are_not_one_window() {
             True/qed();
 
         fused(x[1, 2, 3], 1, 1)
-        "#,
-        "expected: Holds(x[..Bytes/slice(b, 0, m), ..Bytes/slice(b, m + 1, n)] == Bytes/slice(b, 0, m + n))",
-    );
+        "#).by_elaborator_in("/fused", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(x[..Bytes/slice(b, 0, m), ..Bytes/slice(b, m + 1, n)] == Bytes/slice(b, 0, m + n))"));
 }
 
 // An index into a concatenation lies inside its second operand once it has passed the first one's whole length, and the seam is read by cancelling that length off the index. The second operand's own length is no such seam: read as one, `get(b ++ c, len(c))` would be `get(c, 0)` everywhere, which at `x[1] ++ x[2, 3]` is `3` against `2`.
 #[test]
 fn an_index_past_the_wrong_operand_is_no_seam() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, Bytes, Eq, Byte};
         use /std/Bool/{True, Holds};
 
@@ -88,16 +88,13 @@ fn an_index_past_the_wrong_operand_is_no_seam() {
             Eq/cong((y: Byte) => Byte/to_nat(y), shifted(x[1], x[2, 3]));
 
         Eq/subst((v: Nat) => Holds(v == 3), wrong, True/qed())
-        "#,
-        "expected: Eq(@Byte)(Bytes/get(x[..b, ..c], Bytes/len(c)), Bytes/get(c, 0))",
-    );
+        "#).by_elaborator_in("/shifted", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(Byte)(Bytes/get(x[..b, ..c], Bytes/len(c)), Bytes/get(c, 0))"));
 }
 
 // A bound is discharged by the folds its proposition reduces through, and a length past an operand that may be empty is not strictly past it: the sum's shared summand cancels, and `0 < Bytes/len(c)` is what is left. Discharged anyway, `longer(x[], x[])` would be a closed proof of `0 < 0`.
 #[test]
 fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Bytes};
         use /std/Bool/{True, Holds};
 
@@ -105,16 +102,13 @@ fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
             True/qed();
 
         longer(x[], x[])
-        "#,
-        "expected: Holds(0 < Bytes/len(c))",
-    );
+        "#).by_elaborator_in("/longer", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(0 < Bytes/len(c))"));
 }
 
 // `map` by a function whose body reduces to its binder is the list itself, and only then: `v - 1 + 1` is `v` everywhere but at `0`, where truncation makes it `1`. Read as the identity, `moved([0])` would hold `[1]` one value with `[0]`.
 #[test]
 fn a_map_by_a_function_that_is_the_identity_almost_everywhere_is_not_its_list() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, List, Eq};
         use /std/Bool/{True, Holds};
 
@@ -127,16 +121,13 @@ fn a_map_by_a_function_that_is_the_identity_almost_everywhere_is_not_its_list() 
             Eq/cong(sum, moved([0]));
 
         Eq/subst((v: Nat) => Holds(v == 1), at_zero, True/qed())
-        "#,
-        "expected: Eq(@List(Nat))(List/map(@Nat, @Nat, xs, (v) => v - 1 + 1), xs)",
-    );
+        "#).by_elaborator_in("/moved", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(List(Nat))(List/map(@Nat, @Nat, xs, (v) => (v - 1) + 1), xs)"));
 }
 
 // A left fold over a concatenation threads its accumulator through the operands in order; read in the other order, the fold of `[1] ++ [2]` by a step that does not commute would be `21` where it is `12`.
 #[test]
 fn a_fold_over_a_concatenation_threads_its_operands_in_order() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Nat, List, Eq};
         use /std/Bool/{True, Holds};
 
@@ -146,16 +137,13 @@ fn a_fold_over_a_concatenation_threads_its_operands_in_order() {
             Eq/refl();
 
         Eq/subst((v: Nat) => Holds(v == 12), swapped([1], [2]), True/qed())
-        "#,
-        "List/fold(@Nat, @Nat, xs, List/fold(@Nat, @Nat, ys, 0,",
-    );
+        "#).by_elaborator_in("/swapped", |error| matches!(error, curios_elab::Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => (acc * 10) + x), (x2, acc2) => (acc2 * 10) + x2), List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x3, acc3) => (acc3 * 10) + x3), (x4, acc4) => (acc4 * 10) + x4))" && pinned(expected) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => (acc * 10) + x), (x2, acc2) => (acc2 * 10) + x2), List/fold(@Nat, @Nat, xs, List/fold(@Nat, @Nat, ys, 0, (x3, acc3) => (acc3 * 10) + x3), (x4, acc4) => (acc4 * 10) + x4))"));
 }
 
 // A pointwise operation reads the bytes its operands' runs spell, wherever the runs past the fusion cap split them: `not` over a 65-byte run beside a 66-byte one flips the first 65 bytes of one value and the next 66 of the other. A fold that placed the seam at 64 would answer `misaligned`; carried along `grouping` to the same bytes grouped otherwise, the claim becomes `not(regrouped) == misaligned`, which the fold over the other grouping refutes, so the closing term would be a proof of `False`.
 #[test]
 fn a_pointwise_operation_answers_the_bytes_its_runs_spell_wherever_they_split() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Bytes, Eq};
         use /std/Bool/{True, Holds};
 
@@ -167,15 +155,13 @@ fn a_pointwise_operation_answers_the_bytes_its_runs_spell_wherever_they_split() 
         let grouping : Eq()(spelled, regrouped) = Eq/refl();
 
         Eq/subst((z: Bytes) => Holds(Bytes/eql(Bytes/not(z), misaligned)), grouping, claimed)
-        "#,
-        "while elaborating claimed:\ntype mismatch",
-    );
+        "#).by_elaborator_in("/claimed", |error| matches!(error, curios_elab::Error::TypeMismatch { .. }));
 }
 
 // Runs past the fusion cap stay a concatenation, and two such values are compared by the bytes they spell, not by the node that holds them: `x[..run, 0x01]` and `x[..run, 0x02]` share 65 bytes and part at the last. Held one value, `merged` would carry a decided equality of the two to its negation.
 #[test]
 fn runs_past_the_fusion_cap_that_part_at_their_last_byte_are_two_values() {
-    rejected_by(
+    refused(
         r#"
         use /std/{Bytes, Eq};
         use /std/Bool/{True, Holds};
@@ -185,8 +171,10 @@ fn runs_past_the_fusion_cap_that_part_at_their_last_byte_are_two_values() {
 
         Eq/subst((z: Bytes) => Holds(Bytes/eql(z, x[..run, 0x01])), merged, True/qed())
         "#,
-        "while elaborating merged:\ntype mismatch",
-    );
+    )
+    .by_elaborator_in("/merged", |error| {
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    });
 }
 
 // A run's hash reads 32 bytes of it, so two 100-byte runs apart only at the byte with index 1, which none of those 32 is, hash alike, as the test asserts first. Every table a fold answers from keys a term by that hash and confirms it by the bytes, so `sum(marked)` is `1` in the declaration that met `sum(zeros)` first; a table that took the hash for the value would answer it `0` there and `1` everywhere else.
@@ -205,8 +193,7 @@ fn two_runs_whose_sampled_bytes_agree_are_still_two_values() {
         "the two runs hash alike, which is the case the program puts",
     );
 
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Bytes, Nat, Byte, Eq};
         use /std/Bool/{True, Holds};
 
@@ -217,34 +204,26 @@ fn two_runs_whose_sampled_bytes_agree_are_still_two_values() {
         let conflated : Eq()(sum(zeros) + sum(marked), 0) = Eq/refl();
 
         Eq/subst((n: Nat) => Holds(n == 1), conflated, True/qed())
-        "#,
-        "expected: Eq(@Nat)(1, 0)",
-    );
+        "#).by_elaborator_in("/conflated", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(Nat)(1, 0)"));
 }
 
 // `Str` and `Char` carry their validity as a hidden field the literal fills only where the decision reduces to `True`. UTF-8's `ED A0 80` encodes the surrogate `U+D800`: `ED` admits only `80..=9F` after it, where every other three-byte lead but `E0` admits `80..=BF`, and a scan that let it take that range would hand `Str/Valid/decode_head` a `Char` whose own validity is `False`.
 #[test]
 fn a_surrogate_is_neither_text_nor_a_character() {
-    rejected_by(
-        r#"
+    refused(r#"
         use /std/{Str};
 
         let forged: Str = Str { bytes = x[0xED, 0xA0, 0x80] };
 
         /std/print("FORGED")
-        "#,
-        "nothing discharged Str/Valid(x[0xED, 0xA0, 0x80]), which reduces to /std/Bool/False",
-    );
-    rejected_by(
-        r#"
+        "#).by_elaborator_in("/forged", |error| matches!(error, curios_elab::Error::UninferredImplicit { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Str/Valid/Valid(x[0xED, 0xA0, 0x80])" && pinned(reduct) == "/sys/Bool/False"));
+    refused(r#"
         use /std/{Char};
 
         let forged: Char = Char { code = 0xD800 };
 
         /std/print("FORGED")
-        "#,
-        "Char/Valid(55296), which reduces to /std/Bool/False",
-    );
+        "#).by_elaborator_in("/forged", |error| matches!(error, curios_elab::Error::UninferredImplicit { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Char/Valid/Valid(55296)" && pinned(reduct) == "/sys/Bool/False"));
 }
 
 // The kernel's half of `a_surrogate_is_neither_text_nor_a_character`: the kernel reads no privacy and discharges nothing, so a value built past the elaborator is held by the field its literal states alone. `c` is elaborated at `A`, whose validity reduces to `True`, and its code is rewritten to the surrogate `U+D800` with the elaborated proof kept, which the field then states at `Valid(55296)`, reducing to `False`.
@@ -291,7 +270,7 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     assert!(
         matches!(
             verdicts.as_slice(),
-            [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == name
+            [Verdict { name: Some(refused), error: curios_cert::Error::Mismatch { .. } }] if *refused == name
         ),
         "the kernel refuses the forged `c` alone, as a mismatch: {verdicts:?}"
     );
