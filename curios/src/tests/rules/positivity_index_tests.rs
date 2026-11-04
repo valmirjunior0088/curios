@@ -1,8 +1,10 @@
 //! Where an occurrence stands in an index rather than a payload.
 //!
 //! An inductive is not uniform in its indices, so nothing composes through one and the walk leaves them opaque. What these pin is the boundary that leaves: which index positions still admit a recursive occurrence, and which are not reachable at all.
+//!
+//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_elab::Error};
 
 // A family that recurses at an index computed from its own payload. Indices are walked opaquely — an inductive is not uniform in them — so what has to survive is the *payload* occurrence, not the index.
 #[test]
@@ -48,15 +50,17 @@ fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() 
 // The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is not positivity: a declaration is in scope from its own signature on and never inside it, so the elaborator refuses the name before the positivity pass runs at all, and were it in scope kinding would refuse it, `x : Foo` needing `Foo` to be a type where `Foo` is a family until it is applied to the very index this declaration is introducing. That is what makes skipping the position safe rather than lucky.
 #[test]
 fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
-    rejected_by(
+    refused(
         r#"
         induct Foo : (x : Foo) -> pub Type
         end
 
         /std/print("unreachable")
         "#,
-        "`Foo` is not in scope",
-    );
+    )
+    .by_elaborator_in("/Foo", |error| {
+        matches!(error, Error::UnboundVariable { .. })
+    });
 }
 
 // The way *around* that kinding refusal, and the reason it closes too. A second declaration can carry the negative occurrence in its index domain — `B : (f : (A) -> False) -> Type` is well-kinded, because `A` is already a type — so the position the walk skips does name a declaration in the group, and the occurrence relation never records the `B → A` edge.
@@ -66,7 +70,7 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
 // Probed rather than closed: the analysis refuses this as it stands. What the fixture pins is that the two skipped index positions cannot be reached around, so a future relaxation that made `B`'s payload readable — or that dropped `@f` from `mk` — would have to answer this test rather than silently inherit the skip.
 #[test]
 fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness() {
-    rejected_by(
+    refused(
         r#"
         use /std/Bool/{False};
 
@@ -78,8 +82,10 @@ fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness
 
         /std/print("unreachable")
         "#,
-        "is not strictly positive",
-    );
+    )
+    .by_elaborator_in("/A", |error| {
+        matches!(error, Error::NotStrictlyPositive { .. })
+    });
 }
 
 // The other skipped index position, and the one that stays admitted: a constructor's index *targets*. `labelled` ignores the telescope's terminal, so the recursive occurrence in `c`'s target is never walked and `Bad`'s diagonal comes out `Unused`.

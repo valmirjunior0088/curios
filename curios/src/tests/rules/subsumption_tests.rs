@@ -3,10 +3,13 @@
 //! The rule is `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`. Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices and no Π being subsumed is formed; passing a *name* forms it, which is what these compile.
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::tests::sort` puts the same two propositions to the kernel under these names. Rename both or neither.
+//!
+//! Its kernel counterparts are `curios-cert/src/kernel/infer/tests/sort.rs` and `curios-cert/src/recheck/sort_tests.rs`.
 
 use {
     super::test_support::*,
-    crate::tests::{error, run, typecheck},
+    crate::tests::{run, typecheck},
+    curios_elab::Error,
 };
 
 // The direction the language needs. Two predicates, one a level above the other, are handed to slots that share one sort: under the binder each codomain is below it, whichever is read first. A predicate is no family of types, though: `Bool/Holds` is `(b : Bool) -> Prop`, and a slot wanting `(Bool) -> Type` refuses it.
@@ -42,13 +45,9 @@ fn a_function_types_codomain_is_cumulative() {
         let _ = witnessed;
         print("")
         "#;
-    let report = error(a_predicate_as_a_family);
-    assert!(
-        report.contains("type mismatch")
-            && report.contains("inferred: (b: Bool) -> Prop")
-            && report.contains("expected: (Bool) -> Type"),
-        "{report}"
-    );
+    refused(a_predicate_as_a_family).by_elaborator_in("/witnessed", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "(b: Bool) -> Prop" && pinned(expected) == "(Bool) -> Type")
+    });
 }
 
 // The other half of the same fork: a domain is compared by conversion, so a function over types is none over propositions, and the other way round. Asserted separately from the codomain fixture because invariance is a conjunction of refusals.
@@ -67,13 +66,9 @@ fn a_function_types_domain_is_invariant() {
         let _bad: Type = takes(given);
         print("")
         "#;
-    let report = error(wider_domain);
-    assert!(
-        report.contains("type mismatch")
-            && report.contains("inferred: (t: Type) -> Type")
-            && report.contains("expected: (Prop) -> Type"),
-        "{report}"
-    );
+    refused(wider_domain).by_elaborator_in("/_bad", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "(t: Type) -> Type" && pinned(expected) == "(Prop) -> Type")
+    });
 
     let narrower_domain = r#"
         use /std/{Bool, print};
@@ -87,8 +82,8 @@ fn a_function_types_domain_is_invariant() {
         let _bad: Type = takes(given);
         print("")
         "#;
-    let report = error(narrower_domain);
-    assert!(report.contains("type mismatch"), "{report}");
+    refused(narrower_domain)
+        .by_elaborator_in("/_bad", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // The control. A relation that had stopped descending into function types would satisfy neither fixture above while the head rule stayed green, and a relation that refused every function type would satisfy the domain fixture alone. At the head a proposition is held at `Prop` and a type at `Type`, and a proposition stands where no `Type` is wanted.
@@ -120,13 +115,9 @@ fn the_head_rules_still_decide_a_bare_sort() {
         let _ = holds;
         print("")
         "#;
-    let report = error(a_proposition_at_a_type);
-    assert!(
-        report.contains("type mismatch")
-            && report.contains("inferred: Prop")
-            && report.contains("expected: Type"),
-        "{report}"
-    );
+    refused(a_proposition_at_a_type).by_elaborator_in("/holds", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Prop" && pinned(expected) == "Type")
+    });
 }
 
 // A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `kernel::infer::tests::sort` puts the same propositions to the kernel under this name.
@@ -150,24 +141,24 @@ fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() 
         "#;
     assert_eq!(run(&format!("{declarations}{admitted}")), b"ok");
 
-    for (refused, inferred, expected) in [
+    for (at, declared, inferred_as, expected_as) in [
         (
+            "/_sort",
             "let _sort(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: S(k(0)) = Holds(true); 0 | false => 0 end;",
-            "inferred: Prop",
-            "expected: Type",
+            "Prop",
+            "Type",
         ),
         (
+            "/_family",
             "let is(_: Nat) -> Prop = Holds(true);
             let _family(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: H(k(0)) = is; 0 | false => 0 end;",
-            "inferred: (Nat) -> Prop",
-            "expected: (Nat) -> Type",
+            "(Nat) -> Prop",
+            "(Nat) -> Type",
         ),
     ] {
-        let report = error(&format!("{declarations}\n{refused}\nprint(\"\")"));
-        assert!(
-            report.contains("type mismatch") && report.contains(inferred) && report.contains(expected),
-            "{refused}: {report}"
-        );
+        refused(&format!("{declarations}\n{declared}\nprint(\"\")")).by_elaborator_in(at, |error| {
+            matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == inferred_as && pinned(expected) == expected_as)
+        });
     }
 }
 
@@ -317,28 +308,71 @@ fn a_proposition_and_a_type_under_one_implicit_are_refused_in_either_order() {
         let fam(b: Bool) -> Type = Nat;
         "#;
 
-    for mixed in [
-        ": Nat = both(is, fam)",
-        ": Nat = both(fam, is)",
-        ": Prop = Eq()(Holds(true), Nat)",
-        ": Prop = Eq()(Nat, Holds(true))",
-        " = [Holds(true), Nat]",
-        " = [Nat, Holds(true)]",
-        ": Option(Type) = Option/some(Holds(true))",
-        "(b: Bool) -> Nat = let arm = match b | true => Nat | false => Holds(b) end; 0",
-        "(b: Bool) -> Nat = let arm = match b | true => Holds(b) | false => Nat end; 0",
-        " = Twin { a = Holds(true), b = Nat }",
-        " = Twin { a = Nat, b = Holds(true) }",
-        " = Pack { a = Holds(true), b = Nat }",
-        " = [id(Holds(true)), Nat]",
-        " = [Nat, id(Holds(true))]",
-        ": Option(Prop) = pick(Holds(true), Nat)",
+    for (mixed, at, inferred_as, expected_as) in [
+        (
+            ": Nat = both(is, fam)",
+            "/_mixed",
+            "(b: Bool) -> Type",
+            "(Bool) -> Prop",
+        ),
+        (
+            ": Nat = both(fam, is)",
+            "/_mixed",
+            "(b: Bool) -> Prop",
+            "(Bool) -> Type",
+        ),
+        (": Prop = Eq()(Holds(true), Nat)", "/_mixed", "Type", "Prop"),
+        (": Prop = Eq()(Nat, Holds(true))", "/_mixed", "Prop", "Type"),
+        (" = [Holds(true), Nat]", "entry", "Type", "Prop"),
+        (" = [Nat, Holds(true)]", "entry", "Prop", "Type"),
+        (
+            ": Option(Type) = Option/some(Holds(true))",
+            "/_mixed",
+            "/sys/Option(Prop)",
+            "/sys/Option(Type)",
+        ),
+        (
+            "(b: Bool) -> Nat = let arm = match b | true => Nat | false => Holds(b) end; 0",
+            "/_mixed",
+            "Type",
+            "Prop",
+        ),
+        (
+            "(b: Bool) -> Nat = let arm = match b | true => Holds(b) | false => Nat end; 0",
+            "/_mixed",
+            "Prop",
+            "Type",
+        ),
+        (
+            " = Twin { a = Holds(true), b = Nat }",
+            "entry",
+            "Type",
+            "Prop",
+        ),
+        (
+            " = Twin { a = Nat, b = Holds(true) }",
+            "entry",
+            "Prop",
+            "Type",
+        ),
+        (
+            " = Pack { a = Holds(true), b = Nat }",
+            "entry",
+            "Type",
+            "Prop",
+        ),
+        (" = [id(Holds(true)), Nat]", "entry", "Type", "Prop"),
+        (" = [Nat, id(Holds(true))]", "entry", "Prop", "Type"),
+        (
+            ": Option(Prop) = pick(Holds(true), Nat)",
+            "/_mixed",
+            "Type",
+            "Prop",
+        ),
     ] {
-        let report = error(&format!("{declarations}\nlet _mixed{mixed};\nprint(\"\")"));
-        assert!(
-            report.contains("type mismatch") && report.contains("Prop") && report.contains("Type"),
-            "{mixed}: {report}"
-        );
+        refused(&format!("{declarations}\nlet _mixed{mixed};\nprint(\"\")")).by_elaborator_in(at, |error| {
+            matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == inferred_as && pinned(expected) == expected_as)
+        });
     }
 }
 
@@ -381,8 +415,7 @@ fn a_sort_and_a_value_under_one_implicit_are_refused() {
         let _bad: Nat = same(Holds(true), 5);
         print("")
         "#;
-    let report = error(no_sort);
-    assert!(report.contains("type mismatch"), "{report}");
+    refused(no_sort).by_elaborator_in("/_bad", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // Whether a type is a proposition is one fact of it under every case: a result declared at a sort its caller states is one sort, so a match that answers a proposition in one case and a type in another is refused, as it is at `Type`.
@@ -401,10 +434,9 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
         /std/print("")
         "#;
 
-    rejected_by(
-        source,
-        "this decides a `Sort` its declaration leaves to a caller as `Prop`",
-    );
+    refused(source).by_elaborator_in("/F", |error| {
+        matches!(error, Error::SortDecidedTwice { .. })
+    });
 }
 
 // The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `kernel::convert::tests::irrelevance` puts the two comparisons to the kernel under this name.
@@ -432,11 +464,9 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         let two(x: F(false), y: F(false)) -> Eq()(x, y) = Eq/refl();
         print("")
         "#;
-    let apart = error(two);
-    assert!(
-        apart.contains("inferred: Eq(@Nat)(x, x)") && apart.contains("expected: Eq(@Nat)(x, y)"),
-        "{apart}"
-    );
+    refused(two).by_elaborator_in("/two", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Nat)(x, x)" && pinned(expected) == "/std/Eq/Eq(Nat)(x, y)")
+    });
 
     let open = r#"
         use /std/{Nat, Bool, print};
@@ -448,11 +478,9 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         let either(c: Bool, x: F(c)) -> Bool = c;
         print("")
         "#;
-    let unformed = error(open);
-    assert!(
-        unformed.contains("inferred: S(c)") && unformed.contains("expected: Type"),
-        "{unformed}"
-    );
+    refused(open).by_elaborator_in("/either", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "(/S)(c)" && pinned(expected) == "Type")
+    });
 }
 
 // A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the kernel, handed it all the same, refuses it at the assignment that states `Type`.
@@ -469,7 +497,7 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
         /std/print("")
         "#;
 
-    rejected_by(source, "it can only be `Prop`");
+    refused(source).by_elaborator_in("/pick", |error| matches!(error, Error::SortDecided { .. }));
 }
 
 // A proposition carries only proofs, so a field at a sort left to a caller is one the structure decides: at `Type` two of its values would be one with their fields apart. The elaborator refuses the structure for deciding its sort; `curios-cert`'s `recheck::sort_tests` refuses it at the assignment that states `Type`, under this name.
@@ -483,7 +511,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
         /std/print("")
         "#;
 
-    rejected_by(source, "it can only be `Prop`");
+    refused(source).by_elaborator_in("/W", |error| matches!(error, Error::SortDecided { .. }));
 }
 
 // Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the kernel under this name.
@@ -506,9 +534,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
         /std/print("")
         "#;
 
-    let report = error(source);
-    assert!(
-        report.contains("inferred: Ph.{Prop;") && report.contains("expected: Ph.{Type;"),
-        "{report}"
-    );
+    refused(source).by_elaborator_in("/leak", |error| {
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned_with_instances(inferred) == "/Ph.{Prop; ?u}" && pinned_with_instances(expected) == "/Ph.{Type; ?u}")
+    });
 }

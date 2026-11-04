@@ -67,15 +67,30 @@ pub(super) fn global(path: &str) -> Global {
 
 /// `term`, a term an elaborator's error holds, as a rule's test pins it: every global by its absolute path, an intrinsic by its surface name, no universe instance and no metavariable's number, so the pin reads the term and not the order elaboration met its levels in, and on one line, each run of whitespace a space.
 pub(super) fn pinned(term: &Term) -> String {
-    term.spelled(&Rc::new(
-        Spelling::default()
-            .with_erased_universes()
-            .with_anonymous_metavars(),
-    ))
-    .to_string()
-    .split_whitespace()
-    .collect::<Vec<_>>()
-    .join(" ")
+    on_one_line(term, Spelling::default().with_erased_universes())
+}
+
+/// `term` as [`pinned`] writes it with its universe instances shown, each level metavariable a bare `?u`: for a test whose claim is the instance a term stands at.
+pub(super) fn pinned_with_instances(term: &Term) -> String {
+    let spelled = on_one_line(term, Spelling::default());
+    let mut pinned = String::with_capacity(spelled.len());
+    let mut rest = spelled.as_str();
+    while let Some(at) = rest.find("?u") {
+        pinned.push_str(&rest[..at + 2]);
+        rest = rest[at + 2..].trim_start_matches(|character: char| character.is_ascii_digit());
+    }
+    pinned.push_str(rest);
+
+    pinned
+}
+
+/// `term` under `spelling` with every metavariable a bare `?`, on one line, each run of whitespace a space.
+fn on_one_line(term: &Term, spelling: Spelling) -> String {
+    term.spelled(&Rc::new(spelling.with_anonymous_metavars()))
+        .to_string()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Whether a refusal raised in `name`, a declaration or none for the term a program closes with, stands `at`: a declaration's absolute path, or `entry`.
@@ -122,12 +137,16 @@ impl fmt::Display for Refusals {
                 inferred, expected, ..
             } = error.raised()
             {
-                write!(
-                    formatter,
-                    "\n  inferred: {}\n  expected: {}",
-                    pinned(inferred),
-                    pinned(expected)
-                )?;
+                for (field, term) in [("inferred", inferred), ("expected", expected)] {
+                    write!(formatter, "\n  {field}: {}", pinned(term))?;
+                    if pinned_with_instances(term) != pinned(term) {
+                        write!(
+                            formatter,
+                            "\n  {field} with instances: {}",
+                            pinned_with_instances(term)
+                        )?;
+                    }
+                }
             }
             writeln!(formatter)?;
         }

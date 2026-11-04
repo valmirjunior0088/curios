@@ -295,37 +295,6 @@ fn a_tuple_witness_for_an_entry_concept_registers() {
     assert_eq!(run(source), b"mine");
 }
 
-/// A witness refusal is located at the concept application the author wrote, under a telescope as without one.
-///
-/// A `satisfy` block has no name, so its declared type is the only thing a caret can point at — and that type is synthesized during lowering (`witness_concept_application`), which carries the application's span — without it, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all, naming only a module that may hold a dozen witnesses. Under a telescope the declared type is a `FuncType` built around the application, so it carries the span too.
-#[test]
-fn a_witness_refusal_is_located_at_its_concept_application() {
-    let telescoped = error(
-        r#"
-        use /std/{Str, Show, List};
-        satisfy (@A : Type, use Show(A)) => Show(List(A)) {
-            show(v) = "l"
-        }
-        /std/Io/pure(())
-        "#,
-    );
-    assert!(telescoped.contains("orphan witness"), "{telescoped}");
-    assert!(telescoped.contains("=> Show(List(A)) {"), "{telescoped}");
-
-    // The nullary form, whose declared type *is* the application.
-    let bare = error(
-        r#"
-        use /std/{Str, Show, Nat};
-        satisfy Show(Nat) {
-            show(n) = "n"
-        }
-        /std/Io/pure(())
-        "#,
-    );
-    assert!(bare.contains("orphan witness"), "{bare}");
-    assert!(bare.contains("satisfy Show(Nat) {"), "{bare}");
-}
-
 // A witness head written with a list holding nothing is the application `Show()`, so it is refused by the call's own arity report rather than read as the bare concept.
 #[test]
 fn a_witness_head_with_nothing_written_is_the_application() {

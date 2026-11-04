@@ -1,70 +1,10 @@
 //! Polarity travelling through a type former, which is the whole of what "modulo polarity" buys.
 //!
 //! A check recognizing recursive occurrences only in immediate payload positions rejects every shape here, `/std/Toml` among them. Each row names the former whose polarity vector the occurrence composes against.
+//!
+//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
-use crate::tests::run;
-
-// A description of an `X` is the delayed `X` its thunk erasure makes it, so `X` under `Io` stays strictly positive — the same reading as `List`, and for a stronger reason: `bind` never hands back the result except inside another `Io`, and there is no eliminator that does. This is the rule a suspension whose continuation is computed by performing an effect rests on.
-#[test]
-fn an_io_payload_is_a_strictly_positive_occurrence() {
-    let source = r#"
-        use /std/{Nat, Io};
-
-        induct Step(A : Type) : pub Type
-        | done(A)
-        | more(next : Io(Step(A)))
-        end
-
-        let machine : Step(Nat) = Step/more(Io/pure(Step/done(7)));
-
-        match machine
-        | done(_) => /std/print("no")
-        | more(_) => /std/print("suspended")
-        end
-        "#;
-    assert_eq!(run(source), b"suspended");
-}
-
-// The rule most likely to be implemented wrongly. A nullary `() -> X` is an *empty* parameter list, so nothing flips and `X` stays strictly positive — a zero-argument function is a thunk of its result. Read as "an occurrence under an arrow is negative", this rejects every type that holds a thunk of itself.
-#[test]
-fn a_nullary_arrow_codomain_is_a_strictly_positive_payload() {
-    let source = r#"
-        use /std/{Nat};
-
-        induct Susp(A : Type) : pub Type
-        | now(A)
-        | later(() -> Susp(A))
-        end
-
-        let delayed : Susp(Nat) = Susp/later(() => Susp/now(7));
-
-        match delayed
-        | now(_) => /std/print("no")
-        | later(_) => /std/print("thunked")
-        end
-        "#;
-    assert_eq!(run(source), b"thunked");
-}
-
-// A step and the suspended rest of it in miniature: two declarations in one `and` block, each reaching the other, with the recursive occurrence behind a thunk. The group boundary lives on `Item::Rec` and not on the registry entry, so this passes only because the occurrence relation is closed transitively rather than by asking who shares a declaration block.
-#[test]
-fn a_mutually_recursive_group_reaching_itself_through_a_thunk_is_admitted() {
-    let source = r#"
-        induct Step : Type
-        | halt()
-        | again(next : () -> Machine)
-        and Machine : Type
-        | done()
-        | more(step : Step, rest : () -> Machine)
-        end
-
-        match Machine/more(Step/halt(), () => Machine/done())
-        | done() => /std/print("no")
-        | more(_, _) => /std/print("mutual")
-        end
-        "#;
-    assert_eq!(run(source), b"mutual");
-}
+use {super::test_support::*, crate::tests::run, curios_core::Polarity, curios_elab::Error};
 
 // `Json/arr(List(Json))`: a list is a finite product of its element, so the intrinsic is covariant and a strict occurrence stays strict. Without polarity on intrinsics this shape is rejected outright.
 #[test]
@@ -87,6 +27,31 @@ fn recursion_through_a_covariant_intrinsic_is_admitted() {
     assert_eq!(run(source), b"listed");
 }
 
+// `List` is covariant, so an occurrence under it is whatever it was inside: a strict one stays admitted, and the arrow's left is still the arrow's left.
+#[test]
+fn a_negative_occurrence_under_a_covariant_intrinsic_is_rejected() {
+    refused(
+        r#"
+        use /std/{List, Bool};
+
+        induct Bad : pub Type
+        | c(List((Bad) -> Bool))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
 // `Json/obj(List({Str, Json}))`: polarity has to travel through an anonymous tuple type as well as the intrinsic, since a product is as positive as its factors.
 #[test]
 fn recursion_through_an_anonymous_tuple_is_admitted() {
@@ -104,6 +69,83 @@ fn recursion_through_an_anonymous_tuple_is_admitted() {
         end
         "#;
     assert_eq!(run(source), b"tupled");
+}
+
+// `Cell` is invariant — it is read *and* written — so nothing recursive may travel through one, even though the occurrence looks like a plain payload.
+#[test]
+fn recursion_through_an_invariant_intrinsic_is_rejected() {
+    refused(
+        r#"
+        use /std/{Cell};
+
+        induct Knot : pub Type
+        | tie(Cell(Knot))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Knot", |error| {
+        matches!(error, Error::NotStrictlyPositive { .. })
+    });
+}
+
+// The composition case, and the one a check without polarity vectors would miss entirely: `Sink` is contravariant in its parameter, so `Trap`'s payload puts `Trap` left of an arrow one indirection away. Nothing about `Trap`'s own constructor looks negative — the rejection comes from `Sink`'s vector.
+#[test]
+fn a_negative_occurrence_borrowed_through_another_declaration_is_rejected() {
+    refused(
+        r#"
+        use /std/{Nat};
+
+        induct Sink(A : Type) : pub Type
+        | drain(f : (A) -> Nat)
+        end
+
+        induct Trap : pub Type
+        | caught(Sink(Trap))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+// The double negative borrowed the same way: `Twice` is positive in its parameter and not strictly so, and the diagonal it gives `Trap` is refused under the merely-positive phrase rather than read as an occurrence the composition cleaned.
+#[test]
+fn a_non_strict_occurrence_borrowed_through_another_declaration_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        induct Twice(A : Type) : pub Type
+        | mk(f : ((A) -> False) -> False)
+        end
+
+        induct Trap : pub Type
+        | caught(Twice(Trap))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Pos,
+                ..
+            }
+        )
+    });
 }
 
 // `/std/Toml`, whose recursion travels `Toml → Map(Str, Toml) → struct field → Option → Node`. This is the shape that makes "modulo polarity" load-bearing on day one rather than a later refinement: a check that only recognizes recursive occurrences in immediate payload positions rejects it.
@@ -135,6 +177,59 @@ fn recursion_through_a_struct_into_a_parameterized_inductive_is_admitted() {
     assert_eq!(run(source), b"three hops");
 }
 
+// A `struct` parameter carries a polarity vector as an `induct`'s does, and a record is the declaration a consumer is likeliest to wrap a recursive type in.
+#[test]
+fn a_negative_occurrence_borrowed_through_a_struct_parameter_is_rejected() {
+    refused(
+        r#"
+        use /std/{Nat};
+
+        struct Sink(A : Type) : pub Type { f : (A) -> Nat }
+
+        induct Trap : pub Type
+        | caught(Sink(Trap))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+#[test]
+fn a_non_strict_occurrence_borrowed_through_a_struct_parameter_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        struct Twice(A : Type) : pub Type { f : ((A) -> False) -> False }
+
+        induct Trap : pub Type
+        | caught(Twice(Trap))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Trap", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Pos,
+                ..
+            }
+        )
+    });
+}
+
 // `Node(V)` mentions itself, so its own parameter vector is an input to computing that vector. A single ordered pass reads `V` as `Unused` and then composes `Value → Table → Node` through a parameter it wrongly believes is never inspected; only running the two fixpoints to stability gets `Strict`.
 #[test]
 fn a_self_mentioning_parameter_needs_the_fixpoint_to_settle() {
@@ -159,23 +254,68 @@ fn a_self_mentioning_parameter_needs_the_fixpoint_to_settle() {
     assert_eq!(run(source), b"settled");
 }
 
-// `struct Waker : Type { () -> {} }` inside `/std/Pause`'s `park` payload: a genuine negative position, and sound only because `Waker` mentions neither member of the group. The check must reject on the *path back*, not on the mere presence of a negative occurrence.
+// A step and the suspended rest of it in miniature: two declarations in one `and` block, each reaching the other, with the recursive occurrence behind a thunk. The group boundary lives on `Item::Rec` and not on the registry entry, so this passes only because the occurrence relation is closed transitively rather than by asking who shares a declaration block.
 #[test]
-fn a_negative_occurrence_of_an_unrelated_type_is_admitted() {
+fn a_mutually_recursive_group_reaching_itself_through_a_thunk_is_admitted() {
     let source = r#"
-        struct Waker : pub Type { () -> {} }
-
-        induct Event : pub Type
-        | idle()
-        | park((Waker) -> {})
+        induct Step : Type
+        | halt()
+        | again(next : () -> Machine)
+        and Machine : Type
+        | done()
+        | more(step : Step, rest : () -> Machine)
         end
 
-        match Event/idle()
-        | idle() => /std/print("unrelated")
-        | park(_) => /std/print("no")
+        match Machine/more(Step/halt(), () => Machine/done())
+        | done() => /std/print("no")
+        | more(_, _) => /std/print("mutual")
         end
         "#;
-    assert_eq!(run(source), b"unrelated");
+    assert_eq!(run(source), b"mutual");
+}
+
+// A cycle whose negative step is in the *other* member. Neither declaration is negative on its own inspection, and the group boundary is not on the registry entry, so this is caught only by closing the occurrence relation transitively.
+#[test]
+fn a_negative_cycle_through_a_mutual_group_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        induct Left : Type
+        | wrap(Right)
+        and Right : Type
+        | back(f : (Left) -> False)
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Left", |error| {
+        matches!(error, Error::NotStrictlyPositive { .. })
+    });
+}
+
+// A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
+//
+// `curios-analysis/src/positivity.rs` names this obligation deliberately out of scope: `F` is a binder with no known polarity, so `Mu` cannot be checked from its own body, and discharging it properly needs an inferred per-binder obligation in a side store. Out of scope leaves open which way the analysis falls, and only one way is safe — an unknown former must read as `Mixed`, never as `Strict`. Nothing in the corpus takes a type-former parameter on an `induct`, so nothing else exercises the choice, and a later improvement to `occurrences` that taught it to see through `F(Mu(F))` would flip it silently.
+//
+// What the wrong direction costs is Curry's paradox with no recursion in sight. Admitting `Mu` lets it be instantiated at a negative former — `let Neg(X : Type) -> Type = (X) -> False` — and `Mu(Neg)`'s constructor is then `fix : ((Mu(Neg)) -> False) -> Mu(Neg)`, the negative occurrence this gate exists to forbid, spelled through a parameter instead of directly. `out(m) = match m | fix(f) => f end` and `delta(m) = out(m)(m)` give `delta(Mu/fix(delta)) : False`.
+//
+// Refused as it stands rather than a closed hole, and the diagnostic is asserted so the fixture cannot pass on an unrelated failure. Its control is `a_type_former_parameter_not_recursed_through_is_admitted`, which shows the refusal is about self-reference through an unknown former and not a blanket ban on higher-kinded parameters — a ban would take `/std`'s `Monad`-shaped abstractions with it.
+#[test]
+fn a_declaration_recursing_through_a_type_former_parameter_is_refused() {
+    refused(
+        r#"
+        induct Mu(F : (Type) -> Type) : pub Type
+        | fix(F(Mu(F)))
+        end
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Mu", |error| {
+        matches!(error, Error::NotStrictlyPositive { .. })
+    });
 }
 
 // The control for the fixture above: a type-former parameter is legal, and applying it is legal. What is refused there is the declaration reaching *itself* through a former whose polarity nothing knows — so the diagonal of the occurrence relation is what decides, exactly as the acceptance predicate says. `Apply` never appears inside `F(A)`, so its diagonal stays `Unused` however `F` behaves.
@@ -197,4 +337,152 @@ fn a_type_former_parameter_not_recursed_through_is_admitted() {
         end
         "#;
     assert_eq!(run(source), b"applied");
+}
+
+// A concept's dictionary is a nominal record of its methods, so a method consuming the recursive type puts it left of an arrow one indirection away, exactly as a struct parameter does — and the dictionary here is *sealed*, its representation private to this module. Privacy is the elaborator's, and the gate reads the declaration whole, so a sealed representation hides a non-positive occurrence from no one: were it to, `Refute`'s `refute : (Bad) -> False` would be the negative occurrence the gate exists to forbid, reachable through a witness.
+#[test]
+fn a_negative_occurrence_borrowed_through_a_sealed_concept_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        concept Refute(A : Type) : Type { refute(A) -> False }
+
+        struct Bad : pub Type { d : Refute(Bad) }
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+// A concept's superclass is a hidden field of its dictionary, and the walk reads it as it reads a written one: `Sub`'s edge `use Refute(Sub(X))` puts `Sub` left of `refute`'s arrow one dictionary away, and skipping a field no projection counts would make that edge the paradox's negative occurrence.
+#[test]
+fn a_negative_occurrence_through_a_superclass_field_is_rejected() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        concept Refute(A : Type) : pub Type { refute(A) -> False }
+
+        concept Sub(X : Type) : pub Type { use Refute(Sub(X)), tag() -> Nat }
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Sub", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+// An associated type a witness chooses is a field of a dictionary the walk unfolds: `Fam/Carrier(@Box(Bad))` resolves to the generic witness for `Box(A)` and projects its `Carrier`, which that witness spells `(A) -> False`. Neither `Bad`'s field nor `Fam`'s declaration shows an arrow, so only reading through the wrapper, the witness and the projection finds the negative occurrence.
+#[test]
+fn a_negative_occurrence_a_generic_witness_chooses_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        concept Fam(A : Type) : pub Type { Carrier : Prop }
+
+        struct Box(A : Type) : pub Type { held : A }
+
+        satisfy (@A : Type) => Fam(Box(A)) { Carrier = (A) -> False }
+
+        struct Bad : pub Type { x : Fam/Carrier(@Box(Bad)) }
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+// A type declared under a premise takes its dictionary as a parameter, and a field resolving through the premise projects it, so `S` uses its dictionary where nothing can see through: `Bad` hands `S` a dictionary whose `Carrier` is `(Bad) -> False`, and reading the dictionary parameter as unused would hand `Bad` that arrow as its own field with no occurrence recorded.
+#[test]
+fn a_negative_occurrence_in_the_dictionary_a_premise_takes_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        concept Fam(A : Type) : pub Type { Carrier : Prop }
+
+        struct S(A : Type, use Fam(A)) : pub Type { x : Fam/Carrier(@A) }
+
+        struct Bad : pub Type { s : S(Bad, use Fam(Bad) { Carrier = (Bad) -> False }) }
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(error, Error::NotStrictlyPositive { .. })
+    });
+}
+
+// A record's field holding a type is read where it is projected: `neg(Bad).T` is a definition's record literal, its field `(Bad) -> False`, and the projection reduces to it. Read as an opaque projection the field type would name `Bad` only inside a value, and the record the paradox is built from would carry its own consumer.
+#[test]
+fn a_negative_occurrence_projected_from_a_record_is_rejected() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        struct Pack : pub Type { T : Prop }
+
+        let neg(X : Type) -> Pack = Pack { T = (X) -> False };
+
+        struct Bad : pub Type { x : neg(Bad).T }
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Neg,
+                ..
+            }
+        )
+    });
+}
+
+// A body the compiler writes is a definition the walk unfolds like a written one: `Sel` picks `(X) -> False` where a derived `Eql` says `Tag/a()` is `Tag/a()`, so `Bad`'s field is the negative arrow only through the derived witness's body.
+#[test]
+fn a_negative_occurrence_a_derived_witness_selects_is_rejected() {
+    refused(r#"
+        use /std/{Bool};
+        use /std/Bool/{True, False};
+        use /std/ops/{Eql};
+
+        induct Tag : pub Type | a() | b() end
+
+        satisfy Eql(Tag) { .. }
+
+        let Sel(t : Tag, X : Type) -> Prop = match t == Tag/a() | true => (X) -> False | false => True end;
+
+        struct Bad : pub Type { x : Sel(Tag/a(), Bad) }
+
+        /std/print("unreachable")
+        "#).by_elaborator_in("/Bad", |error| matches!(error, Error::NotStrictlyPositive { polarity: Polarity::Neg, .. }));
 }
