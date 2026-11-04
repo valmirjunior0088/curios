@@ -35,7 +35,7 @@ An attack on a premise starts from a seed, as **Where a suspicion comes from** o
 
 ## Probing
 
-The snapshot's board, `<snapshot>/bin/xboard probe <file>`, asks the board's question of a candidate on no ticket, as `xboard/README.md` states it, and a route to `False` is tried there before anything is sent. A candidate is a file written in the hunter's directory of the snapshot: a program, `.crs`; Core text, `.crsc`; or a ticket, a `metadata.toml` beside the texts its witnesses name, a witness among them a history. A program written there as `f.crs`,
+The snapshot's board, `<snapshot>/binaries/xboard probe <file>`, asks the board's question of a candidate on no ticket, as `xboard/README.md` states it, and a route to `False` is tried there before anything is sent. A candidate is a file written in the hunter's directory of the snapshot: a program, `.crs`; Core text, `.crsc`; or a ticket, a `metadata.toml` beside the texts its witnesses name, a witness among them a history. A program written there as `f.crs`,
 
 ```crs
 use /std/{Nat};
@@ -50,7 +50,7 @@ let f(n: Nat, h: Holds(n == 2)) -> False =
 f(2, True/qed())
 ```
 
-is put by `<snapshot>/bin/xboard probe <snapshot>/hunters/hunter-<n>/f.crs`. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. The snapshot's compiler, `<snapshot>/bin/curios`, answers `run -` and `wonder -` on standard input as CLAUDE.md probes.
+is put by `<snapshot>/binaries/xboard probe <snapshot>/hunters/hunter-<n>/f.crs`. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. The snapshot's compiler, `<snapshot>/binaries/curios`, answers `run -` and `wonder -` on standard input as CLAUDE.md probes.
 
 ## Attacking a charter
 

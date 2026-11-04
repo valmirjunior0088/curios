@@ -96,7 +96,7 @@ judge() {
         /*)
             local binary
             if ! binary=$(snapshot_binary "$program"); then
-                refuse "$program $*" "a program named by its path is a snapshot's compiler or board, \`.claude/snapshots/<commit>/bin/curios\` or \`bin/xboard\`"
+                refuse "$program $*" "a program named by its path is a snapshot's compiler or board, \`.claude/snapshots/<commit>/binaries/curios\` or \`binaries/xboard\`"
             fi
             case $binary in
                 curios) judge_curios "$@" ;;
