@@ -1235,10 +1235,10 @@ fn scan_module_info(heads: &[Headed]) -> Result<ModuleInfo, Error> {
                     info.insert_binding(&struct_.label, struct_.vis_pub)?;
                 }
             }
-            // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
+            // A concept declares the type-former binding *and* a nested namespace its methods bind in, like an inductive's constructors.
             Head::Concept(group) => {
                 for concept in group {
-                    info.insert_child(&concept.label, concept.vis_pub)?;
+                    info.insert_concept_child(&concept.label, concept.vis_pub)?;
                     info.insert_binding(&concept.label, concept.vis_pub)?;
                 }
             }

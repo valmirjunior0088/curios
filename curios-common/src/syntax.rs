@@ -106,13 +106,13 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only four groups hold concept methods; the other ten are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only five groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
             result: _,
             channel: _,
-            monad: _,
+            monad,
             lift,
             operator,
             character: _,
@@ -127,6 +127,7 @@ impl SyntaxRegistry {
 
         operator
             .concept_fields()
+            .chain([monad.bind])
             .chain([lift.lift])
             .chain([program.execute])
             .chain(derivations.concept_fields())
@@ -196,17 +197,17 @@ impl ChannelSyntax {
     }
 }
 
-/// The target postfix `!` sequences with: `/std/Monad`'s `bind`, projected from the witness the operand's type resolves.
+/// The method postfix `!` sequences with: `/std/Monad`'s `bind`, projected from the witness the region's monad resolves.
 #[derive(Debug, Clone, Copy)]
 pub struct MonadSyntax {
-    pub bind: SyntaxName,
+    pub bind: ConceptField,
 }
 
 impl MonadSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self { bind } = self;
 
-        [bind].into_iter()
+        [bind.concept].into_iter()
     }
 }
 
@@ -698,12 +699,12 @@ impl Derivation {
 
     /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the references `curios-module`'s unused-declaration lint cannot read off the `Derive` transient, since the body naming them does not exist yet.
     ///
-    /// A [`Qualifier`] rather than a [`SyntaxName`]: a concept *method* is its concept's path extended by a field label, which is built rather than spelled, so no `&'static` segment list for it exists or could be made.
+    /// A [`Qualifier`] rather than a [`SyntaxName`], as the bodies' references are read.
     ///
     /// `string` is [`SyntaxRegistry::string`], shared with the body writer; only `Spell` emits string literals and adds these dependencies.
     pub fn vocabulary(self, string: &StringSyntax) -> Vec<Qualifier> {
-        let field = self.concept_field();
-        let method = field.concept.qualifier().with(field.field);
+        // A method named by its path reads its concept: a method is its concept's field, and no declaration.
+        let concept = self.concept_field().concept.qualifier();
 
         match self {
             Derivation::Spell(SpellDerivation {
@@ -711,7 +712,7 @@ impl Derivation {
                 call,
                 record,
                 hidden,
-            }) => [method]
+            }) => [concept]
                 .into_iter()
                 .chain(
                     [call, record, hidden]
@@ -720,18 +721,18 @@ impl Derivation {
                         .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Eql(EqlDerivation { eql: _ }) => vec![method],
+            Derivation::Eql(EqlDerivation { eql: _ }) => vec![concept],
             Derivation::Ord(OrdDerivation {
                 ord: _,
                 lexicographic,
                 by_tag,
                 eq,
-            }) => [method]
+            }) => [concept]
                 .into_iter()
                 .chain([lexicographic, by_tag, eq].map(SyntaxName::qualifier))
                 .collect(),
             Derivation::Hash(HashDerivation { hash: _, tagged }) => {
-                vec![method, tagged.qualifier()]
+                vec![concept, tagged.qualifier()]
             }
         }
     }

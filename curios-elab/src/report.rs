@@ -16,8 +16,8 @@ use {
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
     curios_core::{
-        Apply, Bound, Global, ImplicitOrigin, Intrinsic, Mention, Metavar, MetavarOrigin, Quality,
-        Sort, Subterm, Term, Visit,
+        Apply, Bound, Global, ImplicitOrigin, Intrinsic, Metavar, MetavarOrigin, Method, Quality,
+        Sort, Subterm, Term, Transient, Visit,
     },
     std::{
         collections::BTreeMap,
@@ -399,16 +399,18 @@ fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<
     differ.then(|| Error::unembedded_action(this.clone(), that.clone()))
 }
 
-/// Whether `term` is a `/std/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
+/// Whether `term` is a call of `/std/Monad`'s `bind` — what every `!` is elaborated as, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
 fn is_sequencing(context: &Context, term: &Term) -> bool {
     let Subterm::Apply(Apply { head, .. }) = &**term else {
         return false;
     };
+    let bind = context.syntax().monad.bind;
 
-    head.head_name()
-        == Some(Mention::Declaration(Global::Authored(
-            context.syntax().monad.bind.qualifier(),
-        )))
+    matches!(
+        &**head,
+        Subterm::Transient(Transient::Method(Method { concept, field }))
+            if *concept == Global::Authored(bind.concept.qualifier()) && field == bind.field
+    )
 }
 
 /// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.

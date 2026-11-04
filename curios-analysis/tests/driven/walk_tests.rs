@@ -154,7 +154,10 @@ fn forms(term: &Term) -> Vec<&'static str> {
             | Transient::Bang(_)
             | Transient::Ascribed(_)
             | Transient::Matrix(_) => "a transient",
-            Transient::NumLit(_) | Transient::Derive | Transient::Name(_) => "a leaf",
+            Transient::NumLit(_)
+            | Transient::Derive
+            | Transient::Name(_)
+            | Transient::Method(_) => "a leaf",
         }],
         Subterm::Intrinsic(_) => vec!["an intrinsic"],
         Subterm::Foreign(_) => vec!["a foreign call"],

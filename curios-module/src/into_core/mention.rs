@@ -231,11 +231,9 @@ impl Text<'_> {
             |(walked, names), node| {
                 if let Some(extent) = node.extent()
                     && (extent.anchor, extent.stamp) == self.key
-                    && let curios_core::Subterm::Transient(curios_core::Transient::Name(name))
-                    | curios_core::Subterm::Instance(curios_core::Instance { name, .. }) =
-                        &**node
+                    && let Some(name) = written_name(node)
                 {
-                    names.insert((extent.start, extent.end, *name));
+                    names.insert((extent.start, extent.end, name));
                 }
 
                 match walked.insert(node.identity()) {
@@ -245,5 +243,20 @@ impl Text<'_> {
             },
             |_, _, _| (),
         );
+    }
+}
+
+/// The name `node` writes: a declaration's, or a method's path, its concept's extended by the field's label.
+fn written_name(node: &curios_core::Term) -> Option<curios_core::Global> {
+    match &**node {
+        curios_core::Subterm::Transient(curios_core::Transient::Name(name))
+        | curios_core::Subterm::Instance(curios_core::Instance { name, .. }) => Some(*name),
+        curios_core::Subterm::Transient(curios_core::Transient::Method(curios_core::Method {
+            concept,
+            field,
+        })) => Some(curios_core::Global::Authored(
+            concept.qualifier()?.with(field),
+        )),
+        _ => None,
     }
 }

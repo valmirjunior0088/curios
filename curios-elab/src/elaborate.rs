@@ -38,11 +38,12 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
+    super::{Context, Error, Occurrence, check, check_is_sort, elaborate_derive, expect},
     curios_common::{Plicity, recurse},
     curios_core::{
-        Ascribed, Extent, Func, FuncType, Global, Sort, Subterm, Term, Transient, Universes,
-        foreign_operands, foreign_produced, former_spelling, instantiate_universes,
+        Ascribed, Extent, Func, FuncType, Global, Method, Sort, Subterm, Term, Transient,
+        Universes, foreign_operands, foreign_produced, former_spelling, instantiate_universes,
+        method_spelling,
     },
     curios_surface::intrinsic_former,
     std::sync::Arc,
@@ -205,6 +206,16 @@ fn elaborate_subterm(
             };
             (rebuilt, type_)
         }
+        Subterm::Transient(Transient::Method(method)) => {
+            let Some((form, type_)) = method_form(context, method, term.extent())? else {
+                return Err(context.unbound_variable(Term::written(method.concept)));
+            };
+            let rebuilt = match term.extent() {
+                Some(extent) => form.with_extent(extent),
+                None => form,
+            };
+            (rebuilt, type_)
+        }
         Subterm::Intrinsic(intrinsic) => {
             return context.awaiting(|context| elaborate_intrinsic(context, term, intrinsic, mode));
         }
@@ -305,6 +316,53 @@ pub fn reference(
     };
 
     Ok(Some((written, type_)))
+}
+
+/// What elaboration writes for the method `method` named by its path, beside its type: its η-form as its concept's entries spell it ([`method_spelling`]), at an instance of the concept's levels chosen here, as an operator's method is read at one. A call of it is that form opened at the call's arguments ([`method_call`]), the projection off the witness the call fills. `None` where the concept's entries are not in hand, or declare no such method.
+pub fn method_form(
+    context: &mut Context,
+    method: &Method,
+    extent: Option<Extent>,
+) -> Result<Option<(Term, Term)>, Error> {
+    let (Some(concept), Some(record)) = (
+        context.concept(&method.concept).cloned(),
+        context.struct_decl(&method.concept).cloned(),
+    ) else {
+        return Ok(None);
+    };
+    let Some((type_, form)) = method_spelling(method.concept, &concept, &record, &method.field)
+    else {
+        return Ok(None);
+    };
+    let occurrence = Occurrence {
+        instantiated: method.concept,
+        extent,
+    };
+    let (type_, universes) =
+        context.instantiate_universe_bound(&concept.universe_context, &type_, Some(occurrence))?;
+    let form = context
+        .instantiate_universe_bound_at(&concept.universe_context, &form, &universes)
+        .map_err(Error::from)?;
+
+    Ok(Some((form, type_)))
+}
+
+/// The type of the method `method` named by its path, at its concept's own levels: what a reader of a written head's type reads of it, as of a declaration's written type. `None` where the concept's entries are not in hand.
+pub fn method_type(context: &Context, method: &Method) -> Option<Term> {
+    let concept = context.concept(&method.concept)?;
+    let record = context.struct_decl(&method.concept)?;
+
+    method_spelling(method.concept, concept, record, &method.field).map(|(type_, _)| type_)
+}
+
+/// A call of a method's η-form `form` at `arguments`, one to each parameter of its one group: the form opened at them, the projection off the witness among them. `None` where `form` is no function taking exactly those.
+pub fn method_call(form: &Term, arguments: &[&Term]) -> Option<Term> {
+    match &**form {
+        Subterm::Func(Func { telescope }) if telescope.len() == arguments.len() => {
+            Some(telescope.open(arguments))
+        }
+        _ => None,
+    }
 }
 
 /// The declaration `name` named where the context stands, at `universes`: inside the group being elaborated a member is the local its group names it by, and any other declaration its instance.

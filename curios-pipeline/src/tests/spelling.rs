@@ -5,7 +5,7 @@
 use {
     super::test_support::*,
     curios_common::{Qualifier, fill},
-    curios_core::{Enter, Global, Item, Subterm, Term, Transient},
+    curios_core::{Enter, Global, Item, Method, Subterm, Term, Transient},
     curios_module::{RootSource, SYNTAX, into_core_with_prelude},
     curios_prelude::with_prelude,
     curios_surface::{IntrinsicForm, intrinsic_form, intrinsic_global, spell},
@@ -68,10 +68,13 @@ struct Counted {
     refuted: usize,
 }
 
-/// The declaration a lowered body names, where the body is a name and nothing else.
+/// The name a lowered body is, where the body is a name and nothing else: a declaration's, or a method's path, its concept's extended by the field's label.
 fn named(body: &Term) -> Option<Global> {
     match &**body {
         Subterm::Transient(Transient::Name(name)) => Some(*name),
+        Subterm::Transient(Transient::Method(Method { concept, field })) => {
+            Some(Global::Authored(concept.qualifier()?.with(field)))
+        }
         _ => None,
     }
 }

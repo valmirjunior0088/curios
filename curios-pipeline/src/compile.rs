@@ -471,10 +471,7 @@ fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
         }
         Subterm::Metavar(metavar) if matches!(metavar.origin, MetavarOrigin::Goal) => term.clone(),
         _ => {
-            let field = syntax.program.execute;
-            let execute = Term::written(Global::Authored(
-                field.concept.qualifier().with(field.field),
-            ));
+            let execute = Term::registered_method(syntax.program.execute);
 
             Term::apply(execute, vec![term.clone()])
         }

@@ -6,9 +6,9 @@ use {
     super::{Mentions, Union},
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, Global, InductType,
-        Instance, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Nat,
-        Proj, Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple, TupleType,
-        UniverseMetaId, Universes, Var, Variant, Visit,
+        Instance, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Method,
+        Nat, Proj, Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple,
+        TupleType, UniverseMetaId, Universes, Var, Variant, Visit,
     },
     curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
@@ -554,9 +554,10 @@ impl Subterm {
         {
             return Mentions::single(Mention::Local(*name));
         }
-        // Neither an instance nor a written name has child terms to union.
+        // Neither an instance nor a written name has child terms to union, and a method named by its path reads its concept.
         if let Subterm::Instance(Instance { name, .. })
-        | Subterm::Transient(Transient::Name(name)) = self
+        | Subterm::Transient(Transient::Name(name))
+        | Subterm::Transient(Transient::Method(Method { concept: name, .. })) = self
         {
             return Mentions::single(Mention::Declaration(*name));
         }

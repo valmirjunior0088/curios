@@ -9,7 +9,7 @@ use {
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
-    curios_common::{InfixOp, Mint, Plicity, Sign},
+    curios_common::{ConceptField, InfixOp, Mint, Plicity, Sign},
     curios_num::Natural,
     std::{
         fmt,
@@ -56,6 +56,24 @@ pub struct Ascribed {
     pub type_: Term,
 }
 
+/// A concept's method named by its path, `Show/show`: field `field` of the concept `concept`, read off the witness resolution finds. Consumed by `elaborate`, which writes it as the method's η-form at an instance of the concept's levels, `(@A, use w: Show(A), x) => w.show(x)` ([`method_spelling`](crate::method_spelling)), so a call of it is the projection off the witness the call fills: a method is its concept's field, and no definition stands between.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Method {
+    pub concept: Global,
+    pub field: String,
+}
+
+/// The method a registry slot names.
+impl From<ConceptField> for Method {
+    fn from(field: ConceptField) -> Self {
+        Self {
+            concept: Global::Authored(field.concept.qualifier()),
+            field: field.field.to_string(),
+        }
+    }
+}
+
 /// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the kernel boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the kernel, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
@@ -74,6 +92,8 @@ pub enum Transient {
     Matrix(Matrix),
     /// A declaration named as it is written, before an instance of it is chosen; consumed by `elaborate`, which writes it as an [`Instance`] at the levels it chooses, none where the declaration is monomorphic.
     Name(Global),
+    /// A concept's method named by its path; consumed by `elaborate` ([`Method`]).
+    Method(Method),
 }
 
 impl Transient {
@@ -81,7 +101,10 @@ impl Transient {
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         let (children, matrix) = match self {
             Transient::Infix(Infix { left, right, .. }) => ([Some(left), Some(right)], None),
-            Transient::NumLit(_) | Transient::Derive | Transient::Name(_) => ([None, None], None),
+            Transient::NumLit(_)
+            | Transient::Derive
+            | Transient::Name(_)
+            | Transient::Method(_) => ([None, None], None),
             Transient::Bang(Bang {
                 action,
                 continuation,
@@ -106,6 +129,7 @@ impl Transient {
             Transient::NumLit(num_lit) => Transient::NumLit(num_lit.clone()),
             Transient::Derive => Transient::Derive,
             Transient::Name(name) => Transient::Name(*name),
+            Transient::Method(method) => Transient::Method(method.clone()),
             Transient::Bang(Bang {
                 action,
                 continuation,

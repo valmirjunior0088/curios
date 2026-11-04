@@ -358,7 +358,7 @@ impl ArgumentSite {
 pub enum Callee {
     /// A function or constructor the program names, carried as its identity rather than its text so the report spells it under the names in scope — the shorten map and the unit's import spellings, exactly as every term in the same report is spelled.
     Function(Mention),
-    /// An infix operator, beside the wrapper of the concept method it dispatches through — the call a program can write where the operator takes no argument.
+    /// An infix operator, beside the path of the concept method it dispatches through — the call a program can write where the operator takes no argument.
     Operator { op: InfixOp, method: Global },
     /// A constructor, named by its declaration and tag.
     Constructor { owner: Global, tag: String },

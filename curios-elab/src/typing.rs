@@ -304,10 +304,10 @@ pub fn blocked_on_metavar(
     let is_numeral = matches!(&**arg, Subterm::Transient(Transient::NumLit(_)));
     // A `!` waits on its region's head alone, which names the monad it sequences in.
     let is_bang = matches!(&**arg, Subterm::Transient(Transient::Bang(_)));
-    // A bare variable or a declaration's name waits on the reading that parked it ([`waits_as_reference`]).
+    // A bare variable, a declaration's name or a method's waits on the reading that parked it ([`waits_as_reference`]).
     if matches!(
         &**arg,
-        Subterm::Var(_) | Subterm::Transient(Transient::Name(_))
+        Subterm::Var(_) | Subterm::Transient(Transient::Name(_) | Transient::Method(_))
     ) {
         return waits_as_reference(context, arg, ty);
     }

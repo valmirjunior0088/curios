@@ -314,6 +314,7 @@ fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
     match callee {
         CalleeId::Function(name) => spelled_mention(name, spelling),
         CalleeId::Constructor { owner, tag } => format!("{}/{tag}", spelling.symbol(owner)),
+        CalleeId::Method { concept, field } => format!("{}/{field}", spelling.symbol(concept)),
         CalleeId::Witness(global) | CalleeId::Structure(global) => spelling.symbol(global),
         CalleeId::Operator(op) => op.symbol().to_string(),
         CalleeId::Anonymous => "<function>".to_string(),

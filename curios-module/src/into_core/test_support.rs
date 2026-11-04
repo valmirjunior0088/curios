@@ -52,7 +52,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         ended: registry_name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
-        bind: registry_name(&["std", "Monad", "bind"]),
+        bind: registry_field(&["std", "Monad"], "bind"),
     },
     lift: LiftSyntax {
         lift: registry_field(&["std", "Lift"], "lift"),

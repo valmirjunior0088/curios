@@ -38,7 +38,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
-    curios_common::{Plicity, recurse},
+    curios_common::{ConceptField, Plicity, recurse},
     curios_num::Natural,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -826,6 +826,19 @@ impl Term {
     /// The declaration `name` as it is written, before elaboration chooses its instance ([`Transient::Name`]).
     pub fn written(name: Global) -> Self {
         Self::from(Subterm::Transient(Transient::Name(name)))
+    }
+
+    /// The method at field `field` of the concept `concept`, named by its path ([`Transient::Method`]).
+    pub fn method(concept: Global, field: impl Into<String>) -> Self {
+        Self::from(Subterm::Transient(Transient::Method(Method {
+            concept,
+            field: field.into(),
+        })))
+    }
+
+    /// The method a registry slot names, as the compiler writes a call of it: a program's `execute`, a `!`'s `bind`, an embedding's `lift`, a derived body's methods.
+    pub fn registered_method(field: ConceptField) -> Self {
+        Self::from(Subterm::Transient(Transient::Method(Method::from(field))))
     }
 
     /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.

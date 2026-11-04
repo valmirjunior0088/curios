@@ -9,15 +9,15 @@
 use {
     crate::{
         Binders, Context, Entailed, InductCase, Opened, Outcome, Resolution, convert_outcome,
-        entail, enter_induct_case, is_prop, reduce_with, reference, refine_head, resolve_witness,
-        synth_neutral, trivially_inhabited, zonk_solved_term_metas,
+        entail, enter_induct_case, is_prop, method_type, reduce_with, reference, refine_head,
+        resolve_witness, synth_neutral, trivially_inhabited, zonk_solved_term_metas,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
-        MatchResult, Mention, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Transient, TupleType, Visit, WitnessOrigin,
+        MatchResult, Mention, Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Transient, TupleType, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     std::{
@@ -352,7 +352,7 @@ impl Writing {
         })
     }
 
-    /// The method at field `index` of `concept`, projected off `dictionary` and called with `arguments` where it heads a call, as a program calls it — its operator where the field has one and every proof the operator leaves out is proved again where the walk stands, its wrapper's call otherwise — where resolution would put the dictionary back. `None` where the field is no method or the dictionary stays, which leaves the projection as it stands.
+    /// The method at field `index` of `concept`, projected off `dictionary` and called with `arguments` where it heads a call, as a program calls it — its operator where the field has one and every proof the operator leaves out is proved again where the walk stands, its call by its path otherwise — with the dictionary left to resolution where it would put it back, and written where it would not. `None` where the field is no method, which leaves the projection as it stands: a superclass edge is a dictionary.
     fn method(
         &mut self,
         context: &mut Context,
@@ -367,11 +367,14 @@ impl Writing {
         let label = context.concept(&concept)?.fields.get(index)?.clone();
         // A superclass edge is a dictionary, written where it stands as one.
         let fields = context.struct_decl(&concept)?.fields().marks();
-        if fields.get(index) != Some(&Plicity::Explicit) || !self.restored(context, dictionary) {
+        if fields.get(index) != Some(&Plicity::Explicit) {
             return None;
         }
+        let restored = self.restored(context, dictionary);
 
-        if let Some(arguments) = arguments
+        // An operator takes no written argument, so it stands only where resolution would put the dictionary back.
+        if restored
+            && let Some(arguments) = arguments
             && let Some(op) = context.syntax().operator.operator_for(&path, &label)
             && let [left, right, filled @ ..] = arguments
             && left.plicity == Plicity::Explicit
@@ -391,46 +394,58 @@ impl Writing {
             }))));
         }
 
-        // The wrapper takes the concept's parameters, then the witness, then — where it takes the method's own in its one group — the method's.
+        // A method's call takes the concept's parameters, then the witness, then — where it takes the method's own in its one group — the method's.
         let opened = self.released(dictionary);
         let type_ = dictionary_type(context, &opened)?;
         let application = reduce_with(context, &type_).ok()?;
         let Subterm::StructType(StructType { params, .. }) = &*application else {
             return None;
         };
-        let wrapper = Global::Authored(path.with(&label));
-        let merged = context
-            .instantiate_declaration(&wrapper, None)
-            .ok()
-            .flatten()
-            .is_some_and(|(type_, _)| {
-                matches!(&*type_, Subterm::FuncType(function) if function.plicities().len() > params.len() + 1)
-            });
-        let leading = params
+        let method = Method {
+            concept,
+            field: label,
+        };
+        let merged = method_type(context, &method).is_some_and(|type_| {
+            matches!(&*type_, Subterm::FuncType(function) if function.plicities().len() > params.len() + 1)
+        });
+        let callee = CalleeId::Method {
+            concept,
+            field: method.field.clone(),
+        };
+        let witness = match restored {
+            true => context.open_witness_slot(WitnessOrigin {
+                func: callee.clone(),
+                role: None,
+            }),
+            false => self.term(context, dictionary),
+        };
+        // Each parameter is written as any argument is: it was read off the dictionary's type, which may hold what a reader writes otherwise, a method's projection among it.
+        let parameters = params
             .iter()
-            .map(|parameter| Argument {
-                term: self.closed_over(parameter),
+            .map(|parameter| self.closed_over(parameter))
+            .collect::<Vec<_>>();
+        let parameters = parameters
+            .iter()
+            .map(|parameter| self.term(context, parameter))
+            .collect::<Vec<_>>();
+        let leading = parameters
+            .into_iter()
+            .map(|term| Argument {
+                term,
                 plicity: Plicity::Implicit,
             })
             .chain(std::iter::once(Argument {
-                term: context.open_witness_slot(WitnessOrigin {
-                    func: CalleeId::Function(Mention::Declaration(wrapper)),
-                    role: None,
-                }),
+                term: witness,
                 plicity: Plicity::Witness,
             }))
             .collect::<Vec<_>>();
-        let reference = Term::written(wrapper);
+        let reference = Term::from(Subterm::Transient(Transient::Method(method)));
         let own = arguments.map(|arguments| {
             arguments
                 .iter()
                 .map(|argument| Argument {
                     term: match argument.plicity {
-                        Plicity::Witness => self.witness(
-                            context,
-                            &argument.term,
-                            CalleeId::Function(Mention::Declaration(wrapper)),
-                        ),
+                        Plicity::Witness => self.witness(context, &argument.term, callee.clone()),
                         _ => self.term(context, &argument.term),
                     },
                     plicity: argument.plicity,
@@ -440,7 +455,7 @@ impl Writing {
 
         Some(match (merged, own) {
             (true, Some(own)) => applied(reference, leading.into_iter().chain(own).collect()),
-            // The method as a value: its wrapper, which a checked position instantiates and eta-expands.
+            // The method as a value: its form, which a checked position instantiates and eta-expands.
             (true, None) => reference,
             (false, own) => {
                 let field = applied(reference, leading);

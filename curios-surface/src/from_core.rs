@@ -212,6 +212,13 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         // An instance is the name it is of, since no source states the levels, and a written name is the name.
         Core::Instance(curios_core::Instance { name, .. })
         | Core::Transient(curios_core::Transient::Name(name)) => global(&name, frame)?,
+        // A method named by its path is that path: its concept's, extended by the field's label.
+        Core::Transient(curios_core::Transient::Method(curios_core::Method { concept, field })) => {
+            global(
+                &curios_core::Global::Authored(concept.qualifier()?.with(&field)),
+                frame,
+            )?
+        }
         Core::Intrinsic(intrinsic) => {
             let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
 

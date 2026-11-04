@@ -15,7 +15,7 @@
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
-    super::{Context, Error, Mode, Opened, Underivable, elaborate, reduce_with},
+    super::{Context, Error, Mode, Opened, Underivable, elaborate, method_type, reduce_with},
     crate::{is_prop_to, sort_of_in},
     curios_common::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
@@ -23,7 +23,7 @@ use {
     },
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
-        Mention, MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term,
+        Mention, MetavarOrigin, Method, Scope, StructDecl, StructEntry, StructType, Subterm, Term,
         WitnessOrigin, str_literal, syn_call,
     },
     curios_num::Natural,
@@ -475,7 +475,7 @@ fn struct_parts(
     Ok(parts)
 }
 
-/// `C/method(@_, …, use ?w, args…)`: the concept's method applied to `args`, its `use` argument a witness goal born with the payload's provenance — how a missing witness is reported against the constructor and payload rather than against the method. The wrapper takes the concept's parameters ahead of its witness, and hidden members are written in order from the first of their run, so each parameter is written as the placeholder that leaves it to the elaborator.
+/// `C/method(@_, …, use ?w, args…)`: the concept's method applied to `args`, its `use` argument a witness goal born with the payload's provenance — how a missing witness is reported against the constructor and payload rather than against the method. A method's call takes the concept's parameters ahead of its witness, and hidden members are written in order from the first of their run, so each parameter is written as the placeholder that leaves it to the elaborator.
 fn witness_call(
     context: &mut Context,
     site: &Site<'_>,
@@ -502,8 +502,7 @@ fn witness_call(
         MetavarOrigin::Witness(provenance),
         Vec::new(),
     ));
-    let wrapper = Global::Authored(field.concept.qualifier().with(field.field));
-    let parameters = match context.declared_type(&wrapper).map(|type_| &**type_) {
+    let parameters = match method_type(context, &Method::from(field)).as_deref() {
         Some(Subterm::FuncType(function)) => function
             .plicities()
             .iter()
@@ -511,9 +510,7 @@ fn witness_call(
             .count(),
         _ => 0,
     };
-    let method = Term::written(Global::Authored(
-        field.concept.qualifier().with(field.field),
-    ));
+    let method = Term::registered_method(field);
     let arguments = (0..parameters)
         .map(|_| (Plicity::Implicit, Term::hole(context.mint_metavar())))
         .chain(std::iter::once((Plicity::Witness, goal)))

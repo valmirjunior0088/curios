@@ -1,9 +1,11 @@
 //! The registry entry for a concept — a record-shaped interface — carried on the [`Definitions`](super::Definitions) beside `induct_decls` and `struct_decls`.
 //!
-//! A concept lowers to a representation-public nominal structure, whose [`StructDecl`](super::StructDecl) entry drives literals and projections; this entry adds what resolution needs on top: the field labels, what each superclass edge reaches, and the parameter telescope. Resolution itself — witness keys, head keys, and the instance search — is elaboration machinery and lives in `curios-elab`.
+//! A concept lowers to a representation-public nominal structure, whose [`StructDecl`] entry drives literals and projections; this entry adds what resolution needs on top: the field labels, what each superclass edge reaches, and the parameter telescope. Resolution itself — witness keys, head keys, and the instance search — is elaboration machinery and lives in `curios-elab`.
 
 use {
-    super::{Global, Sharing, Telescope, UniverseContext},
+    super::{
+        Field, Free, Global, Proj, Sharing, StructDecl, Subterm, Telescope, Term, UniverseContext,
+    },
     curios_common::Plicity,
 };
 
@@ -42,4 +44,75 @@ impl ConceptDecl {
             supers: self.supers.clone(),
         }
     }
+}
+
+/// The method at field `field` of the concept `name`, whose entries are `concept` and its `record`, as a call of it fills it, at the concept's own levels: its type, the one group a call fills — the concept's parameters, each hidden, the witness the call is to find, then where the field's type is a function its parameters, under their marks — ending in the field's type or its function's result; and its η-form, the field projected off the witness, applied to those parameters where it has them. `None` where the concept declares no such field, and for a superclass edge, which has no label.
+///
+/// **The one statement of a method's call.** A method named by its path is its concept's field, so no definition states this: elaboration writes a method as its η-form at an instance of the concept's levels, and a call of it opened at its arguments is the projection off the witness the call fills.
+pub fn method_spelling(
+    name: Global,
+    concept: &ConceptDecl,
+    record: &StructDecl,
+    field: &str,
+) -> Option<(Term, Term)> {
+    let index = concept
+        .fields
+        .iter()
+        .position(|label| !label.is_empty() && label == field)?;
+
+    // The record's telescopes are closed, so any binders open them: counted from zero, under the hints the entry keeps.
+    let mut hidden = Vec::new();
+    let mut parameters = Vec::new();
+    let mut cursor = record.arity.cursor();
+    while let Some((hint, domain)) = cursor.entry() {
+        let binder = Free::local(hidden.len() as u64, hint);
+        cursor.advance(Term::free_var(&binder));
+        parameters.push(Term::free_var(&binder));
+        hidden.push((Plicity::Implicit, binder, domain));
+    }
+    let witness = Free::local(hidden.len() as u64, None);
+    let value = Term::free_var(&witness);
+    hidden.push((
+        Plicity::Witness,
+        witness,
+        Term::struct_type_at(
+            name,
+            record.universe_context.identity_instance(),
+            parameters.clone(),
+        ),
+    ));
+    let projected = Field::Struct(name, index);
+    let field_type = record
+        .fields()
+        .field_type_beneath(&parameters, &value, &projected)?;
+    let method = Term::from(Subterm::Proj(Proj {
+        head: value,
+        field: projected,
+    }));
+
+    Some(match &*field_type {
+        Subterm::FuncType(function) => {
+            let mut cursor = function.telescope.cursor();
+            let mut own = Vec::with_capacity(function.telescope.len());
+            while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
+                let binder = Free::local((hidden.len() + own.len()) as u64, hint);
+                cursor.advance(Term::free_var(&binder));
+                own.push((mark, binder, domain));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
+            let arguments = own
+                .iter()
+                .map(|(mark, binder, _)| (*mark, Term::free_var(binder)))
+                .collect::<Vec<_>>();
+            let group = hidden.into_iter().chain(own).collect::<Vec<_>>();
+            (
+                Term::func_type_marked(group.clone(), output),
+                Term::func_marked(group, Term::apply_marked(method, arguments)),
+            )
+        }
+        _ => (
+            Term::func_type_marked(hidden.clone(), field_type),
+            Term::func_marked(hidden, method),
+        ),
+    })
 }

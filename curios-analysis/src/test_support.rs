@@ -50,7 +50,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         ended: name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
-        bind: name(&["std", "Monad", "bind"]),
+        bind: field(&["std", "Monad"], "bind"),
     },
     lift: LiftSyntax {
         lift: field(&["std", "Lift"], "lift"),

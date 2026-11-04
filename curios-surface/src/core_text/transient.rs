@@ -1,11 +1,13 @@
 //! The forms only elaboration builds, each in the surface spelling it was read from under the node it is.
 //!
-//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site `#{node = Bang} (action!; rest)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
+//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site `#{node = Bang} (action!; rest)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
 
 use {
     super::{Decoration, reader_infix},
     crate::{Frame, escape_character, lambda_parameters, sub, written_pattern},
-    curios_core::{Ascribed, Bang, Func, Infix, Matrix, NumLit, Row, Subterm, Transient},
+    curios_core::{
+        Ascribed, Bang, Func, Global, Infix, Matrix, Method, NumLit, Row, Subterm, Transient,
+    },
     curios_print::{Printer, flat, pure},
 };
 
@@ -78,6 +80,15 @@ fn transient_written_as_core(
         Transient::Derive => frame.decorated(node("Derive"), pure("?"), true),
         Transient::Name(name) => {
             frame.decorated(node("Name"), pure(frame.spelling.symbol(&name)), true)
+        }
+        Transient::Method(Method { concept, field }) => {
+            let path = match concept.qualifier() {
+                Some(concept) => frame
+                    .spelling
+                    .symbol(&Global::Authored(concept.with(&field))),
+                None => format!("{}/{field}", frame.spelling.symbol(&concept)),
+            };
+            frame.decorated(node("Method"), pure(path), true)
         }
         Transient::Matrix(matrix) => {
             frame.decorated(node("Matrix"), matrix_written(matrix, frame), true)

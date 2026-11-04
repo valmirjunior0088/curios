@@ -1,5 +1,5 @@
 use {
-    super::{Misaligned, align, park_checking, trivially_inhabited},
+    super::{Misaligned, align, method_call, park_checking, trivially_inhabited},
     crate::{
         ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
@@ -8,8 +8,8 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, One,
-        Probe, Scope, Sort, Subterm, Telescope, Term, WitnessOrigin,
+        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, Method,
+        One, Probe, Scope, Sort, Subterm, Telescope, Term, Transient, WitnessOrigin,
     },
     std::collections::BTreeSet,
 };
@@ -372,9 +372,16 @@ pub fn elaborate_apply(
     // Insertion provenance: name the applied function in the uninferred-implicit report.
     //
     // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node would report `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
-    let func_label = head
-        .head_name()
-        .map_or(CalleeId::Anonymous, CalleeId::Function);
+    let func_label = match &**head {
+        Subterm::Transient(Transient::Method(Method { concept, field })) => CalleeId::Method {
+            concept: *concept,
+            field: field.clone(),
+        },
+        _ => head
+            .head_name()
+            .map_or(CalleeId::Anonymous, CalleeId::Function),
+    };
+    let method = matches!(&**head, Subterm::Transient(Transient::Method(_)));
 
     let (head, written_type) = elaborate(context, head, Mode::Infer)?;
     // The holes the head's spine leaves open are this call's to await, as the implicits it inserts are: `Eq()(5, b)` reads its arguments against the type the head's own call left open.
@@ -494,6 +501,11 @@ pub fn elaborate_apply(
     if let Mode::Check(expected) = &mode {
         // The output carries any parked argument's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — conversion waits on a placeholder, never solving one to what the expectation states in its argument's place — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
+    }
+
+    // A method named by its path is its η-form, so its call is that form opened at the call's arguments: the projection off the witness the call fills, as an operator's is.
+    if method && let Some(call) = method_call(&head, &elaborated.iter().collect::<Vec<_>>()) {
+        return Ok((call, output));
     }
 
     // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: every slot is then written, in telescope order, and nothing is minted twice.

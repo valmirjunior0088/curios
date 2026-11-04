@@ -135,6 +135,14 @@ fn callee_written(callee: &CalleeId, frame: Frame) -> Printer {
             ]),
             pure(")"),
         ]),
+        CalleeId::Method { concept, field } => flat([
+            pure("Method("),
+            nested(vec![
+                ("concept", pure(frame.spelling.symbol(concept))),
+                ("field", pure(format!("\"{}\"", escaped(field)))),
+            ]),
+            pure(")"),
+        ]),
         CalleeId::Witness(name) => named("Witness", frame.spelling.symbol(name)),
         CalleeId::Operator(op) => named("Operator", format!("{op:?}")),
         CalleeId::Anonymous => pure("Anonymous"),

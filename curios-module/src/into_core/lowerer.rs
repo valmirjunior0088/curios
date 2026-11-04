@@ -516,6 +516,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
+    /// The term a written name lowers to: the method it names where it resolves into a concept's namespace ([`Context::method_of`]), and the declaration or binder it resolves to otherwise ([`reference()`]).
+    fn term_reference(&self, name: &Name) -> Result<curios_core::Term, Error> {
+        let resolved = self.resolve_name(name)?;
+        if let curios_core::Mention::Declaration(curios_core::Global::Authored(target)) = &resolved
+            && let Some((concept, field)) = self.context.method_of(target)
+        {
+            return Ok(curios_core::Term::method(concept, field));
+        }
+
+        Ok(reference(resolved))
+    }
+
     // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, @valid = True/qed() }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
     //
     // # Why the proof is one constant
@@ -582,7 +594,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.term(&infix.left)?,
                 self.term(&infix.right)?,
             ),
-            Subterm::Name(name) => reference(self.resolve_name(name)?),
+            Subterm::Name(name) => self.term_reference(name)?,
             Subterm::FuncType(ft) => self.func_type_under(&ft.params, || self.term(&ft.output))?,
             Subterm::Func(func) => {
                 self.abstract_value(&func.params, &self.mint_params(&func.params), &func.body)?

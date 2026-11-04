@@ -276,14 +276,23 @@ fn group(items: Vec<FlatLet>) -> curios_core::RecItem {
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub(super) enum ChildInfo {
-    Ordinary { vis_pub: bool },
-    InductConstructors { vis_pub: bool, rep_pub: bool },
+    Ordinary {
+        vis_pub: bool,
+    },
+    InductConstructors {
+        vis_pub: bool,
+        rep_pub: bool,
+    },
+    /// A concept's namespace, whose bindings are its methods: a name resolved into it is the concept's field, and no declaration.
+    ConceptMethods {
+        vis_pub: bool,
+    },
 }
 
 impl ChildInfo {
     fn is_public(self) -> bool {
         match self {
-            ChildInfo::Ordinary { vis_pub } => vis_pub,
+            ChildInfo::Ordinary { vis_pub } | ChildInfo::ConceptMethods { vis_pub } => vis_pub,
             ChildInfo::InductConstructors { vis_pub, rep_pub } => vis_pub && rep_pub,
         }
     }
@@ -376,6 +385,29 @@ impl ModuleInfo {
             true => Err(duplicate(label)),
             false => Ok(()),
         }
+    }
+
+    /// Declare `label` as a concept's namespace, the child its methods bind in.
+    pub(super) fn insert_concept_child(
+        &mut self,
+        label: &Label,
+        vis_pub: bool,
+    ) -> Result<(), Error> {
+        if self.children.contains_key(label.as_str()) {
+            return Err(duplicate(label));
+        }
+
+        self.children
+            .insert(label.to_string(), ChildInfo::ConceptMethods { vis_pub });
+        Ok(())
+    }
+
+    /// Whether the child `label` is a concept's namespace, whose bindings are its methods.
+    pub(super) fn is_concept_child(&self, label: &str) -> bool {
+        matches!(
+            self.children.get(label),
+            Some(ChildInfo::ConceptMethods { .. })
+        )
     }
 
     pub(crate) fn get_child(&self, label: &str) -> Option<bool> {
@@ -1421,6 +1453,25 @@ impl<'a> Context<'a> {
                 .collect::<Result<Vec<_>, Error>>()
         })();
         result.map_err(|e| attach(e, name))
+    }
+
+    /// The concept and the field `target` names, where it is one of a concept's methods: a binding of the namespace the concept's module declares for it ([`ChildInfo::ConceptMethods`]), which a name resolves into wherever it was spelled from, a re-export's included.
+    pub(super) fn method_of(&self, target: &Qualifier) -> Option<(curios_core::Global, String)> {
+        // A name of the root's own is no method: a method stands in its concept's namespace, below the module declaring it.
+        if target.is_single() {
+            return None;
+        }
+        let namespace = target.without_last();
+        let module = namespace.without_last();
+        self.table
+            .get(&module)?
+            .is_concept_child(namespace.last())
+            .then(|| {
+                (
+                    curios_core::Global::Authored(namespace),
+                    target.last().to_string(),
+                )
+            })
     }
 
     // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces.

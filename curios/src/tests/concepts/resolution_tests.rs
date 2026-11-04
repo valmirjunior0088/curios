@@ -1,8 +1,12 @@
-//! Resolving a witness through the table: a method wrapper, a premise, an explicit override, several parameters, a later declaration and the operator concepts — and what a premise may be.
+//! Resolving a witness through the table: a method called by its path, a premise, an explicit override, several parameters, a later declaration and the operator concepts — and what a premise may be.
 
 use {
     crate::tests::{error, run},
-    curios_common::fill,
+    curios_common::{Qualifier, fill},
+    curios_core::{Field, Global, Item, Proj, Subterm},
+    curios_module::RootSource,
+    curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
+    curios_surface::Entrypoint,
 };
 
 // The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to the `Show(Nat)` witness.
@@ -482,4 +486,47 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
             && report.contains("not read: a guard, x == y"),
         "{report}"
     );
+}
+
+// A method named by its path is its concept's field: its call elaborates to the projection off the witness resolution finds, as an operator's does, and names no definition.
+#[test]
+fn a_method_called_by_its_path_is_the_projection_off_its_witness() {
+    let source = r#"
+        use /std/{Nat, Str, Show};
+        let subject: Str = Show/show(5);
+        /std/print(subject)
+        "#;
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
+    let subject = program
+        .definitions
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .find(|definition| definition.name == Global::Authored(Qualifier::from(["subject"])))
+        .expect("the fixture declares `subject`");
+
+    let Subterm::Apply(call) = &*subject.body else {
+        panic!("`subject` is a call: {:?}", subject.body);
+    };
+    let show = Global::Authored(Qualifier::from(["std", "Show", "Show"]));
+    assert!(
+        matches!(&*call.head, Subterm::Proj(Proj { field: Field::Struct(concept, 0), .. }) if *concept == show),
+        "the call's head is the projection of `show`: {:?}",
+        call.head
+    );
+}
+
+// A method passed where a function is expected is its field of the witness the expected type resolves, read where it stands.
+#[test]
+fn a_method_passed_as_a_value_is_its_field_of_the_witness_its_use_resolves() {
+    let source = r#"
+        use /std/{Nat, Str, Show, List};
+        let shown: List(Str) = List/map([1, 2, 3], Show/show);
+        /std/print(Str/join(", ", shown))
+        "#;
+
+    assert_eq!(run(source), b"1, 2, 3");
 }

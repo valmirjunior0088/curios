@@ -4,9 +4,9 @@ use {
     crate::{Spellable, Spelling},
     curios_common::Qualifier,
     curios_core::{
-        Cases, Field, Free, Global, HeadKey, Intrinsic, Level, Match, MatchResult, Nat, Proj,
-        Quality, QualityParam, Sort, Subterm, Term, UniverseParam, Universes, Var, WitnessId,
-        WitnessKey,
+        CalleeId, Cases, Field, Free, Global, HeadKey, Intrinsic, Level, Match, MatchResult,
+        MetavarId, MetavarOrigin, Nat, Proj, Quality, QualityParam, Sort, Subterm, Term,
+        UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -167,5 +167,31 @@ fn a_witness_is_named_by_its_concept_and_key() {
     assert_eq!(
         written(&Term::instance(witness, Universes::default())),
         "/std/Nat/witness~/std/Show(Nat)"
+    );
+}
+
+/// A method named by its path is written as that path under the node it is, and a goal a call of it opened states the method as its concept and field.
+#[test]
+fn a_method_named_by_its_path_is_its_path_under_its_node() {
+    let show = global(&["std", "Show", "Show"]);
+    let goal = Term::metavar_birthed(
+        MetavarId(3),
+        MetavarOrigin::Witness(WitnessOrigin {
+            func: CalleeId::Method {
+                concept: show,
+                field: "show".into(),
+            },
+            role: None,
+        }),
+        Vec::new(),
+    );
+
+    assert_eq!(
+        written(&Term::method(show, "show")),
+        "#{node = Method} /std/Show/Show/show"
+    );
+    assert_eq!(
+        written(&goal),
+        "#{id = 3, origin = Witness({func = Method({concept = /std/Show/Show, field = \"show\"}), role = None})} ?"
     );
 }

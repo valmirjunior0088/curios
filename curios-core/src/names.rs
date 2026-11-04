@@ -146,6 +146,8 @@ pub enum CalleeId {
     Constructor { owner: Global, tag: String },
     /// A witness, which is anonymous by design: carried as its own identity, and named by concept and key when a report renders it.
     Witness(Global),
+    /// A concept's method named by its path, carried as its concept with the field's label, because that pair is how a program writes one: the method is the concept's field, and no declaration is named by its path.
+    Method { concept: Global, field: String },
     /// An infix operator, which has no path to render at all.
     Operator(InfixOp),
     /// A head with no name to report: a projection out of a recursive group, or a computed function. Reported as `<function>`.

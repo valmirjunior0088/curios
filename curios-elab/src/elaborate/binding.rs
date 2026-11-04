@@ -1,5 +1,7 @@
 use {
-    super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
+    super::{
+        Misaligned, align, check_witness_domain, insert_auto_argument, method_type, stands_at,
+    },
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
         ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, check, check_is_sort,
@@ -10,8 +12,8 @@ use {
     curios_common::{InfixOp, Plicity, recurse},
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Instance, Intrinsic, Let, Mention, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec,
-        Subterm, Telescope, Term, Transient, WitnessKey, WitnessOrigin,
+        Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
+        Telescope, Term, Transient, WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
     std::collections::BTreeMap,
@@ -626,7 +628,7 @@ pub fn elaborate_bang(
         return Err(Error::bang_region_not_a_monad(region, owner).at_opt(term.extent()));
     };
     let witness = sequencing_witness(context, &monad, region, owner, term)?;
-    let head = Term::written(Global::Authored(context.syntax().monad.bind.qualifier()));
+    let head = Term::registered_method(context.syntax().monad.bind);
     let arguments = [(Plicity::Implicit, monad)]
         .into_iter()
         .chain(witness.map(|witness| (Plicity::Witness, witness)))
@@ -650,8 +652,8 @@ fn sequencing_witness(
     owner: RegionOwner,
     term: &Term,
 ) -> Result<Option<Term>, Error> {
-    let bind = context.syntax().monad.bind.qualifier();
-    let concept_name = Global::Authored(bind.without_last());
+    let bind = context.syntax().monad.bind;
+    let concept_name = Global::Authored(bind.concept.qualifier());
     let Some(concept) = context.concept(&concept_name).cloned() else {
         return Ok(None);
     };
@@ -663,7 +665,10 @@ fn sequencing_witness(
         context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
     let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
     let provenance = WitnessOrigin {
-        func: CalleeId::Function(Mention::Declaration(Global::Authored(bind))),
+        func: CalleeId::Method {
+            concept: concept_name,
+            field: bind.field.to_string(),
+        },
         role: Some(premise_label(1)),
     };
     let (slot, witness) =
@@ -752,11 +757,8 @@ fn abstracted_monad(
 
 /// `action` wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own extent, or `fallback`, so the report anchors where the action was written.
 fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> Term {
-    let field = context.syntax().lift.lift;
-    let wrapper = Term::written(Global::Authored(
-        field.concept.qualifier().with(field.field),
-    ));
-    let wrapped = Term::apply(wrapper, vec![action.clone()]);
+    let lift = Term::registered_method(context.syntax().lift.lift);
+    let wrapped = Term::apply(lift, vec![action.clone()]);
     match action.extent().or(fallback) {
         Some(extent) => Term::placed(extent, wrapped),
         None => wrapped,
@@ -785,7 +787,9 @@ pub fn lift_on_check(
 ) -> Result<Option<Term>, Error> {
     if !matches!(
         &**term,
-        Subterm::Var(_) | Subterm::Transient(Transient::Name(_)) | Subterm::Apply(_)
+        Subterm::Var(_)
+            | Subterm::Transient(Transient::Name(_) | Transient::Method(_))
+            | Subterm::Apply(_)
     ) {
         return Ok(None);
     }
@@ -857,9 +861,9 @@ impl MonadShape {
     }
 }
 
-/// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept's name derives from the registry's bind wrapper, whose namespace is the concept. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.
+/// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept the registry's bind is a method of. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.
 pub fn is_monad(context: &Context, key: &HeadKey) -> bool {
-    let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
+    let monad = Global::Authored(context.syntax().monad.bind.concept.qualifier());
     context.witness_declared(&monad, &WitnessKey::from([key.clone()]))
 }
 
@@ -903,6 +907,12 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<Mo
             Subterm::Transient(Transient::Name(name))
             | Subterm::Instance(Instance { name, .. }) => {
                 let Some(declared) = context.written_assumption(name).cloned() else {
+                    return Ok(None);
+                };
+                return declared_result_shape(context, &declared, &explicit);
+            }
+            Subterm::Transient(Transient::Method(method)) => {
+                let Some(declared) = method_type(context, method) else {
                     return Ok(None);
                 };
                 return declared_result_shape(context, &declared, &explicit);
@@ -1032,7 +1042,7 @@ fn settled(context: &mut Context, arg: &Term) -> Result<Option<Term>, Error> {
 /// Whether `term` holds an elaboration-only node other than a written name.
 fn writes_beyond_names(term: &Term) -> bool {
     match &**term {
-        Subterm::Transient(Transient::Name(_)) => false,
+        Subterm::Transient(Transient::Name(_) | Transient::Method(_)) => false,
         Subterm::Transient(_) => true,
         subterm => {
             Bound::has_transient(term)

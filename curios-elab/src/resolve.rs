@@ -66,6 +66,13 @@ pub fn callee(context: &Context, func: &CalleeId) -> Callee {
             tag: tag.clone(),
         },
         CalleeId::Function(name) => Callee::Function(*name),
+        // A method is reported by the path a program calls it at, as a function it calls is.
+        CalleeId::Method { concept, field } => match concept.qualifier() {
+            Some(path) => {
+                Callee::Function(Mention::Declaration(Global::Authored(path.with(field))))
+            }
+            None => Callee::Anonymous,
+        },
         CalleeId::Structure(name) => Callee::Structure(*name),
         CalleeId::Anonymous => Callee::Anonymous,
     }
@@ -207,8 +214,8 @@ fn diagnose_embedding(
     let source_key = HeadKey::of_whnf(&source_whnf);
     let target_key = HeadKey::of_whnf(&target_whnf);
 
-    // Monad-hood of the source: any registered Monad witness under its head. The concept's name derives from the registry's bind wrapper — its namespace is the concept.
-    let monad_concept = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
+    // Monad-hood of the source: any registered Monad witness under its head, the concept the registry's bind is a method of.
+    let monad_concept = Global::Authored(context.syntax().monad.bind.concept.qualifier());
     let source_is_monad = match &source_key {
         Some(key) => context.witness_declared(&monad_concept, &WitnessKey::from([key.clone()])),
         None => false,

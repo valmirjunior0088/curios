@@ -1,13 +1,13 @@
 use {
-    super::{insert_auto_argument, reference},
+    super::{insert_auto_argument, method_call, method_type, reference},
     crate::{
         Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with,
         stuck_on_metavar,
     },
     curios_common::Plicity,
     curios_core::{
-        CalleeId, Free, Global, Mention, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term,
-        Transient,
+        CalleeId, Free, Global, Mention, Metavar, MetavarOrigin, MetavarSpine, Method, Subterm,
+        Term, Transient,
     },
 };
 
@@ -105,11 +105,12 @@ pub fn waits_as_reference(
     expected: &Term,
 ) -> Result<bool, Error> {
     let type_ = match &**term {
-        Subterm::Var(var) => context.assumption(var.unwrap()),
-        Subterm::Transient(Transient::Name(name)) => context.declared_type(name),
+        Subterm::Var(var) => context.assumption(var.unwrap()).cloned(),
+        Subterm::Transient(Transient::Name(name)) => context.declared_type(name).cloned(),
+        Subterm::Transient(Transient::Method(method)) => method_type(context, method),
         _ => return Ok(false),
     };
-    let Some(type_) = type_.cloned() else {
+    let Some(type_) = type_ else {
         return Ok(false);
     };
     let hidden = match &*reduce_with(context, &type_)? {
@@ -139,7 +140,9 @@ pub fn insert_implicits_on_check(
 ) -> Result<(Term, Term), Error> {
     if !matches!(
         &**term,
-        Subterm::Var(_) | Subterm::Transient(Transient::Name(_)) | Subterm::Proj(_)
+        Subterm::Var(_)
+            | Subterm::Transient(Transient::Name(_) | Transient::Method(_))
+            | Subterm::Proj(_)
     ) {
         return Ok((rebuilt, type_));
     }
@@ -168,6 +171,10 @@ pub fn insert_implicits_on_check(
     let func_label = match &**term {
         Subterm::Var(var) => CalleeId::Function(Mention::Local(*var.unwrap())),
         Subterm::Instance(instance) => CalleeId::Function(Mention::Declaration(instance.name)),
+        Subterm::Transient(Transient::Method(Method { concept, field })) => CalleeId::Method {
+            concept: *concept,
+            field: field.clone(),
+        },
         _ => CalleeId::Anonymous,
     };
 
@@ -206,7 +213,13 @@ pub fn insert_implicits_on_check(
         Ok(cursor.body().expect("a cursor past every entry"))
     })?;
 
-    let body = Term::apply_marked(rebuilt, head_args);
+    // A method's η-form is opened at the arguments rather than applied to them, as its call is ([`method_call`]).
+    let opened = head_args.iter().map(|(_, arg)| arg).collect::<Vec<_>>();
+    let body = match &**term {
+        Subterm::Transient(Transient::Method(_)) => method_call(&rebuilt, &opened),
+        _ => None,
+    }
+    .unwrap_or_else(|| Term::apply_marked(rebuilt, head_args));
 
     // No explicit binders to eta over (an all-implicit curried prefix, e.g. `(@A, @B) -> …`): the implicit-saturated application *is* the value, and its type is the opened output. Erasure drops the implicit arguments anyway.
     if binders.is_empty() {
