@@ -1,4 +1,4 @@
-//! Coverage, and the foreign wire contract.
+//! Coverage: an elimination enumerates its constructors, and a clash is told from an index that may still meet.
 
 use {super::test_support::*, curios_elab::Error};
 
@@ -8,15 +8,6 @@ fn an_elimination_must_enumerate_its_constructors() {
     refused(AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS).by_elaborator_in("/f", |error| {
         matches!(error, Error::MatrixUncovered { indexed: false, .. })
     });
-}
-
-// The foreign wire contract. The embedder supplies these values, so a `foreign` admitted at an arbitrary type would let the host hand back an inhabitant of a proposition that nothing ever checked.
-#[test]
-fn a_foreign_declaration_is_confined_to_wire_types() {
-    rejected_by(
-        A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES,
-        "expected a wire type",
-    );
 }
 
 // An index pair is impossible only where no value meets it: a truncated difference is zero wherever its subtrahend is at least its minuend, so `x - y` against `0` is no clash.

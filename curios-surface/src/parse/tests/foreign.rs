@@ -356,6 +356,7 @@ fn top_foreign_option_of_leaf() {
     );
 }
 
+/// The foreign wire contract, which is the parser's: the embedder supplies a host call's values, so a `foreign` admitted at an arbitrary type would let the host hand back an inhabitant of a proposition that nothing ever checked.
 #[test]
 fn top_foreign_rejects_non_wire_type() {
     assert!("foreign frobnicate() -> Str;".parse::<Module>().is_err());

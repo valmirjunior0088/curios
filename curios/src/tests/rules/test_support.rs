@@ -1,21 +1,17 @@
-//! Programs the rules' suites compile and run, and the refusals they are held to.
-//!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
+//! What the rules' suites share: the programs more than one of them puts, and what a refusal is held to.
 
 use {
-    crate::test_support::*,
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
     curios_core::{Global, Term, WitnessKey},
     curios_module::RootSource,
-    curios_native::MockHost,
     curios_pipeline::{DEFAULT_BUDGET, EntryTail, Examined, Refused, test_support::*},
     curios_surface::{Entrypoint, Spellable, Spelling},
     std::{fmt, rc::Rc},
 };
 
 /// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the kernel's where the elaborator built it a module.
-pub(super) struct Refusals {
+pub struct Refusals {
     elaborator: Vec<curios_elab::Error>,
     kernel: Vec<Verdict>,
     /// Whether the kernel judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
@@ -23,7 +19,7 @@ pub(super) struct Refusals {
 }
 
 /// Put `source` to both checkers at the program contract: what they refused it with, which must be something.
-pub(super) fn refused(source: &str) -> Refusals {
+pub fn refused(source: &str) -> Refusals {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
     let refusals = match examine_with_prelude(
         DEFAULT_BUDGET,
@@ -63,24 +59,24 @@ pub(super) fn refused(source: &str) -> Refusals {
 }
 
 /// The declaration an absolute path names, as an error carries it.
-pub(super) fn global(path: &str) -> Global {
+pub fn global(path: &str) -> Global {
     Global::Authored(Qualifier::from(
         path.strip_prefix('/').expect("an absolute path").split('/'),
     ))
 }
 
 /// `term`, a term an elaborator's error holds, as a rule's test pins it: every global by its absolute path, an intrinsic by its surface name, no universe instance and no metavariable's number, so the pin reads the term and not the order elaboration met its levels in, and on one line, each run of whitespace a space.
-pub(super) fn pinned(term: &Term) -> String {
+pub fn pinned(term: &Term) -> String {
     on_one_line(term, Spelling::default().with_erased_universes())
 }
 
 /// `key`, the key a coherence refusal holds, as a rule's test pins it.
-pub(super) fn pinned_key(key: &WitnessKey) -> String {
+pub fn pinned_key(key: &WitnessKey) -> String {
     key.faithful().to_string()
 }
 
 /// `term` as [`pinned`] writes it with its universe instances shown, each level metavariable a bare `?u`: for a test whose claim is the instance a term stands at.
-pub(super) fn pinned_with_instances(term: &Term) -> String {
+pub fn pinned_with_instances(term: &Term) -> String {
     let spelled = on_one_line(term, Spelling::default());
     let mut pinned = String::with_capacity(spelled.len());
     let mut rest = spelled.as_str();
@@ -114,7 +110,7 @@ impl Refusals {
     }
 
     /// The elaborator refused the program `at` by an error `pattern` holds of, read beneath what located it.
-    pub(super) fn by_elaborator_in(
+    pub fn by_elaborator_in(
         &self,
         at: &str,
         pattern: impl Fn(&curios_elab::Error) -> bool,
@@ -129,11 +125,7 @@ impl Refusals {
     }
 
     /// The kernel refused the program `at` by an error `pattern` holds of.
-    pub(super) fn by_kernel_in(
-        &self,
-        at: &str,
-        pattern: impl Fn(&curios_cert::Error) -> bool,
-    ) -> &Self {
+    pub fn by_kernel_in(&self, at: &str, pattern: impl Fn(&curios_cert::Error) -> bool) -> &Self {
         assert!(
             self.kernel
                 .iter()
@@ -145,7 +137,7 @@ impl Refusals {
     }
 
     /// The elaborator refused the program by no error `pattern` holds of, wherever it stands.
-    pub(super) fn not_by_elaborator(&self, pattern: impl Fn(&curios_elab::Error) -> bool) {
+    pub fn not_by_elaborator(&self, pattern: impl Fn(&curios_elab::Error) -> bool) {
         assert!(
             !self.elaborated().any(|error| pattern(error.raised())),
             "refused so by the elaborator:\n{self}"
@@ -227,18 +219,7 @@ impl fmt::Display for Refusals {
     }
 }
 
-/// Reject `source`, and by the diagnostic naming the rule under test.
-pub(super) fn rejected_by(source: &str, diagnostic: &str) {
-    let (system, _io) = MockHost::builder().build();
-    let error =
-        run_text(source, system).expect_err("expected the board rule to reject this program");
-    assert!(
-        error.contains(diagnostic),
-        "rejected, but not by '{diagnostic}':\n{error}",
-    );
-}
-
-pub(super) const A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
+pub const A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
     use /std/{Nat};
 
     induct Box : pub Prop
@@ -253,7 +234,7 @@ pub(super) const A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA:
     extract(Box/mk(7))
     "#;
 
-pub(super) const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
+pub const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
 
@@ -264,7 +245,7 @@ pub(super) const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
     /std/print(Nat/to_str(0))
     "#;
 
-pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
+pub const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
 
@@ -282,7 +263,7 @@ pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str =
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS: &str = r#"
+pub const A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS: &str = r#"
     use /std/{Nat};
 
     struct Bad : pub Prop {
@@ -292,7 +273,7 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS: &str = r#"
+pub const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS: &str = r#"
     use /std/{Nat};
 
     concept Bad(A : Type) : pub Prop {
@@ -303,7 +284,7 @@ pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS: &str =
     "#;
 
 /// A hidden field takes no position among the fields a literal writes, and is held as a written one is: two values apart in `n` alone would be one value, and `read` would tell them apart.
-pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD: &str = r#"
+pub const A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD: &str = r#"
     use /std/{Nat};
     use /std/Bool/{Holds};
 
@@ -314,7 +295,7 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD: &str = 
     /std/Io/pure(())
     "#;
 
-pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: &str = r#"
+pub const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: &str = r#"
     use /std/{Show};
 
     concept Carry(A : Type) : pub Prop {
@@ -324,7 +305,7 @@ pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: 
     /std/Io/pure(())
     "#;
 
-pub(super) const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
+pub const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
     use /std/{Nat, Option};
 
     let f(o : Option(Nat)) -> Nat =
@@ -335,15 +316,7 @@ pub(super) const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
     f(Option/none())
     "#;
 
-pub(super) const A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES: &str = r#"
-    use /std/{Str};
-
-    foreign bad() -> Str;
-
-    /std/Io/pure(())
-    "#;
-
-pub(super) const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = r#"
+pub const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = r#"
     use /std/{Nat, Eq};
     use /std/Bool/{False};
 
@@ -368,7 +341,7 @@ pub(super) const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = 
     /std/print("FORGED")
     "#;
 
-pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
+pub const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
     use /std/Bool/{False};
 
     induct Two : pub Prop
@@ -391,7 +364,7 @@ pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: 
     /std/print("FORGED")
     "#;
 
-pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
+pub const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
     use /std/{Nat};
 
     induct Two : pub Prop
@@ -415,13 +388,13 @@ pub(super) const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str =
     "#;
 
 /// `drop`'s `@A` is constrained by nothing — no argument mentions it and no result determines it — so every use below leaves one unsolved term metavariable exactly where the fixture plants it.
-pub(super) const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
+pub const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
     use /std/{Nat};
 
     let drop(@A : Type, n : Nat) -> Nat = n;
 "#;
 
-pub(super) const A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE: &str = r#"
+pub const A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE: &str = r#"
     induct Bad : pub Type
     | c(x : /std/Eq()(drop(0), 0))
     end
@@ -429,7 +402,7 @@ pub(super) const A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_METAVARIABLE_IN_A_STRUCT_FIELD: &str = r#"
+pub const A_METAVARIABLE_IN_A_STRUCT_FIELD: &str = r#"
     struct Bad : pub Type {
         x : /std/Eq()(drop(0), 0)
     }
@@ -437,18 +410,18 @@ pub(super) const A_METAVARIABLE_IN_A_STRUCT_FIELD: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_METAVARIABLE_IN_A_DEFINITIONS_TYPE: &str = r#"
+pub const A_METAVARIABLE_IN_A_DEFINITIONS_TYPE: &str = r#"
     let f(x : /std/Eq()(drop(0), 0)) -> Nat = 0;
 
     /std/Io/pure(())
     "#;
 
-pub(super) const A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY: &str = r#"
+pub const A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY: &str = r#"
     /std/print(Nat/to_str(drop(0)))
     "#;
 
 /// The same argument supplied in all four positions at once, so the refusals above cannot be passing for "a declaration may not mention an implicit".
-pub(super) const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
+pub const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
     induct Fine : pub Type
     | c(x : /std/Eq()(drop(@Nat, 0), 0))
     end
@@ -462,7 +435,7 @@ pub(super) const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
     /std/print(Nat/to_str(drop(@Nat, 0)))
     "#;
 
-pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
+pub const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
 
@@ -490,7 +463,7 @@ pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VA
     /std/print("FORGED")
     "#;
 
-pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
+pub const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
     use /std/{Nat};
 
     induct Two : pub Prop
@@ -517,7 +490,7 @@ pub(super) const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM:
     /std/print(Nat/to_str(f(coerce(Ind/right()))))
     "#;
 
-pub(super) const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
+pub const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
     use /std/{Nat};
 
     induct Pair : pub Type
@@ -537,7 +510,7 @@ pub(super) const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#
     /std/print(Nat/to_str(f(Ind/left())))
     "#;
 
-pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &str = r#"
+pub const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &str = r#"
     use /std/{Eq, Nat, Option};
     use /std/Bool/{False};
 
@@ -571,7 +544,7 @@ pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &st
     /std/print("ok")
     "#;
 
-pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str = r#"
+pub const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str = r#"
     use /std/{Bool, Eq, Nat};
 
     induct Two : (a : Nat, b : Nat) -> Type
@@ -594,7 +567,7 @@ pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str
     /std/print("ok")
     "#;
 
-pub(super) const TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH: &str = r#"
+pub const TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH: &str = r#"
     use /std/Bool/{False};
 
     induct Two : pub Prop
@@ -614,7 +587,7 @@ pub(super) const TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH: 
     /std/print("FORGED")
     "#;
 
-pub(super) const TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CLASH: &str = r#"
+pub const TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CLASH: &str = r#"
     use /std/Bool/{False};
 
     induct Two : pub Prop
@@ -638,7 +611,7 @@ pub(super) const TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CL
     /std/print("FORGED")
     "#;
 
-pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CLASH: &str = r#"
+pub const A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CLASH: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
 
@@ -654,7 +627,7 @@ pub(super) const A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CL
     /std/print("FORGED")
     "#;
 
-pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
+pub const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
     use /std/Bool/{False};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -672,7 +645,7 @@ pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
+pub const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
     use /std/{Eq};
     use /std/Bool/{False};
 
@@ -687,7 +660,7 @@ pub(super) const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#"
+pub const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#"
     use /std/{Eq, Nat};
     use /std/Bool/{False};
 
@@ -697,7 +670,7 @@ pub(super) const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#
     /std/print("FORGED")
     "#;
 
-pub(super) const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
+pub const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
     use /std/{Eq, Nat};
     use /std/Bool/{False};
 
@@ -707,7 +680,7 @@ pub(super) const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
+pub const A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
     use /std/{Eq, Nat};
     use /std/Bool/{False};
 
@@ -717,7 +690,7 @@ pub(super) const A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
+pub const AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
     use /std/{Eq, Int};
     use /std/Bool/{False};
 
@@ -727,7 +700,7 @@ pub(super) const AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE: &str = r#"
+pub const A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE: &str = r#"
     use /std/{Eq, Nat, Bytes};
     use /std/Bool/{False, Holds};
 
@@ -742,7 +715,7 @@ pub(super) const A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE:
     /std/print("FORGED")
     "#;
 
-pub(super) const A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT_THE_OTHER: &str = r#"
+pub const A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT_THE_OTHER: &str = r#"
     use /std/{Eq, Bytes};
     use /std/Bool/{False};
 
@@ -752,7 +725,7 @@ pub(super) const A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT
     /std/print("FORGED")
     "#;
 
-pub(super) const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
+pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
     use /std/{Eq, Bytes};
     use /std/Bool/{False};
 
@@ -762,7 +735,7 @@ pub(super) const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r
     /std/print("ok")
     "#;
 
-pub(super) const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
+pub const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
     use /std/{Nat};
 
     induct Tight : (n : Nat) -> pub Prop
@@ -777,7 +750,7 @@ pub(super) const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
     /std/print(Nat/to_str(extract(Tight/mk(7))))
     "#;
 
-pub(super) const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
+pub const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
     use /std/{Eq, Nat};
     use /std/Bool/{False};
 
@@ -801,7 +774,7 @@ pub(super) const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
+pub const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
     struct Bad : pub Prop {
         carried : Type
     }
@@ -809,7 +782,7 @@ pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &str = r#"
+pub const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &str = r#"
     use /std/{Bool};
     use /std/Bool/{True, Holds};
 
@@ -830,7 +803,7 @@ pub(super) const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_C
     /std/print("ok")
     "#;
 
-pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
+pub const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
     use /std/{List, Option};
     use /std/Bool/{True};
 
@@ -849,7 +822,7 @@ pub(super) const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
     "#;
 
 /// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it.
-pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
+pub const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
     use /std/{Nat};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -868,7 +841,7 @@ pub(super) const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str =
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
+pub const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
     use /std/{Nat, List, Option};
     use /std/Bool/{True};
 
@@ -877,7 +850,7 @@ pub(super) const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
     /std/print(Nat/to_str(List/len(one)))
     "#;
 
-pub(super) const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
+pub const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
     use /std/{Nat, Eq};
 
     induct Three : pub Type
@@ -895,7 +868,7 @@ pub(super) const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION: &str = r#"
+pub const A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION: &str = r#"
     use /std/{Nat, Eq};
 
     struct Holder : pub Prop {
@@ -905,7 +878,7 @@ pub(super) const A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION: &str = r#"
+pub const THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION: &str = r#"
     struct Holder : pub Prop {
         field : {}
     }
@@ -913,7 +886,7 @@ pub(super) const THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
+pub const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
     use /std/{Nat, Eq};
 
     struct Holder : pub Prop {
@@ -923,7 +896,7 @@ pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
+pub const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
     struct Holder : pub Prop {
         field : (A : Type) -> A
     }
@@ -931,7 +904,7 @@ pub(super) const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE: &str = r#"
+pub const A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE: &str = r#"
     use /std/{Nat, Bool};
     use /std/Bool/{True};
 
@@ -944,7 +917,7 @@ pub(super) const A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &str = r#"
+pub const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &str = r#"
     use /std/{Nat, Bool, Eq};
     use /std/Bool/{True};
 
@@ -959,7 +932,7 @@ pub(super) const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &st
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str = r#"
+pub const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str = r#"
     use /std/{Nat, Eq};
 
     induct Two : pub Prop
@@ -976,7 +949,7 @@ pub(super) const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str 
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE: &str = r#"
+pub const A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE: &str = r#"
     use /std/{Nat};
 
     induct Two : pub Prop
@@ -993,7 +966,7 @@ pub(super) const A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE: &str = 
     /std/Io/pure(())
     "#;
 
-pub(super) const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str = r#"
+pub const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str = r#"
     induct Bad : pub Type
     | mk(f : {((Bad) -> Prop) -> Prop})
     end
@@ -1001,7 +974,7 @@ pub(super) const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str 
     /std/Io/pure(())
     "#;
 
-pub(super) const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
+pub const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let function(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) = Eq/refl();
@@ -1011,7 +984,7 @@ pub(super) const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &st
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA: &str = r#"
+pub const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA: &str = r#"
     use /std/{Eq, Nat};
 
     let dropped(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), g) = Eq/refl();
@@ -1019,7 +992,7 @@ pub(super) const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA: &str = r#"
+pub const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA: &str = r#"
     use /std/{Eq, Nat};
 
     let swapped(p : {Nat, Nat}) -> Eq()((p.1, p.0), p) = Eq/refl();
@@ -1027,7 +1000,7 @@ pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
+pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let hold(@A : Type, a : A, count : Nat) -> A =
@@ -1071,7 +1044,7 @@ pub(super) const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM: &str = r#"
+pub const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let dropped(b : Bool, g : (Nat) -> Nat)
@@ -1082,7 +1055,7 @@ pub(super) const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM: &str =
     /std/Io/pure(())
     "#;
 
-pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &str = r#"
+pub const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let swapped(b : Bool, p : {Nat, Nat})
@@ -1093,7 +1066,7 @@ pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &s
     /std/Io/pure(())
     "#;
 
-pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
+pub const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     struct U: pub Type {}
@@ -1137,7 +1110,7 @@ pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     let apart(r : {Nat, {}}, s : {Nat, {}}) -> Eq(@({Nat, {}}))(r, s) = Eq/refl();
@@ -1145,7 +1118,7 @@ pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str
     /std/Io/pure(())
     "#;
 
-pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
+pub const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     struct W: pub Type { u: {} }
@@ -1186,7 +1159,7 @@ pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     struct V: pub Type { n: Nat, u: {} }
@@ -1196,7 +1169,7 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART: &str
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     struct R: pub Type { next: (Nat) -> R }
@@ -1206,7 +1179,7 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str =
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     struct Pair(A: Type): pub Type { a: A, b: A }
@@ -1218,7 +1191,7 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APAR
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     struct Left: pub Type { right: (Nat) -> Right }
@@ -1229,8 +1202,7 @@ pub(super) const TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART: &str 
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_ITS_DECLARATION:
-    &str = r#"
+pub const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_ITS_DECLARATION: &str = r#"
         use /std/{Eq, Nat};
 
         struct R: pub Type {
@@ -1242,7 +1214,7 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_
         /std/Io/pure(())
         "#;
 
-pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
+pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -1272,7 +1244,7 @@ pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+pub const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     struct Outer: pub Type { inner: Inner, u: {} }
@@ -1283,7 +1255,7 @@ pub(super) const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APAR
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
+pub const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     struct W: pub Type { u: {} }
@@ -1311,8 +1283,7 @@ pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD:
-    &str = r#"
+pub const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD: &str = r#"
         use /std/{Eq, Nat, Bool};
 
         let apart(b : Bool, r : {Nat, {}}, s : {Nat, {}})
@@ -1323,7 +1294,7 @@ pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A
         /std/Io/pure(())
         "#;
 
-pub(super) const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#"
+pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let against_a_variable(b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
@@ -1352,7 +1323,7 @@ pub(super) const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &s
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIABLE: &str = r#"
+pub const A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIABLE: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let apart(b : Bool, c : Bool, m : Nat, n : Nat)
@@ -1365,7 +1336,7 @@ pub(super) const A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIA
     /std/Io/pure(())
     "#;
 
-pub(super) const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
+pub const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let a_proof_built_against_one_named(b : Bool, p : Eq()(0, 0))
@@ -1376,7 +1347,7 @@ pub(super) const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VARIABLE: &str = r#"
+pub const A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VARIABLE: &str = r#"
     use /std/{Eq, Nat, Bool, Option};
 
     let apart(b : Bool, o : Option(Nat))
@@ -1387,7 +1358,7 @@ pub(super) const A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VA
     /std/Io/pure(())
     "#;
 
-pub(super) const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: &str = r#"
+pub const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: &str = r#"
     use /std/{Eq, Nat};
 
     induct Two : pub Type
@@ -1402,7 +1373,7 @@ pub(super) const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
+pub const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     induct Two : pub Type
@@ -1417,7 +1388,7 @@ pub(super) const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
+pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     struct Record: pub Type { a: Nat, b: Nat }
@@ -1479,7 +1450,7 @@ pub(super) const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA: &str = r#"
+pub const A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let apart(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
@@ -1498,7 +1469,7 @@ pub(super) const A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_E
     /std/Io/pure(())
     "#;
 
-pub(super) const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA: &str = r#"
+pub const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     struct Record: pub Type { a: Nat, b: Nat }
@@ -1513,7 +1484,7 @@ pub(super) const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA:
     /std/Io/pure(())
     "#;
 
-pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
+pub const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
     use /std/{Eq, Nat};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -1523,7 +1494,7 @@ pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = 
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED: &str = r#"
+pub const A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED: &str = r#"
     use /std/{Eq, Nat};
 
     let same(g : (Nat) -> Nat, h : (Nat) -> Nat) -> Eq()(g, h) = Eq/refl();
@@ -1531,7 +1502,7 @@ pub(super) const A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
+pub const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
     use /std/{Eq, Nat};
 
     let same(g : (Nat) -> {Nat, Eq()(0, 0)}, p : Eq()(0, 0))
@@ -1540,7 +1511,7 @@ pub(super) const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT: &str = r#"
+pub const ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT: &str = r#"
     use /std/{Eq, Nat};
 
     let same(p : {Nat, Eq()(0, 0)}) -> Eq()(p, (0, p.1)) = Eq/refl();
@@ -1548,7 +1519,7 @@ pub(super) const ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
+pub const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
     use /std/{Eq, Nat};
 
     let ground(f : (Eq()(0, 0)) -> Nat, p : Eq()(0, 0), q : Eq()(0, 0)) -> Eq()(f(p), f(q)) =
@@ -1557,7 +1528,7 @@ pub(super) const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &str = r#"
+pub const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &str = r#"
     use /std/{Eq, Nat};
 
     induct Z: (Nat) -> pub Prop
@@ -1571,7 +1542,7 @@ pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str = r#"
+pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str = r#"
     use /std/{Eq, Nat};
 
     induct Z: (Nat) -> pub Prop
@@ -1603,7 +1574,7 @@ pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str = r#"
+pub const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str = r#"
     use /std/{Eq, Nat};
 
     let shift(m : Nat) -> (Nat) -> Nat = (x : Nat) => x + m;
@@ -1614,7 +1585,7 @@ pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str =
     /std/Io/pure(())
     "#;
 
-pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
+pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
     use /std/{Eq, Nat, Bool, List};
 
     induct Zero: (Nat) -> pub Prop
@@ -1664,7 +1635,7 @@ pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT: &str = r#"
+pub const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT: &str = r#"
     use /std/{Eq, Nat};
 
     let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
@@ -1675,7 +1646,7 @@ pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVE
     /std/Io/pure(())
     "#;
 
-pub(super) const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &str = r#"
+pub const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &str = r#"
     use /std/{Eq, Nat};
 
     induct Z: (Nat) -> pub Prop
@@ -1693,7 +1664,7 @@ pub(super) const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HE
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART: &str = r#"
+pub const A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART: &str = r#"
     use /std/{Eq, Nat};
 
     let apart(a : Nat, b : Nat, c : (Nat) -> (Nat) -> Nat, x : Eq()(c(0)(a), 0))
@@ -1702,7 +1673,7 @@ pub(super) const A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART: &str = r#"
     /std/Io/pure(())
     "#;
 
-pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
+pub const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
     use /std/{Eq, Nat};
     use /std/Bool/{Holds};
 
@@ -1713,7 +1684,7 @@ pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITIO
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str = r#"
+pub const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str = r#"
     use /std/{Eq, Nat};
 
     let h(n : Nat, e : Eq()(n, n)) -> Nat = match e | refl(@_) => 1 end;
@@ -1723,7 +1694,7 @@ pub(super) const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str =
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING: &str = r#"
+pub const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING: &str = r#"
     use /std/{Eq, Nat};
 
     induct T: pub Prop
@@ -1737,7 +1708,7 @@ pub(super) const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDIN
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
+pub const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
     use /std/{Eq, Nat};
 
     induct T: pub Prop
@@ -1751,7 +1722,7 @@ pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
+pub const A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
     use /std/{Nat};
     use /std/Bool/{Holds};
 
@@ -1767,7 +1738,7 @@ pub(super) const A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA: &
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION: &str = r#"
+pub const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{Holds};
 
@@ -1783,7 +1754,7 @@ pub(super) const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITI
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: &str = r#"
+pub const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: &str = r#"
     use /std/{Eq, Nat};
 
     let along(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
@@ -1792,7 +1763,7 @@ pub(super) const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: 
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
+pub const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
     use /std/{Eq, Nat};
 
     let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
@@ -1804,7 +1775,7 @@ pub(super) const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str =
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS: &str = r#"
+pub const A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS: &str = r#"
     use /std/{Eq, Nat};
 
     let along(a : Nat, b : Nat, p : Eq()(a, b), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =
@@ -1813,7 +1784,7 @@ pub(super) const A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
+pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
     use /std/{Eq, Nat};
 
     let slow(n : Nat) -> Eq()(n, n) =
@@ -1833,7 +1804,7 @@ pub(super) const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
     /std/print(Nat/to_str(Eq/subst((_) => Nat, slow(100000000000), 7)))
     "#;
 
-pub(super) const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
+pub const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
     use /std/{Eq, Nat, Option};
 
     let z_of(@a : Nat, @b : Nat, e : Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
@@ -1854,7 +1825,7 @@ pub(super) const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
     /std/print(Nat/to_str(z_of(Eq/refl(@Nat, @41))))
     "#;
 
-pub(super) const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
+pub const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
     use /std/{Nat};
 
     induct Side : (Nat, Nat) -> pub Prop
@@ -1867,7 +1838,7 @@ pub(super) const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
     /std/print(Nat/to_str(which(Side/left(@41))))
     "#;
 
-pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"
+pub const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"
     use /std/{Eq, Nat};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -1880,7 +1851,7 @@ pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INST
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
+pub const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
     use /std/{Nat};
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
@@ -1898,7 +1869,7 @@ pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
+pub const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
     use /std/{Eq, Nat, State};
 
     let left(a: Nat, f: (Nat) -> State(Nat, Nat)) -> Eq()(State/bind(State/pure(a), f), f(a)) =
@@ -1907,7 +1878,7 @@ pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE: &str = r#"
+pub const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE: &str = r#"
     use /std/{Eq, Nat, State};
 
     let right(m: State(Nat, Nat)) -> Eq()(State/bind(m, (v) => State/pure(v)), m) =
@@ -1916,7 +1887,7 @@ pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
+pub const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
     use /std/{Eq, Nat, State};
 
     let assoc(m: State(Nat, Nat), f: (Nat) -> State(Nat, Nat), g: (Nat) -> State(Nat, Nat))
@@ -1926,7 +1897,7 @@ pub(super) const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
+pub const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
     use /std/{Nat};
 
     let pick(@A: Type, n: Nat, x: A) -> Nat =
@@ -1937,7 +1908,7 @@ pub(super) const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
     /std/print(Nat/to_str(other(1)))
     "#;
 
-pub(super) const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
+pub const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
     use /std/{Nat};
 
     let pick(@A: Type, x: A) -> Nat = 0;
@@ -1946,7 +1917,7 @@ pub(super) const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
     /std/print(Nat/to_str(other(1)))
     "#;
 
-pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
+pub const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
     use /std/{Eq, Nat, Option, Str};
 
     induct P : pub Prop | mk() end
@@ -1962,7 +1933,7 @@ pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
+pub const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
     use /std/{Eq, Nat};
 
     struct Sealed : pub Type {
@@ -1977,7 +1948,7 @@ pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
     "#;
 
 /// The premise every rule above is stated over: a type is a *pure* term. A description sitting at the type level is a value, not an error, so what refuses the program is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
-pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
+pub const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
     let entry() -> /std/Io({}) =
@@ -2000,7 +1971,7 @@ entry()
     "#;
 
 /// The control. Only the refinement's escape into a *type* is at issue, so a rule that refused the elimination outright, or refused `Cell/poll` in every position, would be a brick. Forcing the poll yields an ordinary `Option(Bool)`, from which the fixture reads its Boolean.
-pub(super) const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
+pub const A_MATCH_ON_A_FORCED_CELL_READ_STILL_COMPILES: &str = r#"
     use /std/{Cell, Bool, Option, Str};
 
     let entry() -> /std/Io({}) =
@@ -2018,7 +1989,7 @@ entry()
     "#;
 
 // The same premise behind a stuck head. With the read an argument of the parameters `f`, `g` and `h`, weak-head reduction stops at the head without visiting it, so one spelling of the read would be refined to `true` in the outer arm and, after `Cell/fill(c, false)`, to `false` in the inner one — `h` carrying the outer arm's knowledge across, so `p` re-reads at `Eq()(false, true)` and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`. Two heads rather than one because the kernel drops a nested refinement of a *single* key: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a key with no local free. The read's type is `Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the argument is refused before any arm records an equation.
-pub(super) const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
+pub const AN_EFFECT_BEHIND_A_STUCK_HEAD_IS_NOT_AN_ARGUMENT: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
     let entry() -> /std/Io({}) =
@@ -2046,7 +2017,7 @@ entry()
 /// The control, and it guards against a brick: a scrutinee whose head is stuck is the *ordinary* case — `flip(b)` for a `b` nothing can instantiate — and refining it is what lets a hypothesis stated over the scrutinee re-read at the arm's value. So a guard that refused every stuck application, or every application it could not fully reduce, would still reject this.
 ///
 /// The head is a *definition* here; [`a_parameter_headed_scrutinee_refines_again`] is the same control over a parameter.
-pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
+pub const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     use /std/{Eq, Bool, Str};
 
     let flip(b : Bool) -> Bool = Bool/not(b);
@@ -2061,7 +2032,7 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     "#;
 
 // The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
-pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
+pub const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
     use /std/Bool/{False};
 
@@ -2089,7 +2060,7 @@ entry()
     "#;
 
 /// A parameter-headed scrutinee refines. A walk over the term cannot read a binder's body, so it cannot tell a pure `f` from an effectful one, and refusing the equation would withhold a refinement from every program stating a hypothesis over an opaque head; purity is a typing fact, so the equation is licensed and `p` re-reads at the arm's value.
-pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
+pub const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     use /std/{Eq, Bool, Str};
 
     let refined(f : (Bool) -> Bool, b : Bool, p : Eq()(f(b), true)) -> Str =
@@ -2102,7 +2073,7 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     "#;
 
 /// The description every fixture below takes apart, and the accepting control: `Io(False)` is built from an exit at a carrier with no constructors, so a program holding a description of a computation that yields `False` compiles and runs. What keeps it from being a proof is that nothing opens it.
-pub(super) const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
+pub const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
     use /std/{Io, Proc};
     use /std/Bool/{False};
 
@@ -2114,7 +2085,7 @@ pub(super) const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
     /std/print("ok")
     "#;
 
-pub(super) const A_DESCRIPTION_IS_NO_EMPTY_TYPE: &str = r#"
+pub const A_DESCRIPTION_IS_NO_EMPTY_TYPE: &str = r#"
     use /std/{Proc};
     use /std/Bool/{False};
 
@@ -2126,7 +2097,7 @@ pub(super) const A_DESCRIPTION_IS_NO_EMPTY_TYPE: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
+pub const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
     use /std/{Proc};
     use /std/Bool/{False};
 
@@ -2141,7 +2112,7 @@ pub(super) const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
+pub const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
     use /std/{Io, Monad, Proc};
     use /std/Bool/{False};
 
@@ -2167,7 +2138,7 @@ pub(super) const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
+pub const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
     use /std/{Io, Eq};
 
     induct Empty : pub Type end
@@ -2178,7 +2149,7 @@ pub(super) const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
     "#;
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
-pub(super) const PARTIAL_DIRECT: &str = r#"
+pub const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2187,7 +2158,7 @@ pub(super) const PARTIAL_DIRECT: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const PARTIAL_THROUGH_WITNESS: &str = r#"
+pub const PARTIAL_THROUGH_WITNESS: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2198,7 +2169,7 @@ pub(super) const PARTIAL_THROUGH_WITNESS: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const PARTIAL_HIGHER_ORDER: &str = r#"
+pub const PARTIAL_HIGHER_ORDER: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2208,7 +2179,7 @@ pub(super) const PARTIAL_HIGHER_ORDER: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const PARTIAL_IN_FIELD: &str = r#"
+pub const PARTIAL_IN_FIELD: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2222,7 +2193,7 @@ pub(super) const PARTIAL_IN_FIELD: &str = r#"
 /// A diverging proof in a position the judgment *infers* rather than checks — a match scrutinee — inside a definition whose own type is relevant, so the body is not a proof position either.
 ///
 /// Both checkers record every settled node with the type it settled at, checked or inferred alike. Nothing here is a checked position, and the elimination conjures a `Nat` from a proof that never terminates, so a checker seeding only checked positions would accept it — the quadrant this matrix exists to make visible.
-pub(super) const INFERRED_PROOF_POSITION: &str = r#"
+pub const INFERRED_PROOF_POSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2236,7 +2207,7 @@ pub(super) const INFERRED_PROOF_POSITION: &str = r#"
 /// A non-descending `rec` written *inline*, at a `Type`-sorted type so the kernel's local descent gate does not apply, inside a definition that is not itself a proof position.
 ///
 /// Nothing but the classification walk can see this one: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`.
-pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
+pub const INLINE_REC_UNDER_CARRIER: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     struct Box : pub Type { p : False }
@@ -2250,7 +2221,7 @@ pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
 /// A partial inhabitant of an index no constructor targets, eliminated by the arms it leaves out.
 ///
 /// The four rows above reach the partial definition through a value a proof reads. This one reads nothing of it: `Pin(n + 1)` is a case every constructor's target clashes with, so the elimination enumerates no arm, and the proof is the ex falso that covers nothing. Reduction never takes the scrutinee apart and never needs to — which is exactly the shape where "a term left stuck admits nothing" has to be carried by obligation (V) rather than by reduction, since `spin(n + 1)` is a closed term of an uninhabited type that no rule ever reduces. A general recursion at a `Type`-sorted result is the language's design, so `spin` itself stands; what must not is a proof standing on it.
-pub(super) const PARTIAL_UNDER_AN_EMPTY_ELIMINATION: &str = r#"
+pub const PARTIAL_UNDER_AN_EMPTY_ELIMINATION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     induct Pin : (n : Nat) -> pub Type
@@ -2266,7 +2237,7 @@ pub(super) const PARTIAL_UNDER_AN_EMPTY_ELIMINATION: &str = r#"
 /// Obligation **(T)** rather than (V): a *type* that reaches a definition which is not known to terminate.
 ///
 /// `spin` is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this syntactically from written type positions; the kernel seeds it from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T).
-pub(super) const TYPE_REACHING_PARTIAL: &str = r#"
+pub const TYPE_REACHING_PARTIAL: &str = r#"
     use /std/{Nat, Vec};
     let spin(n : Nat) -> Nat = spin(n);
     let Sized(n : Nat) -> Type = Vec(Nat, spin(n));
@@ -2276,7 +2247,7 @@ pub(super) const TYPE_REACHING_PARTIAL: &str = r#"
 /// The induction hypothesis of a `Nat` fold, at the wrong instance.
 ///
 /// In the successor arm the hypothesis is the motive at the *predecessor*, and the goal is the motive at the successor. Handing the hypothesis back directly proves `Eq()(k + 1, 0)` from `Eq()(k, 0)`, so a rule that typed the hypothesis at the scrutinee rather than at the peeled index would make every predicate provable by induction.
-pub(super) const INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE: &str = r#"
+pub const INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE: &str = r#"
     use /std/{Nat, Eq};
     let bogus(n : Nat) -> Eq()(n, 0) =
         match n : (m) => Eq()(m, 0)
@@ -2289,7 +2260,7 @@ pub(super) const INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE: &str = r#"
 /// A natural-number dispatch whose default is checked at a case's instance rather than the scrutinee's.
 ///
 /// The default binds nothing and refines no index, so it must be checked at the scrutinee's own value: its goal here is `Eq()(n, 0)` for an arbitrary `n`, which `Eq/refl()` cannot inhabit. Were it checked at the `0` arm's instance — the shape a refinement leak would produce — reflexivity would discharge it and every natural would equal zero.
-pub(super) const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
+pub const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
     use /std/{Nat, Eq};
     let bogus(n : Nat) -> Eq()(n, 0) =
         match n : (m) => Eq()(m, 0)
@@ -2304,7 +2275,7 @@ pub(super) const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
 /// Note which rule fires on each side: the elaborator refuses through the reach obligation — the definition is a proof position reaching something not known to terminate — while the kernel refuses through its own local gate, a recursive member at a proposition whose group does not descend. Two rules, two crates, one program; that is what the second opinion is supposed to look like.
 ///
 /// `n - 1` is `0` at `0`, so `bogus(0)` calls itself forever. The declared result is a proposition, which obliges the group to descend, and the size-change engine decides that — an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and since erasure deletes the proof, `False` follows immediately.
-pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
+pub const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     let bogus(n : Nat) -> False = bogus(n - 1);
@@ -2315,7 +2286,7 @@ pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
 /// Permuting the arguments is not a descent either.
 ///
 /// The classic size-change subtlety: every call maps a parameter to a parameter, so each call matrix is full of `Same` entries and none is `Less`. Composing a swap with itself returns the identity, so no cycle carries a strict decrease and the group cannot be total — an engine reading "the argument came from a parameter" as progress would certify a recursion that runs forever.
-pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
+pub const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
     let bogus(a : Nat, b : Nat) -> False = bogus(b, a);
@@ -2326,7 +2297,7 @@ pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
 /// Two distinct recursions are not the same function.
 ///
 /// Both fold to themselves, which is the shape two recursions meet in: unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq()(0, 1)`.
-pub(super) const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
+pub const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
     use /std/{Nat, Eq};
     let f(n : Nat) -> Nat =
         match n
@@ -2345,7 +2316,7 @@ pub(super) const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
 /// A `Bool` arm is checked at *its own* case value.
 ///
 /// The `false` arm's goal is the motive at `false`, so `Eq/refl()` would have to inhabit `Eq()(false, true)`. An arm rule that refined the scrutinee to the wrong case — or to none at all — would let reflexivity discharge it, and every boolean would equal `true`.
-pub(super) const BOOL_ARM_AT_THE_WRONG_CASE: &str = r#"
+pub const BOOL_ARM_AT_THE_WRONG_CASE: &str = r#"
     use /std/{Bool, Eq};
     let bogus(b : Bool) -> Eq()(b, true) =
         match b : (c) => Eq()(c, true)
@@ -2358,7 +2329,7 @@ pub(super) const BOOL_ARM_AT_THE_WRONG_CASE: &str = r#"
 /// A natural-number dispatch's *literal* arm is checked at that literal.
 ///
 /// The `1` arm's goal is the motive at `1`, which `Eq/refl()` cannot inhabit for `Eq()(1, 0)`. This is the companion to the default-arm fixture: there the danger is refining an arm that binds nothing, here it is refining a literal arm to the wrong literal.
-pub(super) const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
+pub const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
     use /std/{Nat, Eq};
     let bogus(n : Nat) -> Eq()(n, 0) =
         match n : (m) => Eq()(m, 0)
@@ -2369,7 +2340,7 @@ pub(super) const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
+pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
     use /std/{Nat, Eq};
 
     let all_zero(n : Nat) -> Eq()(n, 0) =
@@ -2383,7 +2354,7 @@ pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL:
     /std/print("unreachable")
     "#;
 
-pub(super) const A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
+pub const A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
     use /std/{Nat, Eq, List};
 
     let all_empty(l : List(Nat)) -> Eq()(List/len(l), 0) =
@@ -2397,7 +2368,7 @@ pub(super) const A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_
     /std/print("unreachable")
     "#;
 
-pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_EVERY_TAIL: &str = r#"
+pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_EVERY_TAIL: &str = r#"
     use /std/{Nat, Eq};
 
     let twice(n : Nat) -> Nat = n + n;
@@ -2413,8 +2384,7 @@ pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_
     /std/print("unreachable")
     "#;
 
-pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_IT_AT_EVERY_TAIL:
-    &str = r#"
+pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_IT_AT_EVERY_TAIL: &str = r#"
         use /std/{Nat, Eq};
 
         let all_zero(n : Nat) -> Eq()(n, 0) =
@@ -2429,7 +2399,7 @@ pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_
         /std/print("unreachable")
         "#;
 
-pub(super) const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
+pub const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, Holds};
 
@@ -2444,7 +2414,7 @@ pub(super) const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_
     /std/print("held")
     "#;
 
-pub(super) const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
+pub const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
     use /std/{Nat, Eq};
 
     let plus_zero(n : Nat) -> Eq()(n + 0, n) =
@@ -2456,7 +2426,7 @@ pub(super) const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
     /std/print(Nat/to_str(3))
     "#;
 
-pub(super) const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+pub const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, False, Holds};
 
@@ -2471,7 +2441,7 @@ pub(super) const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str
     /std/print("unreachable")
     "#;
 
-pub(super) const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+pub const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
     use /std/{Nat, proved};
     use /std/Bool/{True, False, Holds};
 
@@ -2489,7 +2459,7 @@ pub(super) const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r
     /std/print("unreachable")
     "#;
 
-pub(super) const AN_ARM_OF_A_FOLD_OVER_A_CALL_RECORDS_NO_EQUATION: &str = r#"
+pub const AN_ARM_OF_A_FOLD_OVER_A_CALL_RECORDS_NO_EQUATION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, False, Holds};
 
@@ -2504,7 +2474,7 @@ pub(super) const AN_ARM_OF_A_FOLD_OVER_A_CALL_RECORDS_NO_EQUATION: &str = r#"
     /std/print("unreachable")
     "#;
 
-pub(super) const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+pub const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
     use /std/{Nat, List};
     use /std/Bool/{True, False, Holds};
 
@@ -2519,7 +2489,7 @@ pub(super) const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#
     /std/print("unreachable")
     "#;
 
-pub(super) const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
+pub const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
     use /std/{Nat, proved};
     use /std/Bool/{True, Holds};
 
@@ -2532,7 +2502,7 @@ pub(super) const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str 
     /std/print(Nat/to_str(counted(3, 5, True/qed())))
     "#;
 
-pub(super) const A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT: &str = r#"
+pub const A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT: &str = r#"
     use /std/Bool/{False};
 
     induct Bad: Prop
@@ -2544,7 +2514,7 @@ pub(super) const A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT: &str = r#
     /std/print("unreachable")
     "#;
 
-pub(super) const A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX: &str = r#"
+pub const A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX: &str = r#"
     use /std/Bool/{False};
 
     induct I: (f: (A: Type) -> (A) -> A) -> Type
@@ -2557,7 +2527,7 @@ pub(super) const A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX: &str = r#"
     /std/print("unreachable")
     "#;
 
-pub(super) const A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH: &str = r#"
+pub const A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH: &str = r#"
     use /std/Bool/{False};
 
     induct T: Type
@@ -2574,7 +2544,7 @@ pub(super) const A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH: &str = r#"
     /std/print("unreachable")
     "#;
 
-pub(super) const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
+pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
 
@@ -2587,7 +2557,7 @@ pub(super) const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT: &str = r#"
+pub const A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT: &str = r#"
     use /std/Bool/{False};
 
     struct Bad: Prop
@@ -2598,7 +2568,7 @@ pub(super) const A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT: &str = r#"
     /std/print("unreachable")
     "#;
 
-pub(super) const A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
+pub const A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
 
@@ -2610,7 +2580,7 @@ pub(super) const A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &
     /std/print(Nat/to_str(1))
     "#;
 
-pub(super) const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
+pub const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
     use /std/{Nat, Bool};
 
     let F(b: Bool) -> Type =
@@ -2624,7 +2594,7 @@ pub(super) const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
     /std/print(Nat/to_str(g(@3)))
     "#;
 
-pub(super) const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
+pub const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
     use /std/{Nat, Bool};
 
     let F(b: Bool) -> Type =
@@ -2638,28 +2608,28 @@ pub(super) const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK: &str = r#"
+pub const TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK: &str = r#"
     use /std/{Nat, Eq};
 
     let stated: Eq()((n: Nat) => n, (n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
     /std/print("ok")
     "#;
 
-pub(super) const TWO_FUNCTIONS_EQUATED_UNDER_A_HIDDEN_MARK: &str = r#"
+pub const TWO_FUNCTIONS_EQUATED_UNDER_A_HIDDEN_MARK: &str = r#"
     use /std/{Nat, Eq};
 
     let stated: Eq()((@n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
     /std/print("ok")
     "#;
 
-pub(super) const TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK: &str = r#"
+pub const TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK: &str = r#"
     use /std/{Nat, Eq};
 
     let stated: Eq()((n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
     /std/print("FORGED")
     "#;
 
-pub(super) const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
+pub const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, Holds};
 
@@ -2674,7 +2644,7 @@ pub(super) const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
     /std/print(Nat/to_str(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1))
     "#;
 
-pub(super) const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
+pub const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, Holds};
 
@@ -2689,28 +2659,28 @@ pub(super) const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_SUM_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+pub const A_SUM_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
     use /std/{Nat, Eq};
 
     let swapped(a: Nat, b: Nat) -> Eq()(a + b, b + a) = Eq/refl();
     /std/print("ok")
     "#;
 
-pub(super) const A_DIFFERENCE_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+pub const A_DIFFERENCE_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
     use /std/{Nat, Eq};
 
     let swapped(a: Nat, b: Nat) -> Eq()(a - b, b - a) = Eq/refl();
     /std/print("FORGED")
     "#;
 
-pub(super) const A_CONJUNCTION_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
+pub const A_CONJUNCTION_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
     use /std/{Bool, Eq};
 
     let swapped(a: Bool, b: Bool) -> Eq()(a && b, b && a) = Eq/refl();
     /std/print("ok")
     "#;
 
-pub(super) const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str = r#"
+pub const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str = r#"
     use /std/{Bool, Eq};
 
     let confused(a: Bool, b: Bool) -> Eq()(a && b, a || b) = Eq/refl();
@@ -2718,14 +2688,14 @@ pub(super) const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str =
     "#;
 
 /// The negative functor every exploit below is built from. It is *accepted* — strict positivity asks whether a declaration reaches itself, and `Sink` never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct` can express that.
-pub(super) const SINK: &str = r#"
+pub const SINK: &str = r#"
     induct Sink(A : Type) : pub Type
     | sink(f : (A) -> /std/Bool/False)
     end
 "#;
 
 /// A *total* type-level function and a *partial* value of ordinary data type. `Shape` descends structurally on `F`; nothing here is a partial type former, which is why only the aggressive reading of (T) rejects the pair at all.
-pub(super) const SHAPE: &str = r#"
+pub const SHAPE: &str = r#"
     use /std/{Nat};
 
     induct F : pub Type
@@ -2743,7 +2713,7 @@ pub(super) const SHAPE: &str = r#"
 "#;
 
 /// The productive twin of [`SHAPE`], whose `Shape(inf)` unfolds to `Sink(Shape(inf))` forever rather than to itself.
-pub(super) const PRODUCTIVE_SHAPE: &str = r#"
+pub const PRODUCTIVE_SHAPE: &str = r#"
     induct Sink(A : Type) : pub Type
     | sink(f : (A) -> /std/Bool/False)
     end
