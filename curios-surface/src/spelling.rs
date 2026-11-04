@@ -4,16 +4,17 @@ use {
     crate::{
         Decoration, Frame, binders, bracketed, core_written, decorated, escape_character, escaped,
         family_declared, from_core, level_spelled, nested, plicity_mark, print_term,
-        record_declared, spell, sub, universe_context_written, written_entries,
+        print_wire_signature, record_declared, spell, sub, universe_context_written,
+        written_entries,
     },
-    curios_abi::stdio,
+    curios_abi::{ForeignFunction, stdio},
     curios_common::{InfixOp, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bind, Bound, ConceptDecl, Cursor, Definition, DefinitionKind, Definitions,
-        Field, Free, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks,
-        Members, Mention, Nat, Nominal, Notation, Pattern, Program, Scope, Spellings, StructDecl,
-        Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort,
-        suffixes_of,
+        Field, Free, Func, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon,
+        Marks, Members, Mention, Nat, Nominal, Notation, Pattern, Program, Scope, Spellings,
+        StructDecl, Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey,
+        inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, flat, indent, pure, run_printer, run_printer_within},
@@ -22,7 +23,7 @@ use {
         collections::{BTreeSet, HashMap},
         fmt,
         rc::Rc,
-        sync::OnceLock,
+        sync::{Arc, OnceLock},
     },
 };
 
@@ -79,6 +80,44 @@ pub struct Spelling {
     declined: Rc<Cell<bool>>,
     /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a kernel's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
     core_text: bool,
+    /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
+    form_scope: Option<Rc<FormScope>>,
+}
+
+/// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t = …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Core text is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
+pub struct FormScope {
+    pub syntax: SyntaxRegistry,
+    pub entries: HashMap<Global, Rc<Nominal>>,
+}
+
+impl FormScope {
+    /// The scope of a text read over `units` under `syntax`: every entry their formers carry.
+    pub fn over<'d>(
+        syntax: SyntaxRegistry,
+        units: impl IntoIterator<Item = &'d Definitions>,
+    ) -> Self {
+        let mut entries = HashMap::new();
+        for item in units
+            .into_iter()
+            .flat_map(|definitions| definitions.items.iter())
+        {
+            let held = match item {
+                Item::Let(definition) => vec![(definition.name, &definition.kind)],
+                Item::Rec(rec) => rec
+                    .definitions
+                    .iter()
+                    .map(|member| (member.name, &member.kind))
+                    .collect(),
+            };
+            for (name, kind) in held {
+                if let DefinitionKind::Nominal(nominal) = kind {
+                    entries.insert(name, Rc::clone(nominal));
+                }
+            }
+        }
+
+        Self { syntax, entries }
+    }
 }
 
 /// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
@@ -373,6 +412,12 @@ impl Spelling {
             core_text: true,
             ..Self::default()
         }
+    }
+
+    /// This spelling with `scope` to write a test's and a foreign row's forms against.
+    pub fn with_form_scope(mut self, scope: Rc<FormScope>) -> Self {
+        self.form_scope = Some(scope);
+        self
     }
 
     /// How a kernel refusal of `definitions` is written: as Core text proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a kernel refusal is often about the universes.
@@ -1762,6 +1807,31 @@ fn print_items(
         }
         match item {
             Item::Let(definition) => {
+                // A foreign row is stated by its form, which implies the definition that calls it: one written beside it where it is not that one.
+                if let Some(function) = foreign_row(definition) {
+                    let made = spelling.form_scope.as_ref().map(|scope| {
+                        Definition::foreign(
+                            definition.name,
+                            definition.island,
+                            Arc::clone(&function),
+                            &scope.syntax,
+                        )
+                    });
+                    let implied = made.is_some_and(|made| **definition == made);
+                    write(
+                        formatter,
+                        foreign_declared(definition, &function, implied, spelling),
+                    )?;
+                    writeln!(formatter, ";")?;
+                    if implied {
+                        continue;
+                    }
+                }
+                if let Some(test) = test_declared(definition, spelling) {
+                    write(formatter, test)?;
+                    writeln!(formatter, ";")?;
+                    continue;
+                }
                 let member = Member {
                     definition,
                     proof: definition.proof,
@@ -1795,6 +1865,90 @@ fn print_items(
     }
 
     Ok(())
+}
+
+/// The row `definition` is the declaration of, where its value beneath its own binders is a call of that row.
+fn foreign_row(definition: &Definition) -> Option<Arc<ForeignFunction>> {
+    let Subterm::Func(Func { telescope }) = &*definition.body else {
+        return None;
+    };
+    match &**telescope.terminal() {
+        Subterm::Foreign(foreign) if foreign.declared == definition.name => {
+            Some(Arc::clone(&foreign.function))
+        }
+        _ => None,
+    }
+}
+
+/// A foreign row in its form, `foreign /f(Bytes) -> Bytes`: the row's name where it is not its declaration's path, and where the definition it implies is the one the module holds, that definition's island where it is not its name's parent.
+fn foreign_declared(
+    definition: &Definition,
+    function: &ForeignFunction,
+    implied: bool,
+    spelling: &Rc<Spelling>,
+) -> Printer {
+    let mut fields = Vec::<Decoration>::new();
+    if definition.name.qualifier().map(Qualifier::join).as_deref() != Some(function.name.as_str()) {
+        fields.push(("name", pure(format!("\"{}\"", escaped(&function.name)))));
+    }
+    if implied {
+        fields.extend(island_field(definition, spelling));
+    }
+
+    decorated(
+        fields,
+        flat([
+            pure("foreign "),
+            pure(spelling.symbol(&definition.name)),
+            print_wire_signature(function.signature()),
+        ]),
+        true,
+    )
+}
+
+/// A test in its form, `test /t = value`, where it is the definition the form makes against the scope the spelling holds: `None` where the spelling holds none, or the test is another.
+fn test_declared(definition: &Definition, spelling: &Rc<Spelling>) -> Option<Printer> {
+    if definition.kind != DefinitionKind::Test {
+        return None;
+    }
+    let scope = spelling.form_scope.as_ref()?;
+    let family = Global::Authored(scope.syntax.test.test_type.qualifier());
+    let declaration = scope.entries.get(&family)?.inductive()?;
+    let Subterm::Func(Func { telescope }) = &*definition.body else {
+        return None;
+    };
+    if !telescope.is_empty() {
+        return None;
+    }
+    let value = telescope.terminal().clone();
+    let made = Definition::test(
+        definition.name,
+        definition.island,
+        value.clone(),
+        family,
+        declaration,
+    );
+    if made != *definition {
+        return None;
+    }
+
+    Some(decorated(
+        island_field(definition, spelling).into_iter().collect(),
+        flat([
+            pure("test "),
+            pure(spelling.symbol(&definition.name)),
+            pure(" =\n"),
+            indent(print_core(value.clone(), &spelling.with_words(&value))),
+        ]),
+        true,
+    ))
+}
+
+/// A definition's island, where it is not its name's parent.
+fn island_field(definition: &Definition, spelling: &Spelling) -> Option<Decoration> {
+    let parent = definition.name.qualifier().map(Qualifier::without_last);
+    (parent.as_ref() != Some(&definition.island))
+        .then(|| ("island", pure(module_written(&definition.island, spelling))))
 }
 
 /// What the declarations of a module imply of its items: the items left to the declaration that implies them, by their places, and the names a declaration implies that no item of the module declares, by the declaration.

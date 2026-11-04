@@ -105,8 +105,8 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
             let index = match stage {
                 Stage::Text(_) => 1,
-                Stage::Core(_) => 2,
-                Stage::CoreElab(_) => 3,
+                Stage::Core(..) => 2,
+                Stage::CoreElab(..) => 3,
                 Stage::Anf(_) => 4,
                 Stage::AnfOptm(_) => 5,
                 Stage::Cps(_) => 6,

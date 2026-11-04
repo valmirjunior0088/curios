@@ -16,6 +16,7 @@ mod codegen;
 use codegen::*;
 
 mod concepts;
+mod core_text;
 mod derive;
 mod document;
 mod effects;
@@ -76,7 +77,9 @@ use {
     curios_common::Qualifier,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
+    curios_pipeline::{
+        DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude, typecheck_with_prelude,
+    },
     curios_surface::Entrypoint,
     curios_surface::Spellable,
 };
@@ -248,8 +251,8 @@ fn core(source: &str) -> String {
 
     let mut printed = None;
     let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::Core(module) = stage {
-            printed = Some(module.faithful().to_string());
+        if let Stage::Core(..) = stage {
+            printed = Some(stage.to_string());
         }
     });
 
@@ -262,8 +265,8 @@ fn core_elab(source: &str) -> String {
 
     let mut printed = None;
     let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::CoreElab(module) = stage {
-            printed = Some(module.faithful().to_string());
+        if let Stage::CoreElab(..) = stage {
+            printed = Some(stage.to_string());
         }
     });
 

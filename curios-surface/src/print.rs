@@ -1195,7 +1195,7 @@ fn print_wire_results(results: &WireResults) -> Printer {
 }
 
 /// A row's signature as its declaration writes it after the name: the operand list, empty or not, and what the call answers.
-fn print_wire_signature(signature: &WireSignature) -> Printer {
+pub fn print_wire_signature(signature: &WireSignature) -> Printer {
     flat([
         listed(
             "(",

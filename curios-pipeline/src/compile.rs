@@ -4,7 +4,7 @@
 pub mod test_support;
 
 use {
-    super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
+    super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
     curios_cert::{Globals, Kernel, Verdict, certify_definitions, certify_program},
@@ -728,7 +728,11 @@ where
         false => test_records(&scheduled, &anchors),
     };
 
-    observe(Stage::Core(&lowered));
+    let dumped = DumpScope {
+        syntax,
+        predecessors,
+    };
+    observe(Stage::Core(&lowered, dumped));
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
@@ -786,7 +790,7 @@ where
         entrypoint: entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
     };
 
-    observe(Stage::CoreElab(&program));
+    observe(Stage::CoreElab(&program, dumped));
 
     Ok(((program, user_foreigns, records, own), obligations))
 }
@@ -933,10 +937,17 @@ where
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);
-    observe(Stage::Core(&Program {
-        definitions: lowered.core().clone(),
-        entrypoint: written.clone(),
-    }));
+    let dumped = DumpScope {
+        syntax,
+        predecessors,
+    };
+    observe(Stage::Core(
+        &Program {
+            definitions: lowered.core().clone(),
+            entrypoint: written.clone(),
+        },
+        dumped,
+    ));
     let closing = tail.closing(&written, &scheduled);
 
     let mut findings = None;
@@ -959,10 +970,13 @@ where
         (None, earlier) => {
             let mut elaborated =
                 |definitions: &curios_core::Definitions, entry: &curios_core::Entrypoint| {
-                    observe(Stage::CoreElab(&Program {
-                        definitions: definitions.clone(),
-                        entrypoint: entry.clone(),
-                    }));
+                    observe(Stage::CoreElab(
+                        &Program {
+                            definitions: definitions.clone(),
+                            entrypoint: entry.clone(),
+                        },
+                        dumped,
+                    ));
                 };
             let mut refused = |lowered: &PreparedText| findings = Some(Findings::of_text(lowered));
             let closing = Some(Closing {
@@ -1011,10 +1025,13 @@ where
             // Read off the unit before the term that closes the program is judged: a lint is no part of that verdict either.
             let findings = findings.unwrap_or_else(|| Findings::of_text(unit.text()));
             if lowered.is_some() {
-                observe(Stage::CoreElab(&Program {
-                    definitions: unit.core().clone(),
-                    entrypoint: entry.clone(),
-                }));
+                observe(Stage::CoreElab(
+                    &Program {
+                        definitions: unit.core().clone(),
+                        entrypoint: entry.clone(),
+                    },
+                    dumped,
+                ));
             }
             // A test program that schedules no test is compiled to nothing, so it is not erased.
             let erases = !(tested && records.is_empty());

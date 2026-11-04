@@ -1,8 +1,10 @@
 //! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder stage`'s rungs are derived from.
 
 use {
-    curios_surface::{Entrypoint, Spellable},
-    std::fmt,
+    curios_common::SyntaxRegistry,
+    curios_surface::{Entrypoint, FormScope, Spellable, Spelling},
+    curios_unit::Predecessors,
+    std::{fmt, rc::Rc},
 };
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
@@ -11,11 +13,11 @@ use {
 pub enum Stage<'a> {
     Text(&'a Entrypoint),
     /// Core as `curios_module::into_core` produced it: syntax that nothing has checked. It carries term and universe metavariables — the universes' seeds travel beside it, in what the lowering hands elaboration — and unresolved `Transient` nodes (`Infix`, `NumLit`), and the entries its type formers carry are unelaborated. Useful for debugging the lowering; not a typed program.
-    Core(&'a curios_core::Program),
+    Core(&'a curios_core::Program, DumpScope<'a>),
     /// Core after elaboration and zonking, which is the program every later stage consumes. Metavariable-free by construction — each item is zonked strictly where it is published, which errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. It carries the entry's own items only; the prelude is scope every later stage is seeded from, not a run of items in front of them.
     ///
     /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_definitions` takes, and [`Stage::Core`] is not.
-    CoreElab(&'a curios_core::Program),
+    CoreElab(&'a curios_core::Program, DumpScope<'a>),
     Anf(&'a curios_anf::Module),
     AnfOptm(&'a curios_anf::Module),
     Cps(&'a curios_cps::Module),
@@ -23,6 +25,26 @@ pub enum Stage<'a> {
     Wasm(&'a curios_wasm::Module),
     /// The Binaryen-optimized module, rendered by Binaryen's own text writer when the observer formats it — ground truth from the session that optimized it, not a reader's reconstruction, and free for an observer that does not look. The native product's `optimize` emits it where Binaryen runs, as the driver emits every other stage at its production site; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
     WasmOptm(&'a dyn fmt::Display),
+}
+
+/// What a dump of Core is written over: the registry the program was compiled with and the units before it, whose entries a test's and a foreign row's forms are made against ([`FormScope`]).
+#[derive(Clone, Copy)]
+pub struct DumpScope<'a> {
+    pub syntax: &'a SyntaxRegistry,
+    pub predecessors: Predecessors<'a>,
+}
+
+impl DumpScope<'_> {
+    /// What a dump of Core is written under: Core text proper, a test's and a foreign row's forms made against the units before it.
+    pub fn spelling(&self) -> Spelling {
+        let units = self.predecessors.placed();
+        let scope = FormScope::over(
+            *self.syntax,
+            units.iter().map(|(definitions, ..)| *definitions),
+        );
+
+        Spelling::core_text().with_form_scope(Rc::new(scope))
+    }
 }
 
 impl<'a> Stage<'a> {
@@ -48,8 +70,8 @@ impl<'a> Stage<'a> {
     pub fn name(&self) -> &'static str {
         match self {
             Stage::Text(_) => "text",
-            Stage::Core(_) => "core",
-            Stage::CoreElab(_) => "core-elab",
+            Stage::Core(..) => "core",
+            Stage::CoreElab(..) => "core-elab",
             Stage::Anf(_) => "anf",
             Stage::AnfOptm(_) => "anf-optm",
             Stage::Cps(_) => "cps",
@@ -64,8 +86,9 @@ impl fmt::Display for Stage<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
-            Stage::Core(program) => write!(f, "{}", program.faithful()),
-            Stage::CoreElab(program) => write!(f, "{}", program.faithful()),
+            Stage::Core(program, scope) | Stage::CoreElab(program, scope) => {
+                write!(f, "{}", program.spelled(&Rc::new(scope.spelling())))
+            }
             Stage::Anf(module) => write!(f, "{module}"),
             Stage::AnfOptm(module) => write!(f, "{module}"),
             Stage::Cps(module) => write!(f, "{module}"),

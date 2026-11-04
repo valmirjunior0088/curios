@@ -4,12 +4,12 @@
 
 use {
     crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
-    curios_module::{Overlay, RootSource, read_module},
+    curios_module::{Overlay, RootSource, SYNTAX, read_module},
     curios_pipeline::{Cache, Fold, Stage},
-    curios_surface::{Module, Spellable},
+    curios_surface::{FormScope, Module, Spellable, Spelling},
     curios_unit::Unit,
     curios_verdict::Verdicts,
-    std::path::Path,
+    std::{path::Path, rc::Rc},
 };
 
 /// One rung, reprinted and handed on where the driver emitted it.
@@ -133,14 +133,14 @@ pub fn unit_stage(
                 }]
             })
         }
-        "core" => last_unit(budget, &units, None, |unit| {
-            unit.text().core().faithful().to_string()
+        "core" => last_unit(budget, &units, None, |unit, spelling| {
+            unit.text().core().spelled(spelling).to_string()
         }),
         _ => last_unit(
             budget,
             &units,
             reached.as_ref().map(|cache| cache as &dyn Cache),
-            |unit| unit.core().faithful().to_string(),
+            |unit, spelling| unit.core().spelled(spelling).to_string(),
         ),
     };
 
@@ -157,17 +157,33 @@ pub fn unit_stage(
     }
 }
 
-/// What `read` makes of the last of `units` once the fold has compiled it over `cache`, or what stopped the fold.
+/// What `read` makes of the last of `units` once the fold has compiled it over `cache`, under the spelling a dump of its Core is written in — a test's and a foreign row's forms made against the units before it, the prelude's roots first — or what stopped the fold.
 fn last_unit(
     budget: u64,
     units: &[RootSource],
     cache: Option<&dyn Cache>,
-    read: impl FnOnce(&Unit) -> String,
+    read: impl FnOnce(&Unit, &Rc<Spelling>) -> String,
 ) -> Result<String, Vec<Diagnosis>> {
     Fold::new(budget, units, cache)
         .units(
             |_| {},
-            |_, produced| Ok(produced.last().map(read).unwrap_or_default()),
+            |prelude, produced| {
+                Ok(produced
+                    .split_last()
+                    .map(|(last, before)| {
+                        let scope = FormScope::over(
+                            SYNTAX,
+                            prelude
+                                .iter()
+                                .map(|unit| unit.core())
+                                .chain(before.iter().map(Unit::core)),
+                        );
+                        let spelling = Spelling::core_text().with_form_scope(Rc::new(scope));
+
+                        read(last, &Rc::new(spelling))
+                    })
+                    .unwrap_or_default())
+            },
         )
         .map_err(of_error)
 }

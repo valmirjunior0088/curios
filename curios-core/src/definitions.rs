@@ -8,14 +8,16 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Marks, Members, Mentions, Place, Places, Polarity, ReadEntry, ReadTable,
-        RecGroup, Scope, Sharing, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
-        UniverseContext, UniverseError, Variance, WitnessId,
+        Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl, Items, Level,
+        Lexicon, Many, Marks, Members, Mentions, Place, Places, Polarity, Quality, ReadEntry,
+        ReadTable, RecGroup, Scope, Sharing, StructDecl, StructType, Subterm, Symbols, Telescope,
+        Term, UniverseContext, UniverseError, UniverseParam, Universes, Variance, WitnessId,
+        foreign_produced, wire_term,
     },
+    curios_abi::ForeignFunction,
     curios_common::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
-        Records, Sorted, candidate_name,
+        Records, Sorted, SyntaxRegistry, candidate_name,
     },
     std::{
         cell::OnceCell,
@@ -23,6 +25,7 @@ use {
         fmt,
         ops::Deref,
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -1044,6 +1047,92 @@ impl Definition {
                 }
             })
             .collect()
+    }
+
+    /// The definition a `foreign` row declares under `name`, made from the row: a function of its wire parameters, each explicit and hintless, ahead of which a row that does not return takes the type it yields, hidden, at a level of the definition's own; answering the row's call over them, at the type the row produces ([`foreign_produced`]).
+    ///
+    /// **The one spelling of a foreign row's definition.** The lowering writes a `foreign` declaration's definition so, and a reader of Core text makes it so from the row a `foreign` form states.
+    pub fn foreign(
+        name: Global,
+        island: Qualifier,
+        function: Arc<ForeignFunction>,
+        syntax: &SyntaxRegistry,
+    ) -> Self {
+        let yields = function.diverges();
+        let universe_context = UniverseContext {
+            parameter_count: usize::from(yields),
+            ..UniverseContext::empty()
+        };
+        let mut minted = 0u64;
+        let mut fresh = |hint: Option<&str>| {
+            minted += 1;
+            Free::local(minted - 1, hint)
+        };
+        let yielded = yields.then(|| {
+            (
+                Plicity::Implicit,
+                fresh(None),
+                Term::type_at(Level::param(UniverseParam(0))),
+            )
+        });
+        let telescope =
+            yielded
+                .into_iter()
+                .chain(function.signature().params.iter().map(|wire_type| {
+                    (Plicity::Explicit, fresh(None), wire_term(wire_type, syntax))
+                }))
+                .collect::<Vec<_>>();
+        let operands = telescope
+            .iter()
+            .map(|(_, binder, _)| Term::free_var(binder))
+            .collect::<Vec<_>>();
+        let produced = foreign_produced(&function, &operands, syntax, |label| fresh(Some(label)));
+
+        Self {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island,
+            proof: false,
+            value_sort: None,
+            type_: Term::func_type_marked(telescope.clone(), produced),
+            body: Term::func_marked(telescope, Term::foreign(function, name, operands)),
+        }
+    }
+
+    /// The definition a `test` declares under `name` with `value` its body: run where it is selected, so a function of nothing answering `value`, at the test family `family`'s type over the unit type at the least instance its entry `declaration` takes, `() -> Test({})`.
+    ///
+    /// **The one spelling of a test's definition.** Elaboration closes a test's type at that instance, every level the unit type sets at its least and every sort a type, and a reader of Core text makes a `test` form's definition so.
+    pub fn test(
+        name: Global,
+        island: Qualifier,
+        value: Term,
+        family: Global,
+        declaration: &InductDecl,
+    ) -> Self {
+        let context = &declaration.universe_context;
+        let universes = Universes {
+            levels: vec![Level::zero(); context.parameter_count],
+            qualities: vec![Quality::Type; context.quality_count],
+        };
+        let tested = Term::induct_type_at(
+            family,
+            universes,
+            [Term::tuple_type_unit()],
+            Vec::<Term>::new(),
+        );
+        let none = Vec::<(Plicity, Free, Term)>::new();
+
+        Self {
+            name,
+            kind: DefinitionKind::Test,
+            universe_context: UniverseContext::empty(),
+            island,
+            proof: false,
+            value_sort: None,
+            type_: Term::func_type_marked(none.clone(), tested),
+            body: Term::func_marked(none, value),
+        }
     }
 
     /// Every declaration this definition references.
