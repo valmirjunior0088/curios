@@ -1737,7 +1737,7 @@ impl Term {
                 continue;
             }
 
-            // A definition whose value is a field of one of its binders, applied in full, is that field of the argument the binder takes: a method named by its path is read as the operator that projects it is. Two instances of one such definition pair their levels by its vector first, as any definition applied in full does.
+            // A definition whose value is a field of one of its binders, applied in full, is that field of the argument the binder takes: an accessor is read as the projection it is. Two instances of one such definition pair their levels by its vector first, as any definition applied in full does.
             let (this_forwarded, that_forwarded) = (
                 Forwarded::of(&this, families),
                 Forwarded::of(&that, families),

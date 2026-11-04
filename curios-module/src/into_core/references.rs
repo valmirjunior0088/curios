@@ -17,6 +17,8 @@ pub(crate) struct LoweredItem {
     pub reaches: Vec<curios_core::Global>,
     /// What each of its definitions declares, in the item's order.
     pub definitions: Vec<Declared>,
+    /// The names it declares beside its definitions, each with where it was written in the text of its declaration: a concept's methods, which no definition holds.
+    pub members: Vec<(curios_core::Global, Option<curios_core::Extent>)>,
 }
 
 /// One definition of a lowered item, as the exposure audit and the `unused-declaration` lint read it.
@@ -60,11 +62,17 @@ impl LoweredItem {
                     alias: alias_of(let_),
                 })
                 .collect(),
+            members: item
+                .lets()
+                .iter()
+                .flat_map(|let_| &let_.members)
+                .map(|(name, span)| (*name, span.as_ref().and_then(&placed)))
+                .collect(),
         }
     }
 }
 
-/// Whether the source wrote this definition under its own name, in the module that declares it. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module, and a witness has no authored path at all.
+/// Whether the source wrote this definition under its own name, in the module that declares it. A member synthesized into a nested namespace — an inductive's constructor — sits below its declaring module, and a witness has no authored path at all.
 fn written_under_its_name(let_: &FlatLet) -> bool {
     let_.name
         .qualifier()
@@ -104,7 +112,7 @@ pub(super) fn node_reference_names(
     names
 }
 
-/// The names a derived witness body will reference once elaboration writes it — the vocabulary of the derivation registered for the concept its signature names, which the `Derive` transient stands for without spelling. References, as the written body's `Var`s would be: a renderer, a method wrapper or a piece of the string machinery that only a derived witness applies is used. Restricted to the signature's concept so one derivation's names never count for the other's rows, and empty for an item that derives nothing.
+/// The names a derived witness body will reference once elaboration writes it — the vocabulary of the derivation registered for the concept its signature names, which the `Derive` transient stands for without spelling. References, as the written body's `Var`s would be: a renderer, a concept whose method the body calls or a piece of the string machinery that only a derived witness applies is used. Restricted to the signature's concept so one derivation's names never count for the other's rows, and empty for an item that derives nothing.
 ///
 /// **Every name a body *writes*, and nothing it merely dispatches through.** A concept reached by infix operator is not here and must not be: `&&` in the equality body is rebuilt by `elaborate_infix` as a projection off a resolved witness, never a wrapper `Var`, so it names no global at all.
 fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_core::Global> {

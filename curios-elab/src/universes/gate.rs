@@ -309,7 +309,7 @@ fn validate_definitions_instance_arities(
             )));
         }
     }
-    // Both directions of the generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
+    // The generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
     for definition in items.iter().flat_map(|item| item.definitions()) {
         let shown = definition.name.faithful();
         match &definition.kind {
@@ -324,15 +324,6 @@ fn validate_definitions_instance_arities(
                 if !declaration.declares(tag) {
                     return Err(Error::UniverseInvariant(format!(
                         "constructor definition {shown} names owner {}, which declares no case '{tag}'",
-                        owner.faithful()
-                    )));
-                }
-            }
-            DefinitionKind::ConceptMethod { owner } => {
-                let owner = Global::Authored(*owner);
-                if definitions.concept(places, &owner).is_none() {
-                    return Err(Error::UniverseInvariant(format!(
-                        "concept method {shown} names missing owner {}",
                         owner.faithful()
                     )));
                 }

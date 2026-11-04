@@ -892,7 +892,7 @@ A public interface cannot mention an item its own consumers cannot reach. The in
 - inductive constructor signatures when the inductive representation is public;
 - declared types of definitions.
 
-The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item reaching only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Definition bodies are not interface, and neither are members synthesized into a nested namespace — an inductive's constructors, a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name. A name under `/sys`, which only the standard library may name, is seen where a signature outside `/sys` names it only within the standard library and wherever one of its exports shows it.
+The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item reaching only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Definition bodies are not interface, and neither are members bound in a nested namespace — an inductive's constructors, a concept's methods — so a constructor facade may hand out values of a type the consumer cannot name. A name under `/sys`, which only the standard library may name, is seen where a signature outside `/sys` names it only within the standard library and wherever one of its exports shows it.
 
 ## Recursive groups
 
@@ -1053,7 +1053,7 @@ Concepts provide ad-hoc polymorphism. A concept is a record-shaped interface, a 
 
 ### Concept declarations
 
-A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, `: Type` a *sealed* one whose representation is private to its declaring module's subtree, so witness declarations, dictionary literals, structure updates and raw field projections are permitted only there. Resolution, `use` parameters and the generated method wrappers work the same either way, and the concept name's own visibility stays independent of its representation.
+A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, `: Type` a *sealed* one whose representation is private to its declaring module's subtree, so witness declarations, dictionary literals, structure updates and raw field projections are permitted only there. Resolution, `use` parameters and a method called by its path work the same either way, and the concept name's own visibility stays independent of its representation.
 
 ```crs
 pub concept Show(A: Type): pub Type {
@@ -1066,11 +1066,11 @@ pub concept Monad(M: (Type) -> Type): pub Type {
 }
 ```
 
-Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation. A method's wrapper takes the concept's parameters and the witness in the same parameter list as the method's own, so a method is called once, as it is declared: `Show/show(value)`, and `Fun/name(@Pair)` for a `name() -> Str` at `Pair`. A field that is not a function is reached by the call that supplies the witness, `Sized/Carrier(@Nat)`.
+Every ordinary field is a method, named by its path in the concept's namespace: `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation, as an operator projects its own. A method's call takes the concept's parameters and the witness in the same parameter list as the method's own, so a method is called once, as it is declared: `Show/show(value)`, and `Fun/name(@Pair)` for a `name() -> Str` at `Pair`, and the witness may be written, `Show/show(@Nat, use loud, n)`. A field that is not a function is reached by the call that supplies the witness, `Sized/Carrier(@Nat)`, and a method named where a function is expected is its field of the witness its type resolves, `List/map(xs, Show/show)`. A method is its concept's field, and no definition.
 
 Concepts whose method types name one another's dictionaries are declared as one group with `and`, as structures are — see [Recursive groups](#recursive-groups). A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused whether or not the two are declared together, since resolution could never discharge it.
 
-The field list is a dependent telescope: later fields may refer to earlier named fields. In a generated wrapper such a reference becomes the corresponding projection of the resolved witness, so the wrapper's type constrains that witness's own implementations.
+The field list is a dependent telescope: later fields may refer to earlier named fields. In a method's call such a reference becomes the corresponding projection of the resolved witness, so the call's type constrains that witness's own implementations.
 
 ```crs
 pub concept Idem(A: Type): pub Type {

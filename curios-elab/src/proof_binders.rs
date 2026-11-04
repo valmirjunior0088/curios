@@ -79,7 +79,7 @@ fn stated_telescope<B: Bound>(
     Ok(telescope.clone().with_proofs(&proofs))
 }
 
-/// Whether the definition `kind` introduced at `type_` is a proof a declaration wrote ([`curios_core::Definition::proof`]). A generated definition is left what it unfolds to: a constructor of a proposition and a law's projection are terms the compiler writes, one node deep.
+/// Whether the definition `kind` introduced at `type_` is a proof a declaration wrote ([`curios_core::Definition::proof`]). A generated definition is left what it unfolds to: a constructor of a proposition is a term the compiler writes, one node deep.
 fn proves(context: &mut Context, kind: &DefinitionKind, type_: &Term) -> Result<bool, Error> {
     Ok(matches!(kind, DefinitionKind::Authored)
         && is_proof_in(context, &mut Opened::default(), type_)?)

@@ -33,27 +33,18 @@ fn constructor(owner: &str, tag: &str) -> Item {
     )
 }
 
-fn method(owner: &str, label: &str) -> Item {
-    item(
-        &[owner, label],
-        DefinitionKind::ConceptMethod {
-            owner: Qualifier::from([owner]),
-        },
-    )
-}
-
 fn definitions(items: Vec<Item>) -> Definitions {
     Definitions {
         items: items.into(),
     }
 }
 
-/// A declaration is its written item with every item generated from it, wherever each stands: a concept's method wrappers written ahead of it, a family's constructors with another declaration between them. A name is found at its own item and in its declaration, and the declarations are read back in the order their written items stand.
+/// A declaration is its written item with every item generated from it, wherever each stands: a constructor written ahead of its family, and a family's constructors with another declaration between them. A name is found at its own item and in its declaration, and the declarations are read back in the order their written items stand.
 #[test]
 fn a_declaration_holds_its_written_item_and_what_was_generated_from_it() {
     let declarations = Declarations::of(&definitions(vec![
-        method("Show", "show"),
-        written(&["Show"]),
+        constructor("Bit", "one"),
+        written(&["Bit"]),
         written(&["List"]),
         constructor("List", "empty"),
         written(&["length"]),
@@ -64,8 +55,8 @@ fn a_declaration_holds_its_written_item_and_what_was_generated_from_it() {
     assert_eq!(**declarations.items(1), [1, 0]);
     assert_eq!(**declarations.items(2), [2, 3, 5]);
     assert_eq!(**declarations.items(4), [4]);
-    assert_eq!(declarations.item(&name(&["Show", "show"])), Some(0));
-    assert_eq!(declarations.declaration(&name(&["Show", "show"])), Some(1));
+    assert_eq!(declarations.item(&name(&["Bit", "one"])), Some(0));
+    assert_eq!(declarations.declaration(&name(&["Bit", "one"])), Some(1));
     assert_eq!(declarations.declaration(&name(&["List", "cons"])), Some(2));
     assert_eq!(declarations.declaration(&name(&["absent"])), None);
 }

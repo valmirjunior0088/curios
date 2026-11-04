@@ -81,6 +81,13 @@ impl PreparedText {
                     names.extend(items.names(at).into_iter().copied());
                     place = items.place_after(Some(at));
                 }
+                // A concept's methods are names its declaration writes, which no item declares.
+                names.extend(
+                    record
+                        .facts()
+                        .iter()
+                        .flat_map(|fact| fact.members.iter().map(|(name, _)| *name)),
+                );
                 keys.push((key, names));
             }
         }

@@ -2078,9 +2078,9 @@ impl UniverseSolver {
 
     /// Issue a declaration into an *inherited* context, binding `instance` to that context's parameters by position.
     ///
-    /// A concept method wrapper is not independently polymorphic. It is issued in its concept's context, and the levels its `use w : C(…)` binder carries are that context's parameters in declaration order, so solving position `i` to `Param(i)` is the identity substitution. Every level the instance does not name directly is related to one that it does by the constraints unification already recorded, and minimizing from those lower bounds settles it at the parameter that forced it.
+    /// A value constructor is not independently polymorphic. It is issued in its family's context, and the levels of the family it constructs are that context's parameters in declaration order, so solving position `i` to `Param(i)` is the identity substitution. Every level the instance does not name directly is related to one that it does by the constraints unification already recorded, and minimizing from those lower bounds settles it at the parameter that forced it.
     ///
-    /// This is deliberately not [`Self::finalize`]: finalization mints parameters for the metas it finds in ascending meta-id order, and a wrapper's own binder metas are minted before its instance metas, so that order need not agree with the concept's.
+    /// This is deliberately not [`Self::finalize`]: finalization mints parameters for the metas it finds in ascending meta-id order, and a constructor's own binder metas are minted before its instance metas, so that order need not agree with the family's.
     pub fn finalize_at_instance(
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -2091,7 +2091,7 @@ impl UniverseSolver {
         // The sorts the instance states are the owner's parameters as its levels are.
         self.pin_qualities(&instance.qualities)?;
         let instance = &instance.levels;
-        // The instance's levels are the concept's parameters, each its own: a join that made two of them one would leave the second no parameter to be.
+        // The instance's levels are the owner's parameters, each its own: a join that made two of them one would leave the second no parameter to be.
         let held = self.representatives(instance.iter().flat_map(Level::metas));
         self.join_weak_equations(&held);
         if instance.len() != parameter_count {

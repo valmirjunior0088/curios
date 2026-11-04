@@ -788,11 +788,17 @@ impl PreparedText {
             .find_map(|(held, nominal)| (held == name).then_some(nominal))
     }
 
-    /// What this unit declares `name` as, with nothing read. `None` for a name the unit does not declare.
+    /// What this unit declares `name` as, with nothing read: a definition's kind, or a concept's method, which its concept declares and no definition holds. `None` for a name the unit does not declare.
     pub fn declared_as(&self, name: &curios_core::Global) -> Option<curios_core::Declared> {
-        self.places()
-            .place(name)
-            .map(|place| self.declared_at(place))
+        if let Some(place) = self.places().place(name) {
+            return Some(self.declared_at(place));
+        }
+        let curios_core::Global::Authored(target) = name else {
+            return None;
+        };
+
+        concept_method(target, |module| self.table.get(module).map(|info| &**info))
+            .map(|_| curios_core::Declared::Method)
     }
 
     /// The item this unit's lowering declares `name` by, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit does not declare.
@@ -1449,7 +1455,7 @@ fn process_items(
                     )?;
                 }
             }
-            // A concept declares its type-former binding and a nested namespace for the method wrappers, like an inductive.
+            // A concept declares its type-former binding and a nested namespace its methods bind in, like an inductive's constructors.
             Head::Concept(group) => {
                 for concept in group {
                     context.insert_scope(
@@ -1628,6 +1634,7 @@ fn process_items(
                             lower.signature_type(&signature, None)
                         })?;
                         Ok(FlatLet {
+                            members: Vec::new(),
                             kind: curios_core::DefinitionKind::Authored,
                             span: let_item.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
@@ -1668,6 +1675,7 @@ fn process_items(
                 };
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 lowered.items.push(FlatItem::Let(FlatLet {
+                    members: Vec::new(),
                     kind: curios_core::DefinitionKind::Test,
                     span: test.label.span().cloned(),
                     name,
@@ -1690,6 +1698,7 @@ fn process_items(
                 let lower = Lowerer::new(context, Some(name));
                 let (type_, body) = lower.foreign(&Arc::new(function), name);
                 lowered.items.push(FlatItem::Let(FlatLet {
+                    members: Vec::new(),
                     kind: curios_core::DefinitionKind::Authored,
                     span: f.label.span().cloned(),
                     name,
@@ -1852,6 +1861,7 @@ fn process_items(
                                 )
                             });
                         Ok(FlatLet {
+                            members: Vec::new(),
                             kind: curios_core::DefinitionKind::Nominal(Rc::new(
                                 curios_core::Nominal::Inductive(
                                     lowered.induct_decls[&name].clone(),
@@ -1884,6 +1894,7 @@ fn process_items(
                     for (c, constructor) in u.cases.iter().zip(constructors) {
                         context.record_import_scope(Some(&constructor.name));
                         lowered.items.push(FlatItem::Let(FlatLet {
+                            members: Vec::new(),
                             span: c.label.span().cloned(),
                             kind: constructor.kind,
                             name: constructor.name,
@@ -1991,6 +2002,7 @@ fn process_items(
                     };
 
                     formers.push(FlatLet {
+                        members: Vec::new(),
                         kind: curios_core::DefinitionKind::Nominal(Rc::new(
                             curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
                         )),
@@ -2007,7 +2019,7 @@ fn process_items(
                 });
             }
             // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
-            // A concept group lowers its formers into one `rec` item as a struct group does; the method wrappers stay `let` items of their own, since each names only its former.
+            // A concept group lowers its formers into one `rec` item as a struct group does; its methods are its fields, which no item declares.
             TopItem::Concept(group) => {
                 context.sorts_stand_in(SortSite::Concept);
                 let mut formers = Vec::with_capacity(group.len());
@@ -2090,7 +2102,7 @@ fn process_items(
 
                     let result_sort = lower.term(&concept.result_sort)?;
 
-                    // The record shape drives struct literals, projections, and — through `field_type_from` below — the declared type of every method wrapper.
+                    // The record shape drives struct literals and projections, and a method's call is read off it ([`curios_core::method_spelling`]).
                     let arity = curios_core::Telescope::build_marked(
                         param_tys.clone(),
                         curios_core::Telescope::build_marked(field_tys, ()),
@@ -2131,6 +2143,20 @@ fn process_items(
                         )
                     };
                     formers.push(FlatLet {
+                        // Each labelled field is a method, reached by its path in the namespace the concept's head seeds for it, and declared by the former alone: a superclass edge has no label.
+                        members: concept
+                            .fields
+                            .iter()
+                            .filter_map(|field| field.label.as_ref())
+                            .map(|label| {
+                                (
+                                    curios_core::Global::Authored(
+                                        context.prefixed(&concept.label).with(label),
+                                    ),
+                                    label.span().cloned(),
+                                )
+                            })
+                            .collect(),
                         kind: curios_core::DefinitionKind::Nominal(Rc::new(
                             curios_core::Nominal::Concept {
                                 concept: lowered.concepts[&name].clone(),
@@ -2143,93 +2169,6 @@ fn process_items(
                         type_,
                         body,
                     });
-
-                    // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f; — and where `F` is a function type `(x₁ : X₁, …) -> R`, its parameters join the wrapper's one group instead: pub let C/f(@p₁ : P₁, …, use w : C(p₁, …), x₁ : X₁, …) -> R = w.f(x₁, …);
-                    //
-                    // One group because a call fills exactly one: `show(A) -> Str` declares one parameter list, so `Show/show(value)` is one call, where a wrapper returning the field as a value would be called `Show/show()(value)` — the concept's parameters and the witness are context the declaration never writes as a call. A field that is not written as a function, `Carrier : Type` or a type alias of a function, is the value it holds, reached by the call that supplies the witness: `Sized/Carrier(@Nat)`.
-                    //
-                    // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
-                    //
-                    // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
-                    // The one field each wrapper states, read off the record's payload at the parameters: opening the whole telescope for each would make a concept's wrappers cost the square of its fields.
-                    let fields = arity.terminal();
-                    for (index, label) in concept
-                        .fields
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, field)| Some((index, field.label.as_ref()?)))
-                    {
-                        // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
-                        let witness_id = lower.mint([String::new()]).remove(0).1;
-                        let witness = curios_core::Term::var(curios_core::Var::free(witness_id));
-
-                        let params = param_tys
-                            .iter()
-                            .map(|(_, binder, type_)| (Plicity::Implicit, *binder, type_.clone()))
-                            .chain(std::iter::once((
-                                Plicity::Witness,
-                                witness_id,
-                                curios_core::Term::struct_type(name, param_vars.clone()),
-                            )))
-                            .collect::<Vec<_>>();
-
-                        let field_type = fields
-                            .field_type_beneath(
-                                &param_vars,
-                                &witness,
-                                &curios_core::Field::Struct(name, index),
-                            )
-                            .expect("a concept's own field index is within its record telescope");
-                        let method = curios_core::Term::proj_struct(witness, name, index);
-
-                        let (type_, body) = match &*field_type {
-                            curios_core::Subterm::FuncType(function) => {
-                                let mut cursor = function.telescope.cursor();
-                                let mut own = Vec::with_capacity(function.telescope.len());
-                                while let Some((hint, domain)) = cursor.entry() {
-                                    let mark = cursor.mark().expect("a mark stands at an entry");
-                                    let binder = lower
-                                        .mint([hint.unwrap_or_default().to_string()])
-                                        .remove(0)
-                                        .1;
-                                    cursor.advance(curios_core::Term::free_var(&binder));
-                                    own.push((mark, binder, domain));
-                                }
-                                let output = cursor.body().expect("a cursor past every entry");
-                                let arguments = own
-                                    .iter()
-                                    .map(|(plicity, binder, _)| {
-                                        (*plicity, curios_core::Term::free_var(binder))
-                                    })
-                                    .collect::<Vec<_>>();
-                                let group = params.into_iter().chain(own).collect::<Vec<_>>();
-                                (
-                                    curios_core::Term::func_type_marked(group.clone(), output),
-                                    curios_core::Term::func_marked(
-                                        group,
-                                        curios_core::Term::apply_marked(method, arguments),
-                                    ),
-                                )
-                            }
-                            _ => (
-                                curios_core::Term::func_type_marked(params.clone(), field_type),
-                                curios_core::Term::func_marked(params, method),
-                            ),
-                        };
-
-                        lowered.items.push(FlatItem::Let(FlatLet {
-                            span: label.span().cloned(),
-                            kind: curios_core::DefinitionKind::ConceptMethod {
-                                owner: context.prefixed(&concept.label),
-                            },
-                            name: curios_core::Global::Authored(
-                                context.prefixed(&concept.label).with(label),
-                            ),
-                            island: context.island(),
-                            type_,
-                            body,
-                        }));
-                    }
                 }
                 lowered.items.push(match formers.len() {
                     1 => FlatItem::Let(formers.pop().expect("a `concept` item has a member")),
@@ -2301,6 +2240,7 @@ fn process_items(
                         let lower = Lowerer::new(context, Some(name));
                         let signature = lower.signature(&signature);
                         let item = FlatLet {
+                            members: Vec::new(),
                             kind: curios_core::DefinitionKind::Witness,
                             span: declared.clone(),
                             name,
@@ -3244,6 +3184,11 @@ fn into_core_unit_within(
         for ((name, _, _), declared) in item.declared().zip(&lowered.definitions) {
             if let Some(label) = declared.label {
                 shared.anchoring.name(name, label);
+            }
+        }
+        for (name, label) in &lowered.members {
+            if let Some(label) = label {
+                shared.anchoring.name(*name, *label);
             }
         }
     }

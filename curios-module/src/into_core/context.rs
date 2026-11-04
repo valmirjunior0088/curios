@@ -152,8 +152,10 @@ impl Anchoring {
 pub(super) struct FlatLet {
     pub name: curios_core::Global,
     pub kind: curios_core::DefinitionKind,
-    /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A constructor's is its tag, a method wrapper's its field's label, a test's its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
+    /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A constructor's is its tag, a test's its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
     pub span: Option<Span>,
+    /// The names it declares beside itself, each with where it was written: a concept's methods, which its former declares and no definition holds. Empty for every other definition, and for one a later lowering keeps.
+    pub members: Vec<(curios_core::Global, Option<Span>)>,
     pub island: Qualifier,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
@@ -311,6 +313,26 @@ pub(crate) struct ModuleInfo {
     bindings: HashMap<String, bool>,
     /// The names this module's tests take, in declaration order. Nothing resolves to a test, so none is a binding, but a test's path is its report line and what a filter selects, so its name is as unique among the module's declarations as a binding's.
     tests: Vec<String>,
+}
+
+/// The concept and the field `target` names where it is one of a concept's methods: a binding of the namespace the concept's module declares for it ([`ChildInfo::ConceptMethods`]), the module's table read through `module`.
+pub(super) fn concept_method<'t>(
+    target: &Qualifier,
+    module: impl Fn(&Qualifier) -> Option<&'t ModuleInfo>,
+) -> Option<(curios_core::Global, String)> {
+    // A name of the root's own is no method: a method stands in its concept's namespace, below the module declaring it.
+    if target.is_single() {
+        return None;
+    }
+    let namespace = target.without_last();
+    module(&namespace.without_last())?
+        .is_concept_child(namespace.last())
+        .then(|| {
+            (
+                curios_core::Global::Authored(namespace),
+                target.last().to_string(),
+            )
+        })
 }
 
 /// How a module declares a label, as a step of a path reads it: a child module, or a binding, each with its visibility.
@@ -1457,21 +1479,7 @@ impl<'a> Context<'a> {
 
     /// The concept and the field `target` names, where it is one of a concept's methods: a binding of the namespace the concept's module declares for it ([`ChildInfo::ConceptMethods`]), which a name resolves into wherever it was spelled from, a re-export's included.
     pub(super) fn method_of(&self, target: &Qualifier) -> Option<(curios_core::Global, String)> {
-        // A name of the root's own is no method: a method stands in its concept's namespace, below the module declaring it.
-        if target.is_single() {
-            return None;
-        }
-        let namespace = target.without_last();
-        let module = namespace.without_last();
-        self.table
-            .get(&module)?
-            .is_concept_child(namespace.last())
-            .then(|| {
-                (
-                    curios_core::Global::Authored(namespace),
-                    target.last().to_string(),
-                )
-            })
+        concept_method(target, |module| self.table.get(module))
     }
 
     // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces.

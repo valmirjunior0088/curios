@@ -621,7 +621,7 @@ pub fn elaborate_bang(
         _ => bang.action.clone(),
     };
 
-    // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
+    // The bind's monad is the region's, supplied before any action is checked. Left to the bind call's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
     //
     // **Whether the region is a monad at all is decided here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing and `?M(?B)` can never meet it; a monad read and no witness of it means nothing to sequence through. Left to the wrapper, either would be reported against a premise of a call the author never wrote. Deciding both here changes no acceptance, only what the reader is told.
     let Some(monad) = region_monad(context, &region, term.extent())? else {
@@ -680,7 +680,7 @@ fn sequencing_witness(
     Ok(Some(witness))
 }
 
-/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. The imitation is asked for ([`Context::imitating`]), where a call's waits for its term to complete: the region is the `!`'s expectation, and no part read later says what its monad is. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers the monad itself.
+/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the bind call's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. The imitation is asked for ([`Context::imitating`]), where a call's waits for its term to complete: the region is the `!`'s expectation, and no part read later says what its monad is. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the bind call then infers the monad itself.
 fn region_monad(
     context: &mut Context,
     region: &Term,

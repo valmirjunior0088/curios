@@ -98,7 +98,7 @@ fn a_region_waits_for_the_arm_beside_it_to_state_its_type() {
     assert_eq!(run(source), b"x");
 }
 
-/// A region whose type is known and is no monad names that type, rather than reporting the wrapper's unsolved hole.
+/// A region whose type is known and is no monad names that type, rather than reporting the bind's unsolved hole.
 ///
 /// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — left to the wrapper's own inference it would report `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type is already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
 #[test]

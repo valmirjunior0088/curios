@@ -1,4 +1,4 @@
-//! How a declaration's levels close into its scheme: by its kind, a method wrapper and a constructor inheriting their owner's, and the levels a family's instances hold sorted from those it leaves to its callers.
+//! How a declaration's levels close into its scheme: by its kind, a constructor inheriting its family's, and the levels a family's instances hold sorted from those it leaves to its callers.
 
 #[cfg(test)]
 mod tests;
@@ -168,41 +168,9 @@ pub fn finalize_definition(
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
-    // A method wrapper is not independently polymorphic. Its own type mentions only a *subset* of its concept's levels — `pure` names some, `bind` others — so generalizing it alone yields fewer parameters than the concept has (`Monad` 5 against `pure` 2, `bind` 1). But the type also carries the concept applied at *all* of them, through the `use w : C(..)` binder, and the levels outside the wrapper's own generalized set then have nothing to name them: `level w escapes its universe parameter context`. So the wrapper must inherit the concept's whole context. Lean and Rocq both hand a projection its structure's universe parameters verbatim, for the same reason. The owner comes from `into_core`, which records it where the wrapper is generated; re-deriving it by splitting `name` would misread an ordinary definition that merely happens to sit under a concept's namespace. Inheriting the context is only half the work: those levels are still metas, and ordinary finalization — the one thing that would solve them — is exactly what must not run here, because it would mint the wrapper's own parameters in its own order. `finalize_at_instance` binds the concept application's arguments to the inherited parameters positionally instead.
-    if let DefinitionKind::ConceptMethod { owner } = kind {
-        let owner = Global::Authored(*owner);
-        let universe_context = context
-            .concept(&owner)
-            .ok_or_else(|| {
-                Error::UniverseInvariant(format!(
-                    "{}: method wrapper names an unregistered concept '{}'",
-                    name.faithful(),
-                    owner.faithful()
-                ))
-            })?
-            .universe_context
-            .clone();
-        let instance = declaration_instance(&type_, &owner).ok_or_else(|| {
-            Error::UniverseInvariant(format!(
-                "{}: method wrapper does not apply its concept '{}'",
-                name.faithful(),
-                owner.faithful()
-            ))
-        })?;
-        let mut metas = context.universe_metas_in(&type_);
-        metas.extend(context.universe_metas_in(&body));
-        context.finalize_universe_metas_at_instance(
-            metas,
-            &instance,
-            universe_context.parameter_count,
-        )?;
-        let type_ = context.zonk_universe_levels(&type_)?;
-        let body = context.zonk_universe_levels(&body)?;
-        return Ok((universe_context, type_, body));
-    }
-    // A value constructor stands in the same relation to its inductive as a method wrapper does to its concept, and fails the same way. `Result(F, S)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. A constructor is not independently polymorphic: its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
+    // A value constructor is not independently polymorphic. `Result(F, S)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. Its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
     //
-    // Like `ConceptMethod`, the owner is a field `into_core` records where the constructor is generated, not something recovered from `name`.
+    // The owner is a field the lowering records where the constructor is generated, not something recovered from `name`.
     if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
         let owner = Global::Authored(*owner);
         let universe_context = context

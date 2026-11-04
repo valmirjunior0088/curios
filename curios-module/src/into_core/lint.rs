@@ -149,7 +149,7 @@ pub(super) fn kept(name: &Qualifier) -> bool {
     name.last().starts_with('_')
 }
 
-/// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a method wrapper, a witness and a test are reached through their owner or are roots, and are never reported.
+/// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a witness and a test are reached through their owner or are roots, and are never reported; a concept's method is its field, and no definition.
 fn is_reportable(kind: &curios_core::DefinitionKind) -> bool {
     matches!(
         kind,

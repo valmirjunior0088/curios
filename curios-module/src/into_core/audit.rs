@@ -223,7 +223,7 @@ pub(super) fn audit_public_exposures(
     };
 
     for (name, declared) in definitions {
-        // Only definitions the source actually wrote, whose signature was taken. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
+        // Only definitions the source actually wrote, whose signature was taken. A member synthesized into a nested namespace — an inductive's constructor — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
         //
         // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence check's.
         let Some(path) = name.qualifier() else {

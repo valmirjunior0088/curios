@@ -803,6 +803,7 @@ fn kept_let(
     keep_entries(name, &definition.kind, lowered);
 
     FlatLet {
+        members: Vec::new(),
         name,
         kind: definition.kind.clone(),
         // What is read of where it was written was taken where it was lowered.

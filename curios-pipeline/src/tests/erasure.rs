@@ -160,9 +160,9 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
     );
 }
 
-/// A concept method's wrapper is a shim, and a call to one erases to the projection call it forwards to: the dictionary's method, applied. Left as a call to the wrapper, a top-level one calls a closure the effect summary cannot see, so pruning keeps it and everything it reaches — `curios`'s `a_trivial_program_retains_none_of_the_parser_web` is the program that measures the cost.
+/// A method called by its path is the projection off its witness from elaboration on: the dictionary's method, applied, with no definition of the method to call. A call of one at top level would call a closure the effect summary cannot see, so pruning would keep it and everything it reaches — `curios`'s `a_trivial_program_retains_none_of_the_parser_web` is the program that measures the cost.
 #[test]
-fn a_method_call_erases_to_the_projection_it_forwards_to() {
+fn a_method_call_erases_to_the_projection_it_is() {
     let source = r#"
         use /std/{Nat};
         pub concept Twice(A: Type): pub Type {
@@ -177,10 +177,13 @@ fn a_method_call_erases_to_the_projection_it_forwards_to() {
 
     let (anf, _) = compile_printed_stages(source).unwrap();
 
-    // The wrapper's own definition is still there, for pruning to drop; what must be gone is every call to it.
-    let calls = anf
+    // No definition of the method exists, so nothing names it, called or defined.
+    let named = anf
         .lines()
-        .filter(|line| line.contains("$/Twice/twice(") && !line.trim_start().starts_with("let ~f"))
+        .filter(|line| line.contains("$/Twice/twice"))
         .collect::<Vec<_>>();
-    assert!(calls.is_empty(), "the wrapper is still called: {calls:#?}");
+    assert!(
+        named.is_empty(),
+        "the method is named as a definition: {named:#?}"
+    );
 }

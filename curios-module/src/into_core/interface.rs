@@ -1178,7 +1178,7 @@ fn seed_module(
             }
             Head::Concept(group) => {
                 for concept in group {
-                    // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
+                    // A concept's methods are bound in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
                     let namespace = prefix.with(&concept.label);
 
                     let mut direct = ModuleInfo::new();

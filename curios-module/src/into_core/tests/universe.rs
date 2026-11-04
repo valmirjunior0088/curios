@@ -1,4 +1,4 @@
-//! Universe levels and roles the lowering assigns, cumulativity, and the context a concept's wrappers share.
+//! Universe levels and roles the lowering assigns, cumulativity, and the instance a concept's method is called at.
 
 use {
     crate::into_core::test_support::*, crate::*, curios_common::Qualifier,
@@ -363,30 +363,25 @@ fn an_operator_in_a_dependent_type_elaborates_after_its_witness_row() {
     );
 }
 
-/// A generated method wrapper belongs to *its concept's* universe context, not to one generalized from its own signature. The wrapper's type names only the levels its own field needs, yet it also carries `use w : C(…)` applied at all of the concept's; a level outside the wrapper's own generalized set would then have nothing to denote it.
+/// A method is called at an instance of every level of its concept, however few of them its own field names: `left` names `F`'s two levels and `right` `G`'s other two, and each is called where the concept stands at all four. A method's own `@A` is its family's domain, so a concept over one family — a monad's `pure` and `bind` — names the same levels in every method and could not tell the two readings apart.
 #[test]
-fn a_concept_method_wrapper_shares_its_concept_universe_context() {
-    let definitions = elaborate_source("pub concept C(A : Type) : pub Type { f(A) -> A, } C");
-    assert_eq!(universe_parameters(&definitions, "/C"), 1);
-    assert_eq!(universe_parameters(&definitions, "/C/f"), 1);
-}
-
-/// The same rule where the concept's levels genuinely exceed any one wrapper's: `left` names `F`'s two levels and `right` `G`'s other two, so generalizing either alone comes out short. A method's own `@A` is its family's domain, so a concept over one family — a monad's `pure` and `bind` — names the same levels in every wrapper and could not tell the two contexts apart.
-#[test]
-fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
+fn a_method_is_called_at_an_instance_of_every_level_of_its_concept() {
     let definitions = elaborate_source(
         "pub concept M(F : (Type) -> Type, G : (Type) -> Type) : pub Type {
              left(@A : Type, value : A) -> F(A),
              right(@B : Type, value : B) -> G(B),
-         } M",
+         }
+         pub let lefted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @A : Type, value : A) -> F(A) =
+             M/left(@F, @G, value);
+         pub let righted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @B : Type, value : B) -> G(B) =
+             M/right(@F, @G, value);
+         M",
     );
-    // Four, against each wrapper's own two: the point of the test is lost if the concept ever stops outrunning its wrappers.
+    // Four, against each method's own two: the point of the test is lost if the concept ever stops outrunning its methods.
     assert_eq!(universe_parameters(&definitions, "/M"), 4);
-    assert_eq!(universe_parameters(&definitions, "/M/left"), 4);
-    assert_eq!(universe_parameters(&definitions, "/M/right"), 4);
 }
 
-/// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq()(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.
+/// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. A call of the method states that type with every such reference projected off the witness it fills, `Eq()(w.op(w.op(x)), w.op(x))`; the field's type read in the caller's scope instead leaves `op` bound by nothing.
 #[test]
 fn a_concept_field_may_reference_a_preceding_field() {
     elaborate_source(
@@ -397,11 +392,13 @@ fn a_concept_field_may_reference_a_preceding_field() {
              op(A) -> A,
              law(x : A) -> Eq()(op(op(x)), op(x)),
          }
+         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =
+             Idem/law(x);
          Idem",
     );
 }
 
-/// Superclass fields occupy positions in the field telescope, with no label, and generate no wrapper. A wrapper must therefore read its field type at that field's *absolute* telescope index; using its position among the non-super fields would read `law`'s type one slot early here and hand the wrapper `op`'s.
+/// Superclass fields occupy positions in the field telescope, with no label, and are no method. A method's call must therefore read its field type at that field's *absolute* telescope index; using its position among the non-super fields would read `law`'s type one slot early here and hand the call `op`'s.
 #[test]
 fn a_superclass_does_not_shift_a_dependent_field_reference() {
     elaborate_source(
@@ -414,6 +411,8 @@ fn a_superclass_does_not_shift_a_dependent_field_reference() {
              op(A) -> A,
              law(x : A) -> Eq()(op(op(x)), op(x)),
          }
+         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =
+             Idem/law(x);
          Idem",
     );
 }

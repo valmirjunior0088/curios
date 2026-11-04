@@ -1806,13 +1806,15 @@ fn definition_fields(
                 format!(", tag = {}", tag.as_string()),
             ),
         )),
-        DefinitionKind::ConceptMethod { owner } => {
-            fields.push(("kind", owned("ConceptMethod", owner, String::new())));
-        }
     }
     let parent = name.qualifier().map(Qualifier::without_last);
     if parent.as_ref() != Some(island) {
-        fields.push(("island", pure(spelling.symbol(&Global::Authored(*island)))));
+        // The root is the module no path names, written as the slash every absolute path leads with.
+        let module = match island.is_root() {
+            true => "/".to_string(),
+            false => spelling.symbol(&Global::Authored(*island)),
+        };
+        fields.push(("island", pure(module)));
     }
     if proof {
         fields.push(("proof", pure("true")));

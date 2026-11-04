@@ -1,6 +1,6 @@
 //! The declarations a module's items make, as a walk asks for them: what elaboration finds a declaration by, from a name it is asked for, visiting none it is not asked for.
 //!
-//! **A declaration is a written item with the items generated from it.** A type former's constructors and a concept's method wrappers name the declaration they were generated from (`DefinitionKind::InductiveConstructor`, `DefinitionKind::ConceptMethod`); each is that declaration's, wherever it sits among the items, and every other item is a declaration of its own. An item generated from a declaration the module does not hold is one of its own too.
+//! **A declaration is a written item with the items generated from it.** A family's constructors name the declaration they were generated from (`DefinitionKind::InductiveConstructor`); each is that declaration's, wherever it sits among the items, and every other item is a declaration of its own. An item generated from a declaration the module does not hold is one of its own too.
 //!
 //! **Made where the module is made**, and kept with whatever holds the module, so a walk asking for one declaration reads its items and no other's. Its tables are persistent, so the declarations of a version of a module are its module's with those of what the version changed made again.
 

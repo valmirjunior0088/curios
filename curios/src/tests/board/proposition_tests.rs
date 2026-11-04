@@ -46,7 +46,7 @@ fn an_informative_field_is_reported_as_written_at_its_type() {
     }
 }
 
-// A superclass edge is a field of the generated record too, one no method wrapper names: two witnesses of a `Prop` concept over a data concept would be one value by irrelevance and hold two dictionaries a projection tells apart.
+// A superclass edge is a field of the generated record too, one no method path names: two witnesses of a `Prop` concept over a data concept would be one value by irrelevance and hold two dictionaries a projection tells apart.
 #[test]
 fn a_proposition_concept_may_not_carry_an_informative_superclass() {
     rejected_by(

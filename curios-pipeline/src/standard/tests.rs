@@ -816,15 +816,14 @@ fn introduced(item: &Item) -> &DefinitionKind {
     }
 }
 
-/// The names of each declaration of `module`, in item order: an item's, with those of every item generated from it — a type former's constructors, a concept's method wrappers — which no elaboration takes apart from it.
+/// The names of each declaration of `module`, in item order: an item's, with those of every item generated from it — a family's constructors — which no elaboration takes apart from it.
 fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
     let mut generated: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     let mut declarations = Vec::new();
     for item in &definitions.items {
         let names = item.declared_names().into_iter().copied();
         match introduced(item) {
-            DefinitionKind::InductiveConstructor { owner, .. }
-            | DefinitionKind::ConceptMethod { owner } => generated
+            DefinitionKind::InductiveConstructor { owner, .. } => generated
                 .entry(Global::Authored(*owner))
                 .or_default()
                 .extend(names),
@@ -948,7 +947,7 @@ fn std_replay_census() {
                     .min()
                     .copied()
                     .expect("a declaration declares a lowered name");
-                // The item the declaration is written as, wherever the lowering puts the items generated from it: a concept's method wrappers leave the lowering ahead of the concept.
+                // The item the declaration is written as, wherever the lowering puts the items generated from it.
                 let own = names
                     .iter()
                     .filter_map(|name| position.get(name))
@@ -957,7 +956,6 @@ fn std_replay_census() {
                         !matches!(
                             introduced(item),
                             DefinitionKind::InductiveConstructor { .. }
-                                | DefinitionKind::ConceptMethod { .. }
                         )
                     })
                     .expect("a declaration holds the item it is written as");

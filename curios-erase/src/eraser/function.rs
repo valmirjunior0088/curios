@@ -98,11 +98,6 @@ impl Eraser<'_> {
         expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        // A concept method's wrapper is erased as the projection call it forwards to. Called through the wrapper, `bind(dict, value, k)` at top level is a call whose callee calls a closure the effect summary cannot see, so pruning would judge its eager evaluation observable and keep it and everything it reaches — through `/std/Json/decode/decode`, the whole `Json`/`Parse` web in every program. Written as `dict.bind(value, k)`, closed-term evaluation resolves the method off the known dictionary before the prune.
-        if let Some(forwarded) = self.forwarded_method(apply)? {
-            return self.walk(context, &forwarded, expected, hint);
-        }
-
         let head = &apply.head;
         let params = apply.params().cloned().collect::<Vec<_>>();
 
@@ -297,34 +292,6 @@ fn named_head(head: &curios_core::Term) -> Option<(&curios_core::Global, &curios
 }
 
 impl Eraser<'_> {
-    /// The call a concept method's wrapper forwards to, at `apply`'s arguments — `w.i(x…)` for a method, `w.i` for any other field — or `None` when the callee is not a wrapper.
-    ///
-    /// `into_core` generates each wrapper as exactly that forwarding, `(@p…, use w, x…) => w.i(x…)`, and a call fills its one parameter group, so every call to one supplies the whole group and unfolds in one step: the wrapper's body, at the call's instance, opened at the call's arguments. One step and no further — reducing the call instead would go on into the method's own body wherever the dictionary is known, which is inlining arbitrary code. The kind is the definition's, read off the item that declares it as [`Eraser::is_proof_constructor`] reads its own, rather than guessed from the name.
-    fn forwarded_method(
-        &self,
-        apply: &curios_core::Apply,
-    ) -> Result<Option<curios_core::Term>, Error> {
-        let Some((name, universes)) = named_head(&apply.head) else {
-            return Ok(None);
-        };
-        let Some(definition) = self.declared(name) else {
-            return Ok(None);
-        };
-        let curios_core::DefinitionKind::ConceptMethod { .. } = definition.kind else {
-            return Ok(None);
-        };
-        let body = curios_core::instantiate_universes(&definition.body, universes)?;
-        let curios_core::Subterm::Func(wrapper) = &*body else {
-            return Ok(None);
-        };
-        let arguments = apply.params().collect::<Vec<_>>();
-
-        Ok(
-            (wrapper.telescope.len() == arguments.len())
-                .then(|| wrapper.telescope.open(&arguments)),
-        )
-    }
-
     /// Whether `head` names a constructor of a family that is a proposition at the call's sorts.
     ///
     /// The owning family comes from the definition's own [`DefinitionKind::InductiveConstructor`](curios_core::DefinitionKind::InductiveConstructor), recorded by `into_core` where the constructor function was generated, and read off the item that declares it. Splitting the name into a qualifier prefix and a last segment would instead ask whether some *other* declaration happens to be registered under this name's prefix — a question whose answer is only accidentally the same one, and which decides whether a call is dropped entirely.

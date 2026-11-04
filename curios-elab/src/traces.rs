@@ -170,7 +170,7 @@ pub struct Vectors {
     pub variances: Vec<Variance>,
     /// Which universe parameters each field of its value holds, where that value, beneath the definition's own binders, is a struct or tuple literal: one vector per field in slot order, read off the field's value beneath its own binders as `variances` is read off a body that answers no type. A projection of the definition applied in full is the field's value, so its levels are compared where this field's vector says, not wherever the literal mentions them: a witness is polymorphic in a level its concept's sort-valued member stands at, and a method projected from it holds none of it.
     pub field_variances: Vec<Vec<Variance>>,
-    /// Where its value, beneath its own binders, is a field of one of them: which binder and which slot. Applied in full, the definition is that field of the argument the binder takes, so its levels are compared where that field's are, as a projection's are by `field_variances`, and not wherever the argument's own value mentions them: a method named by its path holds of a witness what the operator that projects it holds, and so does any definition written the same way.
+    /// Where its value, beneath its own binders, is a field of one of them: which binder and which slot. Applied in full, the definition is that field of the argument the binder takes, so its levels are compared where that field's are, as a projection's are by `field_variances`, and not wherever the argument's own value mentions them: an accessor such as `/std/Str/to_bytes`, whose value is its argument's field, holds of the argument what the projection holds.
     pub parameter_field: Option<ParameterField>,
 }
 

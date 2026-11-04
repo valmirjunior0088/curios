@@ -600,9 +600,6 @@ pub enum DefinitionKind {
         owner: Qualifier,
         tag: Atom,
     },
-    ConceptMethod {
-        owner: Qualifier,
-    },
     Witness,
     Test,
 }
@@ -616,11 +613,10 @@ impl DefinitionKind {
         }
     }
 
-    /// The declaration a generated definition was generated from: a constructor's former, a method wrapper's concept. `None` for a written one.
+    /// The declaration a generated definition was generated from: a constructor's family. `None` for a written one.
     pub fn generated_from(&self) -> Option<Qualifier> {
         match self {
-            DefinitionKind::InductiveConstructor { owner, .. }
-            | DefinitionKind::ConceptMethod { owner } => Some(*owner),
+            DefinitionKind::InductiveConstructor { owner, .. } => Some(*owner),
             _ => None,
         }
     }
@@ -635,14 +631,13 @@ impl DefinitionKind {
                 Nominal::Concept { .. } => Declared::Concept,
             },
             DefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
-            DefinitionKind::ConceptMethod { .. } => Declared::Method,
             DefinitionKind::Witness => Declared::Witness,
             DefinitionKind::Test => Declared::Test,
         }
     }
 }
 
-/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand.
+/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand, or a concept's method, which is a name its concept declares and no definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Declared {
@@ -744,7 +739,7 @@ pub struct Definition {
     pub island: Qualifier,
     /// Whether this definition is a proof a declaration wrote: one introduced as [`DefinitionKind::Authored`] whose type is a proposition, or a function into one. Its body is then read by its own check and by nothing after it: a judgment that asks what the name unfolds to is answered with nothing, in both checkers, so the name stands for a constant of its type. No judgment reads a proof's value, which is what a binder's mark rests on too ([`Scope::binds_proof`](super::Scope::binds_proof)), so a body withheld refuses nothing a body unfolded would admit, and what a later declaration reads of this one is its type.
     ///
-    /// Stated by each checker of its own run, as the definition's item is published, with its binders' marks, and `false` until then: `curios-elab` states it for the module it elaborates, and the certifier states it again by its own reading, reading none a module arrives with, in the module it hands back, which is the one a unit stores. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to.
+    /// Stated by each checker of its own run, as the definition's item is published, with its binders' marks, and `false` until then: `curios-elab` states it for the module it elaborates, and the certifier states it again by its own reading, reading none a module arrives with, in the module it hands back, which is the one a unit stores. A constructor of a proposition is the compiler's own term and stays what it unfolds to.
     pub proof: bool,
     /// The sort this definition's value inhabits, where it takes no parameter and its type is written as a sort, so that its value is a type: that type's own sort, read off the value and never off the annotation, which may name a larger universe. A sort term under [`Self::universe_context`], read at an occurrence's universes as [`InductDecl::result_sort`](super::InductDecl::result_sort) is. `None` for any other definition, and until the item is published.
     ///
