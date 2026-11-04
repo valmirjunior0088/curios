@@ -103,7 +103,7 @@ fn a_binder_no_index_pins_builds_no_instance() {
     assert_eq!(instance, None);
 }
 
-/// `mk(@a) : (Tag/t(a))` holds its binder under a constructor, and the walk does not descend into one: at a proposition `Tag/t(0)` and `Tag/t(7)` are one value, so the target recovers nothing, and a pinned `a` would be a payload a program reads out of what irrelevance identified. `curios`'s `tests::board::large_elimination_tests::a_payload_under_a_propositions_constructor_is_not_pinned` holds the `False` that reading reaches.
+/// `mk(@a) : (Tag/t(a))` holds its binder under a constructor, and the walk does not descend into one: at a proposition `Tag/t(0)` and `Tag/t(7)` are one value, so the target recovers nothing, and a pinned `a` would be a payload a program reads out of what irrelevance identified. `curios`'s `tests::rules::large_elimination_tests::a_payload_under_a_propositions_constructor_is_not_pinned` holds the `False` that reading reaches.
 #[test]
 fn a_binder_under_a_constructor_is_not_pinned() {
     let a = binder(1, "a");

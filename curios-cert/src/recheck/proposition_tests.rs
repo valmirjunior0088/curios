@@ -31,7 +31,7 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
 
 /// (V) has two routes to a refusal, and no program reaches the second. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
 ///
-/// Across a kernel walk of the whole prelude and every program in `curios`'s test corpus the anonymous route refuses nothing: every surface spelling that would reach it is refused during elaboration, so no module carries it here — `rec b : False = b; b`, the shape `curios`'s `tests::soundness` fixtures use, never arrives.
+/// Across a kernel walk of the whole prelude and every program in `curios`'s test corpus the anonymous route refuses nothing: every surface spelling that would reach it is refused during elaboration, so no module carries it here — `rec b : False = b; b`, the shape `curios`'s `tests::rules` totality fixtures use, never arrives.
 ///
 /// A call to `/std/Proc/exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields `Io({})`, the type `qed` holds, and `Held/qed(exit(@{}, 0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///

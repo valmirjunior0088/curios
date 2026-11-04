@@ -238,7 +238,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     );
 }
 
-// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a derived declaration with the written form's exact reports (`concepts/coherence_tests.rs`).
+// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a derived declaration with the written form's exact reports (`rules/coherence_tests.rs`).
 #[test]
 fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let orphan = r#"

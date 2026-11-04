@@ -151,7 +151,7 @@ fn two_stuck_operations_on_different_operands_do_not_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(false));
 }
 
-/// A truncated difference does not commute where a sum does: a chain that paired `-`'s operands as it pairs a sum's would hold `a - b` one with `b - a`, which part at `a := 5`, `b := 3`. The control is the sum, whose operands the chain pairs. `tests::board`'s twin shares the name.
+/// A truncated difference does not commute where a sum does: a chain that paired `-`'s operands as it pairs a sum's would hold `a - b` one with `b - a`, which part at `a := 5`, `b := 3`. The control is the sum, whose operands the chain pairs. `tests::rules`'s twin shares the name.
 #[test]
 fn a_difference_does_not_convert_with_its_operands_swapped() {
     let mut kernel = kernel();
@@ -334,7 +334,7 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
     );
 }
 
-/// Two connectives are one only where they agree at every assignment of their atoms: `a && b` and `a || b` part at `a := true`, `b := false`. The control is a conjunction against its operands swapped, which agree everywhere. `tests::board`'s twin shares the name.
+/// Two connectives are one only where they agree at every assignment of their atoms: `a && b` and `a || b` part at `a := true`, `b := false`. The control is a conjunction against its operands swapped, which agree everywhere. `tests::rules`'s twin shares the name.
 #[test]
 fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
     let mut kernel = kernel();

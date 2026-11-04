@@ -54,7 +54,7 @@ fn a_proposition_may_carry_a_proof() {
     assert!(check_struct_decl(&mut kernel, &declaration).is_ok());
 }
 
-/// A field's mark changes nothing of what it holds: a hidden field at `Nat`, and a concept's superclass edge at a relevant record, are each refused as a written field is. The elaborator refuses both sources before the kernel is asked (`curios`'s `tests::board::proposition_tests`), so this is the kernel's copy of the rule under each mark a generated record entry carries.
+/// A field's mark changes nothing of what it holds: a hidden field at `Nat`, and a concept's superclass edge at a relevant record, are each refused as a written field is. The elaborator refuses both sources before the kernel is asked (`curios`'s `tests::rules::proposition_tests`), so this is the kernel's copy of the rule under each mark a generated record entry carries.
 #[test]
 fn a_proposition_may_not_carry_an_informative_field_under_a_mark() {
     let dictionary = Global::Authored(Qualifier::from(["Dict"]));

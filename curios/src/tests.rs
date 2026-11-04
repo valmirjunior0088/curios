@@ -5,7 +5,6 @@ mod algebra;
 mod alignment;
 mod big_num;
 mod binders;
-mod board;
 mod bounds;
 mod characters;
 mod cli;
@@ -39,12 +38,12 @@ mod matching;
 mod numeric;
 mod operators;
 mod packages;
-mod positivity;
 mod programs;
 mod recovery;
 mod recursion;
 mod reduction;
 mod respelling;
+mod rules;
 mod runaways;
 // Only the runaway measurement builds the programs the fixtures answer.
 #[cfg(feature = "profile")]
@@ -52,7 +51,6 @@ use runaways::*;
 
 mod concurrent;
 mod runtime;
-mod soundness;
 mod strings;
 mod structs;
 mod toml;

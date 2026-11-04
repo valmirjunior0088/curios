@@ -80,7 +80,7 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
 ///
 /// `Pin(1)` below is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. Only coverage is left: `no` has no arm and is not impossible at `Pin(1)`. Excused, `forged(Pin/no())` would reduce to the `yes` arm's body — the sort `Prop`, a term nothing typed standing at `False`.
 ///
-/// Only a fixture reaches the kernel's own loop with this shape: `curios-elab` refuses the same sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind and `curios`'s `tests::board::index_tests` reads the elaborator's matrix rather than this.
+/// Only a fixture reaches the kernel's own loop with this shape: `curios-elab` refuses the same sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind and `curios`'s `tests::rules::index_tests` reads the elaborator's matrix rather than this.
 ///
 /// Mutation-checked, which is what makes this a forgery rather than a refusal: with the coverage loop's `MissingArm` suppressed, the walk returns **zero** verdicts over this module, so the entry is certified at `False`.
 #[test]

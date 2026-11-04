@@ -16,7 +16,7 @@ use {
 ///
 /// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Same(@X)(x, y)`, an equation between two proofs of `X` — its one constructor discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Same(@List(P))([p], [])` for a one-element list against the empty one. Congruence through `List/len` carries that to `1` and `0`, and transport turns `()` into a proof of `False`.
 ///
-/// `curios/src/tests/board`'s `a_list_of_proofs_is_not_a_proposition` is the surface program.
+/// `curios/src/tests/rules`'s `a_list_of_proofs_is_not_a_proposition` is the surface program.
 ///
 /// The controls are the other half. A list at a relevant element still reports that element's level, `List(Type 0)` included, so the rule does not pin every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it does not refuse the position outright.
 #[test]

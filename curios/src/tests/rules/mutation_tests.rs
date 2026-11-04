@@ -1,6 +1,6 @@
 //! Differential mutation of an elaborated module: the kernel must refuse a body it has no reason to accept.
 //!
-//! Filed here because it is a board instrument: it attacks the walk rather than any one rule.
+//! Filed among the rules because it attacks the walk every rule's verdict passes through, rather than any one rule.
 
 use {
     curios_core::{Definitions, Item, Program, Term, Zonked},

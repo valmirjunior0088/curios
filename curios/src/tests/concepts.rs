@@ -1,6 +1,5 @@
 //! Concepts and witnesses, end to end.
 
-mod coherence_tests;
 mod dictionary_tests;
 mod erasure_tests;
 mod field_tests;

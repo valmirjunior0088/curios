@@ -543,7 +543,7 @@ fn a_family_whose_own_sort_is_left_to_its_caller_is_refused() {
     );
 }
 
-/// Two instances of one family apart in a sort are two types, whatever else they share: nothing of `Tagged` mentions the sort it leaves, and its instance at `Prop` is still no instance at `Type`. `curios`'s `tests::board::subsumption_tests` puts two such instances to the elaborator under this name. Rename both or neither.
+/// Two instances of one family apart in a sort are two types, whatever else they share: nothing of `Tagged` mentions the sort it leaves, and its instance at `Prop` is still no instance at `Type`. `curios`'s `tests::rules::subsumption_tests` puts two such instances to the elaborator under this name. Rename both or neither.
 #[test]
 fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     let (name, _) = tagged();
@@ -620,7 +620,7 @@ fn a_declaration_leaves_no_more_sorts_than_the_limit() {
     );
 }
 
-/// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart: judged at `Prop` the match is a proof's, and at `Type` it is the large elimination the guard refuses, so the definition is refused at that assignment. `curios`'s `tests::board::subsumption_tests` puts the same proposition to the elaborator under this name. Rename both or neither.
+/// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart: judged at `Prop` the match is a proof's, and at `Type` it is the large elimination the guard refuses, so the definition is refused at that assignment. `curios`'s `tests::rules::subsumption_tests` puts the same proposition to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
     let nullary = |tag: &str| {
@@ -678,7 +678,7 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
     );
 }
 
-/// A proposition carries only proofs at every assignment of the sorts it leaves: `struct W(A: Sort): Prop { a: A }` holds a proof at `Prop` and a value at `Type`, where any two of its values would be one with their fields apart, so it is refused at that assignment. `curios`'s `tests::board::subsumption_tests` puts the same structure to the elaborator under this name. Rename both or neither.
+/// A proposition carries only proofs at every assignment of the sorts it leaves: `struct W(A: Sort): Prop { a: A }` holds a proof at `Prop` and a value at `Type`, where any two of its values would be one with their fields apart, so it is refused at that assignment. `curios`'s `tests::rules::subsumption_tests` puts the same structure to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
     let (carrier, held) = (Free::local(40, Some("A")), Free::local(41, Some("a")));
@@ -797,7 +797,7 @@ fn a_value_sort_is_stated_as_every_assignment_reaches_it() {
     assert_eq!(definition.value_sort, Some(Term::type_ground()));
 }
 
-/// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::positivity::refusal_tests` puts the same declaration to the elaborator under this name. Rename both or neither.
+/// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::rules::positivity_refusal_tests` puts the same declaration to the elaborator under this name. Rename both or neither.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     let (eq, eq_decl) = equality_over_a_sort();

@@ -28,7 +28,7 @@ fn any_two_inhabitants_of_a_proposition_convert() {
     );
 }
 
-/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type, and neither call is opened to say so. `tests::board`'s row of the same name is the program.
+/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type, and neither call is opened to say so. `tests::rules`'s row of the same name is the program.
 ///
 /// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. The proposition's half holds by either rule — unfolded, the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates (`two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant`) — so what this holds is the verdict, and that the spines reach it without unfolding is what the comparison costs less by.
 #[test]
@@ -80,7 +80,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     );
 }
 
-/// The spines of two calls of one definition are compared on the pair as posed, ahead of eta by the goal's type, and through a curried spine: at a function type, at a record type, and for the definition's call applied once more, `h(p)(3)`, whose head is the call. `tests::board`'s row of the same name is the programs.
+/// The spines of two calls of one definition are compared on the pair as posed, ahead of eta by the goal's type, and through a curried spine: at a function type, at a record type, and for the definition's call applied once more, `h(p)(3)`, whose head is the call. `tests::rules`'s row of the same name is the programs.
 ///
 /// The control for each is the same definition over a relevant family, where the spines disagree and the pair stays apart. Each held goal holds by either rule: left to eta by the type, both calls unfold and the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates. So this holds the verdict at each type, which does not follow where the spine rule sits; trying it first, as the elaborator does, is what keeps the two calls folded.
 #[test]
@@ -714,7 +714,7 @@ fn does_not_leak_into_a_relevant_type() {
     );
 }
 
-/// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::board::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
+/// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::rules::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
 #[test]
 fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
     let mut kernel = kernel();

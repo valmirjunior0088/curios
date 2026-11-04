@@ -34,7 +34,7 @@ fn a_stuck_application_scrutinee_still_refines() {
     assert_eq!(run(A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES), b"t");
 }
 
-/// Asserted on the offending *argument*: the refusal is that `(b) => Cell/fill(c, true)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a board test asserts its own diagnostic.
+/// Asserted on the offending *argument*: the refusal is that `(b) => Cell/fill(c, true)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic.
 #[test]
 fn an_effect_cannot_inhabit_a_pure_arrow() {
     rejected_by(AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW, "Io");

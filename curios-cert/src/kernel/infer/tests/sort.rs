@@ -203,7 +203,7 @@ impl UnderTheCase {
     }
 }
 
-/// A type that is a sort or a function type only where an arm's case equation is in force is subsumed there as the one the case makes it, cumulatively and holding no proposition: under `k(0) = true`, `decided(Type 1)` takes `Nat` and refuses `P`, and `decided((n: Nat) -> Type 1)` takes the family of small types `f` and refuses the predicate `g`. `curios`'s `tests::board::subsumption_tests` puts the same propositions to the elaborator under this name.
+/// A type that is a sort or a function type only where an arm's case equation is in force is subsumed there as the one the case makes it, cumulatively and holding no proposition: under `k(0) = true`, `decided(Type 1)` takes `Nat` and refuses `P`, and `decided((n: Nat) -> Type 1)` takes the family of small types `f` and refuses the predicate `g`. `curios`'s `tests::rules::subsumption_tests` puts the same propositions to the elaborator under this name.
 ///
 /// Mutation-checked: with `subsumes` matching on its two sides unreduced, `Nat` is refused at the sort the case reaches.
 #[test]

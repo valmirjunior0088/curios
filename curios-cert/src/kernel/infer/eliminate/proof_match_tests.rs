@@ -7,7 +7,7 @@ use {
     curios_core::{Intrinsic, Level, Many, Reducer, Scope, Term},
 };
 
-/// A motive whose sort its index binder decides is no motive. `Side : (Bool) -> Prop | left : (true) | right : (false)` is eliminated at `(i, s) => match i : (c) => (match c : (_) => Type 1 | false => Type | true => Prop end) | false => Nat | true => Unit end`: at `left`'s case the result is the proposition `Unit`, and at `right`'s it is `Nat`, the data a proposition of two constructors is not taken into. Typed under its binder `i` it lands in no sort, so the match is refused before the guard or either arm is asked. `curios`'s `tests::board::large_elimination_tests` puts the same motive to the elaborator under this name.
+/// A motive whose sort its index binder decides is no motive. `Side : (Bool) -> Prop | left : (true) | right : (false)` is eliminated at `(i, s) => match i : (c) => (match c : (_) => Type 1 | false => Type | true => Prop end) | false => Nat | true => Unit end`: at `left`'s case the result is the proposition `Unit`, and at `right`'s it is `Nat`, the data a proposition of two constructors is not taken into. Typed under its binder `i` it lands in no sort, so the match is refused before the guard or either arm is asked. `curios`'s `tests::rules::large_elimination_tests` puts the same motive to the elaborator under this name.
 #[test]
 fn a_motive_whose_sort_its_index_decides_is_no_motive() {
     let mut kernel = kernel();
@@ -69,7 +69,7 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
     ));
 }
 
-/// Berardi's route, where proof irrelevance meets a proposition that decides something: `Two : (Nat) -> Prop | here : (0) | there : (0)` eliminated at `(i, s) => Prop`, answering the inhabited `Target(0)` at `here` and the empty `Absurd(0)` at `there`. Irrelevance makes `here` and `there` one value, so the two answers would be one proposition and a proof of the first a proof of the second. A universe is relevant, so the guard refuses the match into `Prop` as it refuses one into `Nat` (`tests::a_proposition_with_two_constructors_does_not_eliminate_into_a_type`). `curios`'s `tests::board::large_elimination_tests` puts the same elimination to the elaborator under this name.
+/// Berardi's route, where proof irrelevance meets a proposition that decides something: `Two : (Nat) -> Prop | here : (0) | there : (0)` eliminated at `(i, s) => Prop`, answering the inhabited `Target(0)` at `here` and the empty `Absurd(0)` at `there`. Irrelevance makes `here` and `there` one value, so the two answers would be one proposition and a proof of the first a proof of the second. A universe is relevant, so the guard refuses the match into `Prop` as it refuses one into `Nat` (`tests::a_proposition_with_two_constructors_does_not_eliminate_into_a_type`). `curios`'s `tests::rules::large_elimination_tests` puts the same elimination to the elaborator under this name.
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
     let mut kernel = kernel();
