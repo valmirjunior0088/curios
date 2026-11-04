@@ -6,7 +6,8 @@ use {
     curios_analysis::{Erased, test_support::*},
     curios_common::Qualifier,
     curios_core::{
-        Certification, Certified, Definitions, Global, Term, Totality, Universes, test_support::*,
+        Certification, Certified, Definitions, Free, Global, Intrinsic, Item, Nat, Term, Totality,
+        Universes, test_support::*,
     },
     std::collections::BTreeMap,
 };
@@ -149,6 +150,70 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
     assert!(
         refuses_the_proof_reaching_partiality(&carried),
         "a record not covering its unit must not be read, and the proof must be refused: {carried:?}",
+    );
+}
+
+/// `held : Vouched = ((g : (Nat) -> Nat) => ((n : Nat) => Vouched/qed(()))(g(0)))(reaches)`: a proof reaching `reaches` as [`held_proof`]'s does, in other terms, so a walk over a baseline holding that one judges this.
+fn held_otherwise() -> Item {
+    let (vouched_name, _) = vouched_declaration();
+    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let g = Free::local(940, Some("g"));
+
+    authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        vouched.clone(),
+        Term::apply(
+            Term::func(
+                [(
+                    g,
+                    Term::func_type([(Free::local(941, Some("n")), nat.clone())], nat.clone()),
+                )],
+                Term::apply(
+                    Term::func(
+                        [(Free::local(942, Some("n")), nat)],
+                        Term::variant(
+                            vouched_name,
+                            Vec::<Term>::new(),
+                            "qed",
+                            [Term::tuple(Vec::<Term>::new())],
+                        ),
+                    ),
+                    [Term::apply(
+                        Term::free_var(&g),
+                        [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
+                    )],
+                ),
+            ),
+            [Term::instance(reaches(), Universes::default())],
+        ),
+    )
+}
+
+/// A baseline is read as a mounted record is, only where its record covers its module: one naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so a walk over it judges the unit whole, and refuses the proof, rather than read `reaches` as the record leaves it wherever the walk does not visit it. Mutation-checked: with a baseline taken whatever its record covers, the proof is accepted and no other test in this file fails.
+#[test]
+fn a_baseline_whose_record_does_not_cover_its_module_is_no_baseline() {
+    let baseline = versioned(reaching_library(true));
+    let forged = Certification::of(
+        [(
+            reaches(),
+            Certified {
+                totality: Totality::Total,
+                ..Certified::default()
+            },
+        )],
+        [],
+        [],
+        [],
+    );
+    assert!(!forged.covers(&baseline));
+    let edited = replaced(&baseline, "held", held_otherwise());
+
+    let verdicts = walked_over(&edited, &baseline, &forged).verdicts;
+
+    assert!(
+        refuses_the_proof_reaching_partiality(&verdicts),
+        "a baseline whose record does not cover its module must not be read: {verdicts:?}",
     );
 }
 

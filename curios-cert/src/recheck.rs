@@ -448,6 +448,12 @@ fn verdicts_within<'s>(
     over: Option<Over<'s>>,
 ) -> Rechecked {
     curios_profile::profile!("recheck_definitions");
+    // A baseline is read only where its record covers the module it was filed with, as a mounted record is (`Globals::partial`) and a stored one (`part_digest`): a record naming fewer definitions than its module holds was not made by a walk over it, and a name it leaves out would read as total wherever this walk does not visit it, since nothing classifies the unvisited from their terms. Without one, the walk judges the unit whole.
+    let over = over.filter(|over| {
+        over.baseline
+            .certification
+            .covers(over.baseline.definitions)
+    });
     // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
     let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
     let mut changed = over.map(|over| Changed::of(definitions, globals, over, &abroad));
