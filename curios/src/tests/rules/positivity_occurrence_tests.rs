@@ -1,6 +1,4 @@
 //! Where an occurrence stands under a declaration's own arrows: strictly positive, positive and not strictly, or negative, and an occurrence of another type, which an arrow leaves alone.
-//!
-//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
 use {super::test_support::*, crate::tests::run, curios_core::Polarity, curios_elab::Error};
 

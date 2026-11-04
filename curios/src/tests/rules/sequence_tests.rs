@@ -1,6 +1,4 @@
 //! A sequence fold answers alike at every spelling of its operands: what `Bytes` and `List` operations decide over a symbolic value, and what their rows let a bound or a validity discharge.
-//!
-//! Its counterparts are `curios-core/src/spine/monoid_tests.rs`, the free-monoid step both checkers read a sequence by, and `curios-cert/src/kernel/infer/tests/intrinsic.rs`.
 
 use {
     super::test_support::*,

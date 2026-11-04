@@ -1,6 +1,4 @@
 //! Where irrelevance takes over from comparison: a function into a proposition and a record's proof component, and the relevant parts still compared.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/irrelevance.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

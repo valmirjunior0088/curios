@@ -1,6 +1,4 @@
 //! A proposition taken apart into data: the sort the guard reads off a motive however the motive is spelled, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
-//!
-//! Its kernel counterparts are `curios-cert/src/kernel/infer/eliminate/large_elimination_tests.rs` and `curios-cert/src/kernel/infer/eliminate/proof_match_tests.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

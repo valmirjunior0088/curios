@@ -1,6 +1,4 @@
 //! Eta at a function and a record: an expansion that drops a binder or swaps components is none, a literal's eta where no type directs it, and a struct's function fields.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/eta.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

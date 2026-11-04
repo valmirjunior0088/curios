@@ -1,8 +1,6 @@
 //! Polarity travelling through a type former, which is the whole of what "modulo polarity" buys.
 //!
 //! A check recognizing recursive occurrences only in immediate payload positions rejects every shape here, `/std/Toml` among them. Each row names the former whose polarity vector the occurrence composes against.
-//!
-//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
 use {super::test_support::*, crate::tests::run, curios_core::Polarity, curios_elab::Error};
 

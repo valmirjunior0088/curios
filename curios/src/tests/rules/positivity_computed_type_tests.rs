@@ -1,6 +1,4 @@
 //! A type the walk computes or unfolds before it reads an occurrence: an alias, a type-level match decided or stuck, a sort a caller would decide, and a field or payload a type-level `rec` computes.
-//!
-//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
 use {
     super::test_support::*, crate::tests::run, crate::tests::typecheck_within, curios_common::fill,

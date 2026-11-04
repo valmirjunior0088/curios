@@ -3,8 +3,6 @@
 //! The rule is `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`. Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices and no Π being subsumed is formed; passing a *name* forms it, which is what these compile.
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::tests::sort` puts the same two propositions to the kernel under these names. Rename both or neither.
-//!
-//! Its kernel counterparts are `curios-cert/src/kernel/infer/tests/sort.rs` and `curios-cert/src/recheck/sort_tests.rs`.
 
 use {
     super::test_support::*,

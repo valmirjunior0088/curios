@@ -1,6 +1,4 @@
 //! What a proposition may be eliminated into: data where no constructor applies, another proposition always, and a cast along a proof that runs none of it.
-//!
-//! Its kernel counterparts are `curios-cert/src/kernel/infer/eliminate/large_elimination_tests.rs` and `curios-cert/src/recheck/elimination_tests.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

@@ -1,8 +1,6 @@
 //! Where an occurrence stands in an index rather than a payload.
 //!
 //! An inductive is not uniform in its indices, so nothing composes through one and the walk leaves them opaque. What these pin is the boundary that leaves: which index positions still admit a recursive occurrence, and which are not reachable at all.
-//!
-//! Its counterpart is `curios-analysis/src/positivity/tests.rs`, the analysis both checkers judge through.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

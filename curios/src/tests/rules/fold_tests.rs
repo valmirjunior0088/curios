@@ -1,6 +1,4 @@
 //! A fold's arms learn nothing of its scrutinee: what an arm reads of it, and what a motive that names it states.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/infer/eliminate/fold_tests.rs`, and its ticket `xboard/tickets/elimination/an_arm_of_a_fold_is_typed_with_its_scrutinee_at_the_arms_case_and_is_taken_at_every_tail/`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

@@ -1,8 +1,6 @@
 //! The chain both checkers run where two operations over neutral operands meet: what it holds one, and the near misses beside them it keeps apart.
 //!
 //! The chain is `curios-analysis`'s `convert_intrinsics`, and the rule is `documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md`. The kernel's halves share each name in `curios_cert`'s `kernel::convert::tests::structural`.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/structural.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

@@ -1,6 +1,4 @@
 //! What a proposition may carry and what is one: no informative field, method or superclass, no type field or payload over its own sort, and the records, functions and lists that are or are not propositions.
-//!
-//! Its kernel counterparts are `curios-cert/src/recheck/proposition_tests.rs` and `curios-cert/src/kernel/module/struct_tests.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

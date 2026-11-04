@@ -1,6 +1,4 @@
 //! Two terms at a type with no field or one inhabitant convert, and at a relevant field, a struct that reaches itself, or an elimination, arm binder or constructor at a relevant type, stay apart.
-//!
-//! Its kernel counterparts are `curios-cert/src/kernel/convert/tests/eta.rs` and `curios-cert/src/kernel/convert/tests/irrelevance.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

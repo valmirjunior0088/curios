@@ -1,6 +1,4 @@
 //! A spine's arguments and the proofs they carry: where an argument is typed, and two calls of one definition compared before either unfolds.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/convert/tests/irrelevance.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 

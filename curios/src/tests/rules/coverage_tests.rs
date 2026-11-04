@@ -1,6 +1,4 @@
 //! Coverage, and the foreign wire contract.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/infer/eliminate/coverage_tests.rs`.
 
 use {super::test_support::*, curios_elab::Error};
 

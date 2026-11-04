@@ -1,6 +1,4 @@
 //! What an arm is checked at: its own case, and a hypothesis at the instance it was given.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/infer/eliminate/scope_tests.rs`, and its tickets are `xboard/tickets/elimination/a_guards_reduced_spelling_is_settled_under_one_case_of_a_split_inside_its_arm_and_answers_outside_that_case/` and `xboard/tickets/conversion/a_reduct_read_off_a_locals_type_outlives_the_arm_that_re_typed_the_local/`.
 
 use {super::test_support::*, curios_elab::Error};
 

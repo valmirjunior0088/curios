@@ -1,6 +1,4 @@
 //! Index inversion and K: what forces a binder, and what may not excuse an omitted arm.
-//!
-//! Its kernel counterpart is `curios-cert/src/kernel/infer/eliminate/specialization_tests.rs`.
 
 use {super::test_support::*, crate::tests::run, curios_elab::Error};
 
