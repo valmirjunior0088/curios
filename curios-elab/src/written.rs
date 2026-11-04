@@ -23,6 +23,7 @@ use {
     std::{
         cell::RefCell,
         collections::{HashMap, VecDeque},
+        hash::{Hash, Hasher},
         rc::Rc,
     },
 };
@@ -37,12 +38,29 @@ pub fn written(context: &mut Context, term: &Term) -> Term {
     .term(context, term)
 }
 
+/// A node the walk wrote, told apart by its address and holding the node, so the address is the node's for as long as the memo keys by it: the walk opens binders and drops what it made, and a node met later could take a freed one's address and be answered with what another was written as.
+struct Node(Term);
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.identity() == other.0.identity()
+    }
+}
+
+impl Eq for Node {}
+
+impl Hash for Node {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.identity().hash(state);
+    }
+}
+
 /// The walk's state beside the context it enters binders into.
 struct Writing {
     /// The terms standing for the binders entered, outermost first: a loose index `k` names the `k`th from the end.
     entered: Vec<Term>,
     /// What a term with no loose index was written as, by node: one table for each witness scope the walk stands in, since a `use` binder or an arm's equation changes what resolution answers and nothing else the walk enters does.
-    layers: Vec<HashMap<usize, Term>>,
+    layers: Vec<HashMap<Node, Term>>,
     /// How many arms the walk stands in whose equations it could not install: a witness under one is left as it stands.
     unrefined: usize,
 }
@@ -56,25 +74,25 @@ impl Writing {
             return term.clone();
         }
         let closed = term.closed();
-        if closed && let Some(written) = self.layer().get(&term.identity()) {
+        if closed && let Some(written) = self.layer().get(&Node(term.clone())) {
             return written.clone();
         }
 
         let written = recurse(|| self.node(context, term));
         if closed {
-            self.layer_mut().insert(term.identity(), written.clone());
+            self.layer_mut().insert(Node(term.clone()), written.clone());
         }
 
         written
     }
 
-    fn layer(&self) -> &HashMap<usize, Term> {
+    fn layer(&self) -> &HashMap<Node, Term> {
         self.layers
             .last()
             .expect("the walk stands in a witness scope")
     }
 
-    fn layer_mut(&mut self) -> &mut HashMap<usize, Term> {
+    fn layer_mut(&mut self) -> &mut HashMap<Node, Term> {
         self.layers
             .last_mut()
             .expect("the walk stands in a witness scope")
