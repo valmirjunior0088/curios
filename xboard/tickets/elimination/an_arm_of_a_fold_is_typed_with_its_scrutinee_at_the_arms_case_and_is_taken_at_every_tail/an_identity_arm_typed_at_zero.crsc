@@ -5,8 +5,4 @@
         h
     | pred + 1; ih =>
         ih
-    end)(
-    2,
-    #{node = Variant}
-    /sys/Bool/True/qed()
-)
+    end)(2, #{node = Variant} /sys/Bool/True/qed())

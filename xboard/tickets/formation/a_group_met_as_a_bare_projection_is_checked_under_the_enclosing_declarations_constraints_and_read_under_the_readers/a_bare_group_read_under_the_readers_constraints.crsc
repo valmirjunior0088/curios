@@ -9,94 +9,26 @@ struct /Boxed: pub Type { proof: /sys/Bool/False }
         constraints = [u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x]}}
 let /carrier :
     #{node = Rec}
-    (let x2:
-        #{level = x}
-        Type =
+    (let x2: #{level = x} Type =
         {
-                bottom:
-                    #{level = w}
-                    Type,
-                universe:
-                    #{level = w}
-                    Type,
+                bottom: #{level = w} Type,
+                universe: #{level = w} Type,
                 over: (
-                    S:
-                        #{level = v}
-                        Type,
-                    F: (
-                        p: (s: S) ->
-                            #{level = u}
-                            Type
-                    ) ->
-                        #{level = u}
-                        Type
-                ) ->
-                    #{level = w}
-                    Type,
-                pi: (
-                    S2:
-                        #{level = v}
-                        Type,
-                    F2: (x: S2) ->
-                        #{level = u}
-                        Type
-                ) ->
-                    #{level = w}
-                    Type
+                    S: #{level = v} Type,
+                    F: (p: (s: S) -> #{level = u} Type) -> #{level = u} Type
+                ) -> #{level = w} Type,
+                pi: (S2: #{level = v} Type, F2: (x: S2) -> #{level = u} Type) -> #{level = w} Type
         };
     x2) =
     (
+        (A: #{level = u} Type) -> A,
         (
-            A:
-                #{level = u}
-                Type
-        ) -> A,
-        (
-            X:
-                #{level = u}
-                Type,
-            f: (
-                t: (
-                    s: (s2: X) ->
-                        #{level = u}
-                        Type
-                ) ->
-                    #{level = u}
-                    Type
-            ) -> X
-        ) -> (
-            s3: (s4: X) ->
-                #{level = u}
-                Type
-        ) ->
-            #{level = u}
-            Type,
-        (
-            S:
-                #{level = v}
-                Type,
-            F: (
-                p: (s5: S) ->
-                    #{level = u}
-                    Type
-            ) ->
-                #{level = u}
-                Type
-        ) =>
-            (
-                p2: (s6: S) ->
-                    #{level = u}
-                    Type
-            ) -> F(p2),
-        (
-            S2:
-                #{level = v}
-                Type,
-            F2: (x: S2) ->
-                #{level = u}
-                Type
-        ) =>
-            (x2: S2) -> F2(x2)
+            X: #{level = u} Type,
+            f: (t: (s: (s2: X) -> #{level = u} Type) -> #{level = u} Type) -> X
+        ) -> (s3: (s4: X) -> #{level = u} Type) -> #{level = u} Type,
+        (S: #{level = v} Type, F: (p: (s5: S) -> #{level = u} Type) -> #{level = u} Type) =>
+            (p2: (s6: S) -> #{level = u} Type) -> F(p2),
+        (S2: #{level = v} Type, F2: (x: S2) -> #{level = u} Type) => (x2: S2) -> F2(x2)
     );
 #{universe_context = {parameter_count = 4, constraints = [u <= 0, w <= 0, 1 <= v]}}
 let /paradox : /sys/Bool/False =
@@ -118,9 +50,7 @@ let /paradox : /sys/Bool/False =
                 ) -> Type
             ) =>
                 s10(
-                    (
-                        #{universes = {levels = [0, 1, 1, 2]}}
-                        /carrier).1,
+                    (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                     (
                         t4: (
                             s15: (
@@ -183,9 +113,7 @@ let /paradox : /sys/Bool/False =
                         ) -> Type
                     ) -> Type
                 ) =>
-                    (
-                        #{universes = {levels = [0, 1, 1, 2]}}
-                        /carrier).3(
+                    (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3(
                         (X12: Type, f12: (t15: (s52: (s53: X12) -> Type) -> Type) -> X12) -> (
                             s54: (s55: X12) -> Type
                         ) -> Type,
@@ -203,9 +131,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s63: (s64: X14) -> Type) -> Type
                                 ) =>
                                     s60(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t18: (
                                                 s65: (
@@ -271,9 +197,7 @@ let /paradox : /sys/Bool/False =
                         ) -> Type
                     ) =>
                         s88(
-                            (
-                                #{universes = {levels = [0, 1, 1, 2]}}
-                                /carrier).1,
+                            (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                             (
                                 t26: (
                                     s93: (
@@ -355,9 +279,7 @@ let /paradox : /sys/Bool/False =
                                         ) -> (s132: (s133: X29) -> Type) -> Type
                                     ) =>
                                         s129(
-                                            (
-                                                #{universes = {levels = [0, 1, 1, 2]}}
-                                                /carrier).1,
+                                            (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                             (
                                                 t38: (
                                                     s134: (
@@ -446,9 +368,7 @@ let /paradox : /sys/Bool/False =
                                 ) -> (s169: (s170: X37) -> Type) -> Type
                             ) =>
                                 s166(
-                                    (
-                                        #{universes = {levels = [0, 1, 1, 2]}}
-                                        /carrier).1,
+                                    (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                     (
                                         t49: (
                                             s171: (
@@ -503,9 +423,7 @@ let /paradox : /sys/Bool/False =
             ) -> Type
         ) =>
             (
-                h3: (
-                    #{universes = {levels = [0, 1, 1, 2]}}
-                    /carrier).2(
+                h3: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2(
                     (X43: Type, f43: (t56: (s194: (s195: X43) -> Type) -> Type) -> X43) -> (
                         s196: (s197: X43) -> Type
                     ) -> Type,
@@ -525,9 +443,7 @@ let /paradox : /sys/Bool/False =
                                 ) -> (s206: (s207: X45) -> Type) -> Type
                             ) =>
                                 s203(
-                                    (
-                                        #{universes = {levels = [0, 1, 1, 2]}}
-                                        /carrier).1,
+                                    (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                     (
                                         t59: (
                                             s208: (
@@ -607,9 +523,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s243: (s244: X53) -> Type) -> Type
                                 ) =>
                                     s240(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t70: (
                                                 s245: (
@@ -664,9 +578,7 @@ let /paradox : /sys/Bool/False =
                             )
                         )
                 )
-            ) -> (
-                #{universes = {levels = [0, 1, 1, 2]}}
-                /carrier).0,
+            ) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0,
         (
             x15: (X58: Type, f58: (t76: (s264: (s265: X58) -> Type) -> Type) -> X58) -> (
                 s266: (s267: X58) -> Type
@@ -679,9 +591,7 @@ let /paradox : /sys/Bool/False =
                     ) -> Type
                 ) =>
                     s268(
-                        (
-                            #{universes = {levels = [0, 1, 1, 2]}}
-                            /carrier).1,
+                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                         (
                             t78: (
                                 s273: (
@@ -725,9 +635,7 @@ let /paradox : /sys/Bool/False =
                         ) -> Type
                     ) =>
                         (
-                            h5: (
-                                #{universes = {levels = [0, 1, 1, 2]}}
-                                /carrier).2(
+                            h5: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2(
                                 (
                                     X65: Type,
                                     f65: (t85: (s296: (s297: X65) -> Type) -> Type) -> X65
@@ -750,9 +658,7 @@ let /paradox : /sys/Bool/False =
                                             ) -> (s308: (s309: X67) -> Type) -> Type
                                         ) =>
                                             s305(
-                                                (
-                                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                                    /carrier).1,
+                                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                                 (
                                                     t88: (
                                                         s310: (
@@ -927,15 +833,11 @@ let /paradox : /sys/Bool/False =
                                         )
                                     )
                             )
-                        ) -> (
-                            #{universes = {levels = [0, 1, 1, 2]}}
-                            /carrier).0
+                        ) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0
                 )
             ) =>
                 (
-                    h32: (
-                        #{universes = {levels = [0, 1, 1, 2]}}
-                        /carrier).2(
+                    h32: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2(
                         (X80: Type, f80: (t105: (s366: (s367: X80) -> Type) -> Type) -> X80) -> (
                             s368: (s369: X80) -> Type
                         ) -> Type,
@@ -955,9 +857,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s378: (s379: X82) -> Type) -> Type
                                 ) =>
                                     s375(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t108: (
                                                 s380: (
@@ -1049,9 +949,7 @@ let /paradox : /sys/Bool/False =
                                         ) -> (s415: (s416: X90) -> Type) -> Type
                                     ) =>
                                         s412(
-                                            (
-                                                #{universes = {levels = [0, 1, 1, 2]}}
-                                                /carrier).1,
+                                            (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                             (
                                                 t119: (
                                                     s417: (
@@ -1119,9 +1017,7 @@ let /paradox : /sys/Bool/False =
                             ) -> (s438: (s439: X95) -> Type) -> Type
                         ) =>
                             (
-                                h8: (
-                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                    /carrier).2(
+                                h8: (#{universes = {levels = [0, 1, 1, 2]}} /carrier).2(
                                     (
                                         X96: Type,
                                         f96: (t126: (s440: (s441: X96) -> Type) -> Type) -> X96
@@ -1350,9 +1246,7 @@ let /paradox : /sys/Bool/False =
                                             )
                                         )
                                 )
-                            ) -> (
-                                #{universes = {levels = [0, 1, 1, 2]}}
-                                /carrier).0
+                            ) -> (#{universes = {levels = [0, 1, 1, 2]}} /carrier).0
                     )(h23)(
                         (
                             p28: (
@@ -1370,9 +1264,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s518: (s519: X112) -> Type) -> Type
                                 ) =>
                                     s515(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t148: (
                                                 s520: (
@@ -1467,9 +1359,7 @@ let /paradox : /sys/Bool/False =
                                             ) -> (s555: (s556: X120) -> Type) -> Type
                                         ) =>
                                             s552(
-                                                (
-                                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                                    /carrier).1,
+                                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                                 (
                                                     t159: (
                                                         s557: (
@@ -1694,9 +1584,7 @@ let /paradox : /sys/Bool/False =
                     ) -> (s625: (s626: X135) -> Type) -> Type
                 ) =>
                     s622(
-                        (
-                            #{universes = {levels = [0, 1, 1, 2]}}
-                            /carrier).1,
+                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                         (
                             t179: (
                                 s627: (
@@ -1767,9 +1655,7 @@ let /paradox : /sys/Bool/False =
                                 ) -> (s662: (s663: X143) -> Type) -> Type
                             ) -> Type
                         ) =>
-                            (
-                                #{universes = {levels = [0, 1, 1, 2]}}
-                                /carrier).3(
+                            (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3(
                                 (
                                     X144: Type,
                                     f144: (t190: (s664: (s665: X144) -> Type) -> Type) -> X144
@@ -1790,9 +1676,7 @@ let /paradox : /sys/Bool/False =
                                             ) -> (s675: (s676: X146) -> Type) -> Type
                                         ) =>
                                             s672(
-                                                (
-                                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                                    /carrier).1,
+                                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                                 (
                                                     t193: (
                                                         s677: (
@@ -1881,9 +1765,7 @@ let /paradox : /sys/Bool/False =
                             ) -> (s708: (s709: X153) -> Type) -> Type
                         ) =>
                             s705(
-                                (
-                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                    /carrier).1,
+                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                 (
                                     t202: (
                                         s710: (
@@ -1966,9 +1848,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s745: (s746: X161) -> Type) -> Type
                                 ) -> Type
                             ) =>
-                                (
-                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                    /carrier).3(
+                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).3(
                                     (
                                         X162: Type,
                                         f162: (t213: (s747: (s748: X162) -> Type) -> Type) -> X162
@@ -2081,9 +1961,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s786: (s787: X170) -> Type) -> Type
                                 ) =>
                                     s783(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t224: (
                                                 s788: (
@@ -2320,9 +2198,7 @@ let /paradox : /sys/Bool/False =
                                             ) -> (s864: (s865: X187) -> Type) -> Type
                                         ) =>
                                             s861(
-                                                (
-                                                    #{universes = {levels = [0, 1, 1, 2]}}
-                                                    /carrier).1,
+                                                (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                                 (
                                                     t247: (
                                                         s866: (
@@ -2431,9 +2307,7 @@ let /paradox : /sys/Bool/False =
                                     ) -> (s905: (s906: X196) -> Type) -> Type
                                 ) =>
                                     s902(
-                                        (
-                                            #{universes = {levels = [0, 1, 1, 2]}}
-                                            /carrier).1,
+                                        (#{universes = {levels = [0, 1, 1, 2]}} /carrier).1,
                                         (
                                             t259: (
                                                 s907: (
@@ -2491,9 +2365,5 @@ let /paradox : /sys/Bool/False =
                         ),
                     h10
                 )
-    )(
-        #{node = StructType}
-        /Boxed()
-    )).0;
-#{universes = {levels = [0, 1, 0, 0]}}
-/paradox
+    )(#{node = StructType} /Boxed())).0;
+#{universes = {levels = [0, 1, 0, 0]}} /paradox

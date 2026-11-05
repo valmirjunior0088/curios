@@ -4,62 +4,23 @@
 induct /Read: (i: #BoolType) -> pub Prop
 | mk(x: #BoolType): (x)
 end
-((
-    b: #BoolType,
-    p:
-        #{node = InductType}
-        /Read()(b)
-) =>
-    ((
-        w:
-            #{node = InductType}
-            /sys/Bool/True()
-    ) =>
+((b: #BoolType, p: #{node = InductType} /Read()(b)) =>
+    ((w: #{node = InductType} /sys/Bool/True()) =>
         (
             k: /sys/Bool/Holds(
-                #{
-                    cases = {
-                        stated =
-                            #{node = InductType}
-                            /Read()(b)}}
+                #{cases = {stated = #{node = InductType} /Read()(b)}}
                 match p: (x3, x4) => #BoolType
                 | mk(x) =>
                     x
                 end
             )
         ) =>
-            k)(
-        match b: (x5) =>
-            #{node = InductType}
-            /sys/Bool/True()
+            k)(match b: (x5) => #{node = InductType} /sys/Bool/True()
         | false =>
-            #{node = Variant}
-            /sys/Bool/True/qed()
+            #{node = Variant} /sys/Bool/True/qed()
         | true =>
-            ((
-                h: /sys/Bool/Holds(
-                    #{
-                        cases = {
-                            stated =
-                                #{node = InductType}
-                                /Read()(b)}}
-                    match p: (x6, x7) => #BoolType
+            ((h: /sys/Bool/Holds(#{cases = {stated = #{node = InductType} /Read()(b)}} match p: (x6, x7) => #BoolType
                     | mk(x2) =>
                         x2
-                    end
-                )
-            ) =>
-                #{node = Variant}
-                /sys/Bool/True/qed())(
-                #{node = Variant}
-                /sys/Bool/True/qed()
-            )
-        end
-    )(
-        #{node = Variant}
-        /sys/Bool/True/qed()
-    ))(
-    false,
-    #{node = Variant}
-    /Read/mk(false)
-)
+                    end)) => #{node = Variant} /sys/Bool/True/qed())(#{node = Variant} /sys/Bool/True/qed())
+        end)(#{node = Variant} /sys/Bool/True/qed()))(false, #{node = Variant} /Read/mk(false))

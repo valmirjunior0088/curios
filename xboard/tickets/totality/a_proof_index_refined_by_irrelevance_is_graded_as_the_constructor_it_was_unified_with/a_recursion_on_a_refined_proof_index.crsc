@@ -2,54 +2,17 @@
 #{absent = [/Wit/base, /Wit/w]}
 induct /Wit: pub Prop
 | base()
-| w(
-    inner:
-        #{node = InductType}
-        /Wit()
-)
+| w(inner: #{node = InductType} /Wit())
 end
 #{absent = [/Q/c]}
-induct /Q: (
-    i:
-        #{node = InductType}
-        /Wit()
-) -> pub Prop
-| c(
-    v:
-        #{node = InductType}
-        /Wit()
-): (
-    #{node = Variant}
-    /Wit/w(v)
-)
+induct /Q: (i: #{node = InductType} /Wit()) -> pub Prop
+| c(v: #{node = InductType} /Wit()): (#{node = Variant} /Wit/w(v))
 end
 #{node = Rec}
-(let f: (
-    w0:
-        #{node = InductType}
-        /Wit(),
-    q:
-        #{node = InductType}
-        /Q()(w0)
-) -> /sys/Bool/False =
-    (
-        w02:
-            #{node = InductType}
-            /Wit(),
-        q2:
-            #{node = InductType}
-            /Q()(w02)
-    ) =>
+(let f: (w0: #{node = InductType} /Wit(), q: #{node = InductType} /Q()(w0)) -> /sys/Bool/False =
+    (w02: #{node = InductType} /Wit(), q2: #{node = InductType} /Q()(w02)) =>
         match q2: (x, x2) => /sys/Bool/False
         | c(v) =>
             f(v, q2)
         end;
-f(
-    #{node = Variant}
-    /Wit/base(),
-    #{node = Variant}
-    /Q/c(
-        #{node = Variant}
-        /Wit/base()
-    )
-))
+f(#{node = Variant} /Wit/base(), #{node = Variant} /Q/c(#{node = Variant} /Wit/base())))

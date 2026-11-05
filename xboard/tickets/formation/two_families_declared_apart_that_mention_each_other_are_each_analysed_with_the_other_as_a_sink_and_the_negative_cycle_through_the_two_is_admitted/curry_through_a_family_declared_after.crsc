@@ -9,21 +9,16 @@ induct /B: pub Type
 end
 ((sa: (x: #{node = InductType} /B()) -> #{node = InductType} /E()) =>
     #{result = Ambient(/sys/Bool/False)}
-    match sa(
-        #{node = Variant}
-        /B/b(
-            #{node = Variant}
-            /A/a(sa)
-        )
-    )
+    match sa(#{node = Variant} /B/b(#{node = Variant} /A/a(sa)))
     end)(
-    (x: #{node = InductType} /B()) =>
+    (x2: #{node = InductType} /B()) =>
         #{result = Ambient(#{node = InductType} /E())}
-        match x
+        match x2
         | b(y) =>
             #{result = Ambient(#{node = InductType} /E())}
             match y
-            | a(g) => g(x)
+            | a(g) =>
+                g(x2)
             end
         end
 )

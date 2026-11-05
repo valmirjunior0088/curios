@@ -1,10 +1,4 @@
 -- `X` holds an `F(X)`: positive while `F` is, and accepted then, the store filing the verdict by `X`'s identity with what it read of `F`, digested with no vector. Stepped to again once `F` is negative, it is looked for among those records first.
 induct /app/X: pub Type
-| c(
-    n:
-        #{node = InductType, universes = {levels = [0]}}
-        /lib/F(
-            #{node = InductType}
-            /app/X())
-)
+| c(n: #{node = InductType, universes = {levels = [0]}} /lib/F(#{node = InductType} /app/X()))
 end
