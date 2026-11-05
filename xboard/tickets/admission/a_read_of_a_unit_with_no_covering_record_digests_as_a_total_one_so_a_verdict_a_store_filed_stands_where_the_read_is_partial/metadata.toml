@@ -1,0 +1,15 @@
+title = "A read of a unit with no covering record digests as a total one, so a verdict a store filed stands where the read is partial"
+found = 2026-11-05
+status = "open"
+
+[[witness]]
+what = "`d`'s verdict filed while `w` was total, taken once `w` loops and `/lib`'s record is withheld, then unpacked at `Q`, now `False`"
+step = [
+    { mount = "/base", source = "base.crs" },
+    { mount = "/lib", source = "lib_total.crs" },
+    { mount = "/app", source = "app.crs" },
+    { mount = "/lib", source = "lib_partial.crs" },
+    { withhold = "/lib" },
+    { source = "proof.crsc" },
+]
+refused = [{ by = "kernel", error = "NotTotal", within = "entry" }]

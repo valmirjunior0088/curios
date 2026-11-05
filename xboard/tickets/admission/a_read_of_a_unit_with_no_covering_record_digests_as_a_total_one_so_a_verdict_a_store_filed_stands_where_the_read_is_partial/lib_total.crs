@@ -1,0 +1,10 @@
+-- The library as `/app`'s verdict on `d` is first reached: `Q` is `True` and `w` total, so `d` is total, and the store files that verdict by `d`'s identity with the digest of `w`'s signature, `partial = false` among it.
+use /std/{Nat};
+use /std/Bool/{True};
+use /base/{Box};
+
+pub let Q: Prop =
+    True;
+
+pub let w(n: Nat) -> Box(Q) =
+    Box/box(True/qed());

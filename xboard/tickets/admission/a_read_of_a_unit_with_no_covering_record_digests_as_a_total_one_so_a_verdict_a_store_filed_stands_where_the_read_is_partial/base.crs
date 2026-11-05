@@ -1,0 +1,7 @@
+-- A carrier that holds a proof of what it is applied at, and the projection out of it. Never edited, so every walk reads it alike.
+pub induct Box(P: Prop): pub Type
+| box(p: P)
+end
+
+pub let unbox(@P: Prop, b: Box(P)) -> P =
+    match b | box(p) => p end;

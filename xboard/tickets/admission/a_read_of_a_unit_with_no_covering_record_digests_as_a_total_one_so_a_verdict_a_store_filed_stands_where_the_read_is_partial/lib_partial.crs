@@ -1,0 +1,10 @@
+-- The library edited: `Q` is `False` and `w` loops, at the type and under the binder names it had, so `w`'s signature digests as it did but for the verdict, which its walk files `Partial`. `Q`'s signature, `Prop` with its value sort, is unchanged.
+use /std/{Nat};
+use /std/Bool/{False};
+use /base/{Box};
+
+pub let Q: Prop =
+    False;
+
+pub let w(n: Nat) -> Box(Q) =
+    w(n);

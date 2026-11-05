@@ -1,0 +1,4 @@
+-- `/lib`'s record withheld, a part read of `/lib` digests through `Globals::partial`, which answers `false` for every name of a unit no record covers: `w` digests as it did while it was total. `/app`, recompiled because `/lib` moved, asks `d` again, and the record the store filed while `w` was total stands (`recheck::stored`), so `d` is taken as total. This proof reaches `d` alone, read total, and `Q` is `False`.
+(
+    #{universes = {levels = [0]}}
+    /base/unbox)(@/lib/Q, /app/d)

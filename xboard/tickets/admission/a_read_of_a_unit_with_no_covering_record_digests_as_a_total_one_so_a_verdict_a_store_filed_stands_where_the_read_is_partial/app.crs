@@ -1,0 +1,6 @@
+-- `d` reads the signatures of `Box`, `Q` and `w` and no body: `w(0)` is at `Box(Q)` as written.
+use /base/{Box};
+use /lib/{Q, w};
+
+pub let d: Box(Q) =
+    w(0);
