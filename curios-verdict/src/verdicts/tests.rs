@@ -650,6 +650,28 @@ fn an_entrys_declarations_are_filed_by_the_executable_it_is() {
     assert_eq!(entered(&root, "tool.crs", Some("tool")), "reused");
 }
 
+/// An executable's slot answers only for the file its entry is: a manifest that points the executable at another file finds the slot's record naming the first, whose text still stands, and compiles the second's declarations rather than believing the first's.
+///
+/// Mutation-checked at `agrees`: with the record held only to the files it names, the second file's term is compiled over the first file's declarations.
+#[test]
+fn an_executables_slot_answers_for_no_file_but_the_one_it_was_filed_from() {
+    let root = project("entry-moved");
+    write(&root, "x.crs", DECLARING_ENTRY);
+    write(
+        &root,
+        "y.crs",
+        &DECLARING_ENTRY.replace("concat(message, message)", "concat(message, \"!\")"),
+    );
+
+    assert_eq!(entered(&root, "x.crs", Some("prog")), "compiled");
+    assert_eq!(entered(&root, "x.crs", Some("prog")), "reused");
+    assert_ne!(
+        entered(&root, "y.crs", Some("prog")),
+        "reused",
+        "the slot filed from x.crs answered for y.crs"
+    );
+}
+
 /// An entry's unit rests on the units it could have read, as any unit does: an edit to its dependency compiles it over the unit it filed.
 #[test]
 fn an_edited_dependency_recompiles_the_entry_over_its_unit() {

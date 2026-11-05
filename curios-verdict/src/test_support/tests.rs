@@ -76,6 +76,36 @@ fn a_core_text_unit_stepped_twice_is_the_unit_its_last_text_is() {
     assert_eq!(core(&stepped), core(&whole));
 }
 
+/// A step that rewrites a program's unit as Core text is read from its Core text: the record the program's step filed names the program's file, whose text still stands, and not the one the unit is now written in.
+///
+/// Mutation-checked at `Verdicts`' `agrees`: with the record held only to the files it names, the program's unit is mounted and its lowering with it.
+#[test]
+fn a_unit_stepped_from_a_program_to_core_text_is_read_from_its_core_text() {
+    let mut history = History::new();
+    history
+        .step("lib", Written::Program, "pub let one: /std/Nat = 1;\n")
+        .expect("the program step builds");
+    history
+        .step("lib", Written::CoreText, "let /lib/one : #NatType = 2;\n")
+        .expect("the Core text step builds");
+
+    let lowered = history
+        .built(|scope| {
+            scope
+                .units()
+                .last()
+                .expect("a unit is mounted")
+                .text()
+                .is_some()
+        })
+        .expect("the history builds");
+
+    assert!(
+        !lowered,
+        "the program's unit was mounted for the Core text step"
+    );
+}
+
 #[test]
 fn a_withheld_record_is_the_one_a_later_build_mounts() {
     let mut history = History::new();

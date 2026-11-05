@@ -719,6 +719,8 @@ impl Cache for Verdicts {
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list. And so is a unit the source could have read that the record does not name, or names with other contents: one that joined its scope, left it, or changed.
 ///
 /// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects: `curios_unit::read_within` states why it is a containment check rather than a re-derivation of the read set.
+///
+/// **And every file `source` has read already must be one the record names, holding the text it holds now.** An entry's unit is filed by its executable and not by its root file, and the source logs that root as read the moment it is opened ([`RootSource::opened`](curios_module::RootSource)): a record that names other files, every one of which still stands, is the record of another file, as after a manifest points its executable elsewhere.
 fn agrees(
     source: &UnitSource<'_>,
     record: &Record,
@@ -729,6 +731,9 @@ fn agrees(
     record.answers == source.answered()
         && contents(reach, taken).is_some_and(|contents| contents == record.after)
         && read_within(&source.directories(), &record.reads)
+        && digested(source.reads())
+            .iter()
+            .all(|read| record.reads.contains(read))
         && unchanged(&record.reads, overlay)
 }
 
