@@ -70,7 +70,11 @@ use {
         LevelHead, Names, Notation, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
         StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
     },
-    std::{collections::BTreeMap, fmt, rc::Rc},
+    std::{
+        collections::{BTreeMap, HashSet},
+        fmt,
+        rc::Rc,
+    },
 };
 
 /// Why the kernel refused a term.
@@ -193,6 +197,8 @@ pub enum Error {
     NotCore(Term),
     /// A family's parameter or index, or a record's or a concept's parameter, that names `member`, declared with the declaration it indexes or reaching it back. Positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits.
     IndexedByItsGroup { member: Global },
+    /// A local-free term whose typing needs its own type while that typing is in progress: a derivation resting on its own conclusion, whose regress a walk would follow a level a turn.
+    NeedsItsOwnTyping(Term),
     /// A family that declares one constructor tag more than once. Every lookup resolves a tag by first match, so a repeat hides a constructor rather than adding one — and the coverage rule then answers about the first entry once per entry, reporting a family empty at an index its own later entry constructs at.
     RepeatedTag(Atom),
     /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
@@ -420,6 +426,13 @@ impl fmt::Display for Displayed<'_> {
                 "a parameter or index names `{}`, which is declared with it or reaches it back",
                 member.faithful()
             ),
+            Error::NeedsItsOwnTyping(term) => {
+                let term = notation.term(term);
+                write!(
+                    formatter,
+                    "typing `{term}` needs the type of `{term}` itself, which that typing is computing"
+                )
+            }
             Error::RepeatedTag(tag) => {
                 write!(
                     formatter,
@@ -631,6 +644,8 @@ pub struct Kernel<'s> {
     machine: bool,
     /// Whether the terms in hand are already by value: set where reduction or conversion is entered from typing, so the entries beneath read what they are handed, and put back where typing binds a `let`. See [`Kernel::by_value`].
     reading: bool,
+    /// The local-free terms [`infer()`] is typing, each from where its typing begins to where it ends: one asked for again in between is refused ([`Error::NeedsItsOwnTyping`]).
+    typing: HashSet<Term>,
 }
 
 impl<'s> Kernel<'s> {
@@ -648,6 +663,7 @@ impl<'s> Kernel<'s> {
             assumed: Vec::new(),
             machine: true,
             reading: false,
+            typing: HashSet::new(),
         }
     }
 
@@ -1199,6 +1215,24 @@ impl<'s> Kernel<'s> {
         }
 
         outcome
+    }
+
+    /// Type `term` by `typing`, refusing where `term` names no local and its typing is already in progress: such a term's typing reads the definition store alone, so one that needs itself needs itself again at every turn, and a derivation resting on its own conclusion is none.
+    pub(crate) fn typing_once<T>(
+        &mut self,
+        term: &Term,
+        typing: impl FnOnce(&mut Self) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        if term.has_local_free() {
+            return typing(self);
+        }
+        if !self.typing.insert(term.clone()) {
+            return Err(Error::NeedsItsOwnTyping(term.clone()));
+        }
+
+        let typed = typing(self);
+        self.typing.remove(term);
+        typed
     }
 
     /// [`Kernel::scoped`] for a walk whose refusal is not its item's last word: where `walk` is refused, what it recorded is taken back, so the kernel stands as if it had not run.

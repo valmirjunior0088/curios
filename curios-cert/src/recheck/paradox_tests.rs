@@ -665,3 +665,67 @@ fn a_member_named_through_its_sibling_is_held_to_its_items_scheme() {
     assert!(stands(&verdicts, "Small"), "{verdicts:?}");
     assert!(stands(&verdicts, "fits"), "{verdicts:?}");
 }
+
+/// `A`'s case holds a `B` at a λ that takes an `A` apart and then the `B` proof inside it, whose case pins its index to the function it carries: typing the payload types the λ, its inner arm solves `k` to the λ itself, and binding the solution types the λ again.
+const A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX: &str = r#"
+induct /B(T: Prop): (x: T) -> pub Prop
+| c(k: T): (k)
+end
+induct /A: pub Prop
+| mk(b: #{node = InductType} /B((a: #{node = InductType} /A()) -> #{node = InductType} /std/Bool/False())(
+    (a: #{node = InductType} /A()) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match a
+        | mk(b2) =>
+            #{result = Ambient(#{node = InductType} /std/Bool/False())}
+            match b2
+            | c(k) =>
+                k(a)
+            end
+        end
+))
+end
+/std/Bool/True/qed()
+"#;
+
+/// [`A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX`] with `B` declared in `A`'s group and indexed by a function of `A`, which the scan before the walk refuses as indexed by its group, and the walk judges all the same.
+const A_GROUP_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX: &str = r#"
+induct /A: pub Prop
+| mk(b: #{node = InductType} /B()(
+    (a: #{node = InductType} /A()) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match a
+        | mk(b2) =>
+            #{result = Ambient(#{node = InductType} /std/Bool/False())}
+            match b2
+            | c(k) =>
+                k(a)
+            end
+        end
+))
+end
+and induct /B: (f: (a: #{node = InductType} /A()) -> #{node = InductType} /std/Bool/False()) -> pub Prop
+| c(k: (a: #{node = InductType} /A()) -> #{node = InductType} /std/Bool/False()): (k)
+end
+/std/Bool/True/qed()
+"#;
+
+// A local-free term's typing reads the definition store alone, so one that needs itself while it is in progress needs itself again at every turn: a derivation resting on its own conclusion is none, and the walk refuses it by name. Each module here types the λ inside its own typing, and the walk followed the regress a level a turn, its stack grown on the heap, without end.
+#[test]
+fn a_typing_that_needs_itself_is_refused() {
+    for (module, family) in [
+        (A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX, "A"),
+        (A_GROUP_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX, "A"),
+    ] {
+        let verdicts =
+            core_text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+
+        assert!(
+            refuses(&verdicts, family, |error| matches!(
+                error,
+                Error::NeedsItsOwnTyping(_)
+            )),
+            "{verdicts:?}"
+        );
+    }
+}

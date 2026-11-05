@@ -62,7 +62,8 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
                 inferred
             }
             None => {
-                let inferred = infer_within(kernel, term, spine_head)?;
+                let inferred =
+                    kernel.typing_once(term, |kernel| infer_within(kernel, term, spine_head))?;
                 let closed = kernel.partial_groups() > before;
                 kernel.infer_store(term.clone(), inferred.clone(), closed);
 

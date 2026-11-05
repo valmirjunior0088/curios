@@ -26,6 +26,7 @@ variants!(Error {
     LargeElimination,
     NotCore,
     IndexedByItsGroup,
+    NeedsItsOwnTyping,
     RepeatedTag,
     MissingArm,
     NotDescending,
