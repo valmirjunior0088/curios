@@ -63,7 +63,7 @@ A unit's items are stored in one order, read off what they name: each item at it
 - **A witness whose head only computation reaches**, keyed where reduction takes it: its key would be known only once everything it computes through has elaborated, which is the on-demand read again for that witness.
 - **Clearing a shared context between declarations**, field by field: a field added later flows from one declaration to the next unless its author remembers the list, where a state replaced whole cannot carry one.
 - **Renumbering a declaration's identities as its elaboration begins**, in place of minting them per declaration: every table keyed by a lowered identity — unbound names, a level's origin — would follow the renaming.
-- **One state for a unit that holds a goal**, so its goals are reported from one place as they once were: two declarations' identities are the same numbers, and a declaration elaborated after a goal would follow the declarations before it again.
+- **One state for a unit that holds a goal**, so its goals are reported from one place: two declarations' identities are the same numbers, and a declaration elaborated after a goal would follow the declarations before it again.
 - **Reporting a goal as its declaration finishes**: what fits it would be drawn from the declarations that had elaborated by then, which is the order they were asked for in.
 - **Withholding what reads a declaration that holds a goal**: a reader's own goals and refusals would stay unreported until the first goal was filled.
 - **Keeping the lowering's order as what a proof's lemmas are read by**, with the sort computed for that alone: nothing moves, and an edit elsewhere still decides which lemmas an item has.

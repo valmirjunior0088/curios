@@ -2457,7 +2457,7 @@ impl Bound for Term {
         Term::has_universe_meta(self)
     }
 
-    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — fills its set once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.
+    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — fills its set once rather than once per goal. Uniform in every term, not specific to recursive ones.
     fn mentions(&self) -> Mentions {
         Term::mentions(self)
     }

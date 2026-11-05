@@ -11,6 +11,6 @@
 
 **Rejected.**
 
-- **Each crate that takes a dependency naming its own pin**, which this decision once required: two crates taking one dependency stated its version twice, which nothing held equal, and a pin in one manifest decided nothing about who may spell the dependency's types, which sealing decides.
+- **Each crate that takes a dependency naming its own pin**: two crates taking one dependency stated its version twice, which nothing held equal, and a pin in one manifest decided nothing about who may spell the dependency's types, which sealing decides.
 - **Re-exporting the foreign type from its owner**, which seals nothing: every crate above it still spells the foreign type.
 - **Exempting a dependency whose type spans many crates, or whose features differ by consumer**: `num-bigint` and Wasmtime are such cases, and sealing and a second crate on a shared row cover them.

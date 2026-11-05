@@ -106,7 +106,7 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Decision.** Three outputs, from two sources.
 
-**Rationale.** Those two carry every cross-language argument the old bench's ten runs actually made; the reasoning that read a Curios figure against what WebAssembly costs Rust needs no third language. Dropping the rest removes five toolchains, an entire cross-architecture build stage, and the only contestant whose steady state could not be assumed.
+**Rationale.** Those two carry every cross-language argument a reading makes: a Curios figure is read against what WebAssembly costs Rust, and needs no third language. Every other contestant is a toolchain to install and keep steady, for a row no argument reads.
 
 **Rejected.** Seven contestants: five never entered an argument, two were the noisiest rows in the harness, and one of them alone required an emulated build stage. A peer kept for the occasional finding that the paradigm is not the excuse — that is an investigation, run once and filed, not a toolchain installed forever.
 
@@ -117,11 +117,3 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 **Rationale.** With three contestants the image would install the engine and nothing else, and it never made the platform uniform in any case — a container shares the host's kernel, CPU and governor. What makes two readings comparable is the protocol each carries, which a container is not.
 
 **Rejected.** The kitchen-sink image: it existed for the five contestants that are gone. Pinning the timed processes to one core: core 0 is the one interrupts favour, and holding one core while the rest of the machine runs free invites interference rather than excluding it.
-
-### The bench begins with no reading
-
-**Decision.** `readings/` began empty. The runs a vanished harness took are not carried in.
-
-**Rationale.** It is the board's rule — it began with no ticket, because a flaw never seen admitted by a run of the board says nothing. No earlier run was taken under a protocol this bench records: none states its sizes, its sample count or its warmup, none kept its samples, and each was taken on a machine described in prose. Not one could be compared with a reading taken now, so carrying them in would furnish the record with rows the report must always refuse.
-
-**Rejected.** Keeping them as an archive, marked as taken under an unrecorded protocol: it carries ten readings of unusable data forever and every reader has to be told why they are there.
