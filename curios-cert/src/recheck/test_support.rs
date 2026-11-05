@@ -4152,6 +4152,28 @@ pub(super) fn written() -> Definitions {
     reading_definitions(nat(), Term::free_var)
 }
 
+/// The propositions a module written as Core text here uses, declared where the registry this crate's suites judge under names them: `False`, `True` and `Holds`, the reflection of a decision a bound states.
+pub(super) const PROPOSITIONS: &str = r#"
+induct /std/Bool/False: pub Prop
+end
+
+induct /std/Bool/True: pub Prop
+| qed()
+end
+
+let /std/Bool/Holds : (b: #BoolType) -> Prop =
+    (b: #BoolType) =>
+        #{result = Ambient(Prop)}
+        match b
+        | false =>
+            #{node = InductType}
+            /std/Bool/False()
+        | true =>
+            #{node = InductType}
+            /std/Bool/True()
+        end;
+"#;
+
 /// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
 pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
     let file = text

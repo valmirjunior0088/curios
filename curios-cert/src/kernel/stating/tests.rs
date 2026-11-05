@@ -6,7 +6,7 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Func, Global, InductDecl, InductParam, Intrinsic, Item,
-        Let, Nat, Subterm, Telescope, Term, UniverseContext,
+        Let, Level, Nat, Quality, QualityParam, Subterm, Telescope, Term, UniverseContext,
     },
 };
 
@@ -178,4 +178,55 @@ fn a_constructors_binders_state_what_the_kernel_reads_of_their_types() {
             .proofs(),
         [false, true, false]
     );
+}
+
+/// A binder at a sort its declaration leaves to its caller binds no proof: `(A: Sort, a: A) => a` and `box(A: Sort, a: A)` hold a proof at `Prop` and data at `Type`, and a mark is stated once, of the declaration as written, and read at every assignment, so `a` states none in either, the opposite of what the module says.
+///
+/// Mutation-check: have `as_sort` answer `Prop` for a sort a declaration leaves open, and both state `a` a proof.
+#[test]
+fn a_binder_at_a_sort_left_to_the_caller_binds_no_proof() {
+    let left = Term::sort_at(Quality::Param(QualityParam(0)), Level::zero());
+    let (carrier, held) = (binder(0, "A"), binder(1, "a"));
+    let function = Term::func(
+        [(carrier, left.clone()), (held, Term::free_var(&carrier))],
+        Term::free_var(&held),
+    );
+
+    let stated = stated_marks(&mut kernel(), &defined(saying(function, &[true, true])));
+
+    let Subterm::Func(Func { telescope }) = &**body(&stated) else {
+        panic!("a function literal");
+    };
+    assert_eq!(telescope.proofs(), [false, false]);
+
+    let boxed = Atom::from("box");
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 0,
+            quality_count: 1,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::build([(carrier, left.clone())], Telescope::done(())),
+        constructors: vec![(
+            boxed.clone(),
+            InductParam {
+                telescope: Telescope::build(
+                    [(carrier, left), (held, Term::free_var(&carrier))],
+                    Vec::new(),
+                )
+                .with_marks(&[Plicity::Implicit, Plicity::Explicit])
+                .with_proofs(&[true, true]),
+            },
+        )]
+        .into(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::from(["Box"]),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let stated = stated_entry(&mut kernel(), &declaration);
+
+    assert_eq!(stated.payload_proofs(&boxed), Some(vec![false]));
 }

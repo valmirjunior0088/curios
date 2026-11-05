@@ -2,28 +2,6 @@
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
-/// The propositions a module here uses, declared where the registry this crate's suites judge under names them: `False`, `True` and `Holds`, the reflection of a decision a bound states.
-const PROPOSITIONS: &str = r#"
-induct /std/Bool/False: pub Prop
-end
-
-induct /std/Bool/True: pub Prop
-| qed()
-end
-
-let /std/Bool/Holds : (b: #BoolType) -> Prop =
-    (b: #BoolType) =>
-        #{result = Ambient(Prop)}
-        match b
-        | false =>
-            #{node = InductType}
-            /std/Bool/False()
-        | true =>
-            #{node = InductType}
-            /std/Bool/True()
-        end;
-"#;
-
 /// `induct Bad : (n: Nat) -> Type | c(fs: List((p: {m: Nat, x: Bad(m), h: Holds(0 < m)}) -> False)) : Bad(len(fs)) end`, closed with `w(1, c([w]), qed)`, where `w` reads the head of the list its argument was built from, the head there because the index says so: Curry's paradox through a list.
 const CURRY_THROUGH_A_LIST: &str = r#"
 #{absent = [/Bad/c]}

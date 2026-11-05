@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier, fill},
     curios_core::{
         Atom, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Item,
         Level, Many, Nat, Quality, QualityParam, RecItem, Scope, StructDecl, Telescope, Term,
@@ -1046,5 +1046,46 @@ fn a_level_a_standing_match_carries_is_held_by_its_family() {
         verdicts.iter().any(|verdict| verdict.name == Some(coerce)
             && matches!(verdict.error, Error::Mismatch { .. })),
         "{verdicts:?}",
+    );
+}
+
+/// `/Box`'s payload stands at a sort its declaration leaves to its caller, and the term this closes with is `qed` at `Holds` of the payload of `box(false)` at `Bool`, read by a closed match.
+const A_PAYLOAD_READ_AT_TYPE: &str = r#"
+#{universe_context = {quality_count = 1}}
+induct /Box(A: Sort): pub Type
+| box(x: A)
+end
+((h: /std/Bool/Holds(
+    #{result = Ambient(#BoolType)}
+    match (
+        #{universes = {qualities = [Type]}}
+        /Box/box)(@#BoolType, false)
+    | box(x) =>
+        x
+    end
+)) => h)(
+    #{node = Variant}
+    /std/Bool/True/qed()
+)
+"#;
+
+// A payload at a sort its family leaves to its caller is a proof at `Prop` and data at `Type`, and what its constructor states of it is stated once, of the declaration as written, and read at every assignment. At `Type` the closed match reads the payload `false` as data, so the closing term stands at `Holds(false)`, which is `False`, and `qed` is refused there: a payload bound at `Type` by what holds at `Prop`, as a proof no judgment reads, is still the value the match hands on. No mutation is claimed: it pins the reduct a closed computation reaches through such a payload, the verdict nearest the mark `kernel::stating::tests::a_binder_at_a_sort_left_to_the_caller_binds_no_proof` holds.
+#[test]
+fn a_payload_at_a_sort_left_to_the_caller_is_read_as_data_at_type() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PAYLOAD_READ_AT_TYPE}",
+        PROPOSITIONS,
+        A_PAYLOAD_READ_AT_TYPE
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
     );
 }

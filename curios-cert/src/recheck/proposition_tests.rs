@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{Erased, test_support::*},
-    curios_common::Qualifier,
+    curios_common::{Qualifier, fill},
     curios_core::{
         Atom, Definitions, Global, InductParam, Intrinsic, Item, Nat, Telescope, Term, Universes,
         test_support::*,
@@ -211,4 +211,97 @@ fn member_proofs(definitions: &Definitions, name: &Global) -> Vec<bool> {
             _ => None,
         })
         .expect("the module holds the group")
+}
+
+/// `/T` is `Bool`, written with a decorator stating that its value is a proposition, and the term this closes with is one at `/H(false)` built from one at `/H(true)`.
+const FORGED_VALUE_SORT: &str = r#"
+#{value_sort = Prop}
+let /T : Type = #BoolType;
+let /H : (x: /T) -> Prop = (x: /T) => /std/Bool/Holds(x);
+((h: /H(false)) => h)(
+    ((k: /H(true)) => k)(
+        #{node = Variant}
+        /std/Bool/True/qed()
+    )
+)
+"#;
+
+// A definition's value sort is a publication `Sort::of` reads with nothing run, ahead of the irrelevance gate: read as the decorator states it, `/T` would be a proposition, `true` and `false` one at it, and the two calls of `/H` one by their spines, so the closing term would stand at `Holds(false)`, which is `False`. The kernel states the sort `/T`'s value inhabits itself, `Type`, and the two calls stay apart.
+#[test]
+fn a_value_sort_a_module_states_decides_no_comparison() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${FORGED_VALUE_SORT}",
+        PROPOSITIONS,
+        FORGED_VALUE_SORT
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// `/Box` is a proposition whose one payload stands at a sort it leaves to its caller, no index pinning it; `/H` takes the payload of a `/Box` of `Bool` into a type, and the term this closes with is one at `/H` of `box(false)` built from one at `/H` of `box(true)`.
+const A_PAYLOAD_AT_THE_CALLERS_SORT: &str = r#"
+#{universe_context = {quality_count = 1}}
+induct /Box(A: Sort): pub Prop
+| box(x: A)
+end
+let /H : (
+    b:
+        #{node = InductType, universes = {qualities = [Type]}}
+        /Box(#BoolType)
+) -> Prop =
+    (
+        b:
+            #{node = InductType, universes = {qualities = [Type]}}
+            /Box(#BoolType)
+    ) =>
+        match b: (b2) => Prop
+        | box(x) =>
+            /std/Bool/Holds(x)
+        end;
+((h: /H(
+    (
+        #{universes = {qualities = [Type]}}
+        /Box/box)(@#BoolType, false)
+)) => h)(
+    ((k: /H(
+        (
+            #{universes = {qualities = [Type]}}
+            /Box/box)(@#BoolType, true)
+    )) => k)(
+        #{node = Variant}
+        /std/Bool/True/qed()
+    )
+)
+"#;
+
+// A proposition may hold data, a payload at a sort its caller states being a proof at `Prop` and a `Bool` at `Type`, and its two values at `Bool` are one by irrelevance: the closing term stands at `/H` of `box(false)` because the two calls of `/H` are one by their spines. What keeps that from `False` is that no payload is taken out of the proposition into a type: `/H` is refused, and the closing term, read against `/H` as it stands, is not.
+//
+// Mutation-check: let the kernel's large-elimination guard take a proposition of one constructor into a type whatever its payloads, as though each were pinned, and the module is admitted whole.
+#[test]
+fn a_proposition_holding_a_payload_at_its_callers_sort_is_not_taken_apart_into_a_type() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PAYLOAD_AT_THE_CALLERS_SORT}",
+        PROPOSITIONS,
+        A_PAYLOAD_AT_THE_CALLERS_SORT
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: Some(name),
+                error: Error::LargeElimination(family)
+            }] if *name == global("H") && *family == global("Box")
+        ),
+        "{verdicts:?}"
+    );
 }
