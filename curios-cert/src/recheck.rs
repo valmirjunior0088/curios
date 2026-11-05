@@ -29,6 +29,8 @@ mod elimination_tests;
 #[cfg(test)]
 mod entry_tests;
 #[cfg(test)]
+mod equation_tests;
+#[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod identity_tests;

@@ -217,3 +217,44 @@ fn a_case_of_a_family_in_a_group_is_built_at_its_own_parameter() {
         b"1"
     );
 }
+
+// A guard's spelling settled inside an arm of a split on an expression reads that arm's equation nowhere: under `g(c) = true` the operands are units, and `one` asks for the guard's spelling there, which is the stuck match whatever the arm knows, so after the split nothing says `k(0)`. Nothing before the split names `k`, so the guard is first settled inside it. `curios-cert`'s `recheck::equation_tests` hold the kernel to the same term.
+#[test]
+fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm() {
+    refused(r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+
+        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+        let leak(g: (Bool) -> Bool, c: Bool, h: (F(g(c))) -> Nat, k: (Nat) -> Bool, p: F(g(c)), q: F(g(c))) -> True =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+            | true =>
+                let split: {} = match g(c) | false => () | true => (let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); ()) end;
+                let after: Holds(k(0)) = True/qed();
+                True/qed()
+            | false => True/qed()
+            end;
+
+        /std/print(Nat/to_str(0))
+        "#).by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+// A refused arm is not taken for one no reduction takes on the strength of its sibling's equation: under the `false` arm's `g(e) = false` the guard's proof is `False` and `g(e)` is forced to `false`, and the `true` arm, which hands `True/qed()` on at `False`, is refused. `curios-cert`'s `recheck::equation_tests` hold the kernel to the same program, where a refused arm can be withdrawn.
+#[test]
+fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
+    refused(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, False, Holds};
+
+        let w(g: (Bool) -> Bool, e: Bool, h: Holds(g(e))) -> False =
+            match g(e)
+            | false => (let k: Holds(g(e) == false) = True/qed(); match h end)
+            | true => True/qed()
+            end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+    )
+    .by_elaborator_in("/w", |error| matches!(error, Error::TypeMismatch { .. }));
+}
