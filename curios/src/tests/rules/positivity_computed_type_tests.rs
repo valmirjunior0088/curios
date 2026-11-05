@@ -157,6 +157,29 @@ fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     );
 }
 
+// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the kernel under this name. Rename both or neither.
+#[test]
+fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
+    let source = r#"
+        use /std/{Eq};
+        use /std/Bool/{True, False};
+
+        induct F(@A: Sort, x: A, y: A, h: Eq()(x, y), B: Type): pub Type
+        | mk(f: match h: (_, _, _) => Prop | refl() => (B) -> False end)
+        end
+
+        induct G: pub Type
+        | g(w: F(True/qed(), True/qed(), Eq/refl(), G))
+        end
+
+        /std/print("")
+        "#;
+    refused(source).by_elaborator_in(
+        "/G",
+        |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/G")),
+    );
+}
+
 // A field whose type a self-calling type-level `rec` computes. The walk forces the `rec` head, cannot see through the stuck `match` it exposes, descends into the arm holding the recursive call, opens that arm against a fresh binder — and forces the same node again, one level deeper, forever. `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so each unfolding hands the walk a structurally identical group; nothing but a guard keyed on that group stops the descent, and `unfolded` cannot be it because an inline group has no name to key on.
 #[test]
 fn a_field_type_a_self_calling_rec_computes_is_admitted() {

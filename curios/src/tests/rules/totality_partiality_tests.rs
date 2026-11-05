@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*, crate::test_support::*, curios_analysis::Erased, curios_common::fill,
+    curios_core::Quality,
 };
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`.
@@ -398,6 +399,36 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
                 offender: Some(offender),
                 ..
             } if *offender == global("/decide")
+        )
+    });
+}
+
+// A group standing in a term of a declaration that leaves a sort binds none of its own: `loop` answers `A`, a proof where the caller states `Prop`, and it does not descend. The elaborator owes a value at a sort left to a caller the termination a proof owes; the kernel reads the group at each assignment with `spin`, and at `Prop` it is a proof's recursion. `curios-cert`'s `recheck::assignment_tests` puts the same declaration to the kernel under this name. Rename both or neither.
+#[test]
+fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        let spin(@A: Sort, n: Nat) -> A =
+            let loop(k: Nat) -> A = loop(k);
+            loop(n);
+
+        let boom: False = spin(0);
+
+        /std/print("")
+        "#,
+    )
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_kernel_in("/spin", |error| {
+        matches!(
+            error,
+            curios_cert::Error::AtSorts { sorts, refusal }
+                if sorts[..] == [Quality::Prop]
+                    && matches!(**refusal, curios_cert::Error::NotDescending { .. })
         )
     });
 }

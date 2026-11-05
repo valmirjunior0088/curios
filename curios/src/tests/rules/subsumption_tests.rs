@@ -524,6 +524,18 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
     });
 }
 
+// Two values of a sort left to a caller are one only where it states `Prop`, so a definition holding any two of them one is true at `Prop` alone, and used at `Type` it would carry `Holds(true)` to `Holds(false)`. The elaborator checks the declaration once with the sort unknown, where no two values are one for being proofs. `curios-cert`'s `recheck::assignment_tests` puts the definition, and the same as a group, to the kernel under this name. Rename both or neither.
+#[test]
+fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
+    let source = r#"
+        let same(@A: Sort, x: A, y: A, G: (A) -> Prop, g: G(x)) -> G(y) = g;
+
+        /std/print("")
+        "#;
+
+    refused(source).by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
 // Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the kernel under this name.
 #[test]
 fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {

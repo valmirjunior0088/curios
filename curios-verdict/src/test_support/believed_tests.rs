@@ -99,6 +99,52 @@ fn a_partial_definition_whose_verdict_alone_is_withheld_is_classified_partial_fr
     assert!(refused_as_partial(&verdicts), "{verdicts:?}");
 }
 
+/// `loop` is a group generic in a sort that answers a `Box`, data at every assignment, so it may loop and its walk files it partial under its own spelling; read at `Prop` at `False`, its value's field is a proof.
+const PARTIAL_AT_A_SORT_LEFT_TO_A_CALLER: &str = "\
+use /std/{Nat};
+
+pub struct Box(A: Sort): pub Type {
+    a: A,
+}
+
+pub let loop(@A: Sort, n: Nat) -> Box(A) = loop(n);
+";
+
+/// A proof position reaching `/lib/loop` at `Prop`, at `False`.
+const PROJECTED_AT_PROP: &str = r"
+#{field = Struct(/lib/Box, 0)}
+(
+    (
+        #{universes = {levels = [0], qualities = [Prop]}}
+        /lib/loop)(@/sys/Bool/False, 0)
+).0
+";
+
+/// A group that leaves a sort to its caller is filed under its own spelling with what every assignment reached, so a later walk reading it at `Prop`, where its field is a proof, reads it partial: over its unit's record, and with the record withheld, from its terms.
+///
+/// Mutation-check: have `check_rec_group` file the group under its own spelling `Total` whatever its assignments reached, and the proof over the kept record is admitted at `False`.
+#[test]
+fn a_group_generic_in_a_sort_filed_partial_is_read_partial_at_prop() {
+    for withheld in [false, true] {
+        let mut history = History::new();
+        history
+            .step("lib", Written::Program, PARTIAL_AT_A_SORT_LEFT_TO_A_CALLER)
+            .expect("the library builds");
+        if withheld {
+            history
+                .withhold("lib", None)
+                .expect("the record is withheld whole");
+        }
+
+        let verdicts = put(&history, PROJECTED_AT_PROP);
+
+        assert!(
+            refused_as_partial(&verdicts),
+            "withheld {withheld}: {verdicts:?}"
+        );
+    }
+}
+
 /// `Neg` uses its parameter negatively.
 const NEG: &str = "\
 use /std/Bool/{False};
