@@ -6,7 +6,7 @@ The kernel's readers take their terms by a type only reading by value makes, so 
 
 - **A `let` is bound for typing and read by value** ([`curios-cert`'s README](../../../curios-cert/README.md#a-let-is-bound-for-typing-and-read-by-value)): typing walks a `let`'s tail by name, so a value named twice is typed once, and everything that reads a term for more than its type reads it with each `let`-bound name unfolded, at that reader's entry. An arm binds each variable its case solves the same way ([An arm is checked in a context specialized by index inversion](../../design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md)).
 - **The scope's snapshots are kept by value where they are taken.** The scope stores every local's type and every `let`'s value by value, and `Kernel::bind`, binding over a local that stood for nothing, assumes again every local whose type names it and binds again every `let` whose value does, so a snapshot never names a local a later binding made `let`-bound.
-- **A test runs with its checks on** ([A test is compiled optimized with its checks on](../../design/a-test-is-compiled-optimized-with-its-checks-on.md)): a debug assertion holds in every test run and costs a release build nothing.
+- **A test runs with its checks on** ([Every profile compiles optimized, and a test keeps its checks](../../design/every-profile-compiles-optimized-and-a-test-keeps-its-checks.md)): a debug assertion holds in every test run and costs a release build nothing.
 
 ## What is missing
 
