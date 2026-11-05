@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, fill},
     curios_core::{Definitions, Global, Intrinsic, Level, Term, UniverseParam, Variance},
 };
 
@@ -367,4 +367,77 @@ fn an_irrelevant_levels_higher_instance_is_no_type_at_the_lower_instances_sort()
     let verdicts = refusals(&definitions);
 
     assert!(mismatched(&verdicts, lowered), "{verdicts:?}");
+}
+
+/// `Held@{u}(n)`'s payload is a group's member applied to the family's parameter, a recursion stuck on `n` whose base case is `Type u`, so the level reaches the payload only through a group no reduction opens; `Lied` is the same family carrying that level as irrelevant; `Dropped@{u}(n)`'s group states `u` in its member's type and its body is `#NatType`. `lowered` claims a `Held` at level 1 one at level 0, and `moved` a `Dropped`.
+const LEVELS_A_GROUP_HOLDS: &str = r#"
+#{universe_context = {parameter_count = 1}}
+induct /Held(n: #NatType): pub #{level = u + 2} Type
+| held(
+    x: (#{node = Rec}
+        (let m: (k: #NatType) -> #{level = u + 1} Type =
+            (k: #NatType) =>
+                #{result = Ambient(#{level = u + 1} Type)}
+                match k
+                | 0 =>
+                    #{level = u}
+                    Type
+                | j + 1; y =>
+                    m(j)
+                end;
+        m))(n))
+end
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
+induct /Lied(n: #NatType): pub #{level = u + 2} Type
+| lied(
+    x: (#{node = Rec}
+        (let m: (k: #NatType) -> #{level = u + 1} Type =
+            (k: #NatType) =>
+                #{result = Ambient(#{level = u + 1} Type)}
+                match k
+                | 0 =>
+                    #{level = u}
+                    Type
+                | j + 1; y =>
+                    m(j)
+                end;
+        m))(n))
+end
+#{universe_context = {parameter_count = 1}}
+induct /Dropped(n: #NatType): pub #{level = u + 2} Type
+| dropped(
+    x: (#{node = Rec}
+        (let m: (k: #NatType) -> #{level = u + 1} Type =
+            (k: #NatType) =>
+                #NatType;
+        m))(n))
+end
+let /lowered : (n: #NatType, h: #{node = InductType, universes = {levels = [1]}} /Held(n)) -> #{node = InductType, universes = {levels = [0]}} /Held(n) =
+    (n: #NatType, h: #{node = InductType, universes = {levels = [1]}} /Held(n)) =>
+        h;
+let /moved : (n: #NatType, h: #{node = InductType, universes = {levels = [1]}} /Dropped(n)) -> #{node = InductType, universes = {levels = [0]}} /Dropped(n) =
+    (n: #NatType, h: #{node = InductType, universes = {levels = [1]}} /Dropped(n)) =>
+        h;
+/std/Bool/False
+"#;
+
+// A level a group in a payload holds is compared, and one a reduction of the group removes is not: granted irrelevant, `held(0, Type 0) : Held@{1}(0)` read at `Held@{0}(0)` would hold `Type 0` at `Type 0`. So `lowered` is refused, `Lied` is denied the irrelevance it carries, and `moved` stands.
+#[test]
+fn a_level_a_group_in_a_payload_holds_is_invariant() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${LEVELS_A_GROUP_HOLDS}",
+        PROPOSITIONS,
+        LEVELS_A_GROUP_HOLDS
+    ));
+
+    assert!(mismatched(&verdicts, global("lowered")), "{verdicts:?}");
+    assert!(denied(&verdicts, global("Lied"), 0), "{verdicts:?}");
+    for symbol in ["Held", "Dropped", "moved"] {
+        assert!(
+            verdicts
+                .iter()
+                .all(|verdict| verdict.name != Some(global(symbol))),
+            "{symbol}: {verdicts:?}"
+        );
+    }
 }

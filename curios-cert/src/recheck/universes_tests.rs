@@ -1306,3 +1306,83 @@ fn a_verdict_under_one_declarations_constraints_is_no_answer_under_anothers() {
         "{verdicts:?}"
     );
 }
+
+/// `Nested@{u}` stores a group nested in a group's member, and `Motive@{u}` a group a match's motive names; forced, each is `Type (u + 1)`. Each reader pins its own level at zero, the level a reading under its constraints would hand the group, and states `{5}`.
+const GROUPS_IN_A_GROUP_AND_A_MOTIVE: &str = r#"
+#{universe_context = {parameter_count = 1}}
+let /Nested : #{level = u + 2} Type =
+    #{node = Rec}
+    (let outer: #{level = u + 2} Type =
+        #{node = Rec}
+        (let inner: #{level = u + 2} Type =
+            #{level = u + 1}
+            Type;
+        inner);
+    outer);
+#{universe_context = {parameter_count = 1}}
+let /Motive : #{level = u + 2} Type =
+    #{node = Rec}
+    (let m: #{level = u + 2} Type =
+        #{level = u + 1}
+        Type;
+    m);
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /nestedHonest : #{universes = {levels = [5]}} /Nested = #{level = 5} Type;
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /nestedLowered : #{universes = {levels = [5]}} /Nested = #{level = 6} Type;
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /motiveHonest : (n: #NatType) -> #{level = 6} Type =
+    (n: #NatType) =>
+        #{result = Ambient(#{universes = {levels = [5]}} /Motive)}
+        match n
+        | 0 =>
+            #{level = 5}
+            Type
+        | k + 1; x =>
+            #{level = 5}
+            Type
+        end;
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /motiveLowered : (n: #NatType) -> #{level = 7} Type =
+    (n: #NatType) =>
+        #{result = Ambient(#{universes = {levels = [5]}} /Motive)}
+        match n
+        | 0 =>
+            #{level = 6}
+            Type
+        | k + 1; x =>
+            #{level = 6}
+            Type
+        end;
+/std/Bool/False
+"#;
+
+/// A group nested in a group, and a group a motive names, are read at the levels the instance of the declaration holding them states, as the four sites [`a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels`] and its neighbours hold read a group standing alone: `Type 5` inhabits `Nested@{5}` and an arm of `Type 5` stands at `Motive@{5}`, where `Type 6` does neither, whatever the reader's own level is held to.
+///
+/// Mutation-checked: with `RecGroup::traverse` visiting no member scope where `instantiate_universes` substitutes, `nestedHonest` and `motiveHonest` are refused.
+#[test]
+fn a_group_nested_in_a_group_or_named_by_a_motive_is_read_at_its_instances_levels() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${GROUPS_IN_A_GROUP_AND_A_MOTIVE}",
+        PROPOSITIONS,
+        GROUPS_IN_A_GROUP_AND_A_MOTIVE
+    ));
+
+    for symbol in ["nestedLowered", "motiveLowered"] {
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| verdict.name == Some(global(symbol))
+                    && matches!(verdict.error, Error::Mismatch { .. })),
+            "{symbol}: {verdicts:?}"
+        );
+    }
+    for symbol in ["Nested", "Motive", "nestedHonest", "motiveHonest"] {
+        assert!(
+            verdicts
+                .iter()
+                .all(|verdict| verdict.name != Some(global(symbol))),
+            "{symbol}: {verdicts:?}"
+        );
+    }
+}

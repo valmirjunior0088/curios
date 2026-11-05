@@ -623,3 +623,45 @@ fn an_ordinal_over_its_own_universe_is_refused_where_it_is_sized_or_applied() {
         assert!(stands(&verdicts, symbol), "{symbol}: {verdicts:?}");
     }
 }
+
+/// `Small@{u, v | u + 1 <= v} : Type v = Type u` handed back by `named`, a sibling naming it at the group's own instance, so `named@{0, 0}` would be `Type 0` at `Type 0`; and `shifted`, a member naming its sibling at another instance, `Smaller@{v, v}`.
+const A_GROUP_READ_THROUGH_A_SIBLING: &str = r#"
+#{node = Rec, universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}
+let /Small : #{level = v} Type = #{level = u} Type
+and /named : #{level = v} Type = #{universes = {levels = [u, v]}} /Small;
+let /collapse : #{level = 0} Type = #{universes = {levels = [0, 0]}} /named;
+let /fits : #{level = 1} Type = #{universes = {levels = [0, 1]}} /named;
+#{node = Rec, universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}
+let /Smaller : #{level = v} Type = #{level = u} Type
+and /shifted : #{level = v} Type = #{universes = {levels = [v, v]}} /Smaller;
+/std/Bool/False
+"#;
+
+/// A member named through its sibling is read at the instance a reader states of the declaration that holds its group, held to that declaration's constraints: `named@{0, 0}` is refused for its instance and `named@{0, 1}` stands. A group binds no universe, so inside it a member at any instance but the group's own names no declaration in scope.
+///
+/// Mutation-checked at `synth_neutral`'s `Instance` arm: with `check_instance` dropped, `/collapse` stands.
+#[test]
+fn a_member_named_through_its_sibling_is_held_to_its_items_scheme() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GROUP_READ_THROUGH_A_SIBLING}",
+        PROPOSITIONS,
+        A_GROUP_READ_THROUGH_A_SIBLING
+    ));
+
+    assert!(
+        refuses(&verdicts, "collapse", |error| matches!(
+            error,
+            Error::UniverseInstance { .. }
+        )),
+        "{verdicts:?}"
+    );
+    assert!(
+        refuses(&verdicts, "Smaller", |error| matches!(
+            error,
+            Error::Undeclared(name) if *name == global("Smaller")
+        )),
+        "{verdicts:?}"
+    );
+    assert!(stands(&verdicts, "Small"), "{verdicts:?}");
+    assert!(stands(&verdicts, "fits"), "{verdicts:?}");
+}

@@ -558,3 +558,72 @@ fn a_call_below_its_parameter_only_to_a_judgment_does_not_descend() {
         "{verdicts:?}"
     );
 }
+
+/// `Flip(b)` is `True` at `false` and `False` at `true`, and `claimed`, beside it in a group a definition's body holds, states `Flip(false)` in its own body; `control` states the same proof as `stated`'s type.
+const A_SIBLING_READ_IN_A_BODY: &str = r#"
+let /outer : /std/Bool/Holds(true) =
+    #{node = Rec}
+    (let Flip: (b: #BoolType) -> Prop =
+        (b: #BoolType) =>
+            #{result = Ambient(Prop)}
+            match b
+            | false =>
+                #{node = InductType}
+                /std/Bool/True()
+            | true =>
+                #{node = InductType}
+                /std/Bool/False()
+            end
+    and claimed: /std/Bool/Holds(true) =
+        let p: Flip(false) =
+            #{node = Variant}
+            /std/Bool/True/qed();
+        #{node = Variant}
+        /std/Bool/True/qed();
+    claimed);
+let /control : /std/Bool/Holds(true) =
+    #{node = Rec}
+    (let Flop: (b: #BoolType) -> Prop =
+        (b: #BoolType) =>
+            #{result = Ambient(Prop)}
+            match b
+            | false =>
+                #{node = InductType}
+                /std/Bool/True()
+            | true =>
+                #{node = InductType}
+                /std/Bool/False()
+            end
+    and stated: Flop(false) =
+        #{node = Variant}
+        /std/Bool/True/qed();
+    #{node = Variant}
+    /std/Bool/True/qed());
+/std/Bool/False
+"#;
+
+// A group's bodies are checked over members that stand for nothing, so no body reads a value of its group, a sibling's included: `claimed` is refused where it states `Flip(false)`, and the same proof stated as `stated`'s type, where a signature reads its group folded, stands. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_group`: with each body checked over the members bound to their folded selections, as `infer`'s `Rec` arm binds them in the tail, `/outer` stands.
+#[test]
+fn a_sibling_stands_for_nothing_in_its_groups_bodies() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_SIBLING_READ_IN_A_BODY}",
+        PROPOSITIONS,
+        A_SIBLING_READ_IN_A_BODY
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("outer"))
+                && matches!(verdict.error, Error::Mismatch { .. })),
+        "{verdicts:?}"
+    );
+    assert!(
+        verdicts
+            .iter()
+            .all(|verdict| verdict.name != Some(global("control"))),
+        "{verdicts:?}"
+    );
+}

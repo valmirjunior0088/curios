@@ -13,6 +13,7 @@ mod coverage_tests;
 mod effect_tests;
 mod eta_tests;
 mod fold_tests;
+mod group_tests;
 mod index_tests;
 mod irrelevance_tests;
 mod large_elimination_tests;
