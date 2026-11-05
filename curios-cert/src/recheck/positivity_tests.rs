@@ -195,3 +195,48 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
         );
     }
 }
+
+/// `struct S(G: (Type) -> Type) { f: (G(S(G))) -> False }`, closed at `G` the identity with `s.f(s)` over `s = S { (x) => x.f(x) }`: Curry's paradox with no recursion, the record reaching itself only as the argument of its own parameter, a function of types no vector speaks for.
+const CURRY_THROUGH_A_PARAMETER: &str = r#"
+struct /S(G: (A: Type) -> Type): pub Type {
+    f: (
+        x: G(
+            #{node = StructType}
+            /S(G)
+        )
+    ) -> /std/Bool/False
+}
+((
+    s:
+        #{node = StructType}
+        /S((A2: Type) => A2)
+) =>
+    (#{field = Struct(/S, 0)} s.0)(s))(
+    /S((A3: Type) => A3) {
+        (
+            x2:
+                #{node = StructType}
+                /S((A4: Type) => A4)
+        ) =>
+            (#{field = Struct(/S, 0)} x2.0)(x2)
+    }
+)
+"#;
+
+// Nothing says how a parameter uses its argument, so the record reaching itself as one is read as reaching itself at `Mixed`: the record is refused, and the closing term, which types once it is admitted, is refused for nothing of its own.
+#[test]
+fn a_record_reaching_itself_through_its_own_parameter_is_refused() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${CURRY_THROUGH_A_PARAMETER}",
+        PROPOSITIONS,
+        CURRY_THROUGH_A_PARAMETER
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(name), error: Error::NotPositive { .. } }] if *name == global("S")
+        ),
+        "{verdicts:?}"
+    );
+}

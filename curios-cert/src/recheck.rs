@@ -27,7 +27,11 @@ mod foreign_tests;
 #[cfg(test)]
 mod identity_tests;
 #[cfg(test)]
+mod implied_tests;
+#[cfg(test)]
 mod independence_tests;
+#[cfg(test)]
+mod intrinsic_tests;
 #[cfg(test)]
 mod occurrence_tests;
 #[cfg(test)]

@@ -4174,13 +4174,26 @@ let /std/Bool/Holds : (b: #BoolType) -> Prop =
         end;
 "#;
 
-/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
-pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
+/// What `text` writes, Core text read with nothing in scope: the module, and the term it closes with where it closes with one.
+fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
     let file = text
         .parse::<curios_surface::CoreFile>()
         .unwrap_or_else(|error| panic!("{}", error.format()));
-    let (definitions, entry) =
-        curios_surface::to_core(&file, None).unwrap_or_else(|error| panic!("{error}"));
+
+    curios_surface::to_core(&file, None).unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// The module `text` writes, read with nothing in scope and closing with no term: an environment another text is put over.
+pub(super) fn core_text_module(text: &str) -> Definitions {
+    let (definitions, entry) = core_text_read(text);
+    assert!(entry.is_none(), "an environment closes with no term");
+
+    definitions
+}
+
+/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
+pub(super) fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
+    let (definitions, entry) = core_text_read(text);
     let program = Program {
         definitions,
         entrypoint: Entrypoint {
@@ -4192,7 +4205,12 @@ pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
         },
     };
 
-    fixture_verdicts(&program, BUDGET, &Globals::default(), SYNTAX)
+    fixture_verdicts(&program, BUDGET, globals, SYNTAX)
+}
+
+/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
+pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
+    core_text_verdicts_over(text, &Globals::default())
 }
 
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.

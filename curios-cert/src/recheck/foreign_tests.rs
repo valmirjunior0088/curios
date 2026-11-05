@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, fill},
     curios_core::{Global, Intrinsic, Term},
 };
 
@@ -78,5 +78,35 @@ fn a_foreign_row_cannot_be_held_at_another_wire_type() {
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
         "the kernel let a row take another wire type than its own: {verdicts:?}",
+    );
+}
+
+/// A row that does not return, and its declaration written beside it stating that a call yields the proposition it is handed rather than a description of it: applied at `False`, the declaration would be a proof of it.
+const ANSWERED_OUTSIDE_IO: &str = r#"
+foreign /gone() -> Never;
+let /gone : (A: Prop) -> A =
+    (A2: Prop) =>
+        #{node = Foreign}
+        /gone(@A2);
+/gone(/std/Bool/False)
+"#;
+
+/// A declaration stated beside a row cannot take the row's answer out of `Io`: the call is typed by the row it carries, whatever the declaration around it states, so the declaration's body is refused at its type, and the closing term, which reaches the refused declaration, as not known to terminate.
+///
+/// Mutation-checked at `curios_core::foreign_produced`: with a diverging row's result handed back bare rather than in `Io`, the declaration types and no mismatch is refused under `/gone`.
+#[test]
+fn a_declaration_beside_a_row_cannot_take_its_answer_out_of_io() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${ANSWERED_OUTSIDE_IO}",
+        PROPOSITIONS,
+        ANSWERED_OUTSIDE_IO
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("gone"))
+                && matches!(verdict.error, Error::Mismatch { .. })),
+        "the kernel let a declaration beside a row take its answer out of `Io`: {verdicts:?}",
     );
 }

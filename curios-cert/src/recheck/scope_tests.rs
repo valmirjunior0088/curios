@@ -491,3 +491,45 @@ fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
         );
     }
 }
+
+/// The reflection every intrinsic bound is stated in, declared again under the name the registry knows it by and true of every decision, and the reflection again under a name of the module's own, `/G`, by which every byte is below 256 with nothing written: were the name the module's to state, a byte narrowed from 300 would carry its bound by `qed`, and `/G` at it is `/G(300 < 256)`, which is `False`.
+const HOLDS_RESTATED_TO_GAUGE_A_BYTE: &str = r#"
+let /std/Bool/Holds : (b: #BoolType) -> Prop =
+    (b: #BoolType) => /std/Bool/True;
+let /G : (b2: #BoolType) -> Prop =
+    (b3: #BoolType) =>
+        #{result = Ambient(Prop)}
+        match b3
+        | false => /std/Bool/False
+        | true => /std/Bool/True
+        end;
+((
+    below: (b4: #ByteType) -> /G(#NatLt(#ByteToNat(b4), 256))
+) =>
+    below(
+        #NatToByte(
+            300,
+            #{node = Variant}
+            /std/Bool/True/qed()
+        )
+    ))(
+    (b5: #ByteType) =>
+        #{node = Variant}
+        /std/Bool/True/qed()
+)
+"#;
+
+/// A module cannot make a name the kernel's registry knows stand for something else: every bound `Intrinsic::signature` states is built from the registry's `Holds`, so the one declared over an environment holding it is refused for the name before anything is judged, the closing term among it.
+///
+/// Mutation-checked against the environment's question in `redeclarations`: with a held name never asked after, the walk goes on, the module's `Holds` is refused where the walk writes it and the closing term beside it, the bound being the environment's. Put with nothing in scope, `HOLDS_RESTATED_TO_GAUGE_A_BYTE` is admitted, its closing term a proof of `False`: the bound's whole force is what the registry's name means.
+#[test]
+fn the_registrys_reflection_is_not_declared_again() {
+    let environment = core_text_module(PROPOSITIONS);
+    let verdicts = core_text_verdicts_over(
+        HOLDS_RESTATED_TO_GAUGE_A_BYTE,
+        &already_judged(&environment).globals(),
+    );
+    let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
+
+    assert!(redeclares(&verdicts, &holds), "{verdicts:?}");
+}
