@@ -18,7 +18,7 @@ The store as a compilation sees it: the `Cache` the fold consults for units alre
 
 **Rationale.** A unit compiled over a baseline is stored as the index a whole compile of the same text stores, naming the same objects ([A stored unit is a baseline for an item-level recompile](../documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)), so the slot is the one a whole compile would have written whichever command wrote it, and the next baseline is no further from a whole compile than the last. No verdict a build files rests on what the elaborator kept: which of a baseline's verdicts stand is the certifier's decision, from the reads its own walk filed ([Cached verdicts](../documentation/design/soundness/cached-verdicts.md)). A baseline is offered whatever moved before it, since what a declaration read of another unit is asked again by the stage that read it, by the digest it recorded, wherever that unit is not the one the record names.
 
-**Rejected.** A build compiling a moved unit whole, which pays for every declaration of the unit where a question pays for what moved, to store the same index; withholding what a question compiled over a baseline, which leaves every question after a saved edit recompiling what moved until a build files the unit.
+**Rejected.** A build compiling a moved unit whole, and withholding what a question compiled over a baseline, for the reasons [A stored unit is a baseline for an item-level recompile](../documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) gives.
 
 ### An entry's unit is filed by the executable it is, and a handle with no store keeps for its session
 
