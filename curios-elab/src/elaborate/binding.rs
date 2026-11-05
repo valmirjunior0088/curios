@@ -67,6 +67,8 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
             .map(|(label, _, value)| (*label, value.clone()))
             .collect::<Vec<_>>();
         let tail_type = leaving(context, tail_type, &values);
+        // What the block recorded names a binding by its label, which says nothing of what it stands for: the obligations read it as its value.
+        context.record_labels(&triples.iter().map(|(label, ..)| *label).collect::<Vec<_>>());
 
         // Materialized before the block closes, as a group is: a committed solution substituted here is captured in its own size, where its occurrence would have the capture walk a spine as long as the scope it was born in. Tolerant, so what is not yet committed waits for the final zonk.
         let triples = triples
@@ -196,6 +198,8 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             .map(|(index, label)| (*label, Term::rec_proj(group.clone(), index)))
             .collect::<Vec<_>>();
         let tail_type = leaving(context, tail_type, &values);
+        // What the tail recorded names a member by its label, a local that holds no group: the obligations read it as the member's projection out of the group.
+        context.record_labels(&labels);
 
         Ok((Term::rec(triples, tail_elaborated), tail_type))
     })

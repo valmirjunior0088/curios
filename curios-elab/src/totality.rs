@@ -14,8 +14,8 @@ use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position},
     curios_analysis::{Erased, group_totality, yields_a_sort},
     curios_core::{
-        Definition, Definitions, Enter, Entrypoint, Extent, Global, Item, Rec, RecGroup, RecItem,
-        Sharing, Subterm, Term, Totality,
+        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, Rec, RecGroup,
+        RecItem, Sharing, Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeSet, HashMap, HashSet},
@@ -280,6 +280,7 @@ fn checked_type_positions(
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
     let settled = context.checked()[mark..].to_vec();
+    let labels = context.checked_labels(mark);
     // One site per definition, not per position: many recorded terms were settled in one.
     let mut sites: HashMap<Option<Global>, Rc<ErasedSite>> = HashMap::new();
     let mut positions = Vec::new();
@@ -292,7 +293,7 @@ fn checked_type_positions(
         let sort = matches!(&*type_, Subterm::Sort(_));
         if sort {
             positions.push(Position {
-                term: zonked(context, cache, &term)?,
+                term: by_value(&zonked(context, cache, &term)?, &labels),
                 site: Rc::clone(sites.entry(site).or_insert_with(|| {
                     Rc::new(ErasedSite::Within {
                         definition: site,
@@ -307,6 +308,14 @@ fn checked_type_positions(
     curios_profile::sample!("totality::type_sites", sites.len());
     curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
+}
+
+/// `term` with each local binding it names read as what the binding stands for: what a position reaches is what the kernel reads it by, which a label hides — a member of a local group stands for the group, and a `let`'s binding for whatever its value reaches. The values name no binding, each read by value where its block ended, so one substitution reads them all.
+fn by_value(term: &Term, labels: &[(Free, Term)]) -> Term {
+    match term.has_local_free() {
+        true => term.substitute(labels),
+        false => term.clone(),
+    }
 }
 
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
@@ -334,6 +343,7 @@ fn checked_proof_positions(
     mark: usize,
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
+    let labels = context.checked_labels(mark);
     let checked = context.split_checked(mark);
     // One site per definition and kind of proof, not per position: many recorded terms were settled in one.
     let mut sites: HashMap<(Option<Global>, &'static str), Rc<ErasedSite>> = HashMap::new();
@@ -355,7 +365,7 @@ fn checked_proof_positions(
         };
         if let Some(what) = held {
             positions.push(Position {
-                term: zonked(context, cache, &term)?,
+                term: by_value(&zonked(context, cache, &term)?, &labels),
                 site: Rc::clone(sites.entry((site, what)).or_insert_with(|| {
                     Rc::new(ErasedSite::Within {
                         definition: site,

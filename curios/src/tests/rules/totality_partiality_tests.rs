@@ -368,6 +368,9 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         pub let in_an_implicit: Nat = take(@spin(()).p);
         satisfy Lawful(Nat) { op(x) = x, law(_) = spin(()).p }
         pub let in_a_signature(_: Holds(decide(()))) -> Nat = 0;
+        pub let in_a_groups_tail: Nat = let h(u: {}) -> Box = h(u); let _: False = h(()).p; 0;
+        pub let in_a_type_in_a_groups_tail: Nat = let d(u: {}) -> Bool = d(u); let f(_: Holds(d(()))) -> Nat = 0; 0;
+        pub let in_a_lets_tail: Nat = let g: ({}) -> Box = (let h(u: {}) -> Box = h(u); h); let _: False = g(()).p; 0;
 
         /std/print("unreachable")
         "#,
@@ -401,6 +404,23 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
             } if *offender == global("/decide")
         )
     });
+    // A member named in its group's tail, or a binding whose value holds a group named in the binding's tail, stands there by its label, which is read as what it stands for, so the position holds the group.
+    for (at, erased) in [
+        ("/in_a_groups_tail", Erased::Proof),
+        ("/in_a_type_in_a_groups_tail", Erased::Type),
+        ("/in_a_lets_tail", Erased::Proof),
+    ] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: refused,
+                    offender: None,
+                    ..
+                } if *refused == erased
+            )
+        });
+    }
 }
 
 // A group standing in a term of a declaration that leaves a sort binds none of its own: `loop` answers `A`, a proof where the caller states `Prop`, and it does not descend. The elaborator owes a value at a sort left to a caller the termination a proof owes; the kernel reads the group at each assignment with `spin`, and at `Prop` it is a proof's recursion. `curios-cert`'s `recheck::assignment_tests` puts the same declaration to the kernel under this name. Rename both or neither.

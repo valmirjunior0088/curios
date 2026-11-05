@@ -81,8 +81,8 @@ use {
     crate::{Classified, Published, ZonkPass, zonk},
     curios_common::SyntaxRegistry,
     curios_core::{
-        Declarations, DefinitionKind, Extent, Global, Imports, Item, MetavarSpine, Mints, Subterm,
-        Term,
+        Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
+        Subterm, Term,
     },
     std::{
         collections::{BTreeSet, HashMap},
@@ -258,7 +258,7 @@ impl<'s> Context<'s> {
         self.underway.checked.truncate(mark);
     }
 
-    /// Each term recorded since `mark`, and its type, through `restate`: what a declaration recorded while its members were locals, which the obligations read after it has closed over them.
+    /// Each term recorded since `mark`, its type and what each binding recorded since stands for, through `restate`: what a declaration recorded while its members were locals, which the obligations read after it has closed over them.
     pub(crate) fn restate_checked(
         &mut self,
         mark: usize,
@@ -270,8 +270,28 @@ impl<'s> Context<'s> {
             restated.push((restate(self, &term)?, restate(self, &type_)?, site));
         }
         self.underway.checked.replace_since(mark, restated);
+        let mut labels = mem::take(&mut self.underway.checked);
+        let restated = labels.restate_labels(mark, |value| restate(self, value));
+        self.underway.checked = labels;
 
-        Ok(())
+        restated
+    }
+
+    /// Record what each of `labels`, the bindings of a block that is ending, stands for, read by value while the block stands: a term recorded in the block names a binding by its label, and the erasure obligations read it as that value ([`Context::checked_labels`]).
+    pub(crate) fn record_labels(&mut self, labels: &[Free]) {
+        for label in labels {
+            let value = self.by_value(&Term::free_var(label));
+            self.underway.checked.record_label(*label, value);
+        }
+    }
+
+    /// Each binding recorded since `mark`, with what it stands for: what a term recorded since `mark` names by a label is read as.
+    pub(crate) fn checked_labels(&self, mark: usize) -> Vec<(Free, Term)> {
+        self.underway
+            .checked
+            .labels_since(mark)
+            .map(|(_, label, value)| (*label, value.clone()))
+            .collect()
     }
 
     /// Begin a unit's items: the declarations they make, which place each of its names, and the names of those its walk is to decide, none finished yet; every other declaration of the unit is a baseline's, and finished. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
@@ -496,8 +516,14 @@ impl<'s> Context<'s> {
             settled.push((settle(term)?, settle(type_)?, *site));
         }
         self.underway.checked.replace_since(mark, settled);
+        let mut labels = mem::take(&mut self.underway.checked);
+        let settled = labels.restate_labels(mark, |value| match zonked.get(value) {
+            Some(done) => Ok(done.clone()),
+            None => pass.zonk(self, value),
+        });
+        self.underway.checked = labels;
 
-        Ok(())
+        settled
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
@@ -508,8 +534,9 @@ impl<'s> Context<'s> {
         self.underway.needs.finish(names);
     }
 
-    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
+    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last. The bindings recorded since go with them.
     pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
+        self.underway.checked.drop_labels(mark);
         self.underway.checked.split_off(mark)
     }
 
