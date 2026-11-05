@@ -65,6 +65,8 @@ mod totality_tests;
 #[cfg(test)]
 mod universes_tests;
 #[cfg(test)]
+mod unjudged_tests;
+#[cfg(test)]
 mod variance_tests;
 
 use {
