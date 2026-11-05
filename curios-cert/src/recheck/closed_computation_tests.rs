@@ -556,3 +556,86 @@ fn an_arm_whose_dispatch_resolves_to_a_closed_comparison_leaves_nothing_the_decl
         "{verdicts:?}"
     );
 }
+
+/// `f(1)` matches on a fold of `[5]` whose step returns its accumulator, so the fold answers `f(0)`, which is `0`, and the match `7`; the same fold over `member(3)` answers `0`, so `c3`'s and `S`'s types are their arms at `0`, and over `pair(3)` it answers `(0, 1)`.
+const A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL: &str = r#"
+#{node = Rec}
+let /f : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        #{result = Ambient(#NatType)}
+        match n
+        | 0 =>
+            0
+        | k + 1; x =>
+            #{result = Ambient(#NatType)}
+            match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /f(k), (a: #NatType, b: #NatType) => b)
+            | 0 =>
+                7
+            | _ =>
+                9
+            end
+        end;
+let /y : /std/Bool/Holds(#NatEql(/f(1), 7)) =
+    /std/Bool/True/qed();
+#{node = Rec}
+let /member : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        #{result = Ambient(#NatType)}
+        match n
+        | 0 =>
+            0
+        | k + 1; x =>
+            /member(k)
+        end;
+let /c3 : #{result = Ambient(Type)}
+    match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /member(3), (a: #NatType, b: #NatType) => b)
+    | 0 =>
+        #BoolType
+    | _ =>
+        #NatType
+    end =
+    true;
+let /S : #{result = Ambient(#{level = 1} Type)}
+    match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /member(3), (a: #NatType, b: #NatType) => b)
+    | 0 =>
+        Type
+    | _ =>
+        Type
+    end =
+    #BoolType;
+let /s : /S =
+    true;
+#{node = Rec}
+let /pair : (n: #NatType) -> {#NatType, #NatType} =
+    (n: #NatType) =>
+        #{result = Ambient({#NatType, #NatType})}
+        match n
+        | 0 =>
+            (0, 1)
+        | k + 1; x =>
+            /pair(k)
+        end;
+let /p : /std/Bool/Holds(
+    #NatEql(
+        (#ListFold(#NatType, {#NatType, #NatType}, #List(#NatType, [5]), /pair(3), (a: #NatType, b: {#NatType, #NatType}) => b)).0,
+        0
+    )
+) =
+    /std/Bool/True/qed();
+/std/Bool/True/qed()
+"#;
+
+// A match and a projection force what they read, so where an intrinsic answers a recursive call the machine forces the call before either reads it, as the strategy forces what `whnf` answers: `y`'s and `p`'s instances are `True`, `c3`'s type is `Bool` and `S` is a sort. Handed the fold's answer at the weak demand, a match or a projection stands on the unforced call, `Frame::RecGuard` reads `f`'s step as neutral, and `y`, `s` and `p` are refused. `curios`'s `tests::rules::sequence_tests` puts the program to both checkers under this name.
+#[test]
+fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL}",
+        PROPOSITIONS,
+        A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL
+    ));
+
+    assert!(
+        the_closing_instance_alone_is_refused(&verdicts),
+        "{verdicts:?}"
+    );
+}

@@ -810,3 +810,104 @@ fn an_operand_a_fold_reads_plainly_is_not_served_its_forced_value() {
         "the machine and the strategy disagreed at a plain demand on {term:?}",
     );
 }
+
+/// **A match or a projection that forces an intrinsic reads the forced form of what the fold answers.**
+///
+/// A fold over `[5]` whose step hands its accumulator back answers its initial value, here the folded call `member(3)`: the plain form, which a match on it or a projection out of it has to force, as the strategy forces what `whnf` answered before it dispatches. Handed the folded call, the machine's match stood stuck, and a recursion stepping through one never computed.
+///
+/// Mutation-checked at the machine's `Finish::Intrinsic`: with the answer handed back at whatever demand the intrinsic was evaluated at, the match stands stuck and the projection with it.
+#[test]
+fn a_match_or_a_projection_forces_what_an_intrinsic_answers() {
+    let (member, n) = (binder(0, "member"), binder(1, "n"));
+    let (pred, hypothesis) = (binder(2, "pred"), binder(3, "ih"));
+    let (motive_binder, item, acc) = (binder(4, "m"), binder(5, "item"), binder(6, "acc"));
+    let (outer_pred, outer_hypothesis, outer_motive) =
+        (binder(7, "pred"), binder(8, "ih"), binder(9, "m"));
+    let (first, second) = (binder(10, "first"), binder(11, "second"));
+    let pair_type = Term::tuple_type([(first, nat_type()), (second, nat_type())]);
+    let five = || {
+        Term::intrinsic(Intrinsic::List {
+            element: nat_type(),
+            items: vec![nat(5)],
+        })
+    };
+
+    // `member(n)` is `zero` for every `n`, by a recursion that descends to its zero case.
+    let program = |result: Term, zero: Term, around: &dyn Fn(Term) -> Term| {
+        let body = Term::func(
+            [(n, nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive_binder),
+                result.clone(),
+                zero,
+                &pred,
+                &hypothesis,
+                Term::free_var(&hypothesis),
+            ),
+        );
+        let step = Term::func(
+            [(item, nat_type()), (acc, result.clone())],
+            Term::free_var(&acc),
+        );
+        let folded = Term::intrinsic(Intrinsic::list_fold(
+            nat_type(),
+            result.clone(),
+            five(),
+            Term::apply(Term::free_var(&member), [nat(3)]),
+            step,
+        ));
+        let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+            [(member, Term::func_type([(n, nat_type())], result), body)],
+            around(folded),
+        )) else {
+            unreachable!("built as a rec")
+        };
+        unfold_rec(rec)
+    };
+    let matched = program(nat_type(), nat(0), &|folded| {
+        Term::nat_match(
+            folded,
+            Some(&outer_motive),
+            nat_type(),
+            nat(7),
+            &outer_pred,
+            &outer_hypothesis,
+            nat(9),
+        )
+    });
+    let projected = program(pair_type, Term::tuple([nat(0), nat(1)]), &|folded| {
+        Term::proj(folded, 0)
+    });
+
+    for (label, term) in [("the match", matched), ("the projection", projected)] {
+        let mut machined = kernel();
+        let mut strategy = strategy_kernel();
+        assert_eq!(
+            machined.reduce(term.clone()),
+            strategy.reduce(term.clone()),
+            "{label}: the machine and the strategy disagreed at a plain demand on {term:?}",
+        );
+        assert_eq!(
+            machined.reduce_forced(term.clone()),
+            strategy.reduce_forced(term.clone()),
+            "{label}: the machine and the strategy disagreed at the forced demand on {term:?}",
+        );
+    }
+    let mut machined = kernel();
+    assert_eq!(
+        machined.reduce(program(nat_type(), nat(0), &|folded| {
+            Term::nat_match(
+                folded,
+                Some(&outer_motive),
+                nat_type(),
+                nat(7),
+                &outer_pred,
+                &outer_hypothesis,
+                nat(9),
+            )
+        })),
+        Ok(nat(7)),
+        "the match took no arm"
+    );
+}

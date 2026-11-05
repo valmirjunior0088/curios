@@ -274,10 +274,16 @@ enum Finish {
     },
     /// Open an `Induct` arm over the payload values.
     Arm { body: Scope<Many>, demand: Demand },
-    /// Fold the intrinsic through [`reduce_intrinsic`], serving it the values through a [`Tap`], and remember the result under `key` — the whole intrinsic term as focused.
+    /// Fold the intrinsic through [`reduce_intrinsic`], serving it the values through a [`Tap`], and remember the result under `key` — the whole intrinsic term as focused — then hand it on at `demand`, the one the intrinsic was evaluated at.
     ///
     /// The memo is what keeps a *closed neutral* accumulator linear. A fold whose combining operation is genuinely stuck — byte arithmetic no rule folds, a runtime-only operation — accumulates a neutral chain one link deeper per element, exactly as it does under the hosts; without the memo the machine would re-walk that chain at every element, and a pathological program would price *worse* here than under the strategy this replaces. With it, a chain link evaluates once and every later encounter is one probe.
-    Intrinsic { key: Term, intrinsic: Intrinsic },
+    ///
+    /// **A forced demand forces what the fold answers.** A fold's answer is a plain form: a list fold whose step hands its accumulator back answers its initial value, which may be a folded recursive call. A match and a projection evaluate their head at [`Demand::Forced`], and the strategy forces what `whnf` answered before it dispatches; handed the folded call, the machine's match stood stuck, and a recursion stepping through one never computed. So an answer that is not its own forced form is evaluated again at the forced demand, on this stack.
+    Intrinsic {
+        key: Term,
+        intrinsic: Intrinsic,
+        demand: Demand,
+    },
 }
 
 /// A left-to-right evaluation of a fixed list of terms, then a [`Finish`] over the values.
@@ -631,6 +637,7 @@ impl Machine {
                         finish: Finish::Intrinsic {
                             key: Term::from(Subterm::Intrinsic(intrinsic.clone())),
                             intrinsic,
+                            demand,
                         },
                     },
                 )
@@ -928,7 +935,11 @@ impl Machine {
                 let refs = args.done.iter().collect::<Vec<_>>();
                 Ok(Step::Eval(body.open(&refs), demand))
             }
-            Finish::Intrinsic { key, intrinsic } => {
+            Finish::Intrinsic {
+                key,
+                intrinsic,
+                demand,
+            } => {
                 let values = args
                     .originals
                     .iter()
@@ -947,9 +958,24 @@ impl Machine {
                     let memo = host.closed_memo();
                     memo.remember(value.clone(), value.clone(), Demand::Whnf);
                     memo.remember(key, value.clone(), Demand::Whnf);
+
+                    return Ok(Step::Value(value));
                 }
 
-                Ok(Step::Value(value))
+                match demand {
+                    Demand::Whnf => Ok(Step::Value(value)),
+                    // Remembered under the intrinsic at the forced demand, as a match's value is under the match.
+                    Demand::Forced => {
+                        self.push(
+                            host,
+                            Frame::Memo {
+                                key,
+                                demand: Demand::Forced,
+                            },
+                        )?;
+                        Ok(Step::Eval(value, Demand::Forced))
+                    }
+                }
             }
         }
     }

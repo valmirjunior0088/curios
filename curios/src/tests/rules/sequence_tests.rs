@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*,
+    crate::test_support::*,
     curios_cert::Verdict,
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
@@ -271,5 +272,30 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
             [Verdict { name: Some(refused), error: curios_cert::Error::Mismatch { .. } }] if *refused == name
         ),
         "the kernel refuses the forged `c` alone, as a mismatch: {verdicts:?}"
+    );
+}
+
+// A match and a projection force what they read, so where a fold answers a recursive call — its step returning the accumulator, its initial value the call — both checkers force the call before reading it: `f(1)` is `7`, `c3`'s type is `Bool`, `S` is `Bool` and `p`'s instance is `True`. Read at the fold's unforced answer, `f`'s step stands neutral and `y` is refused by both checkers, and the elaborator and the kernel part on `c3` and `s`. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the kernel under this name.
+#[test]
+fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, List, Bool};
+            use /std/Bool/{True, Holds};
+
+            pub let f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => match List/fold([5], f(k), (_: Nat, b: Nat) => b) | 0 => 7 | _ => 9 end end;
+            pub let y: Holds(f(1) == 7) = True/qed();
+
+            pub let member(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => member(k) end;
+            pub let c3: match List/fold([5], member(3), (_: Nat, b: Nat) => b) | 0 => Bool | _ => Nat end = true;
+            pub let S: match List/fold([5], member(3), (_: Nat, b: Nat) => b) | 0 => Type | _ => Type end = Bool;
+            pub let s: S = true;
+
+            pub let pair(n: Nat) -> {Nat, Nat} = match n | 0 => (0, 1) | k + 1 => pair(k) end;
+            pub let p: Holds(List/fold([5], pair(3), (_: Nat, b: {Nat, Nat}) => b).0 == 0) = True/qed();
+
+            /std/print("ok")
+            "#),
+        b"ok"
     );
 }
