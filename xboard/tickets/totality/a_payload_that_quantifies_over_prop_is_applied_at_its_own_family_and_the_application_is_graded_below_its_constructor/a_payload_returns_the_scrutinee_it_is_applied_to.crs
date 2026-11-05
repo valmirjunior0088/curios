@@ -1,7 +1,11 @@
 -- `f` quantified over every proposition, `Bad` among them, so `f(Bad)(b)` was a `Bad`, and an application of a payload is graded a child of its constructor. With `f` the identity it is `b` itself, and the recursion that was judged to descend took the same value for ever. `Bad` is now sized: holding `f`, it sits above the propositions `f` ranges over, and is none of them.
 use /std/Bool/{False};
+
 induct Bad: Prop
 | c(f: (A: Prop) -> (A) -> A)
 end
-let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end;
+
+let bad(b: Bad) -> False =
+    match b | c(f) => bad(f(Bad)(b)) end;
+
 bad(Bad/c((A) => (x) => x))

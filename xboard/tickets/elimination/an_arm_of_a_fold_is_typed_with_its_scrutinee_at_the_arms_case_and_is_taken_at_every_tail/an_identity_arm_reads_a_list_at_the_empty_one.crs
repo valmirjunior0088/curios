@@ -1,9 +1,8 @@
 -- The rule is the free-monoid carriers', so a list's fold has it as `Nat`'s does.
 use /std/{Nat, List};
 use /std/Bool/{True, False, Holds};
+
 let f(xs: List(Nat), h: Holds(List/len(xs) == 2)) -> False =
-    match xs: (m) => False
-    | [] => h
-    | [x, ..t]; ih => ih
-    end;
+    match xs: (m) => False | [] => h | [x, ..t]; ih => ih end;
+
 f([1, 2], True/qed())

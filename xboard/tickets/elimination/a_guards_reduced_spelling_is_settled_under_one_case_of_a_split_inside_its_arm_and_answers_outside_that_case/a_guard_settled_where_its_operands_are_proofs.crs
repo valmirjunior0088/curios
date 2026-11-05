@@ -1,22 +1,34 @@
 -- `F(c)` was a proposition at `true` and `Nat` at `false`, so `p` and `q` were proofs only under the `true` case of the split, where conversion held `h(p)` and `h(q)` one term without reading either. The guard is the match on `h(p) == h(q)`, which stands while `c` is open, and its reduced spelling was settled inside that arm, where the comparison was `true` and the match `k(0)`. The spelling is kept with the guard's equation, which outlives the split: after it, with `c` open again, `k(0)` was answered `true`, and at `false`, where the guard says `k(1)`, that is `Holds(false)`. What the settlement read of the split was whether two locals are proofs. No proposition stands where a type is wanted now, so `F` is refused where it is declared: a type is a proposition under every case of `c` or under none.
 use /std/{Nat, Bool};
 use /std/Bool/{True, False, Holds};
-induct Two: Prop | a() | b() end
-let F(c: Bool) -> Type = match c | true => Two | false => Nat end;
+
+induct Two: Prop
+| a()
+| b()
+end
+
+let F(c: Bool) -> Type =
+    match c | true => Two | false => Nat end;
+
 let f(
     c: Bool,
     h: (F(c)) -> Nat,
     k: (Nat) -> Bool,
     p: F(c),
     q: F(c),
-    guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
-    match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+    guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end),
+) -> Holds(k(0)) =
+    match match h(p) == h(q) | true => k(0) | false => k(1) end
     | false => match guard end
     | true =>
-        let split: {} = match c
+        let split: {} =
+            match c
             | false => ()
-            | true => (let settled: Holds(k(0)) = True/qed(); ())
+            | true =>
+                let settled: Holds(k(0)) = True/qed();
+                ()
             end;
         True/qed()
     end;
+
 f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())

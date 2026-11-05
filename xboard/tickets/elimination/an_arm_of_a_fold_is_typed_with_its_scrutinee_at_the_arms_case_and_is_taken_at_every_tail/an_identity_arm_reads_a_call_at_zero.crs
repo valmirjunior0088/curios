@@ -1,9 +1,8 @@
 -- A scrutinee that is no variable is substituted nowhere: the arm is typed under the recorded equation `g(x) = 0`, which reduction consults, and `h` is read through it.
 use /std/{Nat};
 use /std/Bool/{True, False, Holds};
+
 let f(g: (Nat) -> Nat, x: Nat, h: Holds(g(x) == 2)) -> False =
-    match g(x): (m) => False
-    | 0 => h
-    | k + 1; ih => ih
-    end;
+    match g(x): (m) => False | 0 => h | k + 1; ih => ih end;
+
 f((y: Nat) => y, 2, True/qed())
