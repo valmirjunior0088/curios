@@ -78,10 +78,10 @@ mod variance_tests;
 use {
     super::{
         Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Stated, Totals, Unvisited,
-        bytes_of, carried_marks, check_definition, check_entrypoint, check_induct_decl,
-        check_positions, check_rec_group, check_struct_decl, define_as_stated, free_locals_of,
-        held_digest, open_positions_of, open_quality, positivity_vectors, read_digest,
-        rewrite_universe_levels, state_definition, state_rec_group, stated_entrypoint,
+        bytes_of, carried_marks, check_case_counts, check_definition, check_entrypoint,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
+        free_locals_of, held_digest, open_positions_of, open_quality, positivity_vectors,
+        read_digest, rewrite_universe_levels, state_definition, state_rec_group, stated_entrypoint,
         stated_marks, universe_metas, universe_verdict, unstated_entry, variance_vectors,
     },
     curios_analysis::{Declarations, PositivityRefusal},
@@ -593,6 +593,24 @@ fn verdicts_within<'s>(
                 checked.insert(*name);
             }
         }
+    }
+
+    // A case whose counts are not its family's is refused here, whole, as a redeclaration is: every reader of a case opens its parameters at the family's, the family's own positivity and an arm judged before it among them, so no judgment of the module may run first.
+    let miscounted = entries_among(&inducts, &checked)
+        .filter_map(|(name, declaration)| {
+            check_case_counts(declaration).err().map(|error| Verdict {
+                name: Some(*name),
+                error,
+            })
+        })
+        .collect::<Vec<_>>();
+    if !miscounted.is_empty() {
+        return Rechecked {
+            verdicts: miscounted,
+            certification: Certification::default(),
+            definitions: definitions.clone(),
+            entrypoint: entry.cloned(),
+        };
     }
 
     // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope stands exactly as a refused item does — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it. A baseline is beneath the walk as the scope is, answering for the declarations whose verdict the walk adopts, and for every declaration it does not visit once it has passed it.

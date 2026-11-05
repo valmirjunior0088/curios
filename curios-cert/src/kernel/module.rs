@@ -411,6 +411,7 @@ pub(crate) fn check_induct_decl(
     declaration: &InductDecl,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_induct_decl");
+    check_case_counts(declaration)?;
     check_declared_sort(&declaration.result_sort)?;
     check_distinct_tags(declaration)?;
 
@@ -518,6 +519,31 @@ fn walk_arity<B: Bound>(
     })
 }
 
+/// Each case of `declaration` states at least its family's parameters and as many index targets as its family has indices, read off its telescope as it stands: every reader of a case opens its parameter prefix at the family's parameters, asserting the prefix is there, so a walk that judges anything of a module counts its cases first (`recheck`).
+pub(crate) fn check_case_counts(declaration: &InductDecl) -> Result<(), Error> {
+    let (parameters, indices) = (declaration.param_count(), declaration.index_count());
+    for constructor in declaration.signatures() {
+        let stated = constructor.telescope.len();
+        if stated < parameters {
+            return Err(Error::Arity {
+                counted: Counted::Parameters,
+                expected: parameters,
+                actual: stated,
+            });
+        }
+        let targets = constructor.telescope.terminal().len();
+        if targets != indices {
+            return Err(Error::Arity {
+                counted: Counted::Indices,
+                expected: indices,
+                actual: targets,
+            });
+        }
+    }
+
+    Ok(())
+}
+
 /// A constructor's index targets must inhabit the family's index telescope, and its parameter prefix must be the family's own parameters.
 ///
 /// The terminal carries the targets and nothing else — the family and its parameters are fixed by the declaration, so a terminal naming another family or standing at other parameters is unspellable rather than refused. What remains is two typing clauses: the targets are checked here, because index inversion and the arm rule both read them.
@@ -529,14 +555,7 @@ fn check_constructed(
 ) -> Result<(), Error> {
     // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
     //
-    // Refused before the walk, because `take` would end it early without complaint: a telescope too short to hold the prefix would hand `indices_at` a short parameter list and panic in `Telescope::open`, and a malformed entry deserves a refusal rather than a crash.
-    if entries.len() < declaration.param_count() {
-        return Err(Error::Arity {
-            counted: Counted::Parameters,
-            expected: declaration.param_count(),
-            actual: entries.len(),
-        });
-    }
+    // The counts are [`check_case_counts`]'s, so `take` finds the whole prefix and `indices_at` as many targets as the family has indices.
 
     let mut cursor = declaration.arity.cursor();
 
@@ -554,15 +573,6 @@ fn check_constructed(
         cursor.advance(Term::free_var(binder));
     }
     let declared = cursor.into_args();
-
-    let expected = declaration.index_count();
-    if targets.len() != expected {
-        return Err(Error::Arity {
-            counted: Counted::Indices,
-            expected,
-            actual: targets.len(),
-        });
-    }
 
     let telescope = declaration.indices_at(&declared);
     let mut cursor = telescope.cursor();

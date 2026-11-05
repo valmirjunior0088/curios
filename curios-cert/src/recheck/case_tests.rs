@@ -1252,3 +1252,36 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
         );
     }
 }
+
+/// `Short`'s case states none of its family's one parameter.
+const A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY: &str = r#"
+induct /Short(A: Type): pub Type
+| #{params = []} mk()
+end
+/std/Bool/True/qed()
+"#;
+
+/// A case's parameters are counted against its family's before anything reads them: every reader of a case opens its parameter prefix at the family's parameters, positivity and an arm's signature among them, and opening a prefix shorter than that aborted the walk. So `Short` is refused by its count, under its name.
+#[test]
+fn a_case_stating_fewer_parameters_than_its_family_is_refused_by_its_count() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY}",
+        PROPOSITIONS,
+        A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("Short"))
+                && matches!(
+                    verdict.error,
+                    Error::Arity {
+                        counted: Counted::Parameters,
+                        expected: 1,
+                        actual: 0
+                    }
+                )),
+        "{verdicts:?}"
+    );
+}
