@@ -20,7 +20,7 @@ pub(crate) use {
         struct_reaches_itself, variance_vectors, wholly_pinned, yields_a_sort,
     },
     curios_core::{
-        accelerable, foreign_signature, free_locals_of, instantiate_qualities,
+        accelerable, foreign_operands, foreign_signature, free_locals_of, instantiate_qualities,
         instantiate_universes, open_positions_of, open_quality, probe_spellings, reduce_closed,
         reduce_intrinsic, rewrite_universe_levels, universe_metas, weak_head_value,
     },

@@ -110,3 +110,40 @@ fn a_declaration_beside_a_row_cannot_take_its_answer_out_of_io() {
         "the kernel let a declaration beside a row take its answer out of `Io`: {verdicts:?}",
     );
 }
+
+/// A call of a row that does not return holding none of its operands, and its declaration written beside it: the row demands the type a call yields first.
+const A_DIVERGING_CALL_OF_NO_OPERAND: &str = r#"
+foreign /gone() -> Never;
+let /gone : #IoType(#BoolType) =
+    #{node = Foreign}
+    /gone();
+/std/Bool/True/qed()
+"#;
+
+/// A call's operands are counted against its row before the row's result is read: a row that does not return reads its result off the call's first operand, so a call holding none is refused by its count where reading the result first aborted the walk.
+#[test]
+fn a_call_of_a_row_is_counted_before_its_result_is_read() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_DIVERGING_CALL_OF_NO_OPERAND}",
+        PROPOSITIONS,
+        A_DIVERGING_CALL_OF_NO_OPERAND
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [
+                Verdict {
+                    name: Some(gone),
+                    error: Error::Arity {
+                        counted: Counted::Arguments,
+                        expected: 1,
+                        actual: 0
+                    }
+                },
+                Verdict { name: None, .. },
+            ] if *gone == global("gone")
+        ),
+        "{verdicts:?}"
+    );
+}

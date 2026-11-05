@@ -28,7 +28,7 @@ use {
     super::{
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
-    crate::{foreign_signature, spine},
+    crate::{foreign_operands, foreign_signature, spine},
     curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
@@ -113,17 +113,18 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             ..
         }) => {
             let syntax = kernel.syntax();
-            let signature =
-                foreign_signature(function, args, &syntax, |label| kernel.fresh(Some(label)));
-
-            if args.len() != signature.operands.len() {
+            // Counted before the row's result is read, which a row that does not return reads off the call's first operand.
+            let expected = foreign_operands(function, &syntax).len();
+            if args.len() != expected {
                 return Err(Error::Arity {
                     counted: Counted::Arguments,
-                    expected: signature.operands.len(),
+                    expected,
                     actual: args.len(),
                 });
             }
 
+            let signature =
+                foreign_signature(function, args, &syntax, |label| kernel.fresh(Some(label)));
             check_operands(kernel, args, &signature.operands)?;
 
             let Produced::Fixed(type_) = signature.produced else {
