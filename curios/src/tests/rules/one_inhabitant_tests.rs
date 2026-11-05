@@ -151,3 +151,46 @@ fn two_binders_of_an_arm_at_a_relevant_type_stay_apart() {
             matches!(error, Error::TypeMismatch { .. })
         });
 }
+
+// **What one inhabitant reads of a struct is every field it holds, a hidden one among them.** `S`'s plain field is a unit and its hidden `k` a `Nat`, so two neutrals at `S` stay apart, where read off the plain fields alone `cast` would carry `F` from `S { @k = 1, u = () }` to `S { @k = 0, u = () }`, `True` to `False`. The control is the same pair at a struct whose hidden field is a unit too. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+#[test]
+fn two_neutrals_at_a_struct_whose_relevant_field_is_hidden_stay_apart() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds, True, False};
+
+        struct S: pub Type { @k: Nat, u: {} }
+
+        let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
+
+        let cast(r: S, s: S, G: (S) -> Prop, y: G(r)) -> G(s) = y;
+
+        let _forged: False = cast(S { @k = 1, u = () }, S { @k = 0, u = () }, F, True/qed());
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/cast", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+#[test]
+fn two_neutrals_at_a_struct_whose_hidden_field_is_a_unit_convert() {
+    assert_eq!(
+        run(r#"
+            use /std/{print};
+            use /std/Bool/{Holds, True};
+
+            struct H: pub Type { @k: {}, u: {} }
+
+            let F(t: H) -> Prop = Holds(true);
+
+            let cast(r: H, s: H, G: (H) -> Prop, y: G(r)) -> G(s) = y;
+
+            let _held: F(H { @k = (), u = () }) = cast(H { @k = (), u = () }, H { @k = (), u = () }, F, True/qed());
+
+            print("1")
+            "#),
+        b"1"
+    );
+}

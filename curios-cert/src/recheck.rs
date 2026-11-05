@@ -55,6 +55,8 @@ mod registry_tests;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
+mod shape_tests;
+#[cfg(test)]
 mod sort_tests;
 #[cfg(test)]
 mod standing_tests;

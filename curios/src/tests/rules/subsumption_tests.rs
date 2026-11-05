@@ -567,3 +567,42 @@ fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
     )
     .by_elaborator_in("/held", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// A sort left to a caller is one each use states, so what a declaration claims of a value at it holds at both: `Box(A)` has one inhabitant at a proposition and two at `Bool`, and `generic`, holding any two boxes one, would carry `Holds(true)` to `Holds(false)` at `Type`. The control is the same claim made at `Prop`. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name, refused at the assignment that states `Type`.
+#[test]
+fn a_struct_at_a_sort_left_to_a_caller_has_one_inhabitant_only_at_prop() {
+    refused(
+        r#"
+        use /std/{Bool};
+        use /std/Bool/{Holds, True, False};
+
+        struct Box(A: Sort): pub Type { a: A }
+
+        let generic(@A: Sort, x: Box(A), y: Box(A), G: (Box(A)) -> Prop, g: G(x)) -> G(y) = g;
+
+        let _forged: False = generic(Box { a = true }, Box { a = false }, (z: Box(Bool)) => Holds(z.a), True/qed());
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/generic", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+#[test]
+fn a_struct_at_a_proposition_has_one_inhabitant() {
+    assert_eq!(
+        run(r#"
+            use /std/{print};
+            use /std/Bool/{Holds, True};
+
+            struct Box(A: Sort): pub Type { a: A }
+
+            let generic(@A: Prop, x: Box(A), y: Box(A), G: (Box(A)) -> Prop, g: G(x)) -> G(y) = g;
+
+            let _held: Holds(true) = generic(Box { a = True/qed() }, Box { a = True/qed() }, (z: Box(Holds(true))) => Holds(true), True/qed());
+
+            print("1")
+            "#),
+        b"1"
+    );
+}

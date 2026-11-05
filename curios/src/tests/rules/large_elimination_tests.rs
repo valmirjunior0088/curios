@@ -330,3 +330,91 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         });
     }
 }
+
+// The singleton rung asks every payload to be pinned, a hidden one as a plain one. `Q/mk`'s plain `n` is its index and its hidden `k` is pinned by none, so `Q/mk(@0, 5)` and `Q/mk(@1, 5)` are one proof of `Q(5)`, and `read` telling them apart would carry `True` to `False` through `cast`. The control is the same family with `k` an index too, read into data. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+#[test]
+fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds, True, False};
+
+        induct Q: (Nat) -> pub Prop
+        | mk(@k: Nat, n: Nat): (n)
+        end
+
+        let read(m: Nat, q: Q(m)) -> Nat = match q | mk(@k, _) => k end;
+
+        let cast(G: (Q(5)) -> Prop, y: G(Q/mk(@0, 5))) -> G(Q/mk(@1, 5)) = y;
+
+        let _forged: False = cast((q: Q(5)) => Holds(match read(5, q) | 0 => true | _ => false end), True/qed());
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/read", |error| {
+        matches!(error, Error::LargeElimOfProp { name } if *name == global("/Q"))
+    });
+}
+
+#[test]
+fn a_hidden_payload_an_index_pins_is_read_out_of_a_proof() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, print};
+            use /std/Bool/{Holds, True};
+
+            induct Q: (Nat, Nat) -> pub Prop
+            | mk(@k: Nat, n: Nat): (k, n)
+            end
+
+            let read(j: Nat, m: Nat, q: Q(j, m)) -> Nat = match q | mk(@k, _) => k end;
+
+            let _held: Holds(read(1, 5, Q/mk(@1, 5)) == 1) = True/qed();
+
+            print("1")
+            "#),
+        b"1"
+    );
+}
+
+// Reduction reads a tuple's slot off a constructor's value through the flat runtime view `(tag, payload...)`, so `P/mk(1).1` would be `1`; a slot is typed off what it is a slot of, and a family's value is no tuple, so `get` is refused, where `P/mk(0)` and `P/mk(1)` being one proof would carry `True` to `False` through `cast`. The control is the same slot read off a tuple. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+#[test]
+fn a_proofs_payload_is_read_by_no_tuple_slot() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds, True, False};
+
+        induct P: pub Prop
+        | mk(n: Nat)
+        end
+
+        let get(p: P) -> Nat = p.1;
+
+        let cast(G: (P) -> Prop, y: G(P/mk(0))) -> G(P/mk(1)) = y;
+
+        let _forged: False = cast((p: P) => Holds(match get(p) | 0 => true | _ => false end), True/qed());
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/get", |error| matches!(error, Error::NotATuple { .. }));
+}
+
+#[test]
+fn a_tuples_slot_is_read_off_the_tuple() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, print};
+            use /std/Bool/{Holds, True};
+
+            let get(p: {Nat, Nat}) -> Nat = p.1;
+
+            let _held: Holds(match get((0, 1)) | 1 => true | _ => false end) = True/qed();
+
+            print("1")
+            "#),
+        b"1"
+    );
+}

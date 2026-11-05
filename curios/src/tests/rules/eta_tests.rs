@@ -116,3 +116,46 @@ fn two_distinct_recursions_do_not_convert() {
     refused(DISTINCT_RECURSIONS_ARE_NOT_EQUAL)
         .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// **A hidden member is a slot of the value, and a literal's eta reads it.** `S`'s one relevant field, `k`, is hidden and its plain field is a unit, so an eta that walked only what an author writes would hold `S { @k = 0, u = () }` one with every `S`, and `cast` would carry `F` at `S { @k = 1, u = () }`, which is `True`, to `F` at `@k = 0`, which is `False`. The control is the literal that states the neutral's own `k`, which is its eta. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+#[test]
+fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
+    refused(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds, True, False};
+
+        struct S: pub Type { @k: Nat, u: {} }
+
+        let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
+
+        let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = 0, u = () }) = y;
+
+        let _forged: False = cast(S { @k = 1, u = () }, F, True/qed());
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/cast", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+#[test]
+fn a_struct_literal_stating_a_neutrals_hidden_field_is_its_eta() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, print};
+            use /std/Bool/{Holds, True};
+
+            struct S: pub Type { @k: Nat, u: {} }
+
+            let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
+
+            let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = s.k, u = () }) = y;
+
+            let _held: F(S { @k = 1, u = () }) = cast(S { @k = 1, u = () }, F, True/qed());
+
+            print("1")
+            "#),
+        b"1"
+    );
+}
