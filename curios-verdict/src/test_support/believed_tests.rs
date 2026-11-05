@@ -4,7 +4,7 @@ use {
     super::*,
     crate::*,
     curios_cert::{Error, Verdict},
-    curios_common::{Qualifier, fill},
+    curios_common::{Qualifier, RootKind, fill},
     curios_core::{Entrypoint, Program, Term, Universes, Zonked},
     curios_pipeline::{Earlier, recheck},
 };
@@ -861,7 +861,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
     let store = || Verdicts::alone(directory.join("project"));
 
     let tested = written(&kinds("/sys/Bool/True()", true));
-    let tested_root = RootSource::core_text("lib", &file, &tested).tested();
+    let tested_root = RootSource::one_file("lib", &file, &tested).tested();
     with_prelude(|prelude| {
         super::read(
             &store(),
@@ -874,7 +874,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
     .expect("the tested unit builds");
 
     let built = written(&kinds("/sys/Bool/False()", false));
-    let built_root = RootSource::core_text("lib", &file, &built);
+    let built_root = RootSource::one_file("lib", &file, &built);
     let verdicts = store();
     assert!(
         verdicts

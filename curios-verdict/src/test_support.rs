@@ -10,18 +10,14 @@ mod tests;
 use {
     crate::Verdicts,
     curios_abi::ForeignStore,
-    curios_common::{RootKind, Source, test_support::Temporary},
+    curios_common::{Source, test_support::Temporary},
     curios_core::{Certification, Definitions, Global},
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_pipeline::{Cache, CompileError, DEFAULT_BUDGET, compile_units, test_support::*},
     curios_prelude::with_prelude,
     curios_surface::{CoreFile, FormScope, ReadError, to_core},
     curios_unit::{Predecessors, Unit},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-        sync::Arc,
-    },
+    std::{fs, path::PathBuf},
 };
 
 /// What a unit's step is written in.
@@ -139,13 +135,13 @@ impl History {
         // Filed through a cache that has taken the units before it and not the unit itself, so its record names what it was compiled after, as the filing that made it did.
         let filing = self.verdicts();
         self.walked(&filing, Some(mount), |_, _, _| ())?;
-        let (_, written, file) = self
+        let (_, _, file) = self
             .units
             .iter()
             .find(|(at, ..)| at == mount)
             .expect("the unit was walked");
         let text = Source::read(file).map_err(|error| stored(error.to_string()))?;
-        let root = rooted(mount, *written, file, &text);
+        let root = RootSource::one_file(mount, file, &text);
         filing.put(
             &UnitSource::mounted(&root),
             &held.with_certification(certification),
@@ -186,7 +182,7 @@ impl History {
             };
             let text =
                 Source::read(file).map_err(|error| stopped(Unbuilt::Stored(error.to_string())))?;
-            let root = rooted(mount, *written, file, &text);
+            let root = RootSource::one_file(mount, file, &text);
             let source = UnitSource::mounted(&root);
             let unit = with_prelude(|prelude| {
                 let scope = prelude.iter().copied().chain(&units).collect::<Vec<_>>();
@@ -211,19 +207,6 @@ impl History {
         }
 
         Ok(units)
-    }
-}
-
-/// The source of the unit claiming `mount`, written as `written` in `file`, whose text is `text`.
-fn rooted(mount: &str, written: Written, file: &Path, text: &Arc<Source>) -> RootSource {
-    match written {
-        Written::Program => RootSource::mounted(
-            mount,
-            RootKind::Ordinary,
-            file,
-            RootSource::namespace_of(file),
-        ),
-        Written::CoreText => RootSource::core_text(mount, file, text),
     }
 }
 
