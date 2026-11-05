@@ -1,0 +1,13 @@
+title = "Two families declared apart that mention each other are each analysed with the other as a sink, and the negative cycle through the two is admitted"
+found = 2026-11-05
+status = "open"
+
+[[witness]]
+what = "Curry's paradox through `/A`, which holds a function out of `/B`, declared before `/B`, which holds an `/A`"
+source = "curry_through_a_family_declared_after.crsc"
+refused = [{ by = "kernel", error = "NotPositive" }]
+
+[[witness]]
+what = "the same cycle with `/A`'s payload a definition placed before both families"
+source = "curry_through_a_definition_before_both.crsc"
+refused = [{ by = "kernel", error = "NotPositive" }]

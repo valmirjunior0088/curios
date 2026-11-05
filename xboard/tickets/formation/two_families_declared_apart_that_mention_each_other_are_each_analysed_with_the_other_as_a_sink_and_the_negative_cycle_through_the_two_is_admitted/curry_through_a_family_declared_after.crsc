@@ -1,0 +1,29 @@
+-- `/A` holds a function out of `/B`, and `/B` holds an `/A`, the two declared apart: each is analysed for strict positivity with the other outside its set, read by a vector that speaks of none of its own, so the negative path from `/B` through `/A` back to `/B` is walked by neither. The term this closes with is Curry's paradox with no recursion: `sa` takes a `/B` apart to the function it holds and applies it to the `/B` itself.
+induct /E: pub Type
+end
+induct /A: pub Type
+| a(g: (x: #{node = InductType} /B()) -> #{node = InductType} /E())
+end
+induct /B: pub Type
+| b(x: #{node = InductType} /A())
+end
+((sa: (x: #{node = InductType} /B()) -> #{node = InductType} /E()) =>
+    #{result = Ambient(/sys/Bool/False)}
+    match sa(
+        #{node = Variant}
+        /B/b(
+            #{node = Variant}
+            /A/a(sa)
+        )
+    )
+    end)(
+    (x: #{node = InductType} /B()) =>
+        #{result = Ambient(#{node = InductType} /E())}
+        match x
+        | b(y) =>
+            #{result = Ambient(#{node = InductType} /E())}
+            match y
+            | a(g) => g(x)
+            end
+        end
+)
