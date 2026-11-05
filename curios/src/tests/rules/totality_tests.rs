@@ -1,6 +1,6 @@
 //! A partial definition at an erased position, however it is reached, and what does not count as descent.
 
-use super::test_support::*;
+use {super::test_support::*, curios_analysis::Erased, curios_common::fill};
 
 /// A partial definition behind a `Type`-sorted carrier, reached four ways, and a diverging proof at a position the judgment infers rather than checks: each is a proof resting on something that may not terminate, however it is reached.
 #[test]
@@ -140,6 +140,219 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
             error,
             curios_elab::Error::MatrixUncovered { indexed: true, .. }
         )
+    });
+}
+
+/// A recursion on a proposition's own case, every arm recursing, at an index holding a proof: `P/base()` stands at `step`'s target by irrelevance, so `_bad` is a closed term at `False` were `base`'s arm excused. The holes are the declarations the index needs, the index's type, and `base`'s and `step`'s targets.
+const A_RECURSION_AT_AN_INDEX_HOLDING_A_PROOF: &str = r#"
+    use /std/Bool/{False};
+
+    ${declarations}
+
+    induct P: (${index}) -> Prop
+    | base(): (${base})
+    | step(p: P(${step})): (${step})
+    end
+
+    let f(p: P(${step})) -> False =
+        match p
+        | step(q) => f(q)
+        end;
+
+    let _bad: False = f(P/base());
+
+    /std/print("FORGED")
+    "#;
+
+// `a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits` at every shape a program can carry the proof in: a relevant family holding one, a list and a tuple of them, a type family over a proposition, a proposition above level zero, and one declared in a group. The size order reads `step(q)` as a descent in each, and coverage keeps `base`'s arm, since no clash is concluded between two of a proposition's constructors wherever in an index they meet. `curios-cert`'s `recheck::case_tests` puts the shapes to the kernel under this name, a stated instance and a type a definition spells among them.
+#[test]
+fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_omits() {
+    let wit = r#"
+    induct Wit: Prop
+    | a()
+    | b()
+    end
+    "#;
+    let boxed = r#"
+    induct Wit: Prop
+    | a()
+    | b()
+    end
+
+    induct Box: Type
+    | box(w: Wit)
+    end
+    "#;
+    let optional = r#"
+    induct Wit: Prop
+    | a()
+    | b()
+    end
+
+    induct Opt(A: Prop): Type
+    | none()
+    | some(x: A)
+    end
+    "#;
+    let high = r#"
+    induct High: Prop
+    | ha(f: (A: Prop) -> (A) -> A)
+    | hb()
+    end
+    "#;
+    let grouped = r#"
+    induct G: Prop
+    | ga()
+    | gb(x: G2)
+    and G2: Prop
+    | c(y: G)
+    | d()
+    end
+    "#;
+
+    for (declarations, index, base, step) in [
+        (boxed, "Box", "Box/box(Wit/a())", "Box/box(Wit/b())"),
+        (wit, "/std/List(Wit)", "[Wit/a()]", "[Wit/b()]"),
+        (
+            wit,
+            "{Wit, Wit}",
+            "(Wit/a(), Wit/a())",
+            "(Wit/b(), Wit/b())",
+        ),
+        (
+            optional,
+            "Opt(Wit)",
+            "Opt/some(Wit/a())",
+            "Opt/some(Wit/b())",
+        ),
+        (high, "High", "High/ha((_) => (x) => x)", "High/hb()"),
+        (grouped, "G", "G/ga()", "G/gb(G2/d())"),
+    ] {
+        refused(&fill!(
+            A_RECURSION_AT_AN_INDEX_HOLDING_A_PROOF,
+            declarations,
+            index,
+            base,
+            step
+        ))
+        .by_elaborator_in("/f", |error| {
+            matches!(
+                error,
+                curios_elab::Error::MatrixUncovered { indexed: true, .. }
+            )
+        });
+    }
+}
+
+// `S` is indexed by a proof of `W` and `W` holds an `S`, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index: `v` is `i`, no part of `s`, and the size order grades it below `s`. That reading is sound, a proof of `S(i)` ranking above `i` at its least derivation; what refuses the loop is that `S/mk(w)`, built around `h`'s own case, is nothing at or below `w`, so `h(base)`, which is `h(base)` for ever, starts no descending thread. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name.
+#[test]
+fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        induct W: pub Prop
+        | base()
+        | wrap(x: W, s: S(x))
+        and S: (W) -> pub Prop
+        | mk(v: W): (v)
+        end
+
+        let g(i: W, s: S(i)) -> False =
+            match s
+            | mk(v) => h(v)
+            end
+        and h(w: W) -> False =
+            match w
+            | base() => g(w, S/mk(w))
+            | wrap(x, s2) => g(x, s2)
+            end;
+
+        let _bad: False = h(W/base());
+
+        /std/print("FORGED")
+        "#,
+    )
+    .by_elaborator_in("/g", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/g", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
+}
+
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to stand at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name.
+#[test]
+fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
+    refused(
+        r#"
+        use /std/{Nat};
+
+        induct S: (Nat) -> Prop
+        | mk(n: Nat): (n)
+        end
+
+        let X(n: Nat, p: S(n)) -> Type =
+            match p
+            | mk(m) => X(m, S/mk(m))
+            end;
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/X", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                offender: None,
+                ..
+            }
+        )
+    });
+}
+
+// The field's accessibility routes all need a proof of accessibility where none exists, and `spin` is that recursion's honest half: over a reflexive relation nothing is accessible, `spin` descends through `below(w, qed)`, an application of `intro`'s payload, and so proves accessibility empty there. The proof it is handed is built by a recursion that hands itself back, which descends on nothing and is refused at the proof it stands at.
+#[test]
+fn an_accessibility_proof_built_by_self_reference_is_refused() {
+    refused(
+        r#"
+        use /std/Bool/{True, False};
+
+        induct Acc(@A: Type, R: (A, A) -> Prop): (A) -> pub Prop
+        | intro(@x: A, below: (y: A, r: R(y, x)) -> Acc(R)(y)): (x)
+        end
+
+        let spin(x: {}, a: Acc((p: {}, q: {}) => True)(x)) -> False =
+            match a
+            | intro(@w, below) => spin(w, below(w, True/qed()))
+            end;
+
+        let forever(x: {}) -> Acc((p: {}, q: {}) => True)(x) =
+            Acc/intro((y, r) => forever(y));
+
+        let _bad: False = spin((), forever(()));
+
+        /std/print("FORGED")
+        "#,
+    )
+    .by_elaborator_in("/forever", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/forever", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
 

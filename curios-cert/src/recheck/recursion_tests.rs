@@ -627,3 +627,141 @@ fn a_sibling_stands_for_nothing_in_its_groups_bodies() {
         "{verdicts:?}"
     );
 }
+
+/// `S` is indexed by a proof of `W` and `W` holds an `S`, a family indexed by a family of its own group; `S`'s one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index, and the size order grades `v` below `s` though it is `i` and no part of `s`. `h`'s `base` arm hands `g` the base again with a proof built of it, so `h(base)` is `h(base)` for ever.
+const A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX: &str = r#"
+induct /W: pub Prop
+| base()
+| wrap(
+    x:
+        #{node = InductType}
+        /W(),
+    s:
+        #{node = InductType}
+        /S()(x)
+)
+end
+and induct /S: (
+    w:
+        #{node = InductType}
+        /W()
+) -> pub Prop
+| mk(
+    v:
+        #{node = InductType}
+        /W()
+): (v)
+end
+#{node = Rec, proof = true}
+let /g : (
+    i:
+        #{node = InductType}
+        /W(),
+    s:
+        #{node = InductType}
+        /S()(i)
+) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (
+        i:
+            #{node = InductType}
+            /W(),
+        s:
+            #{node = InductType}
+            /S()(i)
+    ) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/False())}
+        match s
+        | mk(v) =>
+            /h(v)
+        end
+and /h : (
+    w:
+        #{node = InductType}
+        /W()
+) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (
+        w:
+            #{node = InductType}
+            /W()
+    ) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/False())}
+        match w
+        | base() =>
+            /g(w, /S/mk(w))
+        | wrap(x, s2) =>
+            /g(x, s2)
+        end;
+/h(/W/base())
+"#;
+
+// Reading the cast's payload below the proof is sound — a proof of `S(i)` ranks above `i` at its least derivation, `mk` over a derivation of `i`'s proposition — so what refuses the loop is the other half: nothing in the size order reads `S/mk(w)` at or below `w`, so the base arm's call starts no thread back to `s` and the group does not descend. `curios`'s `tests::rules::totality_tests` puts the program to both checkers under this name.
+#[test]
+fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX}",
+        PROPOSITIONS,
+        A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("g"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// `S` is wholly pinned, so a match on a proof of it into `Type` fires with the proof unreduced and reads `m` off the index: `m` is `n`, graded below `p`, and the call hands `X` back a proof at the same index, which a type reaching `X` would unfold for ever.
+const A_TYPE_RECURSING_THROUGH_A_CAST_ON_THE_INDEX_IT_READS: &str = r#"
+induct /S: (#NatType) -> pub Prop
+| mk(n: #NatType): (n)
+end
+#{node = Rec}
+let /X : (
+    n: #NatType,
+    p:
+        #{node = InductType}
+        /S()(n)
+) -> Type =
+    (
+        n: #NatType,
+        p:
+            #{node = InductType}
+            /S()(n)
+    ) =>
+        #{result = Ambient(Type)}
+        match p
+        | mk(m) =>
+            /X(m, /S/mk(m))
+        end;
+/std/Bool/True/qed()
+"#;
+
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to be put at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality_tests` puts the program to the elaborator under this name.
+#[test]
+fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_TYPE_RECURSING_THROUGH_A_CAST_ON_THE_INDEX_IT_READS}",
+        PROPOSITIONS,
+        A_TYPE_RECURSING_THROUGH_A_CAST_ON_THE_INDEX_IT_READS
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("X"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}

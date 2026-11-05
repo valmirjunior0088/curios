@@ -978,3 +978,277 @@ fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
         "{verdicts:?}"
     );
 }
+
+/// `drain` recurses on the payload of its proof's own case, which the size order reads as structure, at a proposition whose index is a proof: irrelevance makes `Q(v)` and `Q(Wit/s(v))` one type, so the call on the payload types, and `Q/nil()` stands at `Q(Wit/s(Wit/triv()))` for the same reason, so `drain(triv, nil)` closes the module at `False` were `nil`'s arm excused.
+const A_RECURSION_ON_A_PROPOSITIONS_CASE: &str = r#"
+induct /Wit: pub Prop
+| triv()
+| s(inner: #{node = InductType} /Wit())
+end
+induct /Q: (i: #{node = InductType} /Wit()) -> pub Prop
+| nil(): (/Wit/triv())
+| cons(
+    v: #{node = InductType} /Wit(),
+    inner: #{node = InductType} /Q()(v)
+): (/Wit/s(v))
+end
+#{node = Rec, proof = true}
+let /drain : (
+    v: #{node = InductType} /Wit(),
+    q: #{node = InductType} /Q()(/Wit/s(v))
+) -> #{node = InductType} /std/Bool/False() =
+    (
+        v: #{node = InductType} /Wit(),
+        q: #{node = InductType} /Q()(/Wit/s(v))
+    ) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match q
+        | cons(w, inner) => /drain(w, inner)
+        end;
+/drain(/Wit/triv(), /Q/nil())
+"#;
+
+// What stands between the reading and `False` is coverage: inversion concludes no clash between two of a proposition's constructors, so `nil`'s arm is mandatory and `drain` is refused for the arm it omits, not for its descent. `curios`'s `tests::rules::totality_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `unify_node` (`curios-analysis/src/invert.rs`): with its `Prop`-sorted family answering by tags, `Wit/triv()` against `Wit/s(v)` clashes, `nil` is excused and the walk returns no verdict.
+#[test]
+fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_RECURSION_ON_A_PROPOSITIONS_CASE}",
+        PROPOSITIONS,
+        A_RECURSION_ON_A_PROPOSITIONS_CASE
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("drain"))
+                && verdict.error
+                    == Error::MissingArm {
+                        family: global("Q"),
+                        tag: Atom::from("nil"),
+                    }),
+        "{verdicts:?}"
+    );
+}
+
+/// Seven propositions `P*`, each with a `base` constructor and a `step` that holds a proof of the instance it targets, indexed where irrelevance makes the two targets one: a relevant family holding a proof, a tuple of proofs, a type family over a proposition, a proposition at level one, a proposition declared in a group, and a proposition whose index is a proof, matched once at a stated instance at `base`'s target and once at a type spelled through a definition.
+const INDICES_HOLDING_PROOFS: &str = r#"
+induct /Wit: pub Prop
+| a()
+| b()
+end
+induct /Box: pub Type
+| box(w: #{node = InductType} /Wit())
+end
+induct /Opt(A: Prop): pub Type
+| none()
+| some(x: A)
+end
+induct /High: pub
+    #{level = 1}
+    Prop
+| ha()
+| hb()
+end
+induct /G: pub Prop
+| ga()
+| gb(x: #{node = InductType} /G2())
+end
+and induct /G2: pub Prop
+| c(y: #{node = InductType} /G())
+| d()
+end
+induct /Pbox: (i: #{node = InductType} /Box()) -> pub Prop
+| base(): (/Box/box(/Wit/a()))
+| step(p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))): (/Box/box(/Wit/b()))
+end
+induct /Ptuple: (i: {#{node = InductType} /Wit(), #{node = InductType} /Wit()}) -> pub Prop
+| base(): ((/Wit/a(), /Wit/a()))
+| step(p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))): ((/Wit/b(), /Wit/b()))
+end
+induct /Popt: (i: #{node = InductType} /Opt(#{node = InductType} /Wit())) -> pub Prop
+| base(): (/Opt/some(@#{node = InductType} /Wit(), /Wit/a()))
+| step(p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))): (/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))
+end
+induct /Phigh: (i: #{node = InductType} /High()) -> pub Prop
+| base(): (/High/ha())
+| step(p: #{node = InductType} /Phigh()(/High/hb())): (/High/hb())
+end
+induct /Pgroup: (i: #{node = InductType} /G()) -> pub Prop
+| base(): (/G/ga())
+| step(p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))): (/G/gb(/G2/d()))
+end
+induct /Pwit: (i: #{node = InductType} /Wit()) -> pub Prop
+| base(): (/Wit/a())
+| step(p: #{node = InductType} /Pwit()(/Wit/b())): (/Wit/b())
+end
+let /Alias : (i: #{node = InductType} /Wit()) -> Prop =
+    (i: #{node = InductType} /Wit()) => #{node = InductType} /Pwit()(i);
+"#;
+
+/// A recursion on each `P*`'s own case at `step`'s target, every arm recursing and `base`'s omitted, closing at `False` on `base`.
+const RECURSIONS_OMITTING_BASE: &str = r#"
+#{node = Rec, proof = true}
+let /fbox : (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /fbox(q)
+        end;
+#{node = Rec, proof = true}
+let /ftuple : (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /ftuple(q)
+        end;
+#{node = Rec, proof = true}
+let /fopt : (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /fopt(q)
+        end;
+#{node = Rec, proof = true}
+let /fhigh : (p: #{node = InductType} /Phigh()(/High/hb())) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Phigh()(/High/hb())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /fhigh(q)
+        end;
+#{node = Rec, proof = true}
+let /fgroup : (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /fgroup(q)
+        end;
+#{node = Rec, proof = true}
+let /fstated : (p: #{node = InductType} /Pwit()(/Wit/b())) -> #{node = InductType} /std/Bool/False() =
+    (p: #{node = InductType} /Pwit()(/Wit/b())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False()), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
+        match p
+        | step(q) => /fstated(q)
+        end;
+#{node = Rec, proof = true}
+let /falias : (p: /Alias(/Wit/b())) -> #{node = InductType} /std/Bool/False() =
+    (p: /Alias(/Wit/b())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        match p
+        | step(q) => /falias(q)
+        end;
+/fbox(/Pbox/base())
+"#;
+
+/// The same recursions with `base`'s arm written, at `True`.
+const RECURSIONS_WRITING_BASE: &str = r#"
+#{node = Rec, proof = true}
+let /fbox : (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /fbox(q)
+        end;
+#{node = Rec, proof = true}
+let /ftuple : (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /ftuple(q)
+        end;
+#{node = Rec, proof = true}
+let /fopt : (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /fopt(q)
+        end;
+#{node = Rec, proof = true}
+let /fhigh : (p: #{node = InductType} /Phigh()(/High/hb())) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Phigh()(/High/hb())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /fhigh(q)
+        end;
+#{node = Rec, proof = true}
+let /fgroup : (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /fgroup(q)
+        end;
+#{node = Rec, proof = true}
+let /fstated : (p: #{node = InductType} /Pwit()(/Wit/b())) -> #{node = InductType} /std/Bool/True() =
+    (p: #{node = InductType} /Pwit()(/Wit/b())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True()), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /fstated(q)
+        end;
+#{node = Rec, proof = true}
+let /falias : (p: /Alias(/Wit/b())) -> #{node = InductType} /std/Bool/True() =
+    (p: /Alias(/Wit/b())) =>
+        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        match p
+        | base() => /std/Bool/True/qed()
+        | step(q) => /falias(q)
+        end;
+/fbox(/Pbox/base())
+"#;
+
+// The size order reads each `step(q)` as a descent, so a recursion that omits `base` is refused by coverage alone, at every shape an index carries its proof in: no clash is concluded between two of a proposition's constructors at any depth of an index, through a tuple, a type family's payload or a group, at any level, nor at a stated instance or a type a definition spells. The control writes `base`'s arm and every recursion stands, which is what makes each refusal coverage's and not the descent's. `curios`'s `tests::rules::totality_tests` puts the shapes a program can write to the elaborator under this name.
+//
+// Mutation-checked at `unify_node` (`curios-analysis/src/invert.rs`): with its `Prop`-sorted family answering by tags, every `base` is excused and no recursion above is refused.
+#[test]
+fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_omits() {
+    let members = [
+        ("fbox", "Pbox"),
+        ("ftuple", "Ptuple"),
+        ("fopt", "Popt"),
+        ("fhigh", "Phigh"),
+        ("fgroup", "Pgroup"),
+        ("fstated", "Pwit"),
+        ("falias", "Pwit"),
+    ];
+
+    let omitted = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${INDICES_HOLDING_PROOFS}\n${RECURSIONS_OMITTING_BASE}",
+        PROPOSITIONS,
+        INDICES_HOLDING_PROOFS,
+        RECURSIONS_OMITTING_BASE
+    ));
+    for (member, family) in members {
+        assert!(
+            omitted
+                .iter()
+                .any(|verdict| verdict.name == Some(global(member))
+                    && verdict.error
+                        == Error::MissingArm {
+                            family: global(family),
+                            tag: Atom::from("base"),
+                        }),
+            "{member}: {omitted:?}"
+        );
+    }
+
+    let written = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${INDICES_HOLDING_PROOFS}\n${RECURSIONS_WRITING_BASE}",
+        PROPOSITIONS,
+        INDICES_HOLDING_PROOFS,
+        RECURSIONS_WRITING_BASE
+    ));
+    for (member, _) in members {
+        assert!(
+            !written
+                .iter()
+                .any(|verdict| verdict.name == Some(global(member))),
+            "{member}: {written:?}"
+        );
+    }
+}

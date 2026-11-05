@@ -487,3 +487,68 @@ fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
         "{verdicts:?}"
     );
 }
+
+/// Lean's subsingleton elimination: `Accessible`'s one constructor holds `below`, a proof no index pins, and `f` takes an accessibility proof apart into `Nat` along a relation that is not well founded, recursing on `below`'s application.
+const A_PROPOSITION_HOLDING_A_PROOF_TAKEN_INTO_DATA: &str = r#"
+#{universe_context = {parameter_count = 2}}
+induct /Accessible(
+    @A:
+        #{level = u}
+        Type,
+    R: (A, A) ->
+        #{level = v}
+        Prop
+): (A) -> pub
+    #{level = max(u, v)}
+    Prop
+| intro(
+    @x: A,
+    below: (y: A, r: R(y, x)) ->
+        #{node = InductType, universes = {levels = [u, v]}}
+        /Accessible(A, R)(y)
+): (x)
+end
+let /R : (y: #NatType, x: #NatType) -> Prop =
+    (y: #NatType, x: #NatType) => /std/Bool/Holds(#NatLt(x, y));
+#{node = Rec}
+let /f : (
+    n: #NatType,
+    lt: (k: #NatType) -> /std/Bool/Holds(#NatLt(k, #NatAdd(k, 1))),
+    a:
+        #{node = InductType, universes = {levels = [0, 0]}}
+        /Accessible(#NatType, /R)(n)
+) -> #NatType =
+    (
+        n: #NatType,
+        lt: (k: #NatType) -> /std/Bool/Holds(#NatLt(k, #NatAdd(k, 1))),
+        a:
+            #{node = InductType, universes = {levels = [0, 0]}}
+            /Accessible(#NatType, /R)(n)
+    ) =>
+        #{result = Ambient(#NatType)}
+        match a
+        | intro(@x, below) =>
+            /f(#NatAdd(n, 1), lt, below(#NatAdd(n, 1), lt(n)))
+        end;
+/std/Bool/True/qed()
+"#;
+
+// The elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively is refused at its source: a proposition is taken apart into data only where its indices pin every payload, and `below` is a proof no index pins. `curios`'s `tests::rules::proposition_elimination_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `guard_large_elimination` (`curios-cert/src/kernel/infer/eliminate.rs`): with the singleton rung excusing a payload whose type is a proposition, as Lean's subsingleton elimination does, `/f` is admitted.
+#[test]
+fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PROPOSITION_HOLDING_A_PROOF_TAKEN_INTO_DATA}",
+        PROPOSITIONS,
+        A_PROPOSITION_HOLDING_A_PROOF_TAKEN_INTO_DATA
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("f"))
+                && verdict.error == Error::LargeElimination(global("Accessible"))),
+        "{verdicts:?}"
+    );
+}
