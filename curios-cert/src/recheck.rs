@@ -37,6 +37,8 @@ mod intrinsic_tests;
 #[cfg(test)]
 mod occurrence_tests;
 #[cfg(test)]
+mod paradox_tests;
+#[cfg(test)]
 mod plicity_tests;
 #[cfg(test)]
 mod positivity_tests;
