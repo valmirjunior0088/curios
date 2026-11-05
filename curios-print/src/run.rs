@@ -587,6 +587,7 @@ fn fits(
     rest: &mut [Step],
     available: usize,
     inside: bool,
+    whole: bool,
     following: Option<(&Original<'_>, Cursor)>,
 ) -> bool {
     let mut used = 0usize;
@@ -677,8 +678,9 @@ fn fits(
         // Text of either kind, measured a character at a time: within the group each one that is not blank steps the cursor's copy, and the first to follow a comment refuses flatness.
         let mut measure = |spelling: &str, used: &mut usize| -> Option<bool> {
             for char in spelling.chars() {
+                // A newline the document writes ends the line, which a group asks of its first line alone; a block asked whether it fits whole does not.
                 if char == '\n' {
-                    return Some(true);
+                    return Some(!(whole && inside));
                 }
                 if inside
                     && !char.is_whitespace()
@@ -894,6 +896,7 @@ fn run<'b, 'c>(
                                         &mut stack,
                                         room,
                                         true,
+                                        false,
                                         state.following,
                                     ),
                                     false => fits(
@@ -901,6 +904,7 @@ fn run<'b, 'c>(
                                         &mut [],
                                         room,
                                         true,
+                                        false,
                                         state.following,
                                     ),
                                 }
@@ -927,12 +931,15 @@ fn run<'b, 'c>(
                     let mut inner = inner.take();
                     let inner_fits = flat
                         || match state.width {
-                            None => true,
                             Some(_) if !state.suffix.is_empty() => false,
-                            Some(width) => fits(
+                            // Measured at any width, since a block that writes a newline is no line's whole.
+                            width => fits(
                                 &mut inner,
                                 &mut stack,
-                                width.saturating_sub(state.effective_column()),
+                                width.map_or(usize::MAX, |width| {
+                                    width.saturating_sub(state.effective_column())
+                                }),
+                                true,
                                 true,
                                 state.following,
                             ),
@@ -960,6 +967,7 @@ fn run<'b, 'c>(
                                 &mut stack,
                                 width.saturating_sub(state.effective_column()),
                                 true,
+                                false,
                                 state.following,
                             ),
                         };
@@ -993,10 +1001,22 @@ fn run<'b, 'c>(
                             || filling.flat
                             || (filling.previous_compact && item.compact))
                         && match filling.items.is_empty() {
-                            true => {
-                                fits(&mut item.printer, &mut stack, room, true, state.following)
-                            }
-                            false => fits(&mut item.printer, &mut [], room, true, state.following),
+                            true => fits(
+                                &mut item.printer,
+                                &mut stack,
+                                room,
+                                true,
+                                false,
+                                state.following,
+                            ),
+                            false => fits(
+                                &mut item.printer,
+                                &mut [],
+                                room,
+                                true,
+                                false,
+                                state.following,
+                            ),
                         }
                 });
                 let atomic = matches!(filling.style, FillStyle::Atomic);

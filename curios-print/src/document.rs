@@ -41,7 +41,7 @@ pub enum Printer {
     Indent(Box<Printer>),
     /// Emitted on a line of its own: where something is already written on the line, a newline and the document one indentation level deeper; at the start of a line, the document as it stands. Its break is mandatory where it is taken, so the fits scan fails on it as on a hard [`Printer::Line`] and no group containing one renders flat.
     OwnLine(Box<Printer>),
-    /// Emitted flat on the line it is reached on where its flat form fits the room left there, as a fitting [`Printer::Group`] is, and otherwise broken on a line of its own, as [`Printer::OwnLine`] places one. The fits scan measures it as a nested group, so a group holding one renders flat only where it fits flat too, and one holding a mandatory break never does.
+    /// Emitted flat on the line it is reached on where the whole of its flat form fits the room left there, and otherwise broken on a line of its own, as [`Printer::OwnLine`] places one. Whole is what sets it apart from a [`Printer::Group`], which asks of its first line alone: a newline it writes, a mandatory break or an own-line block breaks it at any width. The fits scan measures it as a nested group, so a group holding one renders flat only where it fits flat too, and one holding a mandatory break never does.
     OwnLineIfBroken(Box<Printer>),
     /// A document not built yet.
     ///

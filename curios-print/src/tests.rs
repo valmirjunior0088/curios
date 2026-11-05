@@ -368,3 +368,17 @@ fn a_block_takes_a_line_of_its_own_only_where_it_does_not_fit_flat_on_the_one_it
         "f(\n#{a} b)"
     );
 }
+
+#[test]
+fn a_block_that_writes_a_newline_takes_a_line_of_its_own_at_any_width() {
+    let block = || own_line_if_broken(flat([pure("#{a}"), line(), pure("b\nc")]));
+
+    assert_eq!(
+        render(flat([pure("x: "), block()]), Some(80)),
+        "x:\n  #{a}\n  b\n  c"
+    );
+    assert_eq!(
+        render(flat([pure("x: "), block()]), None),
+        "x:\n  #{a}\n  b\n  c"
+    );
+}
