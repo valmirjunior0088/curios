@@ -197,6 +197,21 @@ fn every_source_in_the_tree_formats_without_refusal() {
     assert!(refused.is_empty(), "{}", refused.join("\n"));
 }
 
+/// Every Curios source in the tree is already in its canonical shape, which `place_tests`' sweep over the tree reads a comment's place against: in a source the formatter would change, any change ahead of the marker reads as the comment moved.
+#[test]
+fn every_source_in_the_tree_is_already_canonical() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut sources = Vec::new();
+    collect_sources(&root, &mut sources);
+
+    let reshaped = sources
+        .iter()
+        .filter(|path| matches!(Formatted::from_path(path), Ok(Formatted::Changed(_))))
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    assert!(reshaped.is_empty(), "{}", reshaped.join("\n"));
+}
+
 /// A block string literal is laid out by the formatter: its lines and its closer one level in from the opener's line, wherever the author left them, and the value unchanged because the closer's column is what a reader strips.
 #[test]
 fn a_block_string_literal_takes_the_canonical_indentation() {
