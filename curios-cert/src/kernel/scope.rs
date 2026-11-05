@@ -38,7 +38,7 @@ struct Refinement {
     ///
     /// One for each because a probe is compared with the spelling reduced the way the probe was: plain reduction asks its checker's conversion nothing, so where a key holds a fold only a question decides, its two reducts are two terms.
     reducts: [Reduct; 2],
-    /// The depth the equation stack stood at when an arm restated this equation under its solution, or `None` while it answers as recorded. See [`Scope::restate`].
+    /// The depth the locals stood at when an arm restated this equation under its solution, or `None` while it answers as recorded. See [`Scope::restate`].
     restated_at: Option<usize>,
 }
 
@@ -293,7 +293,8 @@ impl Scope {
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
 
-        let depth = self.refinements.len();
+        // Filed against the locals, which the arm binds its solution among next, so every bracket the arm opens from then on marks deeper and only the arm's own closing, or an outer one's, revives the equation. The equation stack would not do: a restatement naming no local is not recorded, so a bracket the arm opens marks the depth it was restated at.
+        let depth = self.locals.len();
         let mut restated = Vec::new();
         for index in restating {
             let entry = &mut self.refinements[index];
@@ -499,10 +500,7 @@ impl Scope {
         // An equation restated at or past the mark was restated by an arm this bracket held, which is gone with its restatement.
         let mut revived = false;
         for entry in &mut self.refinements {
-            if entry
-                .restated_at
-                .is_some_and(|depth| depth >= mark.refinements)
-            {
+            if entry.restated_at.is_some_and(|depth| depth >= mark.locals) {
                 entry.restated_at = None;
                 revived = true;
             }

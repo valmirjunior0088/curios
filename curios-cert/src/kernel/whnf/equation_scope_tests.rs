@@ -596,6 +596,60 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
     });
 }
 
+/// An equation an arm restated steps aside for the whole arm, and answers again once the arm's bracket closes: where the restatement names no local and is not recorded, so the equation stack stands where it stood, a bracket the arm opens after binding its solution — a lambda, a `let`, a motive, an inner arm — revives nothing as it closes.
+///
+/// Filed against the equation stack's depth, the restatement was revived by the first bracket the arm closed, its mark being that same depth, and `g(n) < 5` answered inside the arm, where `n` is bound by value.
+#[test]
+fn a_restated_equation_steps_aside_until_its_arm_closes() {
+    let n = binder(1, "n");
+    let g = Global::Authored(Qualifier::from(["g"]));
+    let x = binder(3, "x");
+    let z = binder(4, "z");
+    let written = Term::intrinsic(Intrinsic::nat_lt(
+        Term::apply(
+            Term::instance(g, Universes::default()),
+            [Term::free_var(&n)],
+        ),
+        nat(5),
+    ));
+
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    kernel
+        .declare(
+            &g,
+            &Term::func_type([(x, nat_type())], nat_type()),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
+
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .expect("the equation records");
+
+        kernel.scoped(|kernel| {
+            kernel.restate_refinements(&[(n, nat(0))]);
+            kernel.bind(&n, &nat_type(), &nat(0), false);
+
+            kernel.scoped(|kernel| kernel.assume(&z, &nat_type()));
+            assert_eq!(
+                kernel.refinement_of(&written),
+                None,
+                "inside the arm, past a bracket it closed, the recorded equation stands aside"
+            );
+        });
+
+        assert_eq!(
+            kernel
+                .refinement_of(&written)
+                .and_then(|value| value.as_bool()),
+            Some(true),
+            "and once the arm closes it answers again"
+        );
+    });
+}
+
 /// A reduct taken under an arm's binding does not outlive the types the binding re-assumed its locals at. Binding `b` to `true`, as the arm of a `match b` at `true` does, records no equation and re-assumes `f : (z: D(b)) -> Nat` and `p`, `q : D(b)` at `D(true)`, where `D(b)` is `match b | false => Nat | true => {}`: there `{}` has one inhabitant, `f(p)` and `f(q)` are one atom, and `f(p) + f(q) == f(p) + f(p)` folds to `true`. Before the binding and after it the type is stuck and the comparison stands, with the memos on as with them off.
 ///
 /// Mutation-checked: with `Scope::retract` reading no re-typing where it retracts the shadow of a binder that stands for nothing, the arm's `true` answers after it.

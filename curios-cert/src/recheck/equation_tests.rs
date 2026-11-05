@@ -1,4 +1,4 @@
-//! An arm's case equation, held to the arm that records it: no equation answers a term it was not recorded for — not one an arm's restatement left naming no local, not one an inner arm's equation reduces it to, not one read past the arm that restated it or the arm that assumed it, and not the scrutinee of a refused sibling — each a module the elaborator would not build, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
+//! An arm's case equation, held to the arm that records it: no equation answers a term it was not recorded for — not one an arm's restatement left naming no local, not one an inner arm's equation reduces it to, not one read past the arm that restated it or the arm that assumed it, not the recorded one inside the arm that restated it, past a bracket that arm closed, and not the scrutinee of a refused sibling — each a module the elaborator would not build, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -415,6 +415,55 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
             &verdicts[..],
             [Verdict { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
         ),
+        "{verdicts:?}"
+    );
+}
+
+/// `G(x) < 5` names `x`, and the `0` arm of `match x` restates it as `G(0) < 5`, which names no local and is not recorded; in that arm a `let` holds an applied lambda, a bracket the arm opens and closes, and past it `Holds(m == m)` is typed for `m` a match on the proof `h` that states no instance.
+const A_RESTATEMENT_PAST_A_BRACKET_OF_ITS_ARM: &str = r#"
+let /G : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        n;
+let /f : (x: #NatType, h: /std/Bool/Holds(#NatLt(/G(x), 5))) -> #BoolType =
+    (x: #NatType, h: /std/Bool/Holds(#NatLt(/G(x), 5))) =>
+        match #NatLt(/G(x), 5): (b) => #BoolType
+        | false =>
+            false
+        | true =>
+            match x: (y) => #BoolType
+            | 0 =>
+                let l: #BoolType = ((z: #BoolType) => z)(true);
+                ((k: /std/Bool/Holds(#NatEql(
+                    #{result = Ambient(#NatType)}
+                    match h
+                    | qed() =>
+                        3
+                    end,
+                    #{result = Ambient(#NatType)}
+                    match h
+                    | qed() =>
+                        3
+                    end
+                ))) =>
+                    true)(/std/Bool/True/qed())
+            | _ =>
+                true
+            end
+        end;
+/std/Bool/True/qed()
+"#;
+
+// An equation an arm restated stands aside until the arm closes, past every bracket the arm opens inside: `match h` names only a proof, so its typing asks the equations in force for their reduced spellings, and the recorded `G(x) < 5`, revived there by the `let`'s bracket, was settled by name while `x` is bound by value, which aborted the walk. Standing aside, it is asked nothing, and `/f` is admitted.
+#[test]
+fn a_restatement_stands_aside_past_the_brackets_its_arm_closes() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_RESTATEMENT_PAST_A_BRACKET_OF_ITS_ARM}",
+        PROPOSITIONS,
+        A_RESTATEMENT_PAST_A_BRACKET_OF_ITS_ARM
+    ));
+
+    assert!(
+        matches!(&verdicts[..], [Verdict { name: None, .. }]),
         "{verdicts:?}"
     );
 }
