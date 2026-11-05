@@ -1846,8 +1846,8 @@ fn print_items(
         None => run_printer(printer, formatter, 4),
     };
     let implied = Implied::of(definitions);
-    for (index, item) in definitions.items.iter().enumerate() {
-        if implied.omitted.contains(&index) {
+    for (place, item) in definitions.items.places().zip(definitions.items.iter()) {
+        if implied.omitted.contains(&place) {
             continue;
         }
         match item {
@@ -2010,7 +2010,7 @@ fn island_field(definition: &Definition, spelling: &Spelling) -> Option<Decorati
         .then(|| ("island", pure(module_written(&definition.island, spelling))))
 }
 
-/// What the declarations of a module imply of its items: the items left to the declaration that implies them, by their places, and the names a declaration implies that no item of the module declares, by the declaration.
+/// What the declarations of a module imply of its items: the items left to the declaration that implies them, by their places — a version's spaced apart, so no count of the items names one — and the names a declaration implies that no item of the module declares, by the declaration.
 ///
 /// **An implied item is written nowhere where it is the one its declaration makes and stands where a reader puts it.** A family's constructors are made by [`Definition::constructors`]; a constructor that differs from what it makes is written out, and so is every one a declaration implies where the reader's placement ([`Definitions::placed_among`]) would not stand them where the module does.
 struct Implied {
@@ -2022,12 +2022,12 @@ impl Implied {
     fn of(definitions: &Definitions) -> Self {
         let items = &definitions.items;
         let place = items
-            .iter()
-            .enumerate()
-            .flat_map(|(index, item)| {
+            .places()
+            .zip(items.iter())
+            .flat_map(|(at, item)| {
                 item.declared_names()
                     .into_iter()
-                    .map(move |name| (*name, index))
+                    .map(move |name| (*name, at))
             })
             .collect::<HashMap<_, _>>();
         let mut candidates = BTreeSet::new();
@@ -2048,11 +2048,11 @@ impl Implied {
                         .entry(definition.name)
                         .or_default()
                         .push(constructor.name),
-                    Some(&index) => {
-                        if let Item::Let(stored) = &items[index]
+                    Some(&at) => {
+                        if let Item::Let(stored) = &items[at]
                             && **stored == constructor
                         {
-                            candidates.insert(index);
+                            candidates.insert(at);
                         }
                     }
                 }
@@ -2061,14 +2061,14 @@ impl Implied {
 
         // Where a reader puts them is where they stand, or each is written out.
         let written = items
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| !candidates.contains(index))
+            .places()
+            .zip(items.iter())
+            .filter(|(at, _)| !candidates.contains(at))
             .map(|(_, item)| item.clone())
             .collect::<Vec<_>>();
         let implied = candidates
             .iter()
-            .map(|index| items[*index].clone())
+            .map(|at| items[*at].clone())
             .collect::<Vec<_>>();
         let first = |item: &Item| item.declared_names().first().map(|name| **name);
         let placed = Definitions::placed_among(written, implied);

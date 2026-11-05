@@ -287,6 +287,20 @@ fn a_family_is_written_in_its_form_and_its_constructors_are_left_to_it() {
     );
 }
 
+/// A version's items stand at places spaced apart, which no count of them names, and are written as the module they hold: a family's form, its constructors left to it.
+#[test]
+fn a_version_is_written_as_the_module_it_holds() {
+    let constructors =
+        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
+    let made = module(bit(), constructors);
+    let version = Definitions {
+        items: made.items.version(),
+    };
+
+    assert!(version.items.is_version());
+    assert_eq!(version.faithful().to_string(), made.faithful().to_string());
+}
+
 /// A constructor its family's form would not make is written out, under the kind that says whose it is.
 #[test]
 fn a_constructor_its_family_does_not_make_is_written_out() {
