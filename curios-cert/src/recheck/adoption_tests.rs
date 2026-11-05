@@ -1156,3 +1156,89 @@ fn a_module_that_declares_a_name_twice_reaches_no_walk_over_a_baseline() {
 
     walked_over(&edited, &baseline, &certification);
 }
+
+/// Two items the elaborator made again, each standing where the other stood, are handed back with what the baseline's walk stated of the item of their own name, under their own binders' names: `lemma`'s second binder binds a proof and `datum`'s does not, though the module states each the other way round and holds each at the other's place.
+///
+/// Mutation-check to make: with the item whose statements are carried taken where the baseline holds the place the module holds the item at, rather than where it holds the item's first name (`held_item`), each takes the other's.
+#[test]
+fn items_made_again_in_each_others_places_take_the_statements_of_their_own_names() {
+    let identity = |name: &str, sort: Term, names: [&str; 2], proofs: &[bool]| {
+        let [domain, value] =
+            [(30, names[0]), (31, names[1])].map(|(index, hint)| Free::local(index, Some(hint)));
+        let binders = [(domain, sort), (value, Term::free_var(&domain))];
+        let Subterm::Func(Func { telescope }) =
+            Term::unwrap_or_clone(Term::func(binders.clone(), Term::free_var(&value)))
+        else {
+            panic!("a function literal");
+        };
+
+        authored(
+            &global(name),
+            Term::func_type(binders, Term::free_var(&domain)),
+            Term::from(Subterm::Func(Func {
+                telescope: telescope.with_proofs(proofs),
+            })),
+        )
+    };
+    let stated = walked(&collision_definitions(
+        vec![
+            identity("lemma", Term::prop(), ["P", "h"], &[false, false]),
+            identity("datum", Term::type_ground(), ["A", "a"], &[false, false]),
+        ],
+        BTreeMap::new(),
+    ));
+    let baseline = versioned(stated.definitions);
+    let places = Places::of(&baseline);
+    let at = |name: &str| {
+        places
+            .place(&global(name))
+            .expect("the baseline declares the name")
+            .item()
+    };
+    let mut items = baseline.items.clone();
+    items.replace(
+        at("lemma"),
+        identity("datum", Term::type_ground(), ["B", "b"], &[false, true]),
+    );
+    items.replace(
+        at("datum"),
+        identity("lemma", Term::prop(), ["Q", "k"], &[false, false]),
+    );
+
+    let rechecked = walked_over(&Definitions { items }, &baseline, &stated.certification);
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    let statements = |name: &str| {
+        let body = rechecked
+            .definitions
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Let(definition) if definition.name == global(name) => {
+                    Some(definition.body.clone())
+                }
+                _ => None,
+            })
+            .expect("the module holds the name");
+        let Subterm::Func(Func { telescope }) = &*body else {
+            panic!("a function literal");
+        };
+
+        (
+            telescope.proofs(),
+            telescope
+                .labels()
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(
+        statements("lemma"),
+        (vec![false, true], vec!["Q".to_string(), "k".to_string()])
+    );
+    assert_eq!(
+        statements("datum"),
+        (vec![false, false], vec!["B".to_string(), "b".to_string()])
+    );
+}

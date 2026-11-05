@@ -2,10 +2,11 @@
 
 use {
     super::*,
+    crate::*,
     curios_cert::{Error, Verdict},
     curios_common::{Qualifier, fill},
     curios_core::{Entrypoint, Program, Term, Universes, Zonked},
-    curios_pipeline::recheck,
+    curios_pipeline::{Earlier, recheck},
 };
 
 /// The declaration `/<path>`.
@@ -628,5 +629,399 @@ fn a_match_over_a_family_an_edit_gave_a_case_is_judged_again() {
                 if verdict.name == Some(named("lib/f")) && matches!(verdict.error, Error::MissingArm { .. })
         ),
         "{stepped:?}"
+    );
+}
+
+/// `/lib/Q`, the proposition `q` spells, and `/lib/t`, which proves it by `True`'s constructor: `t` stored after `Q`, or ahead of it where `t_first`.
+fn q_and_t(q: &str, t_first: bool) -> String {
+    let q = fill!(
+        r"let /lib/Q : Prop =
+    #{node = InductType}
+    ${q};
+",
+        q
+    );
+    let t = r"let /lib/t : /lib/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+";
+
+    match t_first {
+        true => [t, q.as_str()].concat(),
+        false => [q.as_str(), t].concat(),
+    }
+}
+
+/// `t` moved ahead of the `Q` it reads while `Q` is made `False`: `Q` is not the baseline's, so `t`, which read `Q`'s body, is asked where it now stands, before `Q` is settled, and is judged there and finds `Q` unbound, as a walk over every declaration does.
+///
+/// Mutation-check to make: with the closure `verdicts_within` hands `Adopting::adopts` answering that every declaration the module holds stands, `t` is adopted and the step builds.
+#[test]
+fn a_declaration_an_edit_moved_past_its_reader_is_unbound_where_the_reader_is_judged() {
+    let mut history = History::new();
+    history
+        .step(
+            "lib",
+            Written::CoreText,
+            &q_and_t("/sys/Bool/True()", false),
+        )
+        .expect("the unit builds");
+
+    let stepped = history.step(
+        "lib",
+        Written::CoreText,
+        &q_and_t("/sys/Bool/False()", true),
+    );
+
+    assert!(
+        matches!(
+            &stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Undeclared(_))
+        ),
+        "{stepped:?}"
+    );
+}
+
+/// `Q` true and `R` false, then each item renamed into the other's name where it stood: the item at `Q`'s place is now `R`, true, and the item at `R`'s place is now `Q`, false. A declaration is the baseline's by the item the baseline holds under its name, so `Q` is not, and `t`, which unfolded `Q`, is judged again.
+#[test]
+fn declarations_renamed_into_each_others_places_are_compared_by_their_names() {
+    let unit = |first: (&str, &str), second: (&str, &str)| {
+        fill!(
+            r"let ${first_name} : Prop =
+    #{node = InductType}
+    ${first_value};
+let ${second_name} : Prop =
+    #{node = InductType}
+    ${second_value};
+let /lib/t : /lib/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+",
+            first_name = first.0,
+            first_value = first.1,
+            second_name = second.0,
+            second_value = second.1,
+        )
+    };
+    let mut history = History::new();
+    history
+        .step(
+            "lib",
+            Written::CoreText,
+            &unit(
+                ("/lib/Q", "/sys/Bool/True()"),
+                ("/lib/R", "/sys/Bool/False()"),
+            ),
+        )
+        .expect("the unit builds");
+
+    let stepped = history.step(
+        "lib",
+        Written::CoreText,
+        &unit(
+            ("/lib/R", "/sys/Bool/True()"),
+            ("/lib/Q", "/sys/Bool/False()"),
+        ),
+    );
+
+    assert!(
+        matches!(
+            &stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "{stepped:?}"
+    );
+}
+
+/// The unit claiming `/a` declares `/b/Q`, a name under a mount it does not claim, and the unit claiming `/b` proves it by unfolding it. Once `/a` makes `/b/Q` false, the read is asked of the unit that holds the name, which moved, and not of the mount the name spells, which is the unit being compiled.
+#[test]
+fn a_name_declared_under_a_mount_its_unit_does_not_claim_is_asked_of_the_unit_that_holds_it() {
+    let declared = |q: &str| {
+        fill!(
+            r"let /b/Q : Prop =
+    #{node = InductType}
+    ${q};
+",
+            q
+        )
+    };
+    let mut history = History::new();
+    history
+        .step("a", Written::CoreText, &declared("/sys/Bool/True()"))
+        .expect("the unit claiming `/a` builds");
+    history
+        .step(
+            "b",
+            Written::CoreText,
+            r"let /b/t : /b/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+",
+        )
+        .expect("the unit claiming `/b` builds");
+
+    let stepped = history.step("a", Written::CoreText, &declared("/sys/Bool/False()"));
+
+    assert!(
+        matches!(
+            &stepped,
+            Err(Stopped { mount, why: Unbuilt::Unmade(Unmade::Kernel(verdict)) })
+                if mount == "b"
+                    && verdict.name == Some(named("b/t"))
+                    && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "{stepped:?}"
+    );
+}
+
+/// `/lib/Q`, the proposition `q` spells, `/lib/t`, which proves it, and, where `tested`, `/lib/check`, a test that proves it too: what the unit's two kinds differ by.
+fn kinds(q: &str, tested: bool) -> String {
+    let check = match tested {
+        true => {
+            r"#{kind = Test}
+let /lib/check : /lib/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+"
+        }
+        false => "",
+    };
+
+    fill!(
+        r"let /lib/Q : Prop =
+    #{node = InductType}
+    ${q};
+${check}let /lib/t : /lib/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+",
+        q,
+        check,
+    )
+}
+
+/// A unit compiled for one kind is the baseline of its text compiled for the other ([Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md)): `/lib` filed tested with `Q` true, then compiled built, without its test and with `Q` false, over that slot. `t`'s terms are the slot's and it read `Q`'s body, so it is judged again and refused.
+#[test]
+fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_it_read_moved() {
+    let directory = Temporary::new("history", "kinds");
+    let file = directory.join("lib.crsc");
+    let written = |text: &str| {
+        fs::create_dir_all(&directory).expect("the directory is made");
+        fs::write(&file, text).expect("the text is written");
+
+        Source::read(&file).expect("the text reads back")
+    };
+    let store = || Verdicts::alone(directory.join("project"));
+
+    let tested = written(&kinds("/sys/Bool/True()", true));
+    let tested_root = RootSource::core_text("lib", &file, &tested).tested();
+    with_prelude(|prelude| {
+        super::read(
+            &store(),
+            Predecessors::over(prelude),
+            &UnitSource::mounted(&tested_root),
+            &tested.text,
+        )
+    })
+    .map(|_| ())
+    .expect("the tested unit builds");
+
+    let built = written(&kinds("/sys/Bool/False()", false));
+    let built_root = RootSource::core_text("lib", &file, &built);
+    let verdicts = store();
+    assert!(
+        verdicts
+            .baseline(&UnitSource::mounted(&built_root), None)
+            .is_some(),
+        "the slot filed tested is offered to the text compiled built"
+    );
+    let refused = with_prelude(|prelude| {
+        super::read(
+            &verdicts,
+            Predecessors::over(prelude),
+            &UnitSource::mounted(&built_root),
+            &built.text,
+        )
+    })
+    .err();
+
+    assert!(
+        matches!(
+            &refused,
+            Some(Unbuilt::Unmade(Unmade::Kernel(verdict)))
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "{refused:?}"
+    );
+}
+
+/// `/lib/Q`, the proposition `q` spells, `/lib/t`, which proves it, and `/lib/filler`, the proposition `filler` spells.
+fn beside_filler(q: &str, filler: &str) -> String {
+    fill!(
+        r"let /lib/Q : Prop =
+    #{node = InductType}
+    ${q};
+let /lib/t : /lib/Q =
+    #{node = Variant}
+    /sys/Bool/True/qed();
+let /lib/filler : Prop =
+    #{node = InductType}
+    ${filler};
+",
+        q,
+        filler,
+    )
+}
+
+/// A baseline that was itself compiled over a baseline answers by the record its walk revised: `filler` edited, so the second unit adopts `t` from the first and files the first's record of what `t` read; then `Q` made false, and `t` is judged again by that record.
+#[test]
+fn a_proof_over_a_unit_compiled_over_a_baseline_is_judged_again_where_what_it_read_moved() {
+    let mut history = History::new();
+    history
+        .step(
+            "lib",
+            Written::CoreText,
+            &beside_filler("/sys/Bool/True()", "/sys/Bool/True()"),
+        )
+        .expect("the unit builds");
+    history
+        .step(
+            "lib",
+            Written::CoreText,
+            &beside_filler("/sys/Bool/True()", "/sys/Bool/False()"),
+        )
+        .expect("the unit builds over its first text");
+
+    let stepped = history.step(
+        "lib",
+        Written::CoreText,
+        &beside_filler("/sys/Bool/False()", "/sys/Bool/False()"),
+    );
+
+    assert!(
+        matches!(
+            &stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "{stepped:?}"
+    );
+}
+
+/// A cache that keeps in its session what its fold compiles and files nothing, as a language server's question keeps a unit it compiled from a text it does not file.
+struct Keeping<'a>(&'a Verdicts);
+
+impl Cache for Keeping<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        Cache::get(self.0, source)
+    }
+
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
+        Cache::baseline(self.0, source, offered)
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.0.keep(source, unit);
+    }
+}
+
+/// The library a session compiles twice: `Q`, true, `t`, which proves it, and `filler`, which `edited` makes false, so the second compile is over what the session kept of the first.
+fn session_library(edited: bool) -> String {
+    let filler = match edited {
+        true => "False",
+        false => "True",
+    };
+
+    fill!(
+        "use /std/Bool/{False, True};\n\npub let Q: Prop = True;\n\npub let t: Q = True/qed();\n\npub let filler: Prop = ${filler};\n",
+        filler
+    )
+}
+
+/// A unit a session kept across its questions, itself a recompile and so a version of the unit before it, is the baseline of a module made of it with `Q` replaced, past the elaborator: the walk compares the two by what they do not share, finds `Q` replaced and judges `t`, which unfolded `Q`, again. [Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md): "A language server's baseline may itself be a recompile (`curios-verdict`'s `Session`), which extends by induction".
+///
+/// Mutation-check to make: with `Changed::of` asking no item `Items::changed_since` reports whether it is the baseline's, so `items` is empty where the module is a version of the baseline, the module is admitted.
+#[test]
+fn a_proof_over_a_unit_a_session_kept_is_judged_again_where_what_it_read_moved() {
+    let directory = Temporary::new("history", "session");
+    let file = directory.join("lib.crs");
+    let root = || {
+        RootSource::mounted(
+            "lib",
+            RootKind::Ordinary,
+            &file,
+            RootSource::namespace_of(&file),
+        )
+    };
+    let session = Session::default();
+    let asked = |edited: bool| {
+        fs::create_dir_all(&directory).expect("the directory is made");
+        fs::write(&file, session_library(edited)).expect("the library is written");
+        let root = root();
+        let verdicts = Verdicts::kept_by(session.clone());
+        with_prelude(|prelude| {
+            compile_units(
+                DEFAULT_BUDGET,
+                Predecessors::over(prelude),
+                &SYNTAX,
+                &[(UnitSource::mounted(&root), None)],
+                Some(&Keeping(&verdicts)),
+                |_| {},
+            )
+            .map(|_| ())
+        })
+        .expect("the library builds");
+
+        verdicts
+    };
+    asked(false);
+    let verdicts = asked(true);
+    let root = root();
+    let source = UnitSource::mounted(&root);
+    let earlier = verdicts
+        .kept(&source)
+        .expect("the session kept the library");
+    let kept = &earlier.unit;
+    assert!(
+        kept.core().items.is_version(),
+        "the kept unit is a recompile's, a version of the one before it"
+    );
+    let place = kept
+        .places()
+        .place(&named("lib/Q"))
+        .expect("the kept unit declares `Q`")
+        .item();
+    let mut items = kept.core().items.version();
+
+    let refused = with_prelude(|prelude| {
+        let predecessors = Predecessors::over(prelude);
+        let text = r"let /lib/Q : Prop =
+    #{node = InductType}
+    /sys/Bool/False();
+"
+        .parse::<CoreFile>()
+        .expect("the item parses");
+        let (replacing, _) = to_core(&text, Some(&FormScope::over(SYNTAX, predecessors.cores())))
+            .expect("the item reads over the prelude");
+        items.replace(place, replacing.items[0].clone());
+
+        compile_read(
+            DEFAULT_BUDGET,
+            predecessors,
+            source.claims(),
+            (Definitions { items }, ForeignStore::new()),
+            Some(&earlier),
+        )
+        .err()
+    });
+
+    assert!(
+        matches!(
+            &refused,
+            Some(Unmade::Kernel(verdict))
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "{refused:?}"
     );
 }
