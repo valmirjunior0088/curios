@@ -73,3 +73,105 @@ fn a_description_waiting_on_a_handle_no_host_gave_proves_nothing() {
         "{verdicts:?}"
     );
 }
+
+/// A description taken apart three ways, each as the elaborator refuses its program: matched by a family's case, projected as though it held its answer, and split by a `Bool` case form. `Io(False)` is inhabited by a row that does not return, `gone`, at `False`, so any of the three that typed would hand its caller the proof the description yields; the row's declaration is written beside it so the text reads with no scope.
+const A_DESCRIPTION_TAKEN_APART: &str = r#"
+induct /Wrap(A: Prop): pub Type
+| mk(a: A)
+end
+let /matched : (
+    io: #IoType(
+        #{node = InductType}
+        /std/Bool/False()
+    )
+) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (
+        io: #IoType(
+            #{node = InductType}
+            /std/Bool/False()
+        )
+    ) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/False())}
+        match io
+        | mk(a) =>
+            a
+        end;
+let /projected : (
+    io: #IoType(
+        #{node = InductType}
+        /std/Bool/False()
+    )
+) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (
+        io: #IoType(
+            #{node = InductType}
+            /std/Bool/False()
+        )
+    ) =>
+        (io).0;
+let /split : (io: #IoType(#BoolType)) -> #BoolType =
+    (io: #IoType(#BoolType)) =>
+        #{result = Ambient(#BoolType)}
+        match io
+        | false =>
+            false
+        | true =>
+            true
+        end;
+foreign /gone() -> Never;
+let /gone : #NatType = 0;
+/matched(#{node = Foreign} /gone(@#{node = InductType} /std/Bool/False()))
+"#;
+
+// `Io` has no eliminator: its scrutinee is no family's occurrence and no `Bool`, so each case form refuses it as unclassified, and a projection finds no components in it. The closing term, which types through `matched`'s stated type, is refused all the same, by (V), the row that does not return standing in a proof with no definition to blame. `curios`'s `tests::rules::effect_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_cases`: with a `Bool` case form no longer held to a `Bool` scrutinee, `split` types and is not refused.
+#[test]
+fn a_description_is_taken_apart_by_no_elimination() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_DESCRIPTION_TAKEN_APART}",
+        PROPOSITIONS,
+        A_DESCRIPTION_TAKEN_APART
+    ));
+    let refused = |name: Option<&str>, pattern: fn(&Error) -> bool| {
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == name.map(global) && pattern(&verdict.error))
+    };
+
+    assert!(
+        refused(Some("matched"), |error| matches!(
+            error,
+            Error::Unclassified(_)
+        )),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(Some("projected"), |error| matches!(
+            error,
+            Error::NotATuple(_)
+        )),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(Some("split"), |error| matches!(
+            error,
+            Error::Unclassified(_)
+        )),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(None, |error| matches!(
+            error,
+            Error::NotTotal { reached: None, .. }
+        )),
+        "{verdicts:?}"
+    );
+}

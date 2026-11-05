@@ -45,3 +45,30 @@ fn a_concatenation_of_chunks_against_the_empty_list_is_no_clash() {
         matches!(error, Error::MatrixUncovered { indexed: true, .. })
     });
 }
+
+// `j + j` is `0` at `j = 0` and a successor everywhere else, so neither case's target clashes with it and each arm is written. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name, with `j + 1` as the control a clash excuses.
+#[test]
+fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
+    let refusals = refused(
+        r#"
+        use /std/{Nat};
+
+        induct Ix: (i: Nat) -> Type
+        | zero(): (0)
+        | succ(k: Nat): (k + 1)
+        end
+
+        pub let only_zero(j: Nat, v: Ix(j + j)) -> Nat = match v | zero() => 0 end;
+        pub let only_succ(j: Nat, v: Ix(j + j)) -> Nat = match v | succ(k) => k end;
+        pub let excused(j: Nat, v: Ix(j + 1)) -> Nat = match v | succ(k) => k end;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    for at in ["/only_zero", "/only_succ"] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(error, Error::MatrixUncovered { indexed: true, .. })
+        });
+    }
+}

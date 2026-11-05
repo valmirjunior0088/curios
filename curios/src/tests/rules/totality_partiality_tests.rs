@@ -344,3 +344,60 @@ fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
         )
     });
 }
+
+// The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the kernel under this name, with the ones only Core text writes.
+#[test]
+fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
+    let refusals = refused(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{False, Holds};
+
+        struct Box: Type { p: False }
+        induct Wit: Type | w(p: False) end
+        concept Lawful(A: Type): Type { op(A) -> A, law(x: A) -> False }
+
+        let spin(u: {}) -> Box = spin(u);
+        let decide(u: {}) -> Bool = decide(u);
+        let take(@_: False) -> Nat = 0;
+
+        pub let in_a_let: Nat = let _: False = spin(()).p; 0;
+        pub let in_a_field: Box = Box { p = spin(()).p };
+        pub let in_a_payload: Wit = Wit/w(spin(()).p);
+        pub let in_an_implicit: Nat = take(@spin(()).p);
+        satisfy Lawful(Nat) { op(x) = x, law(_) = spin(()).p }
+        pub let in_a_signature(_: Holds(decide(()))) -> Nat = 0;
+
+        /std/print("unreachable")
+        "#,
+    );
+
+    for at in [
+        "/in_a_let",
+        "/in_a_field",
+        "/in_a_payload",
+        "/in_an_implicit",
+        "/witness~/Lawful(Nat)",
+    ] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(
+                error,
+                curios_elab::Error::PartialInErasedPosition {
+                    erased: Erased::Proof,
+                    offender: Some(offender),
+                    ..
+                } if *offender == global("/spin")
+            )
+        });
+    }
+    refusals.by_elaborator_in("/in_a_signature", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                offender: Some(offender),
+                ..
+            } if *offender == global("/decide")
+        )
+    });
+}

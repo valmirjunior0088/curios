@@ -88,3 +88,31 @@ fn a_description_is_not_what_it_yields() {
     refused(A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS)
         .by_elaborator_in("/_one", |error| matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Type)(Io(/Empty), Io(/Empty))" && pinned(expected) == "/std/Eq/Eq(Type)(Io(/Empty), /Empty)"));
 }
+
+// A description is taken apart by no elimination: matched by a family's case, projected, or split by a `Bool` case form. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the kernel under this name.
+#[test]
+fn a_description_is_taken_apart_by_no_elimination() {
+    refused(
+        r#"
+        use /std/{Io, Bool};
+        use /std/Bool/{False};
+
+        pub induct Wrap(A: Prop): Type
+        | mk(a: A)
+        end
+
+        pub let matched(io: Io(False)) -> False = match io | mk(a) => a end;
+        pub let projected(io: Io(False)) -> False = io.0;
+        pub let split(io: Io(Bool)) -> Bool = match io | true => true | false => false end;
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/matched", |error| {
+        matches!(error, Error::NotAInductType { .. })
+    })
+    .by_elaborator_in("/projected", |error| {
+        matches!(error, Error::NotATuple { .. })
+    })
+    .by_elaborator_in("/split", |error| matches!(error, Error::NotBoolType { .. }));
+}

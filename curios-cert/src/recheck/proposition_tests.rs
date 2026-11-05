@@ -305,3 +305,185 @@ fn a_proposition_holding_a_payload_at_its_callers_sort_is_not_taken_apart_into_a
         "{verdicts:?}"
     );
 }
+
+/// A proof or a type reaching a definition not known to terminate, at each position the elaborator checks one: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method, a test's body, the type a definition states, a local group's tail, and the term the module closes with. `spin` hands back a `Box` it never builds, so its field is a `False` wherever a position takes one in, `decide` a `Bool` it never decides, and `h` in the tail is `spin` again as a group standing in a term.
+const A_PROOF_OR_TYPE_AT_EACH_POSITION: &str = r#"
+struct /Box: pub Type {
+    p:
+        #{node = InductType}
+        /std/Bool/False()
+}
+#{node = Rec}
+let /spin : (u: {}) ->
+    #{node = StructType}
+    /Box() =
+    (u: {}) => /spin(u);
+#{node = Rec}
+let /decide : (u: {}) -> #BoolType =
+    (u: {}) => /decide(u);
+induct /Wit: pub Type
+| w(
+    p:
+        #{node = InductType}
+        /std/Bool/False()
+)
+end
+concept /Lawful(A: Type): pub Type {
+    op: (A) -> A,
+    law: (x: A) ->
+        #{node = InductType}
+        /std/Bool/False()
+}
+let /in_a_let : #NatType =
+    (let q:
+        #{node = InductType}
+        /std/Bool/False() =
+        #{field = Struct(/Box, 0)}
+        (/spin(())).0;
+    0);
+let /in_a_field :
+    #{node = StructType}
+    /Box() =
+    /Box {
+        #{field = Struct(/Box, 0)}
+        (/spin(())).0
+    };
+let /in_a_payload :
+    #{node = InductType}
+    /Wit() =
+    #{node = Variant}
+    /Wit/w(
+        #{field = Struct(/Box, 0)}
+        (/spin(())).0
+    );
+let /take : (
+    @p:
+        #{node = InductType}
+        /std/Bool/False()
+) -> #NatType =
+    (
+        @p:
+            #{node = InductType}
+            /std/Bool/False()
+    ) => 0;
+let /in_an_implicit : #NatType =
+    /take(@#{field = Struct(/Box, 0)} (/spin(())).0);
+let /in_a_method :
+    #{node = StructType}
+    /Lawful(#NatType) =
+    /Lawful(#NatType) {
+        (x: #NatType) => x,
+        (x2: #NatType) =>
+            #{field = Struct(/Box, 0)}
+            (/spin(())).0
+    };
+#{kind = Test}
+let /in_a_test : #NatType =
+    (let q:
+        #{node = InductType}
+        /std/Bool/False() =
+        #{field = Struct(/Box, 0)}
+        (/spin(())).0;
+    0);
+let /in_a_signature : (h: /std/Bool/Holds(/decide(()))) -> #NatType =
+    (h: /std/Bool/Holds(/decide(()))) => 0;
+let /in_a_groups_tail : #NatType =
+    #{node = Rec}
+    (let h: (u: {}) ->
+        #{node = StructType}
+        /Box() =
+        (u2: {}) => h(u2);
+    (let q:
+        #{node = InductType}
+        /std/Bool/False() =
+        #{field = Struct(/Box, 0)}
+        (h(())).0;
+    0));
+#{field = Struct(/Box, 0)}
+(/spin(())).0
+"#;
+
+// The kernel records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality_tests` puts the positions a program writes to the elaborator under this name.
+//
+// Mutation-checked at `Kernel::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
+#[test]
+fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PROOF_OR_TYPE_AT_EACH_POSITION}",
+        PROPOSITIONS,
+        A_PROOF_OR_TYPE_AT_EACH_POSITION
+    ));
+    let refused = |name: Option<Global>, erased: Erased, reached: Option<Global>| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == name && verdict.error == Error::NotTotal { erased, reached }
+        })
+    };
+
+    for name in [
+        "in_a_let",
+        "in_a_field",
+        "in_a_payload",
+        "in_an_implicit",
+        "in_a_method",
+        "in_a_test",
+    ] {
+        assert!(
+            refused(Some(global(name)), Erased::Proof, Some(global("spin"))),
+            "`{name}` was not refused for reaching `spin`: {verdicts:?}"
+        );
+    }
+    assert!(
+        refused(
+            Some(global("in_a_signature")),
+            Erased::Type,
+            Some(global("decide"))
+        ),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(Some(global("in_a_groups_tail")), Erased::Proof, None),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(None, Erased::Proof, Some(global("spin"))),
+        "{verdicts:?}"
+    );
+}
+
+/// A proposition handed to a family's parameter that wants a type: `Holder(False)` would be a family of data over a proof's type.
+const A_PROPOSITION_AT_A_TYPE_PARAMETER: &str = r#"
+induct /Holder(A: Type): pub Type
+| hold(a: A)
+end
+let /held : Type =
+    #{node = InductType}
+    /Holder(
+        #{node = InductType}
+        /std/Bool/False()
+    );
+/std/Bool/False
+"#;
+
+// An occurrence's parameters are checked as arguments are, by subsumption, which holds no proposition below a type: the head rule `kernel::infer::tests::sort`'s `the_head_rules_still_decide_a_bare_sort` pins, reached through a family's occurrence. `curios`'s `tests::rules::subsumption_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `subsumes`: with two sorts compared by their levels whatever their qualities, `held` types.
+#[test]
+fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PROPOSITION_AT_A_TYPE_PARAMETER}",
+        PROPOSITIONS,
+        A_PROPOSITION_AT_A_TYPE_PARAMETER
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("held"))
+                && matches!(
+                    &verdict.error,
+                    Error::Mismatch { inferred, expected }
+                        if **inferred == Term::prop() && **expected == Term::type_ground()
+                )),
+        "{verdicts:?}"
+    );
+}

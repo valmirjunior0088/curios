@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, fill},
     curios_core::{
         Definitions, Entrypoint, Free, Global, Intrinsic, Item, Let, LetBinding, Level, Many, Nat,
         Program, Rec, RecGroup, RecItem, RecMemberScopes, Scope, Subterm, Term, Universes,
@@ -375,4 +375,94 @@ fn an_indirection_does_not_launder_a_member_past_the_call_recorder() {
             "{label}: a member reached through an indirection closed its group with no call, and the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }
+}
+
+/// A member named only in its own motive: `g`'s arms answer `qed` and call nothing, while the motive `Const(g(m))` names `g` at the motive's binder, a type the elimination is typed at.
+const A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE: &str = r#"
+let /Const : (
+    p:
+        #{node = InductType}
+        /std/Bool/True()
+) -> Prop =
+    (
+        p:
+            #{node = InductType}
+            /std/Bool/True()
+    ) =>
+        #{node = InductType}
+        /std/Bool/True();
+#{node = Rec}
+let /g : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        match n: (m) => /Const(/g(m))
+        | 0 =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | _ + 1; x =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        end;
+/std/Bool/False
+"#;
+
+// A type is typed as written, so the motive's `g(m)` is an application the walk types and records, at an argument nothing is below: a group whose calls were looked for in its arms alone would read none here and descend. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at the `Apply` rule of `infer_within`: with no call recorded for an application whose head is a member, `g` descends and is not refused.
+#[test]
+fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE}",
+        PROPOSITIONS,
+        A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("g"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// A lambda applied on the spot to the caller's own argument, whose binder an arm then splits, and whose call hands that binder back: `again(x)` is `again(n)` wherever its arm is taken.
+const A_CALL_HANDING_BACK_A_LAMBDAS_BINDER: &str = r#"
+#{node = Rec}
+let /again : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        ((x: #NatType) =>
+            #{
+                result = Ambient(
+                    #{node = InductType}
+                    /std/Bool/True())}
+            match x
+            | 0 =>
+                #{node = Variant}
+                /std/Bool/True/qed()
+            | k + 1; y =>
+                /again(x)
+            end)(n);
+/std/Bool/False
+"#;
+
+// The binder stands for `n` and the arm's case for the binder, so whichever of the two facts the size order holds, the call's argument is the parameter it stands at and nothing below it. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
+#[test]
+fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CALL_HANDING_BACK_A_LAMBDAS_BINDER}",
+        PROPOSITIONS,
+        A_CALL_HANDING_BACK_A_LAMBDAS_BINDER
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("again"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
 }

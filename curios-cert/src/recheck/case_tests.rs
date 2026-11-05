@@ -478,3 +478,183 @@ fn a_motive_that_binds_a_parameter_is_refused() {
         "{verdicts:?}"
     );
 }
+
+/// `Ix` at `j + j`, a sum that is `0` at `j = 0` and a successor at every other `j`, so each case's target may meet it, and at `j + 1`, a successor no `zero` meets.
+const AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET: &str = r#"
+induct /Ix: (i: #NatType) -> pub Type
+| zero(): (0)
+| succ(k: #NatType): (#NatAdd(k, 1))
+end
+let /only_zero : (
+    j: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatAdd(j, j))
+) -> #NatType =
+    (
+        j: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatAdd(j, j))
+    ) =>
+        #{result = Ambient(#NatType)}
+        match v
+        | zero() =>
+            0
+        end;
+let /only_succ : (
+    j: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatAdd(j, j))
+) -> #NatType =
+    (
+        j: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatAdd(j, j))
+    ) =>
+        #{result = Ambient(#NatType)}
+        match v
+        | succ(k) =>
+            k
+        end;
+let /excused : (
+    j: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatAdd(j, 1))
+) -> #NatType =
+    (
+        j: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatAdd(j, 1))
+    ) =>
+        #{result = Ambient(#NatType)}
+        match v
+        | succ(k) =>
+            k
+        end;
+/std/Bool/False
+"#;
+
+// An absent arm is excused only where the unifier finds a definite clash: `j + j` against `0` or against `k + 1` is a disagreement only arithmetic could settle, which keeps each arm mandatory, while `j + 1` against `0` clashes and excuses `zero`, the control. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_induct_arms`: with the coverage loop taken out, neither `only_zero` nor `only_succ` is refused.
+#[test]
+fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET}",
+        PROPOSITIONS,
+        AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET
+    ));
+    let missing = |name: &str, tag: &str| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name))
+                && verdict.error
+                    == Error::MissingArm {
+                        family: global("Ix"),
+                        tag: Atom::from(tag),
+                    }
+        })
+    };
+
+    assert!(missing("only_zero", "succ"), "{verdicts:?}");
+    assert!(missing("only_succ", "zero"), "{verdicts:?}");
+    assert!(
+        !verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("excused"))),
+        "{verdicts:?}"
+    );
+}
+
+/// An arm a reader wrote that does not type, `0` where `True` is wanted, under three scrutinees: one that computes to the other case wherever it stands, one that computes to the arm's own, and one stuck on its argument.
+const AN_ILL_TYPED_ARM_UNDER_THREE_SCRUTINEES: &str = r#"
+let /never : (n: #NatType) -> #BoolType =
+    (n: #NatType) => false;
+let /always : (n: #NatType) -> #BoolType =
+    (n: #NatType) => true;
+let /zero : (n: #NatType) -> #BoolType =
+    (n: #NatType) =>
+        #{result = Ambient(#BoolType)}
+        match n
+        | 0 =>
+            true
+        | k + 1; x =>
+            false
+        end;
+let /excused : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/True())}
+        match /never(n)
+        | false =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | true =>
+            0
+        end;
+let /taken : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/True())}
+        match /always(n)
+        | false =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | true =>
+            0
+        end;
+let /undecided : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        #{
+            result = Ambient(
+                #{node = InductType}
+                /std/Bool/True())}
+        match /zero(n)
+        | false =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | true =>
+            0
+        end;
+/std/Bool/False
+"#;
+
+// The elaborator refuses all three arms, as a reader wrote them; the kernel withdraws a refused arm only where its scrutinee computes to another case, so it is one no reduction takes, which `excused`'s is and `taken`'s and `undecided`'s are not.
+//
+// Mutation-checked at `unless_never_taken`: with a refused arm withdrawn whatever its scrutinee computes to, `taken` and `undecided` are admitted.
+#[test]
+fn an_ill_typed_arm_is_excused_only_where_no_reduction_takes_it() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${AN_ILL_TYPED_ARM_UNDER_THREE_SCRUTINEES}",
+        PROPOSITIONS,
+        AN_ILL_TYPED_ARM_UNDER_THREE_SCRUTINEES
+    ));
+    let refused = |name: &str| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name)) && matches!(verdict.error, Error::Mismatch { .. })
+        })
+    };
+
+    assert!(refused("taken"), "{verdicts:?}");
+    assert!(refused("undecided"), "{verdicts:?}");
+    assert!(
+        !verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("excused"))),
+        "{verdicts:?}"
+    );
+}

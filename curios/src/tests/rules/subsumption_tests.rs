@@ -548,3 +548,22 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned_with_instances(inferred) == "/Ph.{Prop; ?u}" && pinned_with_instances(expected) == "/Ph.{Type; ?u}")
     });
 }
+
+// A proposition at a family's parameter that wants a type. `curios_cert`'s `recheck::proposition_tests` puts the module to the kernel under this name.
+#[test]
+fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
+    refused(
+        r#"
+        use /std/Bool/{False};
+
+        pub induct Holder(A: Type): Type
+        | hold(a: A)
+        end
+
+        pub let held: Type = Holder(False);
+
+        /std/print("unreachable")
+        "#,
+    )
+    .by_elaborator_in("/held", |error| matches!(error, Error::TypeMismatch { .. }));
+}
