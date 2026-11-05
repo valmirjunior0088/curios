@@ -251,6 +251,14 @@ impl<'s> Globals<'s> {
             .is_some_and(|mounted| !mounted.fixed)
     }
 
+    /// Whether a record covers the unit here that declares `name`, so what a walk concluded of the name is on record. Where none does, a walk classifies the unit for itself and [`Globals::partial`] answers nothing of it, so no verdict a record holds stands on a part of it read.
+    pub(crate) fn classified(&self, name: &Global) -> bool {
+        self.mounted
+            .iter()
+            .find(|mounted| mounted.holds(name))
+            .is_some_and(|mounted| mounted.covered)
+    }
+
     /// Whether `name` is a definition in scope here that is *not* known to terminate, closed transitively already, as the certifier's record of the unit that holds it classifies it.
     ///
     /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.

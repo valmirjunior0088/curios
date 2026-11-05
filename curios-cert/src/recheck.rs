@@ -1265,7 +1265,9 @@ fn declares_a_held_name(
     })
 }
 
-/// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.
+/// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or a record covers it and the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.
+///
+/// **A part of a unit no record covers does not stand.** Its digest holds no verdict or vector a walk concluded of it, the ones a walk reaches from its terms being this walk's own (`Totals::seeded`, `file_scope_polarities`), so it would digest alike under what the reading walk was given and under what this walk reaches.
 fn read_stands(
     globals: &Globals,
     baseline: Baseline<'_>,
@@ -1278,6 +1280,9 @@ fn read_stands(
     }
     if globals.unmoved(name) {
         return true;
+    }
+    if !globals.classified(name) {
+        return false;
     }
     if let Some(stands) = asked.borrow().get(&(*name, body)) {
         return *stands;
@@ -1318,7 +1323,7 @@ struct Settled<'w> {
 
 /// The records a store holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
 ///
-/// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, and a fixed unit's is recorded nowhere. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
+/// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, a fixed unit's is recorded nowhere, and no record that read a unit no record covers stands. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
 fn stored(
     candidates: &dyn Candidates,
     globals: &Globals,
@@ -1426,6 +1431,10 @@ fn stands(
         }
         if globals.in_scope(read) && !globals.recorded(read) {
             return Some(None);
+        }
+        // A part of a unit no record covers holds no verdict or vector a walk concluded of it, as `read_stands` reads one.
+        if globals.in_scope(read) && !globals.classified(read) {
+            return None;
         }
 
         read_digest(globals, read, body)
