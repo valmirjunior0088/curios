@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, fill},
     curios_core::{
         Definition, DefinitionKind, Definitions, Entrypoint, Free, Global, InductDecl, Intrinsic,
         Item, Level, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
@@ -1236,5 +1236,73 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
         ),
         Vec::new(),
         "a bound the hypothesis states at the top of the offset range was not derived",
+    );
+}
+
+/// `Type u` and `Type v` are one under `same`'s constraints, `u <= v` and `v <= u`, and `same` files that verdict, over two terms naming no local, for the rest of its declaration; `cast` states the same two levels under no constraint, where they are apart, and its comparison is keyed by the same terms.
+const A_VERDICT_UNDER_ANOTHER_DECLARATIONS_CONSTRAINTS: &str = r#"
+#{universe_context = {parameter_count = 2, constraints = [u <= v, v <= u]}}
+let /same : (
+    f: (
+        X:
+            #{level = u}
+            Type
+    ) -> X
+) -> (
+    X:
+        #{level = v}
+        Type
+) -> X =
+    (
+        f: (
+            X:
+                #{level = u}
+                Type
+        ) -> X
+    ) =>
+        f;
+#{universe_context = {parameter_count = 2}}
+let /cast : (
+    f: (
+        X:
+            #{level = u}
+            Type
+    ) -> X
+) -> (
+    X:
+        #{level = v}
+        Type
+) -> X =
+    (
+        f: (
+            X:
+                #{level = u}
+                Type
+        ) -> X
+    ) =>
+        f;
+/std/Bool/False
+"#;
+
+// Every table is cleared where the budget is restored, and `cast`'s judgment restores it, so its comparison of the two levels is asked again under its own constraints and refused; the closing term, a proposition and no proof of one, is refused where it stands.
+//
+// Mutation-checked at `Memos::begin_declaration`: with the declaration's verdicts left standing, `cast` is admitted.
+#[test]
+fn a_verdict_under_one_declarations_constraints_is_no_answer_under_anothers() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_VERDICT_UNDER_ANOTHER_DECLARATIONS_CONSTRAINTS}",
+        PROPOSITIONS,
+        A_VERDICT_UNDER_ANOTHER_DECLARATIONS_CONSTRAINTS
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [
+                Verdict { name: Some(cast), error: Error::Mismatch { .. } },
+                Verdict { name: None, error: Error::Mismatch { .. } },
+            ] if *cast == global("cast")
+        ),
+        "{verdicts:?}"
     );
 }

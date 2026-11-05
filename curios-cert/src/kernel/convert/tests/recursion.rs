@@ -558,3 +558,43 @@ fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
         "the control: from no pair, the two calls are one after one unfolding",
     );
 }
+
+/// A verdict reached across a pair left apart is no answer from no pair. `x + g(a, c, n)` against `x + g(b, c, n)`, asked first inside `g`'s unfolding against itself, where the two calls are apart, and then from no pair, where one unfolding reconciles them, is one there, with the memos on as with them off.
+///
+/// Mutation-checked: with `compare` filing a verdict whether or not `Pairs::apart` moved across it, the comparison from no pair answers the `false` filed inside the unfolding.
+#[test]
+fn a_verdict_reached_across_a_pair_left_apart_is_no_answer_from_no_pair() {
+    for mut kernel in [kernel(), Kernel::uncached(100_000, SYNTAX)] {
+        let [x, a, b, c, n] = [
+            binder(40, "x"),
+            binder(41, "a"),
+            binder(42, "b"),
+            binder(43, "c"),
+            binder(44, "n"),
+        ]
+        .map(|local| {
+            kernel.assume(&local, &nat_type());
+            Term::free_var(&local)
+        });
+        let call = |first: &Term| Term::apply(shifting(), [first.clone(), c.clone(), n.clone()]);
+        let sum = |summand: Term| Intrinsic::nat_add(x.clone(), summand);
+
+        let mut pairs = Pairs::default();
+        assert!(pairs.unfold(&shifting(), &shifting()));
+        assert_eq!(
+            convert_intrinsic(&mut kernel, &mut pairs, &sum(call(&a)), &sum(call(&b))),
+            Ok(false),
+            "inside the pair's own unfolding the two calls are apart",
+        );
+        assert_eq!(
+            convert_intrinsic(
+                &mut kernel,
+                &mut Pairs::default(),
+                &sum(call(&a)),
+                &sum(call(&b))
+            ),
+            Ok(true),
+            "from no pair, one unfolding reconciles them, whatever was asked before",
+        );
+    }
+}

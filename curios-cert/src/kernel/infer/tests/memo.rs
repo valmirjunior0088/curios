@@ -325,3 +325,35 @@ fn a_classification_that_failed_only_in_a_withdrawn_arm_is_withdrawn_with_it() {
         assert!(kernel.take_checked().1.is_none());
     }
 }
+
+/// A check remembered under an arm's binding answers only while the binders it was read under stand. Binding `b` to `true`, as the arm of a `match b` at `true` does, records no equation, and no local's type names `b`, so retracting the binding clears no table: `0` checks at `match b | false => Bool | true => Nat` under the binding, and after it, where that type is stuck, the same check is refused, with the memos on as with them off.
+///
+/// Mutation-checked: with a scoped check answered without asking whether its binders stand, `0` checks after the binding.
+#[test]
+fn a_check_remembered_under_an_arms_binding_does_not_outlive_it() {
+    for mut kernel in [kernel(), Kernel::uncached(100_000, SYNTAX)] {
+        let b = binder(1, "b");
+        kernel.assume(&b, &bool_type());
+        let chosen = Term::bool_match(
+            Term::free_var(&b),
+            None,
+            Term::type_ground(),
+            bool_type(),
+            nat_type(),
+        );
+
+        let inside = kernel.scoped(|kernel| {
+            kernel.bind(
+                &b,
+                &bool_type(),
+                &Term::intrinsic(Intrinsic::Bool(true)),
+                false,
+            );
+            check(kernel, &nat(0), &chosen)
+        });
+        let after = check(&mut kernel, &nat(0), &chosen);
+
+        assert_eq!(inside, Ok(()));
+        assert!(matches!(after, Err(Error::Mismatch { .. })), "{after:?}");
+    }
+}

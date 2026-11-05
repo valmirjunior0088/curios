@@ -466,3 +466,95 @@ fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
         "{verdicts:?}"
     );
 }
+
+/// `loop(0)` typed in a sibling's signature, where no body of the group is under check, and again as `loop`'s own body, where it is the one call `loop` makes, at a proposition. `W` holds the call at a parameter of `False`, so `witness`'s written domain and its folded one are one by irrelevance and nothing unfolds `loop`.
+const A_CALL_TYPED_FIRST_IN_A_SIBLINGS_SIGNATURE: &str = r#"
+induct /W(
+    p:
+        #{node = InductType}
+        /std/Bool/False()
+): Type
+| mk()
+end
+#{node = Rec}
+let /loop : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (n: #NatType) =>
+        /loop(0)
+and /witness : (
+    x:
+        #{node = InductType}
+        /W(/loop(0))
+) -> #NatType =
+    (
+        x:
+            #{node = InductType}
+            /W(/loop(0))
+    ) =>
+        0;
+/loop(5)
+"#;
+
+// The signature's typing of `loop(0)` is remembered, the group having no body under check there, and is never the answer in `loop`'s body, where a term naming a member is typed at every occurrence: the call is recorded and `loop` does not descend.
+//
+// Mutation-checked at `Kernel::infer_hit` and `Kernel::check_hit`: answering a term that names a member of a group whose body is being checked, the body's `loop(0)` is answered from the signature, no call is recorded, the group closes total and `loop(5)` is admitted at `False`.
+#[test]
+fn a_call_typed_first_in_a_siblings_signature_is_recorded_in_the_body() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CALL_TYPED_FIRST_IN_A_SIBLINGS_SIGNATURE}",
+        PROPOSITIONS,
+        A_CALL_TYPED_FIRST_IN_A_SIBLINGS_SIGNATURE
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("loop"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// A call below its parameter only to a judgment's reduction: `k + f(p) - f(q)` is `k` where the kernel's conversion holds `f(p)` and `f(q)` one atom, `{}` having one inhabitant, and stuck to plain reduction, which asks nothing. The annotation on `a` puts the argument to a judgment's reduction in the arm before the call is graded.
+const A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT: &str = r#"
+((
+    f: (z: {}) -> #NatType,
+    p: {},
+    q: {}
+) =>
+    #{node = Rec}
+    (let loop: (n: #NatType) -> Type =
+        (n: #NatType) =>
+            #{result = Ambient(Type)}
+            match n
+            | 0 =>
+                #NatType
+            | k + 1; ih =>
+                let a: /std/Bool/Holds(#NatEql(#NatSub(#NatAdd(k, f(p)), f(q)), k)) =
+                    #{node = Variant}
+                    /std/Bool/True/qed();
+                loop(#NatSub(#NatAdd(k, f(p)), f(q)))
+            end;
+    loop(3)))(
+    (z: {}) => 0,
+    (),
+    ()
+)
+"#;
+
+// A call is graded by plain reduction, whose local-bearing reducts are filed apart from a judgment's: the reduct the annotation's comparison took is no answer to the grading, the call is unknown, and the member, a type, does not descend.
+#[test]
+fn a_call_below_its_parameter_only_to_a_judgment_does_not_descend() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT}",
+        PROPOSITIONS,
+        A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT
+    ));
+
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name.is_none()
+            && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}

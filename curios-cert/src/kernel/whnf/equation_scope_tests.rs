@@ -595,3 +595,58 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
         });
     });
 }
+
+/// A reduct taken under an arm's binding does not outlive the types the binding re-assumed its locals at. Binding `b` to `true`, as the arm of a `match b` at `true` does, records no equation and re-assumes `f : (z: D(b)) -> Nat` and `p`, `q : D(b)` at `D(true)`, where `D(b)` is `match b | false => Nat | true => {}`: there `{}` has one inhabitant, `f(p)` and `f(q)` are one atom, and `f(p) + f(q) == f(p) + f(p)` folds to `true`. Before the binding and after it the type is stuck and the comparison stands, with the memos on as with them off.
+///
+/// Mutation-checked: with `Scope::retract` reading no re-typing where it retracts the shadow of a binder that stands for nothing, the arm's `true` answers after it.
+#[test]
+fn a_remembered_reduct_does_not_outlive_the_types_a_binding_re_assumed_its_locals_at() {
+    let sequence = |mut kernel: Kernel| {
+        let b = binder(1, "b");
+        let (f, p, q) = (binder(2, "f"), binder(3, "p"), binder(4, "q"));
+        let bool_type = Term::intrinsic(Intrinsic::BoolType);
+        let shaped = Term::bool_match(
+            Term::free_var(&b),
+            None,
+            Term::type_ground(),
+            nat_type(),
+            Term::tuple_type_unit(),
+        );
+        kernel.assume(&b, &bool_type);
+        kernel.assume(
+            &f,
+            &Term::func_type([(binder(5, "z"), shaped.clone())], nat_type()),
+        );
+        kernel.assume(&p, &shaped);
+        kernel.assume(&q, &shaped);
+        let applied = |argument| Term::apply(Term::free_var(&f), [Term::free_var(argument)]);
+        let compared = Term::intrinsic(Intrinsic::nat_eql(
+            Term::intrinsic(Intrinsic::nat_add(applied(&p), applied(&q))),
+            Term::intrinsic(Intrinsic::nat_add(applied(&p), applied(&p))),
+        ));
+        let decided = |kernel: &mut Kernel| {
+            kernel
+                .reduce_forced(compared.clone())
+                .map(|reduct| reduct.as_bool())
+        };
+
+        let before = decided(&mut kernel);
+        let inside = kernel.scoped(|kernel| {
+            kernel.bind(
+                &b,
+                &bool_type,
+                &Term::intrinsic(Intrinsic::Bool(true)),
+                false,
+            );
+            decided(kernel)
+        });
+        let after = decided(&mut kernel);
+
+        [before, inside, after]
+    };
+
+    let cached = sequence(kernel());
+
+    assert_eq!(cached, [Ok(None), Ok(Some(true)), Ok(None)]);
+    assert_eq!(cached, sequence(Kernel::uncached(1_000_000, SYNTAX)));
+}
