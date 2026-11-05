@@ -19,6 +19,8 @@ mod adoption_tests;
 #[cfg(test)]
 mod budget_tests;
 #[cfg(test)]
+mod case_tests;
+#[cfg(test)]
 mod elimination_tests;
 #[cfg(test)]
 mod entry_tests;

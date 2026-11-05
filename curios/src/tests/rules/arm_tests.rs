@@ -1,6 +1,6 @@
 //! What an arm is checked at: its own case, and a hypothesis at the instance it was given.
 
-use {super::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 #[test]
 fn an_induction_hypothesis_is_typed_at_the_predecessor() {
@@ -165,5 +165,55 @@ fn a_literal_dispatch_reads_no_float() {
     .by_elaborator_in(
         "/tag",
         |error| matches!(error, Error::NotNatType { head_type } if pinned(head_type) == "Flt"),
+    );
+}
+
+// `A` and `B` are one group whose parameters share the name `n`, a `Nat` in one and a `Bool` in the other, and `mkA`'s payload states `n == 1` of its own family's. An `A(0)` holds a `Holds(0 == 1)`, so `forged`'s `qed` would fit only where the case were read at its sibling's parameter, or at another instance's, and `f` would hand it on at `False`. The kernel puts the same proposition as Core text under this name, in `curios-cert`'s `recheck::case_tests`.
+#[test]
+fn a_case_reads_its_own_familys_parameter_in_a_group() {
+    refused(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{False, True, Holds};
+
+        induct A(n: Nat): Type
+        | mkA(h: Holds(n == 1), other: B(true))
+        and B(n: Bool): Type
+        | mkB(h: Holds(n), other: A(0))
+        | base()
+        end
+
+        let f(x: A(0)) -> False = match x | mkA(h, _) => h end;
+
+        let forged: False = f(A/mkA(True/qed(), B/base()));
+
+        /std/print("FORGED")
+        "#,
+    )
+    .by_elaborator_in("/forged", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// The control: an `A(1)` holds a `Holds(1 == 1)`, which `qed` inhabits, and its arm runs.
+#[test]
+fn a_case_of_a_family_in_a_group_is_built_at_its_own_parameter() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{False, True, Holds};
+
+        induct A(n: Nat): Type
+        | mkA(h: Holds(n == 1), other: B(true))
+        and B(n: Bool): Type
+        | mkB(h: Holds(n), other: A(0))
+        | base()
+        end
+
+        let f(x: A(1)) -> Nat = match x | mkA(h, _) => 1 end;
+
+        /std/print(Nat/to_str(f(A/mkA(True/qed(), B/base()))))
+        "#),
+        b"1"
     );
 }
