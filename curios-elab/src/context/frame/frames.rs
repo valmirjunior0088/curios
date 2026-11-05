@@ -793,23 +793,26 @@ impl<'s> Frames<'s> {
     ///
     /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) holds the unerased spellings to one instance and declines where they cannot be.
     pub fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
-        self.refined_in_view()
-            .find_map(|frame| frame.refinement_scrutinees.get(canonical))
+        let (depth, entry) = self.refined_in_view().find_map(|frame| {
+            frame
+                .refinement_scrutinees
+                .get(canonical)
+                .map(|entry| (frame.depth, entry))
+        })?;
+
+        (!self.withheld_inside(depth, canonical)).then_some(entry)
     }
 
     /// Every scrutinee entry the window leaves visible, with the depth of the frame it was registered in, innermost frame first — what a stuck reduct is compared against once its written spelling missed, and the frame each must be settled from. Borrowed rather than collected: `reduce::refined_reduct` walks this at every stuck form under a live guard, and a copy per walk was most of what that cost.
     pub fn visible_scrutinee_entries(
         &self,
     ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
-        let ceiling = self.refinement_ceiling();
         self.refined_in_view().flat_map(move |frame| {
             frame
                 .refinement_scrutinees
                 .iter()
                 .filter(move |(key, entry)| {
-                    !entry.alias
-                        && !entry.withheld
-                        && !self.withheld_inside(frame.depth, ceiling, key)
+                    !entry.alias && !entry.withheld && !self.withheld_inside(frame.depth, key)
                 })
                 .map(move |(key, entry)| (frame.depth, key, entry))
         })
@@ -817,14 +820,13 @@ impl<'s> Frames<'s> {
 
     /// Every equation the window leaves in force with the key it is held under, aliases among them, innermost frame first: what a variable's refinement is read against.
     pub fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
-        let ceiling = self.refinement_ceiling();
         self.refined_in_view()
             .flat_map(|frame| {
                 frame
                     .refinement_scrutinees
                     .iter()
                     .filter(move |(key, entry)| {
-                        !entry.withheld && !self.withheld_inside(frame.depth, ceiling, key)
+                        !entry.withheld && !self.withheld_inside(frame.depth, key)
                     })
                     .map(|(key, entry)| (key.clone(), entry.clone()))
             })
@@ -858,10 +860,12 @@ impl<'s> Frames<'s> {
         forget_settled_windows(frame);
     }
 
-    /// Whether a frame inside the one at depth `frame`, below `ceiling`, withholds the equation `key` holds there, or holds an entry standing in for it.
-    fn withheld_inside(&self, frame: usize, ceiling: usize, key: &Term) -> bool {
+    /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it.
+    ///
+    /// **Past a settlement's ceiling too.** A settlement withholds the refinements of the frames from its own inwards, and an arm's step-aside is no refinement: the recorded equation steps aside in the arm that restated or withheld it from every lookup and every settlement made while the arm stands, as the kernel's `Scope::restate` has it, so a restatement settled with its own frame withheld settles under the arm's re-typing and goes with it, and the recorded equation settles only where the arm does not stand.
+    fn withheld_inside(&self, frame: usize, key: &Term) -> bool {
         self.refined_standing()
-            .filter(|inner| frame < inner.depth && inner.depth < ceiling)
+            .filter(|inner| frame < inner.depth)
             .any(|inner| {
                 inner
                     .refinement_scrutinees

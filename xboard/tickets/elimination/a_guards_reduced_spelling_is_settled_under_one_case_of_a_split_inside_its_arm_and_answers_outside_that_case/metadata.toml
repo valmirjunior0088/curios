@@ -8,6 +8,11 @@ source = "a_guard_settled_at_zero_answers_at_a_successor.crs"
 refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
 
 [[witness]]
+what = "the same guard restated in the true arm of a split, typed through a motive so nothing settles it before the split, and answered after it"
+source = "a_guard_restated_inside_a_split_answers_after_it.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
 what = "the same guard settled in the false arm of a split and answered in the true one, as a term"
 source = "a_guard_settled_under_one_case_of_a_split.crsc"
 refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]

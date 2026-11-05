@@ -258,3 +258,49 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
     )
     .by_elaborator_in("/w", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// A guard an inner arm restated is settled in that arm and goes with it: at `c = true` the split re-types `p` and `q` at `{}`, where `h(p) == h(q)` and so the guard is `k(0)`, and settling `inside` asks for the guard's spelling there. The recorded guard steps aside while the split's arm stands, settled nowhere in it, so after the split `after` reads the guard with `c` open, where it is the stuck match and not `k(0)`. Settled inside the arm, the recorded guard's spelling outlived it, and `forged`, closed at `P := (k) => Holds(k(0))`, `c := false` and `k := (n) => n == 1`, stood at `False`. The soundness board's fixed ticket `elimination/a_guards_reduced_spelling_is_settled_under_one_case_of_a_split_inside_its_arm_and_answers_outside_that_case` holds the same program.
+#[test]
+fn a_guard_restated_in_an_inner_arm_is_settled_nowhere_in_it() {
+    refused(r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, False, Holds};
+
+        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0))) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end): (b) => (Holds(b)) -> P(k)
+            | true => (_: Holds(true)) =>
+                let split: {} = match c | false => () | true => (let inside: Holds(k(0) || true) = True/qed(); ()) end;
+                let after: Holds(k(0)) = True/qed();
+                into(after)
+            | false => (g: Holds(false)) => match g end
+            end;
+
+        let forged: False = f((k: (Nat) -> Bool) => Holds(k(0)), false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, (x: Holds(0 == 1)) => x)(True/qed());
+
+        /std/print(Nat/to_str(0))
+        "#).by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+// The control: inside the split's arm the guard's restatement settles under the arm's re-typing, where `p` and `q` stand at `{}` and the guard is `k(0)`, so a proof of `k(0)` there is admitted, with nothing settled of the guard before the split.
+#[test]
+fn a_guard_restated_in_an_inner_arm_answers_there() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Bool};
+            use /std/Bool/{True, Holds};
+
+            let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+            let f(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c)) -> True =
+                match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+                | true =>
+                    let split: {} = match c | false => () | true => (let settled: Holds(k(0)) = True/qed(); ()) end;
+                    True/qed()
+                | false => True/qed()
+                end;
+
+            /std/print("ok")
+            "#),
+        b"ok"
+    );
+}
