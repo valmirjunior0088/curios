@@ -962,6 +962,7 @@ version = "0.16.18"
 dependencies = [
  "curios-abi",
  "curios-archive",
+ "curios-cert",
  "curios-common",
  "curios-core",
  "curios-module",

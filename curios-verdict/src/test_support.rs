@@ -3,6 +3,8 @@
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
 #[cfg(test)]
+mod believed_tests;
+#[cfg(test)]
 mod tests;
 
 use {

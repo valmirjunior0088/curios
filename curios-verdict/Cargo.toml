@@ -44,6 +44,8 @@ curios-surface = { workspace = true, optional = true }
 # The payload suite files the bytes of a compiled module as a payload: the store digests a payload and never reads it, so any bytes stand in for machine code.
 [dev-dependencies]
 curios-wasm = { workspace = true }
+# What the history's held attacks expect: the kernel's refusal, by its error.
+curios-cert = { workspace = true }
 # The directory of its own every suite here works in, removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
 # What the history's own suite compiles it with, as the `test-support` feature hands it to another crate. Dev-dependency entries beside the normal ones, because the features must not reach a build that ships.
