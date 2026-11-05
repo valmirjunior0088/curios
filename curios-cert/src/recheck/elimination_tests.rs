@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
+    curios_common::{Plicity, Qualifier, fill},
     curios_core::{
         Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam,
         Intrinsic, Item, Level, Many, Nat, Quality, Scope, Subterm, Telescope, Term,
@@ -832,5 +832,165 @@ fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
         ),
         Vec::new(),
         "the reading a capture would have left was refused for some other reason",
+    );
+}
+
+/// A fold whose identity arm holds an empty match on `v`, whose index is the scrutinee, over each carrier, and the same match as a case split, `/split`, whose identity arm is taken once, at the scrutinee itself. The term the module closes with types at `False` through `/nat`, a fold at `1` whose last tail reaches the empty match with `v` a `V(1)` that `/V/s(0)` inhabits.
+const A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM: &str = r#"
+induct /V: (n: #NatType) -> pub Type
+| s(m: #NatType): (#NatAdd(m, 1))
+end
+induct /L: (l: #ListType(#NatType)) -> pub Type
+| s(m: #NatType, t: #ListType(#NatType)): (#ListConcat(#NatType, [#List(#NatType, [m]), t]))
+end
+induct /B: (l: #BytesType) -> pub Type
+| s(m: #ByteType, t: #BytesType): (#BytesConcat([#BytesAppend(x[], m), t]))
+end
+let /nat : (
+    n: #NatType,
+    v:
+        #{node = InductType}
+        /V()(n)
+) -> /std/Bool/False =
+    (
+        n: #NatType,
+        v:
+            #{node = InductType}
+            /V()(n)
+    ) =>
+        match n: (x) => /std/Bool/False
+        | 0 =>
+            match v: (i, w) => /std/Bool/False
+            end
+        | pred + 1; ih =>
+            ih
+        end;
+let /list : (
+    xs: #ListType(#NatType),
+    v:
+        #{node = InductType}
+        /L()(xs)
+) -> /std/Bool/False =
+    (
+        xs: #ListType(#NatType),
+        v:
+            #{node = InductType}
+            /L()(xs)
+    ) =>
+        #{cases = {carrier = {elem = #NatType}}}
+        match xs: (x) => /std/Bool/False
+        | [] =>
+            match v: (i, w) => /std/Bool/False
+            end
+        | [h, ..t]; ih =>
+            ih
+        end;
+let /bytes : (
+    xs: #BytesType,
+    v:
+        #{node = InductType}
+        /B()(xs)
+) -> /std/Bool/False =
+    (
+        xs: #BytesType,
+        v:
+            #{node = InductType}
+            /B()(xs)
+    ) =>
+        match xs: (x) => /std/Bool/False
+        | x[] =>
+            match v: (i, w) => /std/Bool/False
+            end
+        | x[h, ..t]; ih =>
+            ih
+        end;
+let /split : (
+    n: #NatType,
+    v:
+        #{node = InductType}
+        /V()(n)
+) -> #NatType =
+    (
+        n: #NatType,
+        v:
+            #{node = InductType}
+            /V()(n)
+    ) =>
+        match n: (x) => #NatType
+        | 0 =>
+            match v: (i, w) => #NatType
+            end
+        | pred + 1; ih =>
+            1
+        end;
+/nat(
+    1,
+    #{node = Variant}
+    /V/s(0)
+)
+"#;
+
+// A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so each arm of one is checked at the motive opened at its case and under nothing else: the empty match inside the identity arm meets `v` at the scrutinee's own index, `s`'s target may meet it, and `s` is missing over every carrier. The case split's identity arm is taken once, at the scrutinee itself, where `n` stands at `0` and `s` is excused. The three refusals are all that stand between the module and `False`. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_free_monoid` (`curios-cert/src/kernel/infer.rs`): with the identity arm checked by `at` whether or not the cons arm reads its hypothesis, `/nat`, `/list` and `/bytes` are admitted and the walk returns no verdict.
+#[test]
+fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM}",
+        PROPOSITIONS,
+        A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM
+    ));
+    let missing = |name: &str, family: &str| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name))
+                && verdict.error
+                    == Error::MissingArm {
+                        family: global(family),
+                        tag: Atom::from("s"),
+                    }
+        })
+    };
+
+    assert!(missing("nat", "V"), "{verdicts:?}");
+    assert!(missing("list", "L"), "{verdicts:?}");
+    assert!(missing("bytes", "B"), "{verdicts:?}");
+    assert_eq!(verdicts.len(), 3, "{verdicts:?}");
+}
+
+/// The fold ticket's identity arm over `Bytes`, which its witnesses state for `Nat` and `List`: typed with `xs` at `x[]`, `h` would stand at `Holds(0 == 2)`, which is `False`, while reduction takes the arm at the last tail with `xs` still `x[0x01, 0x02]`.
+const THE_IDENTITY_ARM_OF_A_BYTES_FOLD: &str = r#"
+((xs: #BytesType, h: /std/Bool/Holds(#NatEql(#BytesLen(xs), 2))) =>
+    match xs: (x) => /std/Bool/False
+    | x[] =>
+        h
+    | x[b, ..t]; ih =>
+        ih
+    end)(
+    x[0x01, 0x02],
+    #{node = Variant}
+    /std/Bool/True/qed()
+)
+"#;
+
+// The identity arm learns nothing of `xs`, so `h` stands at the type it was given and is refused at the motive, in the term the module closes with. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_free_monoid` (`curios-cert/src/kernel/infer.rs`), as the test above is: with the identity arm checked by `at`, `h` is retyped at `Holds(#NatEql(#BytesLen(x[]), 2))`, the term types at `False` and the walk returns no verdict.
+#[test]
+fn the_identity_arm_of_a_bytes_fold_reads_its_scrutinee_at_no_case() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${THE_IDENTITY_ARM_OF_A_BYTES_FOLD}",
+        PROPOSITIONS,
+        THE_IDENTITY_ARM_OF_A_BYTES_FOLD
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
     );
 }

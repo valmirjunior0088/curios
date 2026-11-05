@@ -118,3 +118,66 @@ fn a_folds_identity_arm_refutes_no_proof_about_its_scrutinee() {
         matches!(error, Error::MatrixUncovered { indexed: true, .. })
     });
 }
+
+// A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so a match inside the arm meets `v` at the scrutinee itself and not at the arm's case: over each carrier `s`'s target may meet it there, and each empty match must name `s`. Specialized as a case split's arm is, the identity arm would excuse `s`, and `forged`, a fold at `1` whose last tail reaches the empty match with `v` a `V(1)` that `V/s(0)` inhabits, would be a closed inhabitant of `False`. The control is the same match as a case split, whose identity arm is taken once, at the scrutinee itself, where the case excuses `s`. `curios_cert`'s `recheck::elimination_tests` puts the module to the kernel under this name.
+#[test]
+fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
+    let refusals = refused(
+        r#"
+        use /std/{Nat, Byte, Bytes, List};
+        use /std/Bool/{False};
+
+        induct V: (n: Nat) -> Type
+        | s(m: Nat): (m + 1)
+        end
+
+        induct L: (l: List(Nat)) -> Type
+        | s(m: Nat, t: List(Nat)): ([m, ..t])
+        end
+
+        induct B: (l: Bytes) -> Type
+        | s(m: Byte, t: Bytes): (x[m, ..t])
+        end
+
+        pub let nat(n: Nat, v: V(n)) -> False =
+            match n: (_) => False | 0 => (match v end) | _ + 1; ih => ih end;
+        pub let list(xs: List(Nat), v: L(xs)) -> False =
+            match xs: (_) => False | [] => (match v end) | [_, .._]; ih => ih end;
+        pub let bytes(xs: Bytes, v: B(xs)) -> False =
+            match xs: (_) => False | x[] => (match v end) | x[_, .._]; ih => ih end;
+        pub let split(n: Nat, v: V(n)) -> Nat =
+            match n | 0 => (match v end) | k + 1 => k end;
+
+        let forged: False = nat(1, V/s(0));
+
+        /std/print("FORGED")
+        "#,
+    );
+
+    for at in ["/nat", "/list", "/bytes"] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(error, Error::MatrixUncovered { indexed: true, .. })
+        });
+    }
+}
+
+// The fold ticket's identity arm over `Bytes`, whose witnesses state it for `Nat` and `List`: typed with `xs` at `x[]`, `h` would stand at `Holds(0 == 2)`, which is `False`, while reduction takes the arm at the last tail with `xs` still `x[1, 2]`. The arm learns nothing of `xs`, so `h` stands at the type it was given. `curios_cert`'s `recheck::elimination_tests` puts the term to the kernel under this name.
+#[test]
+fn the_identity_arm_of_a_bytes_fold_reads_its_scrutinee_at_no_case() {
+    refused(
+        r#"
+        use /std/{Bytes};
+        use /std/Bool/{True, False, Holds};
+
+        let f(xs: Bytes, h: Holds(Bytes/len(xs) == 2)) -> False =
+            match xs: (_) => False | x[] => h | x[_, .._]; ih => ih end;
+
+        let forged: False = f(x[1, 2], True/qed());
+
+        /std/print("FORGED")
+        "#,
+    )
+    .by_elaborator_in("/f", |error| {
+        matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/sys/Bool/Holds(Bytes/len(xs) == 2)")
+    });
+}

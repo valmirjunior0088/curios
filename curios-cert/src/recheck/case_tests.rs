@@ -658,3 +658,323 @@ fn an_ill_typed_arm_is_excused_only_where_no_reduction_takes_it() {
         "{verdicts:?}"
     );
 }
+
+/// One family a carrier indexes for each shape, each with one case: `Ix` at a successor, `Iz` at zero and `By` at the empty value. The near misses meet that case's target at some value of their variables — a floorless sum, a product and a truncated difference are successors somewhere, a power of a base that may be zero is zero at `a = 0`, a window, a concatenation of chunks and a fill of unknown count are empty somewhere — and the controls at none: a successor against zero, a run behind a chunk, an appended byte and a fill of a successor count against the empty value. The term the module closes with types at `False` through `/sum`.
+const AN_ARM_ABSENT_WHERE_A_CARRIERS_INDEX_MAY_MEET_ITS_TARGET: &str = r#"
+induct /Ix: (i: #NatType) -> pub Type
+| succ(k: #NatType): (#NatAdd(k, 1))
+end
+induct /Iz: (i: #NatType) -> pub Type
+| zero(): (0)
+end
+induct /By: (b: #BytesType) -> pub Type
+| e(): (x[])
+end
+let /sum : (
+    a: #NatType,
+    b: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatAdd(a, b))
+) -> /std/Bool/False =
+    (
+        a: #NatType,
+        b: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatAdd(a, b))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /product : (
+    a: #NatType,
+    b: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatMul(a, b))
+) -> /std/Bool/False =
+    (
+        a: #NatType,
+        b: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatMul(a, b))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /difference : (
+    a: #NatType,
+    b: #NatType,
+    v:
+        #{node = InductType}
+        /Ix()(#NatSub(a, b))
+) -> /std/Bool/False =
+    (
+        a: #NatType,
+        b: #NatType,
+        v:
+            #{node = InductType}
+            /Ix()(#NatSub(a, b))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /power : (
+    a: #NatType,
+    b: #NatType,
+    v:
+        #{node = InductType}
+        /Iz()(#NatPow(a, #NatAdd(b, 1)))
+) -> /std/Bool/False =
+    (
+        a: #NatType,
+        b: #NatType,
+        v:
+            #{node = InductType}
+            /Iz()(#NatPow(a, #NatAdd(b, 1)))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /window : (
+    xs: #BytesType,
+    s: #NatType,
+    l: #NatType,
+    p: /std/Bool/Holds(#NatLe(#NatAdd(s, l), #BytesLen(xs))),
+    v:
+        #{node = InductType}
+        /By()(#BytesSlice(xs, s, l, p))
+) -> /std/Bool/False =
+    (
+        xs: #BytesType,
+        s: #NatType,
+        l: #NatType,
+        p: /std/Bool/Holds(#NatLe(#NatAdd(s, l), #BytesLen(xs))),
+        v:
+            #{node = InductType}
+            /By()(#BytesSlice(xs, s, l, p))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /chunks : (
+    xs: #BytesType,
+    ys: #BytesType,
+    v:
+        #{node = InductType}
+        /By()(#BytesConcat([xs, ys]))
+) -> /std/Bool/False =
+    (
+        xs: #BytesType,
+        ys: #BytesType,
+        v:
+            #{node = InductType}
+            /By()(#BytesConcat([xs, ys]))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /fill : (
+    n: #NatType,
+    c: #ByteType,
+    v:
+        #{node = InductType}
+        /By()(#BytesReplicate(n, c))
+) -> /std/Bool/False =
+    (
+        n: #NatType,
+        c: #ByteType,
+        v:
+            #{node = InductType}
+            /By()(#BytesReplicate(n, c))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /successor : (
+    a: #NatType,
+    v:
+        #{node = InductType}
+        /Iz()(#NatAdd(a, 1))
+) -> /std/Bool/False =
+    (
+        a: #NatType,
+        v:
+            #{node = InductType}
+            /Iz()(#NatAdd(a, 1))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /trailing : (
+    xs: #BytesType,
+    v:
+        #{node = InductType}
+        /By()(#BytesConcat([xs, x[0x01]]))
+) -> /std/Bool/False =
+    (
+        xs: #BytesType,
+        v:
+            #{node = InductType}
+            /By()(#BytesConcat([xs, x[0x01]]))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /single : (
+    xs: #BytesType,
+    c: #ByteType,
+    v:
+        #{node = InductType}
+        /By()(#BytesAppend(xs, c))
+) -> /std/Bool/False =
+    (
+        xs: #BytesType,
+        c: #ByteType,
+        v:
+            #{node = InductType}
+            /By()(#BytesAppend(xs, c))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /filled : (
+    n: #NatType,
+    c: #ByteType,
+    v:
+        #{node = InductType}
+        /By()(#BytesReplicate(#NatAdd(n, 1), c))
+) -> /std/Bool/False =
+    (
+        n: #NatType,
+        c: #ByteType,
+        v:
+            #{node = InductType}
+            /By()(#BytesReplicate(#NatAdd(n, 1), c))
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+/sum(
+    1,
+    0,
+    #{node = Variant}
+    /Ix/succ(0)
+)
+"#;
+
+// An absent arm is excused only where the carriers' algebra concludes a clash that holds at every value, so each near miss keeps its case mandatory and each control's case is excused; the closing term types, so the seven refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `Cancelled::<Natural, _>::deduction` (`curios-algebra/src/combination.rs`): with an impossible arm asking only that the emptied side's constant be zero, `self.left.constant.is_zero()` for `self.left.is_zero()` and its mirror, `/sum`, `/product` and `/difference` are excused. At `Word::against_identity` (`curios-algebra/src/word.rs`): with a window and a chunk counted positive, `/window`, `/chunks` and `/fill` are excused.
+#[test]
+fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${AN_ARM_ABSENT_WHERE_A_CARRIERS_INDEX_MAY_MEET_ITS_TARGET}",
+        PROPOSITIONS,
+        AN_ARM_ABSENT_WHERE_A_CARRIERS_INDEX_MAY_MEET_ITS_TARGET
+    ));
+    let missing = |name: &str, family: &str, tag: &str| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name))
+                && verdict.error
+                    == Error::MissingArm {
+                        family: global(family),
+                        tag: Atom::from(tag),
+                    }
+        })
+    };
+
+    assert!(missing("sum", "Ix", "succ"), "{verdicts:?}");
+    assert!(missing("product", "Ix", "succ"), "{verdicts:?}");
+    assert!(missing("difference", "Ix", "succ"), "{verdicts:?}");
+    assert!(missing("power", "Iz", "zero"), "{verdicts:?}");
+    assert!(missing("window", "By", "e"), "{verdicts:?}");
+    assert!(missing("chunks", "By", "e"), "{verdicts:?}");
+    assert!(missing("fill", "By", "e"), "{verdicts:?}");
+    assert_eq!(verdicts.len(), 7, "{verdicts:?}");
+}
+
+/// `[Pr/b()]` and `[Pr/a()]` are one list by irrelevance, so `Ix/mk()` inhabits `Ix([Pr/b()])` and the term the module closes with types at `False` through `/absurd`. `/apart`'s `[]` against `[Pr/a()]` is a clash of length, which reads no element.
+const TWO_LISTS_OF_PROOFS_THAT_IRRELEVANCE_HOLDS_ONE: &str = r#"
+induct /Pr: pub Prop
+| a()
+| b()
+end
+induct /Ix: (
+    l: #ListType(
+        #{node = InductType}
+        /Pr()
+    )
+) -> pub Type
+| mk(): (
+    #List(
+        #{node = InductType}
+        /Pr(),
+        [/Pr/a()]
+    )
+)
+end
+let /absurd : (
+    v:
+        #{node = InductType}
+        /Ix()(
+            #List(
+                #{node = InductType}
+                /Pr(),
+                [/Pr/b()]
+            )
+        )
+) -> /std/Bool/False =
+    (
+        v:
+            #{node = InductType}
+            /Ix()(
+                #List(
+                    #{node = InductType}
+                    /Pr(),
+                    [/Pr/b()]
+                )
+            )
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+let /apart : (
+    v:
+        #{node = InductType}
+        /Ix()(
+            #List(
+                #{node = InductType}
+                /Pr(),
+                []
+            )
+        )
+) -> /std/Bool/False =
+    (
+        v:
+            #{node = InductType}
+            /Ix()(
+                #List(
+                    #{node = InductType}
+                    /Pr(),
+                    []
+                )
+            )
+    ) =>
+        match v: (i, w) => /std/Bool/False
+        end;
+/absurd(/Ix/mk())
+"#;
+
+// No clash is concluded between two of a proposition's constructors, and a list's elements are terms rather than decided values, so two runs that differ at a proof are no clash: `mk` stays mandatory in `/absurd`, while `/apart`'s clash of length is excused. The refusal in `/absurd` is all that stands between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `Run for Vec<E>` (`curios-algebra/src/word.rs`): with `DECIDED` true, the two runs' heads clash, `/absurd` is excused and the walk returns no verdict.
+#[test]
+fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${TWO_LISTS_OF_PROOFS_THAT_IRRELEVANCE_HOLDS_ONE}",
+        PROPOSITIONS,
+        TWO_LISTS_OF_PROOFS_THAT_IRRELEVANCE_HOLDS_ONE
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(absurd), error: Error::MissingArm { family, tag } }]
+                if *absurd == global("absurd")
+                    && *family == global("Ix")
+                    && *tag == Atom::from("mk")
+        ),
+        "{verdicts:?}"
+    );
+}
