@@ -548,6 +548,11 @@ impl Env for Kernel<'_> {
         Kernel::polarity(self, name, index)
     }
 
+    /// Whether a walk filed the family's vector: the kernel registers every family of a module before it judges any, so one stored after the family judged is held and not judged.
+    fn judged(&self, name: &Global) -> bool {
+        Kernel::judged(self, name)
+    }
+
     fn variance(&self, name: &Global, index: usize) -> Variance {
         Kernel::variance(self, name, index)
     }
@@ -1021,6 +1026,12 @@ impl<'s> Kernel<'s> {
     pub(crate) fn polarity(&self, name: &Global, index: usize) -> Polarity {
         self.reads.signature(name);
         self.globals.polarity(name, index)
+    }
+
+    /// Whether a walk judged the family `name` and filed its polarity vector: a read of its signature, as [`Kernel::polarity`] is.
+    pub(crate) fn judged(&self, name: &Global) -> bool {
+        self.reads.signature(name);
+        self.globals.judged(name)
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {

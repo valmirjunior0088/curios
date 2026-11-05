@@ -60,6 +60,10 @@ impl Env for Probe {
     fn polarity(&self, _: &Global, _: usize) -> Polarity {
         Polarity::Mixed
     }
+
+    fn judged(&self, _: &Global) -> bool {
+        false
+    }
 }
 
 /// One graded call, from member `caller` to member `callee`.

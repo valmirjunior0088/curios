@@ -198,6 +198,11 @@ impl curios_analysis::Env for Context<'_> {
             })
             .unwrap_or(Polarity::Mixed)
     }
+
+    /// Whether the registries hold the family, which they do once its declaration is published with its entries' vectors: a declaration reaching one stored after it outside its group is refused as a cycle before anything reads it.
+    fn judged(&self, name: &Global) -> bool {
+        Context::induct_decl(self, name).is_some() || Context::struct_decl(self, name).is_some()
+    }
 }
 
 impl curios_analysis::Judge for Context<'_> {

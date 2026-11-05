@@ -119,7 +119,7 @@ impl<'a> Declarations<'a> {
 
 /// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — and [`PositivityRefusal::Exhausted`] wherever the driver refused a reduction, so that a vector handed back is the declarations' own.
 ///
-/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration is judged after every declaration it mentions, and one judged before it cannot mention it, so every out-of-set declaration is a sink of the occurrence relation.
+/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration judged before the one analysed cannot mention it, so every out-of-set declaration the driver judged ([`Env::judged`]) is a sink of the occurrence relation. One it has not judged is none: the kernel registers every family of a module before it judges any, so a family stored after the one analysed and outside its declaration may reach it again through what nothing has read, and its occurrence is read as reaching the declaration walked at [`Polarity::Mixed`]. The elaborator never meets one, refusing a declaration that reaches one stored after it outside its group.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     declarations: Declarations<'_>,
@@ -356,6 +356,12 @@ fn fixpoint<E: Env>(
                 match target {
                     Target::Param(index) => vector[index] = vector[index].join(polarity),
                     Target::Decl(other) => {
+                        // A family outside the set its driver has not judged is no sink: what it reaches is unread, so it is read as reaching this declaration again, at `Mixed`.
+                        let (other, polarity) =
+                            match split.contains_key(&other) || env.judged(&other) {
+                                true => (other, polarity),
+                                false => (*name, polarity.compose(Polarity::Mixed)),
+                            };
                         edges
                             .entry(other)
                             .and_modify(|entry| *entry = entry.join(polarity))
@@ -449,6 +455,8 @@ fn refusal<E: Env>(
             // A direct self-occurrence stands on its own; anything else has to find its way back, and `closed` already knows how.
             let back = match other == *name {
                 true => Polarity::Strict,
+                // A family outside the set its driver has not judged reaches back as the fixpoint read it.
+                false if !split.contains_key(&other) && !env.judged(&other) => Polarity::Mixed,
                 false => match closed.get(&other).and_then(|reached| reached.get(name)) {
                     Some(back) => *back,
                     None => continue,

@@ -609,6 +609,18 @@ impl<'s> Environment<'s> {
 
     /// How the family `name` uses its parameter at `index`, by the vector this walk filed for it or the record of its unit files: [`Polarity::Mixed`] where neither holds one, and past the end of one.
     pub(super) fn polarity(&self, name: &Global, index: usize) -> Polarity {
+        self.filed_polarities(name)
+            .and_then(|vector| vector.get(index).copied())
+            .unwrap_or(Polarity::Mixed)
+    }
+
+    /// Whether a walk judged the family `name` and filed its polarity vector: this walk, the baseline's where this walk has passed it, or the walk over the unit in scope that holds it. A family of the module stored after the one judged has none yet.
+    pub(super) fn judged(&self, name: &Global) -> bool {
+        self.filed_polarities(name).is_some()
+    }
+
+    /// The polarity vector filed for the family `name`, where a walk filed one.
+    fn filed_polarities(&self, name: &Global) -> Option<&[Polarity]> {
         self.vectors
             .get(name)
             .map(Vec::as_slice)
@@ -617,8 +629,6 @@ impl<'s> Environment<'s> {
                     .and_then(|baseline| baseline.certification.polarities(name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.polarities(name)))
-            .and_then(|vector| vector.get(index).copied())
-            .unwrap_or(Polarity::Mixed)
     }
 
     /// The baseline, where `name` is a declaration the walk does not visit and has passed: whose filed vectors are read from there on, as they are filed where a walk adopts the declaration.

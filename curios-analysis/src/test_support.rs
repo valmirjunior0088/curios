@@ -233,4 +233,8 @@ impl Env for Scope {
     fn polarity(&self, _: &Global, _: usize) -> Polarity {
         Polarity::Mixed
     }
+
+    fn judged(&self, _: &Global) -> bool {
+        false
+    }
 }

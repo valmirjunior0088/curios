@@ -84,6 +84,9 @@ pub trait Env {
     /// Asked of the checker rather than read off the entry it hands back, because which vector a family answers with is the checker's own record. The elaborator's is the one its entry carries; the kernel's is the one its own walk filed, which no entry holds, so reading the entry would have it keep a second copy of every registry entry in scope to put its vector there.
     fn polarity(&self, name: &Global, index: usize) -> Polarity;
 
+    /// Whether this checker judged the family `name` and holds the vector it filed for it. Strict positivity reads a family it reaches outside the set it analyses as a sink of the occurrence relation only where it was judged, since one not judged yet may reach the set again through what nothing has read ([`positivity_vectors`](crate::positivity_vectors)).
+    fn judged(&self, name: &Global) -> bool;
+
     /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
     ///
     /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the kernel's is the one its own walk filed.
