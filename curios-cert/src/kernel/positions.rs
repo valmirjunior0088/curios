@@ -6,7 +6,11 @@
 //!
 //! Three things make that workable. Which half a type's positions belong to is remembered beside the kernel's sorts and under their lives ([`Memos`](super::Memos)), so classifying at every record site costs one question per type for as long as what its sort was read off stands — and a type an arm's equation makes a proposition is classified under each arm's own, where a memo kept here for the whole item would hand one arm's answer to the next. A classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn. The last two are this component's rather than a caller's.
 
-use {super::Error, curios_analysis::Erased, curios_core::Term};
+use {
+    super::Error,
+    curios_analysis::Erased,
+    curios_core::{Free, Term},
+};
 
 /// One erased position an item's check recorded.
 pub(crate) struct Position {
@@ -73,6 +77,18 @@ impl Positions {
     pub(super) fn enclose_partial(&mut self, index: usize) {
         if let Some(position) = self.recorded.get_mut(index) {
             position.encloses_partial = true;
+        }
+    }
+
+    /// Each position recorded since `since` whose term names one of `members` enclosed a group that does not descend: the group's members, assumed while its signatures and bodies are checked, stand in those positions as locals that hold no group.
+    pub(super) fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
+        for position in self.recorded.iter_mut().skip(since) {
+            if members
+                .iter()
+                .any(|member| position.term.mentions_free(member))
+            {
+                position.encloses_partial = true;
+            }
         }
     }
 

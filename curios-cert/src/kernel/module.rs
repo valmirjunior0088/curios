@@ -228,6 +228,8 @@ pub(crate) fn check_group<R>(
 
         let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = members.iter().collect::<Vec<_>>();
+        // Where the positions the signatures and bodies record begin, each holding a member as the local it is assumed at.
+        let since = kernel.positions_recorded();
 
         // Assumed before any signature is checked, because one member's type may name any other. A type not yet known to be a type is assumed only for the span of this scope: an ill-sorted one refuses the group below, and `scoped` retracts every assumption on the way out.
         for (index, name) in names.iter().enumerate() {
@@ -259,6 +261,10 @@ pub(crate) fn check_group<R>(
             enclosing[index] |= kernel.partial_groups() > before;
         }
         let totality = kernel.close_group(group, enclosing);
+        // A member stands in its group's own signatures and bodies as a local, which holds no group, so a position there reaching one is not seen to enclose the group by what it holds: every one that names a member of a group that does not descend encloses it, under the item that holds the group, as a position outside the group holding it closed does.
+        if totality != Totality::Total {
+            kernel.enclose_partial_naming(since, &names);
+        }
 
         if let Some(type_) = erased_member
             && totality != Totality::Total

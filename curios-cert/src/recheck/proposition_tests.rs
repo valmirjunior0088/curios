@@ -552,3 +552,111 @@ fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
         "{verdicts:?}"
     );
 }
+
+/// `Bot`'s method is a function to `False`, so a `Bot` dictionary is a proof of `False` at every value of its carrier.
+const A_FALSE_CONCEPT: &str = r#"
+concept /Bot(A: Type): pub Type {
+    bot: (x: A) ->
+        #{node = InductType}
+        /std/Bool/False()
+}
+induct /Index: (i: #NatType) -> pub Type
+| mk(n: #NatType): (n)
+end
+"#;
+
+/// A dictionary whose method calls the dictionary's own: a group of one data member that does not descend.
+const A_DICTIONARY_CALLING_ITSELF: &str = r#"
+#{node = Rec}
+let /w :
+    #{node = StructType}
+    /Bot(#NatType) =
+    /Bot(#NatType) {
+        (n: #NatType) =>
+            (#{field = Struct(/Bot, 0)}
+            /w.0)(n)
+    };
+/std/Bool/True/qed()
+"#;
+
+/// [`A_DICTIONARY_CALLING_ITSELF`] beside a natural of its group that hands a proof of `False` read off the dictionary to a function.
+const A_SIBLING_READING_THE_DICTIONARY: &str = r#"
+#{node = Rec}
+let /n : #NatType =
+    ((p:
+        #{node = InductType}
+        /std/Bool/False()) => 0)((#{field = Struct(/Bot, 0)}
+    /w.0)(0))
+and /w :
+    #{node = StructType}
+    /Bot(#NatType) =
+    /Bot(#NatType) {
+        (n2: #NatType) =>
+            (#{field = Struct(/Bot, 0)}
+            /w.0)(n2)
+    };
+/std/Bool/True/qed()
+"#;
+
+/// [`A_DICTIONARY_CALLING_ITSELF`] as a group standing in a definition's body.
+const A_DICTIONARY_CALLING_ITSELF_IN_A_TERM: &str = r#"
+let /inline : #NatType =
+    #{node = Rec}
+    (let w:
+        #{node = StructType}
+        /Bot(#NatType) =
+        /Bot(#NatType) {
+            (n: #NatType) =>
+                (#{field = Struct(/Bot, 0)}
+                w.0)(n)
+        };
+    0);
+/std/Bool/True/qed()
+"#;
+
+/// A data member that does not descend, and a sibling whose type reads it.
+const A_SIGNATURE_READING_ITS_SIBLING: &str = r#"
+#{node = Rec}
+let /d : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        /d(n)
+and /v :
+    #{node = InductType}
+    /Index()(/d(0)) =
+    /v;
+/std/Bool/True/qed()
+"#;
+
+// A member stands in its group's own signatures and bodies as the local it is assumed at, which holds no group, so a proof or a type there that reaches a member of a group that does not descend encloses the group by what the group is and not by what the position holds: each is refused under the item that holds the group, the group's first member for a group of the module's own, as a position holding the group closed is. Admitted, `w` would be a proof of `False` in every erased position that reads it, and `v`'s type one no reduction settles.
+#[test]
+fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_member() {
+    for (module, holder, erased) in [
+        (A_DICTIONARY_CALLING_ITSELF, "w", Erased::Proof),
+        (A_SIBLING_READING_THE_DICTIONARY, "n", Erased::Proof),
+        (
+            A_DICTIONARY_CALLING_ITSELF_IN_A_TERM,
+            "inline",
+            Erased::Proof,
+        ),
+        (A_SIGNATURE_READING_ITS_SIBLING, "d", Erased::Type),
+    ] {
+        let verdicts = core_text_verdicts(&fill!(
+            "${PROPOSITIONS}\n${A_FALSE_CONCEPT}\n${module}",
+            PROPOSITIONS,
+            A_FALSE_CONCEPT,
+            module
+        ));
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| verdict.name == Some(global(holder))
+                    && verdict.error
+                        == Error::NotTotal {
+                            erased,
+                            reached: None
+                        }),
+            "{holder}: {verdicts:?}"
+        );
+    }
+}

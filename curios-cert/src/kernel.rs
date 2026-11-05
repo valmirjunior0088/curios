@@ -1531,6 +1531,16 @@ impl<'s> Kernel<'s> {
         Some(position)
     }
 
+    /// How many positions this item's check has recorded: where a group's check begins, for [`Kernel::enclose_partial_naming`].
+    pub(crate) fn positions_recorded(&self) -> usize {
+        self.positions.recorded().0
+    }
+
+    /// Each position recorded since `since` whose term names one of `members` enclosed a group that does not descend.
+    pub(crate) fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
+        self.positions.enclose_partial_naming(since, members);
+    }
+
     /// The position recorded at `position`, where there is one, enclosed a group that does not descend.
     pub(crate) fn enclose_partial(&mut self, position: Option<usize>) {
         if let Some(index) = position {
