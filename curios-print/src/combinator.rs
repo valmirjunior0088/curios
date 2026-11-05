@@ -64,6 +64,11 @@ pub fn own_line(printer: Printer) -> Printer {
     Printer::OwnLine(Box::new(printer))
 }
 
+/// `printer` flat on the current line where it fits there, and otherwise broken on a line of its own, as [`own_line`] places one: a newline and one indentation level deeper where something is already written on the line, and as it stands at the start of one.
+pub fn own_line_if_broken(printer: Printer) -> Printer {
+    Printer::OwnLineIfBroken(Box::new(printer))
+}
+
 /// A soft separator: a single space when the enclosing [`group`] renders flat, a newline (plus indentation) when it breaks — or unconditionally, when no group encloses it.
 pub fn line() -> Printer {
     Printer::Line {

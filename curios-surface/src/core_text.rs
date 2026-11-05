@@ -59,7 +59,7 @@ use {
     crate::Spelling,
     curios_core::{Subterm, Term},
     curios_print::{
-        Printer, flat, group, hard_line, indent, line, own_line, pure, sep_flat, soft_line,
+        Printer, flat, group, indent, line, own_line_if_broken, pure, sep_flat, soft_line,
     },
 };
 
@@ -107,7 +107,7 @@ impl Frame<'_> {
     }
 }
 
-/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it. Where `spelling` writes Core text as a text of its own, the decorator takes a line of its own and `node` the line beneath it ([`Spelling::written_as_text`]).
+/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it. Where `spelling` writes Core text as a text of its own, the two stay on the line they are reached on where they fit there whole, and otherwise the decorator takes a line of its own and `node` the line beneath it ([`Spelling::written_as_text`]).
 pub fn decorated(
     spelling: &Spelling,
     fields: Vec<Decoration>,
@@ -124,7 +124,7 @@ pub fn decorated(
     let decorator = hugged("#{", decoration_fields(fields), "}");
 
     match spelling.writes_as_text() {
-        true => own_line(flat([decorator, hard_line(), node])),
+        true => own_line_if_broken(flat([decorator, line(), node])),
         false => flat([decorator, pure(" "), node]),
     }
 }

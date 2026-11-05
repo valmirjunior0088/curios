@@ -190,7 +190,7 @@ pub fn core(source: &str) -> String {
     printed.expect("the pipeline emits the lowered Core stage")
 }
 
-/// `text` with its whitespace taken out: what a Core printout holds read past how it is laid out, since a decorator stands on a line of its own above what it decorates and a list holding one breaks, so a test asks about the terms and not where their lines break.
+/// `text` with its whitespace taken out: what a Core printout holds read past how it is laid out, since a decorator stands beside what it decorates or above it as the two fit their line, and a list holding one breaks where it does not fit, so a test asks about the terms and not where their lines break.
 pub fn unlaid(text: &str) -> String {
     text.chars()
         .filter(|character| !character.is_whitespace())

@@ -565,9 +565,10 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| (&mut item.printer, flat)));
             }
-            Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
-                stack.push((inner, flat))
-            }
+            Printer::Indent(inner)
+            | Printer::OwnLine(inner)
+            | Printer::OwnLineIfBroken(inner)
+            | Printer::Group(inner) => stack.push((inner, flat)),
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
             Printer::Deferred(_) => unreachable!("forced above"),
         }
@@ -770,8 +771,8 @@ fn fits(
             }),
             // Mandatory where it is taken, as a hard line is: no group holding one renders flat, and beyond the group it may end the line.
             Printer::OwnLine(_) => return !inside,
-            // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group.
-            Printer::Group(inner) => stack.push(Measured {
+            // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group. A block that takes its own line only where it breaks is measured as one.
+            Printer::Group(inner) | Printer::OwnLineIfBroken(inner) => stack.push(Measured {
                 node: inner,
                 flat,
                 inside,
@@ -917,6 +918,31 @@ fn run<'b, 'c>(
                             matches!(style, FillStyle::Atomic),
                         ));
                         if !first_fits && !state.should_indent {
+                            state.line_ends(&mut stack)?;
+                        }
+                    }
+                }
+                // Flat where it fits the room left, as a group is decided; broken where it does not, on a line of its own as `OwnLine` places one.
+                Printer::OwnLineIfBroken(inner) => {
+                    let mut inner = inner.take();
+                    let inner_fits = flat
+                        || match state.width {
+                            None => true,
+                            Some(_) if !state.suffix.is_empty() => false,
+                            Some(width) => fits(
+                                &mut inner,
+                                &mut stack,
+                                width.saturating_sub(state.effective_column()),
+                                true,
+                                state.following,
+                            ),
+                        };
+                    match inner_fits || state.should_indent {
+                        true => stack.push(Step::Print(inner, inner_fits)),
+                        false => {
+                            state.indent_by += state.indent_step;
+                            stack.push(Step::Dedent);
+                            stack.push(Step::Print(inner, false));
                             state.line_ends(&mut stack)?;
                         }
                     }
@@ -1071,9 +1097,10 @@ pub fn each_named(
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
-            Printer::Indent(inner) | Printer::OwnLine(inner) | Printer::Group(inner) => {
-                stack.push(inner)
-            }
+            Printer::Indent(inner)
+            | Printer::OwnLine(inner)
+            | Printer::OwnLineIfBroken(inner)
+            | Printer::Group(inner) => stack.push(inner),
             Printer::Text(_)
             | Printer::Line { .. }
             | Printer::IfBreak { .. }

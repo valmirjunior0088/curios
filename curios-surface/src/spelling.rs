@@ -82,7 +82,7 @@ pub struct Spelling {
     core_text: bool,
     /// Whether a term is written whole, however far its tree outgrows its graph: Core text a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
     whole: bool,
-    /// Whether Core text is written as a text of its own — a file, a dump — rather than as a term inside a sentence: each decorator on a line of its own above what it decorates, at the workspace's line width ([`Spelling::written_as_text`]).
+    /// Whether Core text is written as a text of its own — a file, a dump — rather than as a term inside a sentence: a decorated term on its line where it fits there whole, and otherwise its decorator on a line of its own above it, at the workspace's line width ([`Spelling::written_as_text`]).
     as_text: bool,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
     form_scope: Option<Rc<FormScope>>,
@@ -427,7 +427,7 @@ impl Spelling {
         self.whole
     }
 
-    /// Whether Core text is written as a text of its own, each decorator on a line of its own.
+    /// Whether Core text is written as a text of its own, a decorator above what it decorates where the two do not fit one line.
     pub fn writes_as_text(&self) -> bool {
         self.as_text
     }
@@ -451,7 +451,7 @@ impl Spelling {
         self
     }
 
-    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a kernel's refusal does: a decorator takes a line of its own, and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line, and the text is rendered at [`LINE_WIDTH`], since a group holding a decorator breaks.
+    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a kernel's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`LINE_WIDTH`], which decides what fits.
     pub fn written_as_text(mut self) -> Self {
         self.as_text = true;
         self

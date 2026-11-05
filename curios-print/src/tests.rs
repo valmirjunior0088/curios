@@ -326,3 +326,45 @@ fn no_line_ends_in_a_space_and_a_document_keeps_the_spaces_it_ends_with() {
         "a\nb "
     );
 }
+
+#[test]
+fn a_block_takes_a_line_of_its_own_only_where_it_does_not_fit_flat_on_the_one_it_is_reached_on() {
+    let block = || own_line_if_broken(flat([pure("#{a}"), line(), pure("b")]));
+
+    assert_eq!(render(flat([pure("x: "), block()]), Some(80)), "x: #{a} b");
+    assert_eq!(
+        render(flat([pure("x: "), block()]), Some(8)),
+        "x:\n  #{a}\n  b"
+    );
+    assert_eq!(render(block(), Some(4)), "#{a}\nb");
+    assert_eq!(
+        render(
+            flat([
+                pure("x: "),
+                own_line_if_broken(flat([
+                    pure("#{a}"),
+                    line(),
+                    pure("b"),
+                    hard_line(),
+                    pure("c")
+                ]))
+            ]),
+            Some(80)
+        ),
+        "x:\n  #{a}\n  b\n  c"
+    );
+    assert_eq!(
+        render(
+            group(flat([pure("f("), soft_line(), block(), pure(")")])),
+            Some(80)
+        ),
+        "f(#{a} b)"
+    );
+    assert_eq!(
+        render(
+            group(flat([pure("f("), soft_line(), block(), pure(")")])),
+            Some(8)
+        ),
+        "f(\n#{a} b)"
+    );
+}
