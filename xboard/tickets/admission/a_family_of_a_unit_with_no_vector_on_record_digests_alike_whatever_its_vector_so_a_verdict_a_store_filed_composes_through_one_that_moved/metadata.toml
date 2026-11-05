@@ -1,0 +1,18 @@
+title = "A family of a unit with no vector on record digests alike whatever its vector, so a verdict a store filed composes through one that moved"
+found = 2026-11-05
+status = "open"
+
+[[witness]]
+what = "`X` accepted through `F` while `F`'s vector, computed where `/lib` is mounted, was positive, then taken from the store where it is negative"
+step = [
+    { mount = "/base", source = "base_pos.crs" },
+    { mount = "/lib", source = "lib.crs" },
+    { withhold = "/lib" },
+    { mount = "/app", source = "app_x.crsc" },
+    { mount = "/app", source = "app_none.crsc" },
+    { mount = "/base", source = "base_neg.crs" },
+    { withhold = "/lib" },
+    { mount = "/app", source = "app_x.crsc" },
+    { source = "proof.crsc" },
+]
+refused = [{ by = "kernel", error = "NotPositive", within = "/app/X" }]

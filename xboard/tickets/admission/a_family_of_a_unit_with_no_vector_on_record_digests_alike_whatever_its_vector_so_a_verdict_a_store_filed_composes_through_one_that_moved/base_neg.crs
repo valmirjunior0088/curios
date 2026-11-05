@@ -1,0 +1,6 @@
+-- `G` edited to use its parameter negatively, so `F`, whose terms do not change, is negative too.
+use /std/Bool/{False};
+
+pub induct G(A: Type): pub Type
+| gmk(a: (A) -> False)
+end

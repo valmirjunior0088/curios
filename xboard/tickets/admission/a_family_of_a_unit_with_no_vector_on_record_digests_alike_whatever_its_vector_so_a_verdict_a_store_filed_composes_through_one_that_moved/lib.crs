@@ -1,0 +1,6 @@
+-- `F`'s vector is `G`'s: withheld from `/lib`'s record, it is computed by each walk that mounts `/lib`, and a part read of `F` digests with no vector either way.
+use /base/{G};
+
+pub induct F(A: Type): pub Type
+| mk(g: G(A))
+end

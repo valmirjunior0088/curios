@@ -1,0 +1,2 @@
+-- `/app` without `X` while `G` turns negative, so no build in between judges `X` and is refused.
+let /app/z : #NatType = 0;
