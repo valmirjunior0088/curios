@@ -1464,6 +1464,12 @@ impl fmt::Display for Displayed<'_> {
                     "{grouped} are grouped, and do not all need one another\n  a group ties declarations that need one another, each reading another of them before it can finish, and a declaration reads any other wherever it is written\n  declare each part on its own: {each}"
                 )
             }
+            Error::IndexedByItsGroup { name, member } => write!(
+                f,
+                "'{}' is indexed by '{}', which is declared in its own group\n  a family's parameters and indices, and a record's parameters, name only declarations outside their group",
+                spelling.symbol(name),
+                spelling.symbol(member)
+            ),
             Error::NoWitness {
                 goal,
                 callee,

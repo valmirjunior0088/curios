@@ -141,6 +141,7 @@ variants!(Error {
     NoWitness,
     DeclarationCycle,
     GroupApart,
+    IndexedByItsGroup,
     Goal,
     Goals,
     DuplicateWitness,

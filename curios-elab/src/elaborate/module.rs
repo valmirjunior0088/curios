@@ -186,7 +186,7 @@ fn assume_telescope_entries<B: Bound>(
 
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an index type lowered without the hidden arguments elaboration inserts (e.g. `Eq`'s `@A`, which its written application never states) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
 ///
-/// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked — index types may mention the group's own members (resolved through the assumed signatures), and the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. A name with no registry entry is an ordinary binding; no-op.
+/// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked, since the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. An index type that names a member of the group resolves through the assumed signatures here, and the group is refused for it once elaborated ([`indexed_by_its_group`]). A name with no registry entry is an ordinary binding; no-op.
 fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<Level>, Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(Vec::new());
@@ -771,6 +771,9 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     if parts.len() > 1 {
         return Err(Error::group_apart(&defs, &types, &parts));
     }
+    if let Some((name, member)) = indexed_by_its_group(context, &defs, &locals) {
+        return Err(Error::IndexedByItsGroup { name, member }.in_declaration([name]));
+    }
 
     // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one `finalize_definition` applies, read over the group: a level one member keeps in its interface stays there for all of them, since the group shares a context, and only a level every member confines to its result sort is determined. A group of one is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
     let mut interface = types
@@ -1133,6 +1136,34 @@ fn elaborate_members(
         .collect();
 
     Ok((types, bodies))
+}
+
+/// The first member of a top-level group whose former's domains, a family's parameters and indices or a record's or a concept's parameters, name a member of the group, beside the member they name: by its local, which the group's terms name it by, or by the nominal head a construction of its family holds, as [`group_parts`] reads a member's reach. Positivity walks no index binder type, which is sound only because nothing the group declares stands there, and a family indexed by a family it is declared with is induction-induction, which no decision admits ([`Error::IndexedByItsGroup`]).
+fn indexed_by_its_group(
+    context: &Context,
+    defs: &[Definition],
+    locals: &[Free],
+) -> Option<(Global, Global)> {
+    defs.iter().find_map(|def| {
+        let mut domains = Vec::new();
+        if let Some(entry) = context.induct_decl(&def.name) {
+            domains.extend(entry.former_domains().into_iter().cloned());
+        }
+        if let Some(entry) = context.struct_decl(&def.name) {
+            domains.extend(entry.former_domains().into_iter().cloned());
+        }
+        if let Some(entry) = context.concept(&def.name) {
+            domains.extend(entry.former_domains().into_iter().cloned());
+        }
+        defs.iter().zip(locals).find_map(|(member, local)| {
+            domains
+                .iter()
+                .any(|domain| {
+                    domain.reaches().contains(&member.name) || domain.mentions().contains(*local)
+                })
+                .then_some((def.name, member.name))
+        })
+    })
 }
 
 /// The parts a top-level group's members fall into by what each reaches of the others, through its type, its body and its registry entry — a sibling by its local, which the group's terms name it by, or by the nominal head a construction of its family holds: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.

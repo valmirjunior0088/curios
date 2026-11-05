@@ -244,7 +244,7 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
     }
 }
 
-// `S` is indexed by a proof of `W` and `W` holds an `S`, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index: `v` is `i`, no part of `s`, and the size order grades it below `s`. That reading is sound, a proof of `S(i)` ranking above `i` at its least derivation; what refuses the loop is that `S/mk(w)`, built around `h`'s own case, is nothing at or below `w`, so `h(base)`, which is `h(base)` for ever, starts no descending thread. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name.
+// `S` is indexed by a proof of `W`, and its one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index: `v` is `i`, no part of `s`, and the size order grades it below `s`. That reading is sound, a proof of `S(i)` ranking above `i` at its least derivation; what refuses the loop is that `S/mk(w)`, built around `h`'s own case, is nothing at or below `w`, so `h(base)`, which is `h(base)` for ever, starts no descending thread. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name.
 #[test]
 fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
     refused(
@@ -253,8 +253,9 @@ fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
 
         induct W: pub Prop
         | base()
-        | wrap(x: W, s: S(x))
-        and S: (W) -> pub Prop
+        end
+
+        induct S: (W) -> pub Prop
         | mk(v: W): (v)
         end
 
@@ -265,7 +266,6 @@ fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
         and h(w: W) -> False =
             match w
             | base() => g(w, S/mk(w))
-            | wrap(x, s2) => g(x, s2)
             end;
 
         let _bad: False = h(W/base());

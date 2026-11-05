@@ -26,7 +26,7 @@ fn an_indexed_family_recursing_at_a_computed_index_is_admitted() {
 
 // An inductive's *index binder types* describe the family's arity, not its carrier, so they contribute no polarity of their own — `Eq(@A : Type) : (x : A, y : A)` is `Strict` in `A` because `refl(@z : A)` has an `A` payload. Walking `x : A` on top of that costs the vector its precision and rejects this declaration, which is sound.
 //
-// Nothing is lost by skipping them: a declaration cannot reach itself there. `induct Foo : (x : Foo) -> Type` does not elaborate, because `x : Foo` requires `Foo` to already be a type and it is a family until applied to the very index being declared.
+// Nothing is lost by skipping them: a declaration cannot reach itself there, by its own name or by a member of its group's (below). `induct Foo : (x : Foo) -> Type` does not elaborate, because `x : Foo` requires `Foo` to already be a type and it is a family until applied to the very index being declared.
 #[test]
 fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() {
     let source = r#"
@@ -62,29 +62,58 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
     );
 }
 
-// The way *around* that kinding refusal, and the reason it closes too. A second declaration can carry the negative occurrence in its index domain — `B : (f : (A) -> False) -> Type` is well-kinded, because `A` is already a type — so the position the walk skips does name a declaration in the group, and the occurrence relation never records the `B → A` edge.
-//
-// Nothing follows, because an index domain must be *inhabited* to be used. Every constructor of `B` has to state a target of type `(A) -> False`, and the only way to have one is to bind it — at which point it is a payload, and the payload walk is exactly what sees it. The rejection below names `mk(f)`, a stored binder, not the index domain that motivated it.
-//
-// Probed rather than closed: the analysis refuses this as it stands. What the fixture pins is that the two skipped index positions cannot be reached around, so a future relaxation that made `B`'s payload readable — or that dropped `@f` from `mk` — would have to answer this test rather than silently inherit the skip.
+// The reachability claim's second half, held by a rule rather than by kinding: a second declaration of the group is well-kinded in an index domain, `A` being a type already, so the position the walk skips could name the group, and a family's parameters and indices name nothing its group declares. `S`, indexed by `W` beside a `W` whose `wrap` holds an `S`, is refused, as is `Ty`, whose parameter is a `Ctx` beside a `Ctx` whose `ext` holds a `Ty`, and `B`, whose index domain `(A) -> False` carries a negative occurrence of `A` beside an `A` whose `mk` holds a `B`, the occurrence the payload walk sees only once `mk` stores its witness. A family indexed by a family that holds it is induction-induction, which no decision admits. `curios-cert`'s `recheck::positivity_tests` puts the kernel to the same rule under this name, with the pair declared apart too.
 #[test]
-fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness() {
-    refused(
-        r#"
-        use /std/Bool/{False};
+fn a_family_is_indexed_by_nothing_that_holds_it() {
+    for (source, declaration, holder) in [
+        (
+            r#"
+            induct W: pub Prop
+            | base()
+            | wrap(x: W, s: S(x))
+            and S: (W) -> pub Prop
+            | mk(v: W): (v)
+            end
 
-        induct A : pub Type
-        | mk(@f : (A) -> False, b : B(f))
-        and B : (f : (A) -> False) -> pub Type
-        | unit(@g : (A) -> False) : (g)
-        end
+            /std/print("unreachable")
+            "#,
+            "/S",
+            "/W",
+        ),
+        (
+            r#"
+            induct Ctx: pub Type
+            | empty()
+            | ext(g: Ctx, a: Ty(g))
+            and Ty(g: Ctx): pub Type
+            | unit()
+            end
 
-        /std/print("unreachable")
-        "#,
-    )
-    .by_elaborator_in("/A", |error| {
-        matches!(error, Error::NotStrictlyPositive { .. })
-    });
+            /std/print("unreachable")
+            "#,
+            "/Ty",
+            "/Ctx",
+        ),
+        (
+            r#"
+            use /std/Bool/{False};
+
+            induct A: pub Type
+            | mk(@f: (A) -> False, b: B(f))
+            and B: (f: (A) -> False) -> pub Type
+            | unit(@g: (A) -> False): (g)
+            end
+
+            /std/print("unreachable")
+            "#,
+            "/B",
+            "/A",
+        ),
+    ] {
+        refused(source).by_elaborator_in(declaration, |error| {
+            matches!(error, Error::IndexedByItsGroup { name, member } if *name == global(declaration) && *member == global(holder))
+        });
+    }
 }
 
 // The other skipped index position, and the one that stays admitted: a constructor's index *targets*. `labelled` ignores the telescope's terminal, so the recursive occurrence in `c`'s target is never walked and `Bad`'s diagonal comes out `Unused`.

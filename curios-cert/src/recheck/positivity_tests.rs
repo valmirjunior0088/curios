@@ -1,4 +1,4 @@
-//! Strict positivity as the kernel judges it, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
+//! Strict positivity as the kernel judges it, and the premise it rests on, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, and a family indexed by a declaration that holds it, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -239,4 +239,73 @@ fn a_record_reaching_itself_through_its_own_parameter_is_refused() {
         ),
         "{verdicts:?}"
     );
+}
+
+/// `/S` is indexed by `/W`, whose `wrap` holds an `/S`, the two declared as one group; `/A` and `/Z` are the same pair declared apart, `/A` before the family that holds it and `/Z` after; `/Box`'s parameter is a `/Tag`, whose `boxed` holds a `/Box`. `/Is`, indexed by `/Two`, which names nothing of it, is the control.
+const INDEXED_BY_WHAT_HOLDS_IT: &str = r#"
+induct /W: pub Prop
+| base()
+| wrap(x: #{node = InductType} /W(), s: #{node = InductType} /S()(x))
+end
+and induct /S: (w: #{node = InductType} /W()) -> pub Prop
+| mk(v: #{node = InductType} /W()): (v)
+end
+induct /A: (v: #{node = InductType} /V()) -> pub Prop
+| mk(): (#{node = Variant} /V/base())
+end
+induct /V: pub Prop
+| base()
+| wrap(x: #{node = InductType} /V(), s: #{node = InductType} /A()(x))
+end
+induct /U: pub Prop
+| base()
+| wrap(x: #{node = InductType} /U(), s: #{node = InductType} /Z()(x))
+end
+induct /Z: (u: #{node = InductType} /U()) -> pub Prop
+| mk(): (#{node = Variant} /U/base())
+end
+struct /Box(t: #{node = InductType} /Tag()): pub Type { n: #NatType }
+induct /Tag: pub Type
+| none()
+| boxed(b: #{node = StructType} /Box(#{node = Variant} /Tag/none()))
+end
+induct /Two: pub Prop
+| a()
+| b()
+end
+induct /Is(c: #{node = InductType} /Two()): (x: #{node = InductType} /Two()) -> pub Type
+| yes(): (c)
+end
+/std/Bool/True/qed()
+"#;
+
+// Positivity walks no index binder type, which is sound only because a former's domains name nothing that holds the declaration: a family indexed by a family that holds it is induction-induction, which no decision admits. Each is refused under the declaration whose former names the other, declared in one group or apart, before or after the family that holds it, and a record's parameter alike, where positivity, which reads a family not yet judged at `Mixed`, refuses only the order that walks the holder first. `curios`'s `tests::rules::positivity_index_tests` puts the grouped shape to the elaborator under this name.
+#[test]
+fn a_family_is_indexed_by_nothing_that_holds_it() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${INDEXED_BY_WHAT_HOLDS_IT}",
+        PROPOSITIONS,
+        INDEXED_BY_WHAT_HOLDS_IT
+    ));
+
+    for (declaration, holder) in [("S", "W"), ("A", "V"), ("Z", "U"), ("Box", "Tag")] {
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| verdict.name == Some(global(declaration))
+                    && verdict.error
+                        == Error::IndexedByItsGroup {
+                            member: global(holder)
+                        }),
+            "{declaration}: {verdicts:?}"
+        );
+    }
+    for control in ["Two", "Is"] {
+        assert!(
+            verdicts
+                .iter()
+                .all(|verdict| verdict.name != Some(global(control))),
+            "{control}: {verdicts:?}"
+        );
+    }
 }

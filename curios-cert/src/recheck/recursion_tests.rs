@@ -628,20 +628,12 @@ fn a_sibling_stands_for_nothing_in_its_groups_bodies() {
     );
 }
 
-/// `S` is indexed by a proof of `W` and `W` holds an `S`, a family indexed by a family of its own group; `S`'s one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index, and the size order grades `v` below `s` though it is `i` and no part of `s`. `h`'s `base` arm hands `g` the base again with a proof built of it, so `h(base)` is `h(base)` for ever.
+/// `S` is indexed by a proof of `W`, and its one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index, and the size order grades `v` below `s` though it is `i` and no part of `s`. `h`'s `base` arm hands `g` the base again with a proof built of it, so `h(base)` is `h(base)` for ever.
 const A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX: &str = r#"
 induct /W: pub Prop
 | base()
-| wrap(
-    x:
-        #{node = InductType}
-        /W(),
-    s:
-        #{node = InductType}
-        /S()(x)
-)
 end
-and induct /S: (
+induct /S: (
     w:
         #{node = InductType}
         /W()
@@ -698,8 +690,6 @@ and /h : (
         match w
         | base() =>
             /g(w, /S/mk(w))
-        | wrap(x, s2) =>
-            /g(x, s2)
         end;
 /h(/W/base())
 "#;

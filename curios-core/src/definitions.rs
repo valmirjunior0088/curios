@@ -703,6 +703,19 @@ impl Nominal {
         }
     }
 
+    /// The domains the declaration's former ranges over: a family's parameters and indices, a record's and a concept's parameters.
+    pub fn former_domains(&self) -> Vec<&Term> {
+        match self {
+            Nominal::Inductive(declaration) => declaration.former_domains(),
+            Nominal::Struct(record) => record.former_domains(),
+            Nominal::Concept { concept, record } => {
+                let mut domains = concept.former_domains();
+                domains.extend(record.former_domains());
+                domains
+            }
+        }
+    }
+
     /// Every top-level name the entry's telescopes reach.
     pub fn reaches(&self) -> BTreeSet<Global> {
         match self {
@@ -1674,6 +1687,12 @@ impl InductDecl {
         }
         names
     }
+
+    /// The domains its former ranges over: its parameters' types, then its indices'. What the family is indexed by, as against what its constructors hold.
+    pub fn former_domains(&self) -> Vec<&Term> {
+        let (params, indices) = entries(&self.arity);
+        params.into_iter().chain(entries(indices).0).collect()
+    }
 }
 
 impl StructDecl {
@@ -1683,12 +1702,22 @@ impl StructDecl {
         names.extend(term_reaches(&self.result_sort));
         names
     }
+
+    /// The domains its former ranges over: its parameters' types. What the record is indexed by, as against what its fields hold.
+    pub fn former_domains(&self) -> Vec<&Term> {
+        entries(&self.arity).0
+    }
 }
 
 impl ConceptDecl {
     /// The top-level names this declaration reaches through its parameters; its fields are its record entry's.
     pub fn reaches(&self) -> BTreeSet<Global> {
         fields_reaches(&self.params)
+    }
+
+    /// The domains its former ranges over: its parameters' types.
+    pub fn former_domains(&self) -> Vec<&Term> {
+        entries(&self.params).0
     }
 }
 

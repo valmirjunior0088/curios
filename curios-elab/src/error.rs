@@ -989,6 +989,11 @@ pub enum Error {
     GroupApart {
         parts: Vec<Vec<CycleMember>>,
     },
+    /// A family's parameter or index, or a record's or a concept's parameter, that names `member`, declared in the same group as `name`. Positivity walks no index binder type, which is sound only because nothing a declaration's own group declares stands there, and a family indexed by a family it is declared with is induction-induction, which no decision admits.
+    IndexedByItsGroup {
+        name: Global,
+        member: Global,
+    },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
     ///
     /// The compile path batches goals via [`Error::Goals`] before zonk runs, so this single-goal form survives as the safety net for direct zonk callers.
@@ -2129,6 +2134,12 @@ impl Error {
                     )
                 })
                 .collect(),
+            Self::IndexedByItsGroup { member, .. } => note(
+                Anchors::label(anchors, member),
+                format!("'{}' is declared here", spelling.symbol(member)),
+            )
+            .into_iter()
+            .collect(),
             Self::DuplicateWitness { standing, .. } => note(
                 Anchors::label(anchors, standing),
                 "the other witness is declared here".to_string(),

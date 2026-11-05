@@ -924,6 +924,8 @@ even(input)
 
 Visibility is per member, never per group: a `pub` before `let`, `induct`, `struct` or `concept` covers the first member, and one before `and` covers that member alone. A witness is never `pub`, so neither is a member of a witness group.
 
+A group's families and records hold one another in their cases and fields, never in what they are indexed by: a family's parameters and indices, and a record's or a concept's parameters, name nothing their group declares, so `induct W | base() | wrap(x: W, s: S(x)) and S: (W) -> Prop | mk(v: W): (v) end` is refused at `S`.
+
 ## Inductive declarations
 
 An inductive declaration introduces a nominal family and its constructors.

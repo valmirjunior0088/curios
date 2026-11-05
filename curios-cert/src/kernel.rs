@@ -191,6 +191,8 @@ pub enum Error {
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
     NotCore(Term),
+    /// A family's parameter or index, or a record's or a concept's parameter, that names `member`, declared with the declaration it indexes or reaching it back. Positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits.
+    IndexedByItsGroup { member: Global },
     /// A family that declares one constructor tag more than once. Every lookup resolves a tag by first match, so a repeat hides a constructor rather than adding one — and the coverage rule then answers about the first entry once per entry, reporting a family empty at an index its own later entry constructs at.
     RepeatedTag(Atom),
     /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
@@ -413,6 +415,11 @@ impl fmt::Display for Displayed<'_> {
                 let term = notation.term(term);
                 write!(formatter, "`{term}` is elaboration-only syntax")
             }
+            Error::IndexedByItsGroup { member } => write!(
+                formatter,
+                "a parameter or index names `{}`, which is declared with it or reaches it back",
+                member.faithful()
+            ),
             Error::RepeatedTag(tag) => {
                 write!(
                     formatter,

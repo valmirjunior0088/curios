@@ -93,7 +93,7 @@ use {
         Variance, Zonked,
     },
     std::{
-        cell::RefCell,
+        cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         mem,
         rc::Rc,
@@ -346,6 +346,73 @@ fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Error>
     })
     .err()
     .map(|()| Error::UnclosedUniverses)
+}
+
+/// For each former the item at `place` carries, the first name its domains reach that is declared by that item or by an item reaching it back: what the former is indexed by that does not stand before it.
+fn indexed_by_its_cycle(
+    definitions: &Definitions,
+    place: usize,
+    places: &OnceCell<HashMap<Global, usize>>,
+) -> Vec<(Global, Global)> {
+    let item = &definitions.items[place];
+    let own = item.declared_names();
+    let mut indexed = Vec::new();
+    for (name, nominal) in item.nominals() {
+        let member = nominal
+            .former_domains()
+            .into_iter()
+            .flat_map(Term::reaches)
+            .find(|reached| {
+                own.contains(&reached)
+                    || places
+                        .get_or_init(|| place_of(definitions))
+                        .get(reached)
+                        .is_some_and(|&other| reaches_place(definitions, places, other, place))
+            });
+        if let Some(member) = member {
+            indexed.push((*name, member));
+        }
+    }
+
+    indexed
+}
+
+/// The place of the item that declares each name of the module.
+fn place_of(definitions: &Definitions) -> HashMap<Global, usize> {
+    definitions
+        .items
+        .places()
+        .flat_map(|place| {
+            definitions
+                .items
+                .names(place)
+                .into_iter()
+                .map(move |name| (*name, place))
+        })
+        .collect()
+}
+
+/// Whether the item at `from` reaches the item at `target`, through what each item's terms and registry entries name.
+fn reaches_place(
+    definitions: &Definitions,
+    places: &OnceCell<HashMap<Global, usize>>,
+    from: usize,
+    target: usize,
+) -> bool {
+    let places = places.get_or_init(|| place_of(definitions));
+    let mut seen = HashSet::from([from]);
+    let mut stack = vec![from];
+    while let Some(at) = stack.pop() {
+        for name in definitions.reaches(&definitions.items[at]) {
+            match places.get(&name) {
+                Some(&next) if next == target => return true,
+                Some(&next) if seen.insert(next) => stack.push(next),
+                _ => {}
+            }
+        }
+    }
+
+    false
 }
 
 /// Every kind of elaboration residue an `induct` registry entry can carry.
@@ -605,6 +672,16 @@ fn verdicts_within<'s>(
             verdicts.push(Verdict {
                 name: Some(*name),
                 error,
+            });
+        }
+    }
+    // A former's domains, a family's parameters and indices and a record's or a concept's parameters, name no declaration that reaches it back, itself included: positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits. Over a baseline each changed item is asked, an item whose entry another moved under being read by that one's judgment.
+    let places = OnceCell::new();
+    for place in walk.iter().copied().filter(own_terms) {
+        for (name, member) in indexed_by_its_cycle(definitions, place, &places) {
+            verdicts.push(Verdict {
+                name: Some(name),
+                error: Error::IndexedByItsGroup { member },
             });
         }
     }
