@@ -274,7 +274,7 @@ enum Finish {
     },
     /// Open an `Induct` arm over the payload values.
     Arm { body: Scope<Many>, demand: Demand },
-    /// Fold the intrinsic through [`reduce_intrinsic`], serving it the values through a [`Tap`], and remember the result under `key` — the whole intrinsic term as focused — then hand it on at `demand`, the one the intrinsic was evaluated at.
+    /// Fold the intrinsic over the values ([`Machine::fold`]), and remember the result under `key` — the whole intrinsic term as focused — then hand it on at `demand`, the one the intrinsic was evaluated at.
     ///
     /// The memo is what keeps a *closed neutral* accumulator linear. A fold whose combining operation is genuinely stuck — byte arithmetic no rule folds, a runtime-only operation — accumulates a neutral chain one link deeper per element, exactly as it does under the hosts; without the memo the machine would re-walk that chain at every element, and a pathological program would price *worse* here than under the strategy this replaces. With it, a chain link evaluates once and every later encounter is one probe.
     ///
@@ -284,6 +284,19 @@ enum Finish {
         intrinsic: Intrinsic,
         demand: Demand,
     },
+}
+
+/// An intrinsic folded over its operands' values, as a [`Tap`] serves them.
+struct Fold {
+    /// The whole intrinsic term as focused, which the answer is remembered under.
+    key: Term,
+    intrinsic: Intrinsic,
+    /// The demand the intrinsic was evaluated at.
+    demand: Demand,
+    /// Each operand's value at the plain demand, by the operand as written.
+    values: HashMap<Term, Term>,
+    /// The forced value of each operand the fold has read forced whose plain value is a folded recursive call, by the operand as written.
+    forced: HashMap<Term, Term>,
 }
 
 /// A left-to-right evaluation of a fixed list of terms, then a [`Finish`] over the values.
@@ -351,14 +364,22 @@ enum Frame {
         demand: Demand,
     },
     Args(Args),
+    /// A fold waiting for the forced value of `operand`, which it read forced and whose plain value is a folded recursive call: filed in the fold's forced table, and the fold run again.
+    Forcing {
+        fold: Fold,
+        operand: Term,
+    },
 }
 
-/// The [`Reducer`] a [`Finish::Intrinsic`] hands to [`reduce_intrinsic`]: operand lookups are served from the operands the run just evaluated, so the fold sees them at constant native depth, and anything it conjures beyond them takes the host's ordinary path.
+/// The [`Reducer`] [`Machine::fold`] hands to [`reduce_intrinsic`]: operand lookups are served from the operands the run just evaluated, so the fold sees them at constant native depth, and anything it conjures beyond them takes the host's ordinary path.
 ///
-/// **Produced at the demand a fold reads them by, and served to a forced read only where forcing changes nothing.** The shared folds read most of their operands plainly, so the operands are evaluated at [`Demand::Whnf`]; a plain value is its own forced form for everything but a folded recursive spelling ([`its_own_forced_form`]), and that one shape goes to the host instead. Producing them forced and serving either demand from one table handed a fold the forced value of an operand it asked the plain value of, and a fold over the empty list — which is its initial value, read plainly — then answered that value's forced form where the recursive strategy answers the folded call. Falling through to the host for *every* forced read instead is what cost: a 32-link arithmetic chain exhausted a billion units.
+/// **Produced at the demand a fold reads them by.** The operands are evaluated at [`Demand::Whnf`], and a plain value is its own forced form for everything but a folded recursive spelling ([`its_own_forced_form`]). That one shape is forced on the machine's stack the first time the fold reads it forced: the `Tap` stops the fold there, naming the operand in `wanted`, and the machine forces its value and folds again with it in `forced`. So the machine forces what the fold reads forced and nothing it reads plainly, as the recursive strategy does. Producing every operand forced and serving either demand from one table handed a fold the forced value of an operand it asked the plain value of, and a fold over the empty list — which is its initial value, read plainly — then answered that value's forced form where the recursive strategy answers the folded call. Handing the folded spelling to the host's `reduce_forced` started a machine of the host's per level on the native stack, so a closed recursion through an operand, `sum(k) + 1`, overflowed it; falling through to the host for *every* forced read cost too: a 32-link arithmetic chain exhausted a billion units.
 struct Tap<'a, H: Reducer> {
     host: &'a mut H,
     values: &'a HashMap<Term, Term>,
+    forced: &'a HashMap<Term, Term>,
+    /// The operand the fold stopped at: read forced, its plain value a folded recursive spelling, and its forced value not yet in `forced`.
+    wanted: Option<Term>,
 }
 
 impl<H: Reducer> Reducer for Tap<'_, H> {
@@ -370,13 +391,19 @@ impl<H: Reducer> Reducer for Tap<'_, H> {
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        match self
-            .values
-            .get(&term)
-            .filter(|value| its_own_forced_form(value))
-        {
-            Some(value) => Ok(value.clone()),
-            None => self.host.reduce_forced(term),
+        let Some(value) = self.values.get(&term) else {
+            return self.host.reduce_forced(term);
+        };
+        if its_own_forced_form(value) {
+            return Ok(value.clone());
+        }
+        match self.forced.get(&term) {
+            Some(forced) => Ok(forced.clone()),
+            None => {
+                self.wanted = Some(term);
+                // Exhaustion, which every fold and every probe hands on, so the fold stops at this read; the machine reads `wanted` first, and the error never leaves it.
+                Err(ReduceError::exhausted(0, Cost::term(0)))
+            }
         }
     }
 
@@ -631,7 +658,7 @@ impl Machine {
                         written: Vec::new(),
                         done: Vec::with_capacity(count),
                         next: 0,
-                        // The hosts' intrinsic folds force their operands, so operand errors surface here exactly as they do there. Producing them at the plain demand instead, so that a plain read is served what it asked for, costs what `documentation/roadmap/soundness/000-findings.md` records: a fold that forces then reaches the host, and a 32-link arithmetic chain exhausted a billion units where it spends thousands.
+                        // At the plain demand, so a plain read is served what it asked for; the [`Tap`] has a forced read of a folded call produced on this stack. The hosts' folds reduce their operands strictly, so an operand's error surfaces here as it does there.
                         item_demand: Demand::Whnf,
                         catch: false,
                         finish: Finish::Intrinsic {
@@ -862,6 +889,11 @@ impl Machine {
                 args.done.push(value);
                 self.args(host, args)
             }
+
+            Frame::Forcing { mut fold, operand } => {
+                fold.forced.insert(operand, value);
+                self.fold(host, fold)
+            }
         }
     }
 
@@ -942,40 +974,65 @@ impl Machine {
             } => {
                 let values = args
                     .originals
-                    .iter()
-                    .cloned()
-                    .zip(args.done.iter().cloned())
+                    .into_iter()
+                    .zip(args.done)
                     .collect::<HashMap<_, _>>();
-                let mut tap = Tap {
+                self.fold(
                     host,
-                    values: &values,
-                };
+                    Fold {
+                        key,
+                        intrinsic,
+                        demand,
+                        values,
+                        forced: HashMap::new(),
+                    },
+                )
+            }
+        }
+    }
 
-                let value = key.rebuilt(reduce_intrinsic(&mut tap, &intrinsic)?);
-                // Two entries of two `Term` handles each, on the buffer row, charged before they are made and only where there will be any. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand. A fold whose result is a folded recursive spelling records neither, which the operands being produced at the plain demand now makes reachable.
-                if its_own_forced_form(&value) {
-                    host.spend(Cost::buffer(4))?;
-                    let memo = host.closed_memo();
-                    memo.remember(value.clone(), value.clone(), Demand::Whnf);
-                    memo.remember(key, value.clone(), Demand::Whnf);
+    /// Fold `fold`'s intrinsic through [`reduce_intrinsic`], serving it the operands' values through a [`Tap`]; where it stops at an operand to read forced, force that operand's value on this stack and fold again.
+    fn fold<H: ClosedHost>(&mut self, host: &mut H, fold: Fold) -> Result<Step, ReduceError> {
+        let (answer, wanted) = {
+            let mut tap = Tap {
+                host,
+                values: &fold.values,
+                forced: &fold.forced,
+                wanted: None,
+            };
+            let answer = reduce_intrinsic(&mut tap, &fold.intrinsic);
+            (answer, tap.wanted)
+        };
+        if let Some(operand) = wanted {
+            let value = fold.values[&operand].clone();
+            self.push(host, Frame::Forcing { fold, operand })?;
+            return Ok(Step::Eval(value, Demand::Forced));
+        }
 
-                    return Ok(Step::Value(value));
-                }
+        let Fold { key, demand, .. } = fold;
+        let value = key.rebuilt(answer?);
+        // Two entries of two `Term` handles each, on the buffer row, charged before they are made and only where there will be any. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand. A fold whose result is a folded recursive spelling records neither, which the operands being produced at the plain demand now makes reachable.
+        if its_own_forced_form(&value) {
+            host.spend(Cost::buffer(4))?;
+            let memo = host.closed_memo();
+            memo.remember(value.clone(), value.clone(), Demand::Whnf);
+            memo.remember(key, value.clone(), Demand::Whnf);
 
-                match demand {
-                    Demand::Whnf => Ok(Step::Value(value)),
-                    // Remembered under the intrinsic at the forced demand, as a match's value is under the match.
-                    Demand::Forced => {
-                        self.push(
-                            host,
-                            Frame::Memo {
-                                key,
-                                demand: Demand::Forced,
-                            },
-                        )?;
-                        Ok(Step::Eval(value, Demand::Forced))
-                    }
-                }
+            return Ok(Step::Value(value));
+        }
+
+        match demand {
+            Demand::Whnf => Ok(Step::Value(value)),
+            // Remembered under the intrinsic at the forced demand, as a match's value is under the match.
+            Demand::Forced => {
+                self.push(
+                    host,
+                    Frame::Memo {
+                        key,
+                        demand: Demand::Forced,
+                    },
+                )?;
+                Ok(Step::Eval(value, Demand::Forced))
             }
         }
     }

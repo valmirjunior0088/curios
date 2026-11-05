@@ -1263,3 +1263,20 @@ fn type_level_claim_measurements() {
         );
     }
 }
+
+/// A closed recursion through an intrinsic's operand runs at constant native depth on both checkers: `sum(k) + 1` reads `sum(k)` forced, and the machine forces it on its own stack rather than starting a reduction of the host's per level, which overflowed the native stack.
+#[test]
+fn a_recursion_through_an_intrinsics_operand_runs_at_constant_native_depth() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat};
+            use /std/Bool/{True, Holds};
+
+            pub let sum(n: Nat) -> Nat = match n | 0 => 0 | k + 1; _ => sum(k) + 1 end;
+            pub let x: Holds(sum(20000) == 20000) = True/qed();
+
+            /std/print("ok")
+            "#),
+        b"ok"
+    );
+}

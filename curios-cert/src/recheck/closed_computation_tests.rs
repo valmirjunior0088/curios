@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Global, Term},
+    curios_core::{Global, ReduceError, Term},
 };
 
 /// What `qed` is inferred at: `True`, as the registry this crate's suites judge under names it.
@@ -636,6 +636,40 @@ fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
 
     assert!(
         the_closing_instance_alone_is_refused(&verdicts),
+        "{verdicts:?}"
+    );
+}
+
+/// `f(n)` is `f(n) + 1`, a recursion that never descends, and `w` states a family at `f(0)` to be one at its own unfolding.
+const A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING: &str = r#"
+#{node = Rec}
+let /f : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        #NatAdd(/f(n), 1);
+let /w : (P: (n: #NatType) -> Type, p: P(/f(0))) -> P(#NatAdd(/f(0), 1)) =
+    (P: (n: #NatType) -> Type, p: P(/f(0))) =>
+        p;
+/std/Bool/True/qed()
+"#;
+
+// An operand a fold reads forced whose value is a folded recursive call is forced on the machine's own stack, so a recursion through an intrinsic's operand nests no native frame per level: `f(0) + 1` unfolds until the budget runs out, and `w` is refused by `Reduce`, as its open spelling at a variable `n` is, besides being refused for reading a partial `f` in a type. Forced through the host's own reduction instead, each level started a machine of its own on the native stack, and the run died of a stack overflow before the budget ran out.
+#[test]
+fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING}",
+        PROPOSITIONS,
+        A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [
+                Verdict { name: Some(exhausted), error: Error::Reduce(ReduceError::Exhausted { .. }) },
+                Verdict { name: Some(partial), error: Error::NotTotal { .. } },
+                Verdict { name: None, .. },
+            ] if *exhausted == global("w") && *partial == global("w")
+        ),
         "{verdicts:?}"
     );
 }
