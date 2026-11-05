@@ -21,10 +21,10 @@ run = [
 ]
 
 [build]
-description = "Generate the parsers from the grammars, the program's into `src/` and Core text's into `core/src/`, where the repository commits them"
+description = "Generate the parsers from the grammars, the program's into `base/src/` and Core text's into `core/src/`, where the repository commits them"
 dir = "editors/grammar"
 consumes = ["installed"]
-produces.parser = "editors/grammar/src"
+produces.parser = "editors/grammar/base/src"
 run = [
     ["npm", "run", "generate"],
 ]

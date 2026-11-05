@@ -8,7 +8,7 @@ const {
   SORT_WORDS,
   PRECEDENCE,
   commaList,
-} = require("./common");
+} = require("../common");
 
 module.exports = grammar({
   name: "curios",

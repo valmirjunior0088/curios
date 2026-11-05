@@ -12,7 +12,7 @@
       "editors/vscode/**/*.js",
       "editors/vscode/**/*.json",
       "!**/package-lock.json",
-      "!editors/grammar/src",
+      "!editors/grammar/base/src",
       "!editors/grammar/core/src"
     ]
   },

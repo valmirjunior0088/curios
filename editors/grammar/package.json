@@ -5,10 +5,10 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "generate": "tree-sitter generate && cd core && tree-sitter generate",
-    "test": "npm run generate && git status --short src core/src && test -z \"$(git status --porcelain src core/src)\" && tree-sitter test && (cd core && tree-sitter test) && npm run test:corpus && npm run test:highlights",
-    "test:corpus": "find ../../curios-prelude/std ../../programs -name '*.crs' -exec tree-sitter parse -q {} + && find ../../xboard/tickets -name '*.crsc' -exec tree-sitter parse -q -p core {} +",
-    "test:highlights": "find ../../curios-prelude/std ../../programs -name '*.crs' -exec tree-sitter query -q ../zed/languages/curios/highlights.scm {} + && find ../../xboard/tickets -name '*.crsc' -exec tree-sitter query -q -p core ../zed/languages/curios_core/highlights.scm {} +"
+    "generate": "(cd base && tree-sitter generate) && (cd core && tree-sitter generate)",
+    "test": "npm run generate && git status --short base/src core/src && test -z \"$(git status --porcelain base/src core/src)\" && (cd base && tree-sitter test) && (cd core && tree-sitter test) && npm run test:corpus && npm run test:highlights",
+    "test:corpus": "find ../../curios-prelude/std ../../programs -name '*.crs' -exec tree-sitter parse -q -p base {} + && find ../../xboard/tickets -name '*.crsc' -exec tree-sitter parse -q -p core {} +",
+    "test:highlights": "find ../../curios-prelude/std ../../programs -name '*.crs' -exec tree-sitter query -q -p base ../zed/languages/curios/highlights.scm {} + && find ../../xboard/tickets -name '*.crsc' -exec tree-sitter query -q -p core ../zed/languages/curios_core/highlights.scm {} +"
   },
   "devDependencies": {
     "tree-sitter-cli": "0.27.1"

@@ -2,7 +2,7 @@
 
 // Core text, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Core text writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, items joined into groups whatever their kinds, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
 
-const curios = require("../grammar");
+const curios = require("../base/grammar");
 const { IDENTIFIER, commaList } = require("../common");
 
 // A witness's name is one token: its module's path, `witness~`, and its identity — the concept and the key's heads, with its place where it is not the first at them, `/m/witness~/C(K)#1`, or its place alone, `/m/witness~3`.

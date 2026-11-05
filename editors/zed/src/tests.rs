@@ -7,7 +7,7 @@ use std::{
     process::{self, Command},
 };
 
-/// The directory Zed installs the grammars from, relative to the repository root: the program's at its root and Core text's in `core/`.
+/// The directory Zed installs the grammars from, relative to the repository root: the program's in `base/` and Core text's in `core/`.
 const GRAMMAR: &str = "editors/grammar";
 
 /// The object `revision` names, or `None` when this checkout cannot resolve it.
