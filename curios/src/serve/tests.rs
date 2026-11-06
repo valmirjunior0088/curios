@@ -154,6 +154,25 @@ fn a_host_other_than_loopbacks_own_is_refused() {
     }
 }
 
+/// A head is read to its end before it is answered, so one past the bound is refused however it arrives, and what parses as no request is refused as such.
+#[test]
+fn a_head_past_the_bound_or_that_is_no_request_is_refused() {
+    let port = serving();
+    let past = format!(
+        "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Long: {}\r\n\r\n",
+        "a".repeat(HEAD)
+    );
+
+    assert_eq!(
+        asked(port, &past).0,
+        "HTTP/1.1 431 Request Header Fields Too Large"
+    );
+    assert_eq!(
+        asked(port, "NOT HTTP AT ALL\r\n\r\n").0,
+        "HTTP/1.1 400 Bad Request"
+    );
+}
+
 #[test]
 fn a_port_another_holds_is_refused_naming_the_flag_that_picks_another() {
     let taken = bound(0).unwrap();
@@ -317,7 +336,7 @@ fn a_socket_is_refused_from_another_origin_at_another_version_or_without_a_key()
     );
     assert_eq!(
         handshake(port, &format!("{key}Sec-WebSocket-Version: 8\r\n")),
-        "HTTP/1.1 426 Upgrade Required"
+        "HTTP/1.1 400 Bad Request"
     );
     assert_eq!(
         handshake(port, "Sec-WebSocket-Version: 13\r\n"),

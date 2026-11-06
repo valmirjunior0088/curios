@@ -596,6 +596,7 @@ dependencies = [
  "curios-verdict",
  "curios-wasm",
  "curios-wonder",
+ "httparse",
  "tungstenite",
 ]
 

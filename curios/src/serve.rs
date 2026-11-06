@@ -12,17 +12,22 @@ mod tests;
 use {
     crate::Streams,
     curios_browser::{ARGUMENT, INDEX_HTML, Posted, Reply, Step, content_type, runner},
+    httparse::{EMPTY_HEADER, Error, Request as HttparseRequest, Status},
     std::{
         collections::BTreeMap,
         ffi::OsString,
-        io::{self, BufRead, BufReader, Write},
+        io::{self, Read, Write},
         net::{Ipv4Addr, TcpListener, TcpStream},
         sync::{Mutex, PoisonError},
         thread,
     },
     tungstenite::{
         Message, WebSocket,
-        handshake::derive_accept_key,
+        handshake::server::{
+            Request as TungsteniteRequest, Response as TungsteniteResponse, create_response,
+            write_response,
+        },
+        http::Version,
         protocol::{CloseFrame, Role, WebSocketConfig, frame::coding::CloseCode},
     },
 };
@@ -33,11 +38,11 @@ pub(crate) const PORT: u16 = 8000;
 /// The most a request's head may hold before it is refused: far past any a browser sends for a page.
 const HEAD: usize = 16 * 1024;
 
+/// The most headers a request's head may state before it is refused: far past any a browser sends.
+const HEADERS: usize = 64;
+
 /// The most an outcome a runner sends may hold before its socket is refused: past any output a test writes.
 const OUTCOME: usize = 16 * 1024 * 1024;
-
-/// The WebSocket version the run's socket speaks, the one every browser asks for.
-const VERSION: &str = "13";
 
 /// A page held to serve: every file of it by its page path.
 pub(crate) struct Served {
@@ -254,10 +259,13 @@ impl Response {
     }
 }
 
-/// What a request is answered with: a response, or the switch to a run's socket under the accept key its handshake asked for, the run held for it.
+/// What a request is answered with: a response, or the switch to a run's socket its handshake asked for, the run held for it.
 enum Answer<'r, 'a> {
     Response(Response),
-    Socket { accept: String, held: Held<'r, 'a> },
+    Socket {
+        switch: TungsteniteResponse,
+        held: Held<'r, 'a>,
+    },
 }
 
 impl From<Response> for Answer<'_, '_> {
@@ -268,17 +276,11 @@ impl From<Response> for Answer<'_, '_> {
 
 /// Read one request from `stream` and answer it: write its response, or switch to the run's socket and drive the run over it.
 fn answer(stream: TcpStream, site: &Site<'_>, port: u16) -> io::Result<()> {
-    let mut reader = BufReader::new(&stream);
-    let answered = match head(&mut reader)? {
-        Some(head) => replied(&head, site, port),
-        None => Response::text(
-            "431 Request Header Fields Too Large",
-            "the request's head is too large",
-        )
-        .into(),
-    };
     // What the client sent past the head is the socket's, where one opens.
-    let past = reader.buffer().to_vec();
+    let (answered, past) = match request(&stream)? {
+        Ok((request, past)) => (replied(&request, site, port), past),
+        Err(refused) => (refused.into(), Vec::new()),
+    };
 
     let mut stream = &stream;
     match answered {
@@ -295,11 +297,8 @@ fn answer(stream: TcpStream, site: &Site<'_>, port: u16) -> io::Result<()> {
             stream.write_all(&response.body)?;
             stream.flush()
         }
-        Answer::Socket { accept, held } => {
-            write!(
-                stream,
-                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
-            )?;
+        Answer::Socket { switch, held } => {
+            write_response(stream, &switch).map_err(io::Error::other)?;
             stream.flush()?;
             let socket = WebSocket::from_partially_read(
                 stream,
@@ -356,44 +355,66 @@ fn said(reply: &Reply) -> Message {
     Message::text(String::from_utf8(reply.render()).expect("a reply renders as JSON"))
 }
 
-/// The request's head, its lines up to the blank one, or `None` where it runs past [`HEAD`].
-fn head(reader: &mut impl BufRead) -> io::Result<Option<Vec<String>>> {
-    let mut lines = Vec::new();
-    let mut read = 0;
+/// The request `stream` carries, read to the end of its head, with what the client sent past it, or the response refusing it: a head past [`HEAD`] or stating more than [`HEADERS`] headers, and one that is no HTTP request's.
+fn request(mut stream: &TcpStream) -> io::Result<Result<(TungsteniteRequest, Vec<u8>), Response>> {
+    let mut head = Vec::new();
+    let mut chunk = [0; 4096];
 
     loop {
-        let mut line = String::new();
-        let taken = reader.read_line(&mut line)?;
-        read += taken;
-
-        if read > HEAD {
-            return Ok(None);
+        let read = stream.read(&mut chunk)?;
+        if read == 0 {
+            return Err(io::ErrorKind::UnexpectedEof.into());
         }
+        head.extend_from_slice(&chunk[..read]);
 
-        let line = line.trim_end_matches(['\r', '\n']);
-        if taken == 0 || line.is_empty() {
-            return Ok(Some(lines));
-        }
+        let mut headers = [EMPTY_HEADER; HEADERS];
+        let mut parsed = HttparseRequest::new(&mut headers);
+        let refused = match parsed.parse(&head) {
+            Ok(Status::Complete(length)) if length <= HEAD => {
+                return Ok(stated(&parsed).map(|request| (request, head[length..].to_vec())));
+            }
+            Ok(Status::Partial) if head.len() <= HEAD => continue,
+            Ok(_) | Err(Error::TooManyHeaders) => Response::text(
+                "431 Request Header Fields Too Large",
+                "the request's head is too large",
+            ),
+            Err(_) => no_request(),
+        };
 
-        lines.push(line.to_string());
+        return Ok(Err(refused));
     }
 }
 
-/// The header `name` of `head`, trimmed, where the request carries it.
-fn header<'h>(head: &'h [String], name: &str) -> Option<&'h str> {
-    head.iter().skip(1).find_map(|line| {
-        let (key, value) = line.split_once(':')?;
+/// `parsed` as the request it states, or the refusal of one whose method, target or headers spell none.
+fn stated(parsed: &HttparseRequest<'_, '_>) -> Result<TungsteniteRequest, Response> {
+    let version = match parsed.version {
+        Some(1) => Version::HTTP_11,
+        _ => Version::HTTP_10,
+    };
+    let mut request = TungsteniteRequest::builder()
+        .method(parsed.method.unwrap_or_default())
+        .uri(parsed.path.unwrap_or_default())
+        .version(version);
+    for header in parsed.headers.iter() {
+        request = request.header(header.name, header.value);
+    }
 
-        key.eq_ignore_ascii_case(name).then(|| value.trim())
-    })
+    request.body(()).map_err(|_| no_request())
 }
 
-/// What answers the request whose head is `head`, served on `port`.
-fn replied<'r, 'a>(head: &[String], site: &'r Site<'a>, port: u16) -> Answer<'r, 'a> {
-    let mut words = head.first().map_or("", String::as_str).split(' ');
-    let (method, target) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
+/// The response refusing what is no HTTP request.
+fn no_request() -> Response {
+    Response::text("400 Bad Request", "the request is no HTTP request")
+}
 
-    if !header(head, "host").is_some_and(|host| own(host, port)) {
+/// The header `name` of `request`, where it states one in visible ASCII.
+fn header<'r>(request: &'r TungsteniteRequest, name: &str) -> Option<&'r str> {
+    request.headers().get(name)?.to_str().ok()
+}
+
+/// What answers `request`, served on `port`.
+fn replied<'r, 'a>(request: &TungsteniteRequest, site: &'r Site<'a>, port: u16) -> Answer<'r, 'a> {
+    if !header(request, "host").is_some_and(|host| own(host, port)) {
         return Response::text(
             "421 Misdirected Request",
             "this server answers 127.0.0.1 and localhost at its own port alone",
@@ -401,16 +422,16 @@ fn replied<'r, 'a>(head: &[String], site: &'r Site<'a>, port: u16) -> Answer<'r,
         .into();
     }
 
-    let Some(path) = decoded(target.split(['?', '#']).next().unwrap_or("")) else {
+    let Some(path) = decoded(request.uri().path()) else {
         return Response::text("400 Bad Request", "the path is not percent-encoded UTF-8").into();
     };
     let upgrade =
-        header(head, "upgrade").is_some_and(|upgrade| upgrade.eq_ignore_ascii_case("websocket"));
+        header(request, "upgrade").is_some_and(|upgrade| upgrade.eq_ignore_ascii_case("websocket"));
 
-    match (method, site) {
+    match (request.method().as_str(), site) {
         ("GET", Site::Page(served)) => file(served, &path).into(),
         // The root is the run, and its socket; the page in hand stands beside them, by its own name for its document and its files' page paths.
-        ("GET", Site::Run(run)) if path == "/" && upgrade => socket(head, run, port),
+        ("GET", Site::Run(run)) if path == "/" && upgrade => socket(request, run, port),
         ("GET", Site::Run(run)) if path == "/" => Response::file(INDEX_HTML, &run.runner).into(),
         ("GET", Site::Run(run)) => match run.current() {
             Some(page) => file(page, &path),
@@ -431,9 +452,9 @@ fn own(authority: &str, port: u16) -> bool {
     authority == format!("127.0.0.1:{port}") || authority == format!("localhost:{port}")
 }
 
-/// The socket of `run` the handshake whose head is `head` asks for: refused where it states an `Origin` other than this server's, where it speaks another version or states no key, and where another socket drives the run.
-fn socket<'r, 'a>(head: &[String], run: &'r Run<'a>, port: u16) -> Answer<'r, 'a> {
-    let foreign = header(head, "origin").is_some_and(|origin| {
+/// The socket of `run` the handshake `request` asks for: refused where it states an `Origin` other than this server's, where it is no handshake WebSocket's version 13 takes, and where another socket drives the run.
+fn socket<'r, 'a>(request: &TungsteniteRequest, run: &'r Run<'a>, port: u16) -> Answer<'r, 'a> {
+    let foreign = header(request, "origin").is_some_and(|origin| {
         !origin
             .strip_prefix("http://")
             .is_some_and(|authority| own(authority, port))
@@ -445,26 +466,19 @@ fn socket<'r, 'a>(head: &[String], run: &'r Run<'a>, port: u16) -> Answer<'r, 'a
         )
         .into();
     }
-    if header(head, "sec-websocket-version") != Some(VERSION) {
-        let mut response = Response::text(
-            "426 Upgrade Required",
-            &format!("a run's socket speaks WebSocket version {VERSION}"),
-        );
-        response
-            .headers
-            .push(("Sec-WebSocket-Version", VERSION.to_string()));
-
-        return response.into();
-    }
-    let Some(key) = header(head, "sec-websocket-key") else {
-        return Response::text("400 Bad Request", "a socket's handshake states its key").into();
+    let switch = match create_response(request) {
+        Ok(switch) => switch,
+        Err(error) => {
+            return Response::text(
+                "400 Bad Request",
+                &format!("the handshake is refused: {error}"),
+            )
+            .into();
+        }
     };
 
     match run.held() {
-        Some(held) => Answer::Socket {
-            accept: derive_accept_key(key.as_bytes()),
-            held,
-        },
+        Some(held) => Answer::Socket { switch, held },
         None => Response::text("409 Conflict", "the run is driven by another page").into(),
     }
 }
