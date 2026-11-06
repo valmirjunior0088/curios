@@ -28,7 +28,7 @@ jobs:
             runner: ubuntu-24.04-arm
             asset: curios-linux-aarch64
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-26
             asset: curios-macos-aarch64
 
     steps:
