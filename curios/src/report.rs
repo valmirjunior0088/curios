@@ -33,7 +33,7 @@ use {
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
 pub(crate) enum Subject {
-    /// A unit, by the prefix it mounts.
+    /// A unit, by the prefix it mounts, or a module, by its path: `/` for the root, which joins to nothing.
     Mounted(Qualifier),
     /// A declared executable, by the name its manifest row gives it.
     Executable(String),
@@ -55,6 +55,7 @@ impl Subject {
 impl fmt::Display for Subject {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Mounted(prefix) if prefix.is_root() => formatter.write_str("/"),
             Self::Mounted(prefix) => formatter.write_str(&prefix.join()),
             Self::Executable(name) | Self::Module(name) => formatter.write_str(name),
             Self::File(path) => write!(formatter, "{}", path.display()),
@@ -93,9 +94,9 @@ headings! {
     Compiling => "Compiling",
     /// A subject's program being made of its compiled units, through to the machine code a run executes — closed by the time that took, or by `reused` when the store already held the payload. A step of its own, and not a second `Compiling`, because a library's tests are a program named as its unit is.
     Linking => "Linking",
-    /// The handover of a subject's tests to their scheduler, whose report follows on stdout.
+    /// A module's tests begun, the report of each that runs following on stdout.
     Testing => "Testing",
-    /// A subject's tests finished, with their tally.
+    /// A module's tests finished, with their tally.
     Tested => "Tested",
     /// The handover to the program itself.
     Running => "Running",
@@ -152,7 +153,12 @@ fn head(marker: &str, heading: Heading) -> String {
 
 /// One complete fact, on a line of its own.
 pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
-    eprintln!("{}{detail}", head("", heading));
+    eprintln!("{}", unnested(heading, detail));
+}
+
+/// One complete fact, as text — `Finished 3 passed, 1 failed` — for a fact written to the terminal and carried elsewhere as the same bytes.
+pub(crate) fn unnested(heading: Heading, detail: impl fmt::Display) -> String {
+    format!("{}{detail}", head("", heading))
 }
 
 /// How a build is taken rather than anything it did: a line of its own ahead of the header, spelled as a question spells its note.

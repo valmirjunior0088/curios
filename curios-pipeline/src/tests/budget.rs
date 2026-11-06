@@ -112,7 +112,7 @@ fn erases(source: &str, budget: u64) -> bool {
 
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
-        let (program, _foreigns, _records, _anchors) = elaborate_and_zonk(
+        let program = elaborate_and_zonk(
             crate::DEFAULT_BUDGET,
             predecessors,
             &SYNTAX,

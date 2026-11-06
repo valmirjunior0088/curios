@@ -207,7 +207,7 @@ fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
 
 #[test]
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
-    // A lowered module's tests keep declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
+    // A lowered module's tests keep declaration order across module nesting — the order the synthesized tail schedules each module's in — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
     let definitions =
         lowered_definitions("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
     assert_eq!(

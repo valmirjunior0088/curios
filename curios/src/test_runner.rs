@@ -1,4 +1,4 @@
-//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to — a subject's `↳ Testing` and `↳ Tested` steps, one line per test as it ends, a failing test's body, the count line — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
+//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to — each module's `↳ Testing` and `↳ Tested` steps, one line per test as it ends, a failing test's body, the `Finished` tally — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the module each test stands in, the tests the selection skipped — is printed here from the modules the compile hands back.
 //!
 //! **The printer writes each fact once and hands it back.** Every line it writes to the process's streams it also returns as the bytes written, so a source that answers a report elsewhere — a page's runner — carries the same rendering, and the terminal and the page cannot drift.
 
@@ -8,28 +8,30 @@ mod tests;
 use {
     crate::{
         Access, Failure, Heading, Line, Run, Served, Steps, Subject, bound, drained, fact, nested,
-        note_unlinked, processing, report, serve_run, serving, url,
+        note_unlinked, processing, report, serve_run, serving, unnested, url,
     },
     curios::{Named, TestSubject, Tested, test_subjects},
     curios_browser::Posted,
     curios_common::Qualifier,
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
-    curios_pipeline::{CompileError, TestRecord},
+    curios_pipeline::{CompileError, TestModule, TestRecord},
     curios_verdict::Verdicts,
     std::{
         cmp::Reverse,
+        collections::VecDeque,
         io::{self, Write},
     },
 };
 
-/// The tally a `↳ Tested` step and the count line report, in the order they spell it.
+/// The tally a `↳ Tested` step and the `Finished` line report, in the order they spell it.
 #[derive(Default)]
 struct Totals {
     passed: usize,
     failed: usize,
     trapped: usize,
     exited: usize,
+    skipped: usize,
 }
 
 impl Totals {
@@ -42,15 +44,20 @@ impl Totals {
         self.failed += other.failed;
         self.trapped += other.trapped;
         self.exited += other.exited;
+        self.skipped += other.skipped;
     }
 
-    /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped` and `exited` only when they happened.
+    /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped`, `exited` and `skipped` only when they happened.
     fn line(&self) -> String {
         let mut parts = vec![
             format!("{} passed", self.passed),
             format!("{} failed", self.failed),
         ];
-        for (count, word) in [(self.trapped, "trapped"), (self.exited, "exited")] {
+        for (count, word) in [
+            (self.trapped, "trapped"),
+            (self.exited, "exited"),
+            (self.skipped, "skipped"),
+        ] {
             if count > 0 {
                 parts.push(format!("{count} {word}"));
             }
@@ -127,16 +134,16 @@ pub(crate) fn run_tests(
         )?;
         printer.took(store.as_ref(), &tested);
 
-        // A subject with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
-        let Some(run) = tested.loaded(&subject).map_err(CompileError::failure)? else {
+        let run = tested.loaded(&subject).map_err(CompileError::failure)?;
+        printer.opened(tested.modules());
+        // A subject that schedules nothing has no program to run, and every module it declares closed as it opened.
+        let Some(run) = run else {
             continue;
         };
 
-        printer.testing(&shown);
-        for (index, record) in tested.records().iter().enumerate() {
-            printer.ended(record, run.run(index, OsHost::with_args).into(), None);
+        for index in 0..tested.scheduled().count() {
+            printer.ended(run.run(index, OsHost::with_args).into(), None);
         }
-        printer.tested(&shown);
     }
 
     printer.finish()
@@ -235,16 +242,24 @@ fn edits(path: &str, filter: &str) -> usize {
     row[filter.len()]
 }
 
-/// What a run of tests comes to, printed as it goes: the `↳ Testing` and `↳ Tested` steps around each subject's tests, one line per test as it ends, and the count line, each written to the process's streams and handed back as the bytes written — with the tally, every test the subjects declare, and the one reason a store refused filing.
+/// What a run of tests comes to, printed as it goes: the `↳ Testing` and `↳ Tested` steps around each module's tests, one line per test as it ends, and the `Finished` tally, each written to the process's streams and handed back as the bytes written — with the tally, every test the subjects declare, and the one reason a store refused filing.
 pub(crate) struct Printer<'a> {
     /// The `--filter` arguments as written, for a refusal to name.
     filters: &'a [String],
     /// The prefixes every subject's test program schedules the tests at or under: those `filters` name, or the root where none is given.
     under: Vec<Qualifier>,
     totals: Totals,
-    /// The subject in hand's tally, folded into the run's at its `↳ Tested` step.
-    unit: Totals,
-    /// Every test the subjects compiled so far declare, selected or not: what a filter meeting none is answered with.
+    /// The module in hand's tally, folded into the run's at its `↳ Tested` step.
+    tally: Totals,
+    /// The modules of the subject in hand not yet closed, the one in hand first.
+    modules: VecDeque<TestModule>,
+    /// How many of the scheduled tests of the module in hand have ended: the index of the next one's record.
+    ended: usize,
+    /// How many `↳ Tested` steps the run wrote: `Finished` would repeat the one, so it closes a run of any other number.
+    reported: usize,
+    /// Whether a subject's compile so far selected a test under each of `filters`: one none selected under is refused.
+    matched: Vec<bool>,
+    /// Every test the subjects compiled so far declare, selected or not: the paths a refused filter is answered with the nearest of.
     declared: Vec<Qualifier>,
     /// The first reason a store refused filing, since a store nobody can write refuses every subject for one reason.
     refusal: Option<String>,
@@ -261,7 +276,11 @@ impl<'a> Printer<'a> {
             filters,
             under,
             totals: Totals::default(),
-            unit: Totals::default(),
+            tally: Totals::default(),
+            modules: VecDeque::new(),
+            ended: 0,
+            reported: 0,
+            matched: vec![false; filters.len()],
             declared: Vec::new(),
             refusal: None,
         }
@@ -272,59 +291,102 @@ impl<'a> Printer<'a> {
         &self.under
     }
 
-    /// Take what a subject's compile declared, and keep the first reason its store refused filing.
+    /// Take what a subject's compile declared and which filters it selected a test under, and keep the first reason its store refused filing.
     pub(crate) fn took(&mut self, store: Option<&Verdicts>, tested: &Tested) {
         self.refusal = self
             .refusal
             .take()
             .or_else(|| store.and_then(Verdicts::refused));
-        self.declared.extend(tested.declared().iter().copied());
+        for (prefix, matched) in self.under.iter().zip(&mut self.matched) {
+            *matched |= !tested.unmatched().contains(prefix);
+        }
+        self.declared.extend(tested.declared().copied());
     }
 
-    /// The handover of `shown`'s tests to their scheduler: the `↳ Testing` step, opening the subject's tally.
-    pub(crate) fn testing(&mut self, shown: &Subject) -> Streams {
-        self.unit = Totals::default();
+    /// The subject whose tests are `modules` taken on, and every line up to its first scheduled test: each module's `↳ Testing` step, followed at once by its `↳ Tested` step where it schedules none.
+    pub(crate) fn opened(&mut self, modules: &[TestModule]) -> Streams {
+        self.modules.extend(modules.iter().cloned());
 
         let written = Streams {
             stdout: Vec::new(),
-            stderr: format!("{}\n", nested(Heading::Testing, shown, None)).into_bytes(),
+            stderr: self.advanced().into_bytes(),
         };
         written.emit();
 
         written
     }
 
-    /// One test of the subject in hand ended as `outcome`, `record` naming it: `guest`'s streams first, where a source hands the guest's output over rather than the guest writing to the process's streams itself, then what only the runner knows. The guest prints the outcome line of a test it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
-    pub(crate) fn ended(
-        &mut self,
-        record: &TestRecord,
-        outcome: Outcome,
-        guest: Option<&Streams>,
-    ) -> Streams {
+    /// The lines that take the subject in hand to its next scheduled test: each module's `↳ Testing` step, followed at once by its `↳ Tested` step where it schedules none.
+    fn advanced(&mut self) -> String {
+        let mut lines = String::new();
+        while let Some(module) = self.modules.front() {
+            lines.push_str(&format!(
+                "{}\n",
+                nested(Heading::Testing, &Subject::Mounted(module.path), None)
+            ));
+            match self
+                .modules
+                .pop_front_if(|module| module.scheduled.is_empty())
+            {
+                Some(skipped) => lines.push_str(&self.closed(skipped)),
+                None => break,
+            }
+        }
+
+        lines
+    }
+
+    /// `module`'s `↳ Tested` step: the tally of its tests that ran and of those it skipped, folded into the run's.
+    fn closed(&mut self, module: TestModule) -> String {
+        self.tally.skipped = module.skipped.len();
+        let line = format!(
+            "{}\n",
+            nested(
+                Heading::Tested,
+                &Subject::Mounted(module.path),
+                Some(&self.tally.line())
+            )
+        );
+        self.totals.add(&self.tally);
+        self.tally = Totals::default();
+        self.ended = 0;
+        self.reported += 1;
+
+        line
+    }
+
+    /// Whether a module of the subject in hand is still open: one of its scheduled tests is yet to end.
+    pub(crate) fn in_hand(&self) -> bool {
+        !self.modules.is_empty()
+    }
+
+    /// The next scheduled test of the module in hand ended as `outcome`: `guest`'s streams first, where a source hands the guest's output over rather than the guest writing to the process's streams itself, then what only the runner knows, and the module's `↳ Tested` step where it was the module's last. The guest prints the outcome line of a test it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+    pub(crate) fn ended(&mut self, outcome: Outcome, guest: Option<&Streams>) -> Streams {
         let mut written = Streams::default();
         if let Some(guest) = guest {
             written.stdout.extend_from_slice(&guest.stdout);
             written.stderr.extend_from_slice(&guest.stderr);
         }
 
+        let record = &self.modules[0].scheduled[self.ended];
         let mut lines = String::new();
         match outcome {
             // The guest printed `path: passed` and answered that the test held.
-            Outcome::Answered(true) => self.unit.passed += 1,
+            Outcome::Answered(true) => self.tally.passed += 1,
             // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
             Outcome::Answered(false) => {
-                self.unit.failed += 1;
+                self.tally.failed += 1;
                 body(record, &mut lines);
             }
             // The test exited on its own, before the scheduler could report — its line is written here, whatever the code: a verdict is answered, never exited with.
             Outcome::Exited(code) => {
-                self.unit.exited += 1;
-                lines.push_str(&format!("{}: exited {code}\n", record.path));
+                self.tally.exited += 1;
+                lines.push_str(&format!("{}: exited {code}\n", record.path.join()));
                 body(record, &mut lines);
             }
             Outcome::Trapped(trap) => {
-                self.unit.trapped += 1;
-                lines.push_str(&format!("{}: trapped\n", record.path));
+                self.tally.trapped += 1;
+                lines.push_str(&format!("{}: trapped\n", record.path.join()));
                 for line in trap.lines() {
                     lines.push_str(&format!("  {line}\n"));
                 }
@@ -332,22 +394,16 @@ impl<'a> Printer<'a> {
             }
         }
         written.stdout.extend_from_slice(lines.as_bytes());
-        written.emit();
 
-        written
-    }
-
-    /// `shown`'s tests finished: the `↳ Tested` step with the subject's tally, folded into the run's.
-    pub(crate) fn tested(&mut self, shown: &Subject) -> Streams {
-        let written = Streams {
-            stdout: Vec::new(),
-            stderr: format!(
-                "{}\n",
-                nested(Heading::Tested, shown, Some(&self.unit.line()))
-            )
-            .into_bytes(),
-        };
-        self.totals.add(&self.unit);
+        self.ended += 1;
+        let ended = self.ended;
+        if let Some(module) = self
+            .modules
+            .pop_front_if(|module| module.scheduled.len() == ended)
+        {
+            let lines = self.closed(module) + &self.advanced();
+            written.stderr.extend_from_slice(lines.as_bytes());
+        }
         written.emit();
 
         written
@@ -363,16 +419,14 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// Refuse each filter no test the subjects declare stands at or under, by name.
+    /// Refuse each filter no subject's compile selected a test under, by name.
     pub(crate) fn unmatched(&self) -> Result<(), CompileError> {
         let unmatched = self
             .filters
             .iter()
-            .filter(|filter| {
-                let under = prefix(filter);
-                !self.declared.iter().any(|test| test.is_within(&under))
-            })
-            .map(|filter| matching_nothing(filter, &self.declared))
+            .zip(&self.matched)
+            .filter(|(_, matched)| !**matched)
+            .map(|(filter, _)| matching_nothing(filter, &self.declared))
             .collect::<Vec<_>>();
 
         match unmatched.is_empty() {
@@ -381,11 +435,14 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// The count line, closing the run.
-    pub(crate) fn tally(&self) -> Streams {
+    /// The `Finished` line, closing the run with its tally — left out where it would repeat the one `↳ Tested` step the run wrote.
+    pub(crate) fn finished(&self) -> Streams {
         let written = Streams {
-            stdout: format!("{}\n", self.totals.line()).into_bytes(),
-            stderr: Vec::new(),
+            stdout: Vec::new(),
+            stderr: match self.reported {
+                1 => Vec::new(),
+                _ => format!("{}\n", unnested(Heading::Finished, self.totals.line())).into_bytes(),
+            },
         };
         written.emit();
 
@@ -397,11 +454,11 @@ impl<'a> Printer<'a> {
         self.totals.all_green()
     }
 
-    /// The end of a native run: a store's refusal said once, each filter that matched nothing refused by name, and the count line.
+    /// The end of a native run: a store's refusal said once, each filter that matched nothing refused by name, and the `Finished` line.
     pub(crate) fn finish(self) -> Result<bool, CompileError> {
         self.skipped();
         self.unmatched()?;
-        self.tally();
+        self.finished();
 
         Ok(self.green())
     }
@@ -412,12 +469,6 @@ fn body(record: &TestRecord, lines: &mut String) {
     for line in record.body.lines() {
         lines.push_str(&format!("    {line}\n"));
     }
-}
-
-/// One subject of a browser run: how it is shown, and the records of the tests its page schedules, in the order the runner opens them.
-struct Planned {
-    shown: Subject,
-    records: Vec<TestRecord>,
 }
 
 /// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root and the pages beside it one subject at a time, each report taken as the step in hand's and printed as native prints a test's end. `Ok(true)` when every selected test passed.
@@ -432,6 +483,7 @@ pub(crate) fn serve_tests(
         note_unlinked(program, "is tested");
     }
     let mut printer = Printer::new(filters);
+    // Each served subject's modules, in the order the runner opens its pages.
     let mut planned = Vec::new();
     let mut pages = Vec::new();
 
@@ -448,13 +500,15 @@ pub(crate) fn serve_tests(
         )?;
         printer.took(store.as_ref(), &tested);
 
-        // A subject with nothing to run reports its compile and is never served.
-        if let Some(files) = tested.page(&subject)? {
-            planned.push(Planned {
-                shown,
-                records: tested.records().to_vec(),
-            });
-            pages.push((Served { files }, tested.records().len()));
+        // A subject that schedules nothing is never served, and every module it declares closes as it opens.
+        match tested.page(&subject)? {
+            Some(files) => {
+                planned.push(tested.modules().to_vec());
+                pages.push((Served { files }, tested.scheduled().count()));
+            }
+            None => {
+                printer.opened(tested.modules());
+            }
         }
     }
 
@@ -462,7 +516,7 @@ pub(crate) fn serve_tests(
     printer.skipped();
     printer.unmatched()?;
     if planned.is_empty() {
-        printer.tally();
+        printer.finished();
 
         return Ok(printer.green());
     }
@@ -475,22 +529,16 @@ pub(crate) fn serve_tests(
         .port();
 
     serving(&url(port, &[]));
-    printer.testing(&planned[0].shown);
+    printer.opened(&planned[0]);
 
     let run = Run::new(token, pages, |step, guest, posted| {
-        let subject = &planned[step.subject];
-        let mut written = printer.ended(
-            &subject.records[step.test],
-            outcome_of(posted),
-            Some(&guest),
-        );
+        let mut written = printer.ended(outcome_of(posted), Some(&guest));
 
-        // The subject's last test closes it, and opens the next subject or the run's tally, in the same reply.
-        if step.test + 1 == subject.records.len() {
-            written.append(printer.tested(&subject.shown));
+        // The subject's last test closes it, and opens the next subject or ends the run, in the same reply.
+        if !printer.in_hand() {
             match planned.get(step.subject + 1) {
-                Some(next) => written.append(printer.testing(&next.shown)),
-                None => written.append(printer.tally()),
+                Some(next) => written.append(printer.opened(next)),
+                None => written.append(printer.finished()),
             }
         }
 

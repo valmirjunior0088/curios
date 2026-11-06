@@ -1413,7 +1413,7 @@ impl Definitions {
         self.declared_as(|declared| declared == Declared::Witness)
     }
 
-    /// The names the module declares as tests, in the order it stores them: a unit's lowered module stores its items in the order its sources declare them, so read off it this is the order a test program schedules its tests in and the runner reports them.
+    /// The names the module declares as tests, in the order it stores them: a unit's lowered module stores its items in the order its sources declare them, which a test program schedules its tests by, module by module.
     pub fn tests(&self) -> Vec<Global> {
         self.declared_as(|declared| declared == Declared::Test)
     }

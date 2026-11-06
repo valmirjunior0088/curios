@@ -163,7 +163,7 @@ impl<'a> Fold<'a> {
         self.scoped(progress, |_, _, _, _| Ok(()))
     }
 
-    /// The declaration-ordered test paths of the last unit — what `wonder --tests` answers for a library, whose last unit it marks tested, since a built one holds none. The same fold [`Fold::check_units`] runs, read for its lowered module's tests instead of its verdicts; nothing executes.
+    /// The test paths of the last unit, in the order its test program schedules them — what `wonder --tests` answers for a library, whose last unit it marks tested, since a built one holds none. The same fold [`Fold::check_units`] runs, read for its lowered module's tests instead of its verdicts, since its elaborated module stores its items in dependency order; nothing executes.
     pub fn test_paths<P>(self, progress: P) -> Result<Vec<String>, CompileError>
     where
         P: FnMut(Progress<'_>),
@@ -171,7 +171,8 @@ impl<'a> Fold<'a> {
         self.scoped(progress, |_, _, produced, _| {
             Ok(produced
                 .last()
-                .map(|unit| declared_test_paths(unit.core()))
+                .and_then(Unit::text)
+                .map(|text| declared_test_paths(text.core()))
                 .unwrap_or_default())
         })
     }

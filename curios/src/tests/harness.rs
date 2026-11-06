@@ -359,7 +359,7 @@ fn survives(module: &curios_anf::Module, needle: &str) -> bool {
 
 #[test]
 fn declared_tests_schedule_through_the_synthesized_tail() {
-    // The unit compiled as its own test program runs every declared test in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
+    // The unit compiled as its own test program runs every declared test module by module in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
     assert_eq!(
         run_tests_program(
             r#"
@@ -380,13 +380,13 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
 fn a_unit_with_no_tests_builds_no_program() {
     // `Test/main([])` replaces the authored tail and is judged, and a program that would run nothing is built no further.
     let program = test_program(r#"/std/print("ran\n")"#);
-    assert!(program.records.is_empty() && program.declared.is_empty());
+    assert!(program.modules.is_empty());
     assert!(program.compiled.is_none());
 }
 
 #[test]
 fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
-    // A whole segment at a time: `/Map` selects `/Map` and what is under it, and never `/MapBuilder`. What the tail does not schedule is still declared, for a selection meeting nothing to be answered with.
+    // A whole segment at a time: `/Map` selects `/Map` and what is under it, and never `/MapBuilder`. What the tail does not schedule is still declared, and each prefix that selects nothing is named, for a selection meeting nothing to be refused with the paths nearest it.
     let entrypoint = r#"
         use /std/{Test};
         test Map = Test/assert(true);
@@ -421,26 +421,44 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
             .expect("fixture compiles as a test program");
         assert_eq!(
             program
-                .declared
+                .modules
                 .iter()
-                .map(Qualifier::join)
+                .flat_map(|module| {
+                    module
+                        .scheduled
+                        .iter()
+                        .map(|record| record.path)
+                        .chain(module.skipped.iter().copied())
+                })
+                .map(|path| path.join())
                 .collect::<Vec<_>>(),
             ["/Map", "/Map/inner", "/MapBuilder/beside", "/Set/member"]
         );
 
-        program
-            .records
-            .into_iter()
-            .map(|record| record.path)
-            .collect::<Vec<_>>()
+        let scheduled = program
+            .modules
+            .iter()
+            .flat_map(|module| &module.scheduled)
+            .map(|record| record.path.join())
+            .collect::<Vec<_>>();
+        let unmatched = program
+            .unmatched
+            .iter()
+            .map(Qualifier::join)
+            .collect::<Vec<_>>();
+
+        (scheduled, unmatched)
     };
 
-    assert_eq!(selected(&[&["Map"]]), ["/Map", "/Map/inner"]);
-    assert_eq!(
-        selected(&[&["Map", "inner"], &["Set"]]),
-        ["/Map/inner", "/Set/member"]
-    );
-    assert!(selected(&[&["Nothing"]]).is_empty());
+    let (scheduled, unmatched) = selected(&[&["Map"]]);
+    assert_eq!(scheduled, ["/Map", "/Map/inner"]);
+    assert!(unmatched.is_empty());
+    let (scheduled, unmatched) = selected(&[&["Map", "inner"], &["Set"]]);
+    assert_eq!(scheduled, ["/Map/inner", "/Set/member"]);
+    assert!(unmatched.is_empty());
+    let (scheduled, unmatched) = selected(&[&["Set"], &["Nothing"]]);
+    assert_eq!(scheduled, ["/Set/member"]);
+    assert_eq!(unmatched, ["/Nothing"]);
 }
 
 #[test]
@@ -476,7 +494,7 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         "#
     .parse::<Entrypoint>()
     .expect("fixture parses");
-    let records = Fold::new(DEFAULT_BUDGET, &[], None)
+    let modules = Fold::new(DEFAULT_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
@@ -485,11 +503,12 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             |_| {},
         )
         .expect("fixture compiles as a test program")
-        .records;
+        .modules;
 
     assert_eq!(
-        records
+        modules
             .iter()
+            .flat_map(|module| &module.scheduled)
             .map(|record| record.body.as_str())
             .collect::<Vec<_>>(),
         [
@@ -517,14 +536,15 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         unit
     };
     let scheduled = |units: &[RootSource], entrypoint: &Entrypoint, loader: &RootSource| {
-        let records = Fold::new(DEFAULT_BUDGET, units, None)
+        let modules = Fold::new(DEFAULT_BUDGET, units, None)
             .tests(entrypoint, loader, vec![Qualifier::empty()], |_| {}, |_| {})
             .expect("the test program compiles")
-            .records;
+            .modules;
 
-        records
-            .into_iter()
-            .map(|record| record.path)
+        modules
+            .iter()
+            .flat_map(|module| &module.scheduled)
+            .map(|record| record.path.join())
             .collect::<Vec<_>>()
     };
 

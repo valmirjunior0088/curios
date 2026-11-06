@@ -410,10 +410,10 @@ test("a test page served by the command answers its word through its gateway, an
   assert.equal(reply.next, null);
   assert.equal(
     Buffer.from(reply.stdout, "base64").toString(),
-    "/app/doubling: passed\n1 passed, 0 failed\n",
+    "/app/doubling: passed\n",
   );
 
   const { code, stdout } = await ended;
   assert.equal(code, 0);
-  assert.equal(stdout, "/app/doubling: passed\n1 passed, 0 failed\n");
+  assert.equal(stdout, "/app/doubling: passed\n");
 });

@@ -115,7 +115,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
 /// Over the archive rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. It is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
     let entrypoint = entrypoint_of(source);
-    let (program, _foreigns, _records, _anchors) = with_prelude(|prelude| {
+    let program = with_prelude(|prelude| {
         elaborate_and_zonk(
             DEFAULT_BUDGET,
             Predecessors::over(prelude),

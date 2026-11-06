@@ -15,7 +15,7 @@ pub fn elaborate_and_zonk<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<Elaborated, CompileError>
+) -> Result<Program, CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -23,8 +23,8 @@ where
     elaborate_lowered(budget, predecessors, syntax, lowered, tail, observe)
         .1
         .map_err(|refused| refused.reported)
-        .and_then(|(elaborated, obligations)| match obligations.is_empty() {
-            true => Ok(elaborated),
+        .and_then(|(program, obligations)| match obligations.is_empty() {
+            true => Ok(program),
             // Raised as a compilation raises them: every one, as it reports.
             false => Err(CompileError::Failure(
                 obligations

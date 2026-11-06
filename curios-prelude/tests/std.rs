@@ -102,7 +102,8 @@ fn declared() -> Vec<Qualifier> {
         .compile(DEFAULT_BUDGET, store.as_ref(), &[], Target::Native, |_| {})
         .unwrap_or_else(|error| panic!("the standard library failed to compile:\n{error}"))
         .declared()
-        .to_vec()
+        .copied()
+        .collect()
 }
 
 /// Compile the tested `/std` with the tests at or under `module` scheduled, and run each of them.
@@ -127,7 +128,7 @@ fn run_module(module: &Qualifier) {
 
     let mut passed = 0usize;
     let mut failures = String::new();
-    for (index, record) in tested.records().iter().enumerate() {
+    for (index, record) in tested.scheduled().enumerate() {
         let mut held = None;
         let outcome = run.run(index, |arguments| {
             let (host, io) = MockHost::builder().args(arguments).build();
@@ -150,11 +151,14 @@ fn run_module(module: &Qualifier) {
             }
             // An exit never reaches the guest's printing, so the line is written here, and it is a failure whatever its code: a verdict is answered, never exited with.
             Ok(TestEnd::Exited(code)) => {
-                failures.push_str(&format!("{reported}{}: exited {code}\n", record.path));
+                failures.push_str(&format!(
+                    "{reported}{}: exited {code}\n",
+                    record.path.join()
+                ));
             }
             // Nor does a trap reach it.
             Err(error) => {
-                failures.push_str(&format!("{reported}{}: {error}\n", record.path));
+                failures.push_str(&format!("{reported}{}: {error}\n", record.path.join()));
             }
         }
     }

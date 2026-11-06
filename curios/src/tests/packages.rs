@@ -554,7 +554,7 @@ fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
         .expect("the page is laid out")
         .expect("a test is selected");
 
-    assert_eq!(tested.records().len(), 1);
+    assert_eq!(tested.scheduled().count(), 1);
     assert_eq!(
         files.keys().collect::<Vec<_>>(),
         ["index.html", "index.js", "index.wasm", "web/dom.js"]

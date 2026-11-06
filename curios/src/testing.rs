@@ -2,7 +2,7 @@
 //!
 //! **A subject is one test program.** For the governing package entire it is its library and then each executable, and for a library, a program or a loose file its own. The one unit compiled tested among a subject's is its own ([`RootSource::tested`]), so its program schedules its own tests and nothing it stands on.
 //!
-//! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records and every test the subject declares beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
+//! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
 
 use {
     crate::{bindings_of, engine, linked_of, optimize, to_cwasm},
@@ -12,7 +12,7 @@ use {
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, HostOps, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
-    curios_pipeline::{Cache, CompileError, Fold, Progress, TestRecord},
+    curios_pipeline::{Cache, CompileError, Fold, Progress, TestModule, TestRecord},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
@@ -310,8 +310,8 @@ impl TestSubject {
             .transpose()
             .map_err(CompileError::failure)?;
         let tested = Tested {
-            records: compiled.records,
-            declared: compiled.declared,
+            modules: compiled.modules,
+            unmatched: compiled.unmatched,
             built,
             reused: false,
         };
@@ -356,23 +356,39 @@ impl Payload {
     }
 }
 
-/// One subject compiled as a test program for one target: the records of the tests it schedules, every test it declares, and its payload with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own store, which is what lets [`Tested::loaded`] load its machine code.
+/// One subject compiled as a test program for one target: every test it declares, module by module, scheduled or skipped, and its payload with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own store, which is what lets [`Tested::loaded`] load its machine code.
 pub struct Tested {
-    records: Vec<TestRecord>,
-    declared: Vec<Qualifier>,
+    modules: Vec<TestModule>,
+    unmatched: Vec<Qualifier>,
     built: Option<(Payload, ForeignStore)>,
     reused: bool,
 }
 
 impl Tested {
-    /// One record per scheduled test, in schedule order: a test's index among them is the one it is run at.
-    pub fn records(&self) -> &[TestRecord] {
-        &self.records
+    /// Every test the subject declares, module by module, in the order its program runs them.
+    pub fn modules(&self) -> &[TestModule] {
+        &self.modules
     }
 
-    /// Every test the subject declares, scheduled or not, by its path: what a selection meeting none of them is answered with.
-    pub fn declared(&self) -> &[Qualifier] {
-        &self.declared
+    /// The record of each scheduled test, in schedule order: a test's index among them is the one it is run at.
+    pub fn scheduled(&self) -> impl Iterator<Item = &TestRecord> {
+        self.modules.iter().flat_map(|module| &module.scheduled)
+    }
+
+    /// Each prefix the program was selected under that selects none of the subject's tests.
+    pub fn unmatched(&self) -> &[Qualifier] {
+        &self.unmatched
+    }
+
+    /// Every test the subject declares, scheduled or not, by its path: the paths a selection meeting none of them is answered with the nearest of.
+    pub fn declared(&self) -> impl Iterator<Item = &Qualifier> {
+        self.modules.iter().flat_map(|module| {
+            module
+                .scheduled
+                .iter()
+                .map(|record| &record.path)
+                .chain(&module.skipped)
+        })
     }
 
     /// Whether the program was taken from the store rather than compiled.
@@ -469,26 +485,46 @@ pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), Com
     })
 }
 
-/// What the store files for one test program: its records as `(path, body)` pairs and every test it declares by its path's segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the store is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.
+/// What the store files for one test program: its modules and each prefix it was selected under that selects nothing, by their segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the store is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.
 #[curios_archive::archived]
 struct TestPayload {
-    records: Vec<(String, String)>,
-    declared: Vec<Vec<String>>,
+    modules: Vec<ModulePayload>,
+    unmatched: Vec<Vec<String>>,
     payload: Option<Vec<u8>>,
+}
+
+/// One module's tests as the store files them: the segments of its path, of each scheduled test's path beside its body, and of each skipped test's path.
+#[curios_archive::archived]
+struct ModulePayload {
+    path: Vec<String>,
+    scheduled: Vec<(Vec<String>, String)>,
+    skipped: Vec<Vec<String>>,
 }
 
 /// `tested` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
 fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
     let payload = TestPayload {
-        records: tested
-            .records
+        modules: tested
+            .modules
             .iter()
-            .map(|record| (record.path.clone(), record.body.clone()))
+            .map(|module| ModulePayload {
+                path: module.path.segments().to_vec(),
+                scheduled: module
+                    .scheduled
+                    .iter()
+                    .map(|record| (record.path.segments().to_vec(), record.body.clone()))
+                    .collect(),
+                skipped: module
+                    .skipped
+                    .iter()
+                    .map(|test| test.segments().to_vec())
+                    .collect(),
+            })
             .collect(),
-        declared: tested
-            .declared
+        unmatched: tested
+            .unmatched
             .iter()
-            .map(|test| test.segments().to_vec())
+            .map(|prefix| prefix.segments().to_vec())
             .collect(),
         payload: tested
             .built
@@ -502,16 +538,26 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
 /// The inverse of [`encode`], with the rows the store filed beside the bytes and the target whose directory they were filed in, `None` on any malformation.
 fn decode(bytes: &[u8], foreigns: ForeignStore, target: Target) -> Option<Tested> {
     let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
-    let records = payload
-        .records
+    let modules = payload
+        .modules
         .into_iter()
-        .map(|(path, body)| TestRecord { path, body })
+        .map(|module| TestModule {
+            path: Qualifier::from(module.path),
+            scheduled: module
+                .scheduled
+                .into_iter()
+                .map(|(path, body)| TestRecord {
+                    path: Qualifier::from(path),
+                    body,
+                })
+                .collect(),
+            skipped: module.skipped.into_iter().map(Qualifier::from).collect(),
+        })
         .collect();
-    let declared = payload.declared.into_iter().map(Qualifier::from).collect();
 
     Some(Tested {
-        records,
-        declared,
+        modules,
+        unmatched: payload.unmatched.into_iter().map(Qualifier::from).collect(),
         built: payload
             .payload
             .map(|bytes| (Payload::of(target, bytes), foreigns)),

@@ -168,7 +168,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     );
 
     let TestProgram {
-        records, compiled, ..
+        modules, compiled, ..
     } = Fold::new(DEFAULT_BUDGET, &[unit], None)
         .tests(
             &Entrypoint::trivial(),
@@ -180,6 +180,10 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
         .expect("the unit's test program compiles");
     let (module, foreigns) = compiled.expect("a test program scheduling a test is built");
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
+    let records = modules
+        .iter()
+        .flat_map(|module| &module.scheduled)
+        .collect::<Vec<_>>();
     assert_eq!(records.len(), 1);
 
     let (system, io) = MockHost::builder().args(["test", "0"]).build();
@@ -188,7 +192,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     assert_eq!(outcome, Ok(TestEnd::Answered(true)));
     assert_eq!(
         String::from_utf8_lossy(&io.output()).trim_end(),
-        format!("{}: passed", records[0].path)
+        format!("{}: passed", records[0].path.join())
     );
 }
 

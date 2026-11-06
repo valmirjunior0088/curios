@@ -2,12 +2,14 @@
 
 use {
     crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},
-    curios_module::Overlay,
+    curios_module::{Overlay, PreparedText},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
+    curios_unit::Unit,
     curios_verdict::Verdicts,
+    std::cell::RefCell,
 };
 
-/// Every test `subject` declares, in declaration order — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read, and filed into where a question may.
+/// Every test `subject` declares, in the order its test program schedules them — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read, and filed into where a question may.
 pub fn declared_tests(
     budget: u64,
     subject: Subject,
@@ -38,11 +40,17 @@ pub fn declared_tests(
                 )
             })?;
             let units = overlaid(units, overlay);
-            let program = Fold::new(budget, &units, cache)
+            // Read off the program's lowering, as its test program schedules them: its elaborated module stores its items in dependency order.
+            let lowered = RefCell::new(Vec::new());
+            let read = |_: &[&Unit], text: &PreparedText, _: Option<&curios_core::Entrypoint>| {
+                *lowered.borrow_mut() = declared_test_paths(text.core());
+            };
+            Fold::new(budget, &units, cache)
+                .reading(&read)
                 .check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {})?
                 .verdict?;
 
-            declared_test_paths(&program.definitions)
+            lowered.into_inner()
         }
     };
 

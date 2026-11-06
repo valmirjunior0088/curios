@@ -357,7 +357,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     assert_eq!(code, Some(1));
     assert_eq!(
         String::from_utf8_lossy(&stdout),
-        "/app/holds: passed\n/app/fails: failed\n  expected 2 but got 1\n    Test/equal(1, 2)\n/app/exits: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n/own: passed\n2 passed, 1 failed, 1 exited\n"
+        "/app/holds: passed\n/app/fails: failed\n  expected 2 but got 1\n    Test/equal(1, 2)\n/app/exits: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n/own: passed\n"
     );
     let stderr = String::from_utf8_lossy(&stderr);
     in_order(
@@ -372,14 +372,15 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
             "↳ Serving      http://127.0.0.1:",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 1 passed, 1 failed, 1 exited\n",
-            "↳ Testing      app\n",
-            "↳ Tested       app; 1 passed, 0 failed\n",
+            "↳ Testing      /\n",
+            "↳ Tested       /; 1 passed, 0 failed\n",
+            "Finished       2 passed, 1 failed, 1 exited\n",
         ],
     );
-    assert!(!stderr.contains("Testing      quiet"), "{stderr}");
+    assert_eq!(stderr.matches("↳ Testing").count(), 2, "{stderr}");
 }
 
-/// A run every test of which passes exits 0, and a subject with nothing selected is built and never served.
+/// A run every test of which passes exits 0, and a subject with nothing selected is built and never served, its modules reported skipped as it is built.
 #[test]
 fn test_exits_zero_once_every_selected_test_has_passed() {
     let root = Temporary::new("cli-serve", "test-green");
@@ -402,9 +403,17 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(0), "{}", String::from_utf8_lossy(&stderr));
-    assert_eq!(
-        String::from_utf8_lossy(&stdout),
-        "/own: passed\n1 passed, 0 failed\n"
+    assert_eq!(String::from_utf8_lossy(&stdout), "/own: passed\n");
+    in_order(
+        &String::from_utf8_lossy(&stderr),
+        &[
+            "↳ Testing      /app\n",
+            "↳ Tested       /app; 0 passed, 0 failed, 3 skipped\n",
+            "↳ Serving      http://127.0.0.1:",
+            "↳ Testing      /\n",
+            "↳ Tested       /; 1 passed, 0 failed\n",
+            "Finished       1 passed, 0 failed, 3 skipped\n",
+        ],
     );
 }
 

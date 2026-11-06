@@ -419,7 +419,7 @@ pub fn typecheck_entrypoint(
 
     let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
-    let ((program, _, _, _), obligations) = elaborate_entry(
+    let (program, obligations) = elaborate_entry(
         &mut context,
         &established,
         predecessors,
@@ -532,54 +532,59 @@ pub enum EntryTail {
 }
 
 impl EntryTail {
-    /// Which tests the tail schedules: those `own`, the entry's unit, and `scope` hold that it selects, each a lowered module, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
+    /// The tests in scope, module by module, those the tail selects scheduled and the rest skipped: the tests `own`, the entry's unit, and `scope` hold, each a lowered module, in the fold's order and each unit's [module order](in_module_order); a program and an entry at `False` schedule none and skip none.
     ///
-    /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
-    fn scheduled(
+    /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is *which* tests it schedules, and in what order. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
+    fn schedule(
         &self,
         own: &curios_core::Definitions,
         scope: &[&curios_core::Definitions],
-    ) -> Vec<curios_elab::ScheduledTest> {
+    ) -> Vec<ScheduledModule> {
         let EntryTail::Test { under } = self else {
             return Vec::new();
         };
-        let selected = |test: &&Global| matches!(test, Global::Authored(path) if under.iter().any(|prefix| path.is_within(prefix)));
+        let selected = |test: &Global| under.iter().any(|prefix| selects(prefix, test));
 
         scope
             .iter()
             .copied()
             .chain([own])
             .flat_map(|definitions| {
-                let tests = definitions
-                    .tests()
+                in_module_order(definitions.tests())
                     .into_iter()
-                    .filter(|test| selected(&test))
-                    .collect::<Vec<_>>();
-                scheduled_tests(&tests, &definitions.items)
+                    .map(|(path, tests)| {
+                        let (scheduled, skipped): (Vec<_>, Vec<_>) =
+                            tests.into_iter().partition(|test| selected(test));
+
+                        ScheduledModule {
+                            path,
+                            scheduled: scheduled_tests(&scheduled, &definitions.items),
+                            skipped: skipped
+                                .iter()
+                                .filter_map(|test| test.qualifier().copied())
+                                .collect(),
+                        }
+                    })
             })
             .collect()
     }
 
-    /// Every test in scope, selected or not, by its path, in the order [`EntryTail::scheduled`] keeps: what a selection meeting none of them is answered with. None for a program or an entry at `False`.
-    fn declared(
-        &self,
-        own: &curios_core::Definitions,
-        scope: &[&curios_core::Definitions],
-    ) -> Vec<Qualifier> {
-        match self {
-            EntryTail::Program | EntryTail::False => Vec::new(),
-            EntryTail::Test { .. } => scope
-                .iter()
-                .copied()
-                .chain([own])
-                .flat_map(|definitions| {
-                    definitions
-                        .tests()
-                        .into_iter()
-                        .filter_map(|test| test.qualifier().copied())
-                })
-                .collect(),
-        }
+    /// Each prefix the tail selects tests at or under that selects none of `schedule`'s: what a run names where no subject's tail selects anything at it. None for a program or an entry at `False`.
+    fn unmatched(&self, schedule: &[ScheduledModule]) -> Vec<Qualifier> {
+        let EntryTail::Test { under } = self else {
+            return Vec::new();
+        };
+
+        under
+            .iter()
+            .filter(|prefix| {
+                !schedule
+                    .iter()
+                    .flat_map(|module| &module.scheduled)
+                    .any(|test| selects(prefix, &test.name))
+            })
+            .copied()
+            .collect()
     }
 
     /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
@@ -598,16 +603,60 @@ impl EntryTail {
 /// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from where the anchors in hand place the extent its authored body carries, empty where it carries none (a unit restored from a store may carry none) or none of them holds its declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestRecord {
-    pub path: String,
+    pub path: Qualifier,
     pub body: String,
 }
 
-/// The declaration-ordered paths of a lowered module's tests — how `curios test` and `wonder --tests` name them, read off [`Definitions::tests`](curios_core::Definitions::tests) so the two cannot disagree with the schedule.
-pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String> {
-    definitions
-        .tests()
+/// One module's tests, as a test program's runner reports them: the module they stand in, a record of each the tail schedules, in the order it runs them, and the path of each it leaves out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestModule {
+    pub path: Qualifier,
+    pub scheduled: Vec<TestRecord>,
+    pub skipped: Vec<Qualifier>,
+}
+
+/// Whether `prefix` selects `test`: a whole segment at a time, a test at or under it. The one statement of what a test tail's prefixes select, for what it schedules and for the prefixes that select nothing.
+fn selects(prefix: &Qualifier, test: &Global) -> bool {
+    matches!(test, Global::Authored(path) if path.is_within(prefix))
+}
+
+/// One module's tests as [`EntryTail::schedule`] decides them, before the scheduled ones' bodies are sliced into records.
+struct ScheduledModule {
+    path: Qualifier,
+    scheduled: Vec<curios_elab::ScheduledTest>,
+    skipped: Vec<Qualifier>,
+}
+
+/// The tests a schedule's tail runs, in the order it runs them: each module's scheduled tests, a module after the other.
+fn tail_tests(schedule: &[ScheduledModule]) -> Vec<curios_elab::ScheduledTest> {
+    schedule
         .iter()
-        .map(curios_core::Global::path)
+        .flat_map(|module| module.scheduled.iter().cloned())
+        .collect()
+}
+
+/// `tests` by the module each stands in: the modules in the order their first tests come, and each module's tests in the order they come. The order a test program schedules a unit's tests in and `wonder --tests` lists them in, so a module's tests run and report together however its declarations interleave with another's.
+fn in_module_order(tests: Vec<Global>) -> Vec<(Qualifier, Vec<Global>)> {
+    let mut modules: Vec<(Qualifier, Vec<Global>)> = Vec::new();
+    for (path, test) in tests
+        .into_iter()
+        .filter_map(|test| Some((test.qualifier()?.without_last(), test)))
+    {
+        match modules.iter_mut().find(|(module, _)| *module == path) {
+            Some((_, held)) => held.push(test),
+            None => modules.push((path, vec![test])),
+        }
+    }
+
+    modules
+}
+
+/// The paths of a lowered module's tests, in the order a test program schedules them — how `wonder --tests` lists them, grouped by module as the schedule groups them, so the list cannot disagree with it.
+pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String> {
+    in_module_order(definitions.tests())
+        .into_iter()
+        .flat_map(|(_, tests)| tests)
+        .map(|test| test.path())
         .collect()
 }
 
@@ -636,17 +685,27 @@ fn scheduled_tests(
         .collect()
 }
 
-/// The report metadata of each scheduled test: the path that names it, and its body as written, sliced from where `anchors` place the extent the authored body carries.
-fn test_records(scheduled: &[curios_elab::ScheduledTest], anchors: &[&Anchors]) -> Vec<TestRecord> {
-    scheduled
-        .iter()
-        .map(|test| TestRecord {
-            path: test.name.path(),
-            body: test
-                .extent
-                .and_then(|extent| extent.resolved(anchors))
-                .map(|span| span.source.text[span.start..span.end].to_string())
-                .unwrap_or_default(),
+/// The report metadata of each module's tests: a record of each scheduled one, the path that names it and its body as written, sliced from where `anchors` place the extent the authored body carries, and the path of each skipped one.
+fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<TestModule> {
+    schedule
+        .into_iter()
+        .map(|module| TestModule {
+            path: module.path,
+            scheduled: module
+                .scheduled
+                .iter()
+                .filter_map(|test| {
+                    Some(TestRecord {
+                        path: *test.name.qualifier()?,
+                        body: test
+                            .extent
+                            .and_then(|extent| extent.resolved(anchors))
+                            .map(|span| span.source.text[span.start..span.end].to_string())
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect(),
+            skipped: module.skipped,
         })
         .collect()
 }
@@ -669,9 +728,6 @@ where
         .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// An entry elaborated: its program, the `foreign` rows it declares, one record per test it schedules, and where its declarations lie, for what a later stage reports of it.
-type Elaborated = (Program, ForeignStore, Vec<TestRecord>, Anchors);
-
 /// The elaborating half of the prologue, over an entry already lowered: the lowering's findings, credited with what elaboration's proofs read whatever its verdict, beside that verdict.
 fn elaborate_lowered<O>(
     budget: u64,
@@ -680,7 +736,7 @@ fn elaborate_lowered<O>(
     mut lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> (Findings, Result<(Elaborated, Vec<Obligation>), Refused>)
+) -> (Findings, Result<(Program, Vec<Obligation>), Refused>)
 where
     O: FnMut(Stage<'_>),
 {
@@ -711,7 +767,7 @@ fn elaborate_entry<'s, O>(
     lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(Elaborated, Vec<Obligation>), Refused>
+) -> Result<(Program, Vec<Obligation>), Refused>
 where
     O: FnMut(Stage<'_>),
 {
@@ -723,14 +779,14 @@ where
     let LoweredEntry {
         program: mut lowered,
         minted,
-        foreigns: user_foreigns,
+        foreigns: _,
         names,
         lints: _,
         reached: _,
         broken,
         anchors: own,
     } = lowered;
-    // Read by the first report placed in a declaration, and by a test program for its tests' text: an elaboration that needs neither restores where no unit's declarations lie.
+    // Read by the first report placed in a declaration: an elaboration that reports nothing restores where no unit's declarations lie.
     let anchors = LazyCell::new(|| {
         std::iter::once(&own)
             .chain(scope.iter().map(|text| text.anchors()))
@@ -739,11 +795,7 @@ where
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
     let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
 
-    let scheduled = tail.scheduled(&lowered.definitions, &predecessors.lowered());
-    let records = match scheduled.is_empty() {
-        true => Vec::new(),
-        false => test_records(&scheduled, &anchors),
-    };
+    let scheduled = tail_tests(&tail.schedule(&lowered.definitions, &predecessors.lowered()));
 
     let dumped = DumpScope {
         syntax,
@@ -809,7 +861,7 @@ where
 
     observe(Stage::CoreElab(&program, dumped));
 
-    Ok(((program, user_foreigns, records, own), obligations))
+    Ok((program, obligations))
 }
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
@@ -889,10 +941,10 @@ struct Entered {
     program: Zonked<Program>,
     /// The program erased and linked through the kernel that judged it, or what erasing it refused it for: every program but a test program that schedules no test, which nothing is compiled of. The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
     erased: Option<Erasure>,
-    /// One per scheduled test, when the entry is compiled as a test program.
-    records: Vec<TestRecord>,
-    /// The path of every test in scope, scheduled or not, when the entry is compiled as a test program ([`EntryTail::declared`]).
-    declared: Vec<Qualifier>,
+    /// Every test in scope, module by module, scheduled or skipped, when the entry is compiled as a test program ([`EntryTail::schedule`]).
+    modules: Vec<TestModule>,
+    /// Each prefix of the test tail's that selects no test ([`EntryTail::unmatched`]).
+    unmatched: Vec<Qualifier>,
 }
 
 impl Entered {
@@ -945,12 +997,13 @@ where
         read(predecessors.units(), &lowered, Some(&written));
     }
 
-    let scheduled = tail.scheduled(lowered.core(), &predecessors.lowered());
-    let records = match scheduled.is_empty() {
-        true => Vec::new(),
-        false => test_records(&scheduled, &anchors_of(&lowered, predecessors)),
+    let schedule = tail.schedule(lowered.core(), &predecessors.lowered());
+    let scheduled = tail_tests(&schedule);
+    let unmatched = tail.unmatched(&schedule);
+    let modules = match scheduled.is_empty() {
+        true => test_modules(schedule, &[]),
+        false => test_modules(schedule, &anchors_of(&lowered, predecessors)),
     };
-    let declared = tail.declared(lowered.core(), &predecessors.lowered());
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);
@@ -1051,7 +1104,7 @@ where
                 ));
             }
             // A test program that schedules no test is compiled to nothing, so it is not erased.
-            let erases = !(tested && records.is_empty());
+            let erases = !(tested && scheduled.is_empty());
             let judged = {
                 let units = predecessors
                     .units()
@@ -1076,8 +1129,8 @@ where
                     unit,
                     program,
                     erased,
-                    records,
-                    declared,
+                    modules,
+                    unmatched,
                 }),
             )
         }
@@ -1243,7 +1296,7 @@ pub fn examine_entrypoint(
         })?;
     let (_, elaborated) =
         elaborate_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
-    let ((program, _, _, _), obligations) = elaborated?;
+    let (program, obligations) = elaborated?;
 
     // The zonk evidence the kernel consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&program).map_err(|refusal| Refused {
@@ -1781,13 +1834,13 @@ pub(crate) struct Told<'a, O> {
     pub(crate) read: Option<ReadLowering<'a>>,
 }
 
-/// A program compiled under its tail, with what a test program's tail read: what [`Fold::tests`](crate::Fold::tests) hands back, and, its records empty, what a program's compile is.
+/// A program compiled under its tail, with what a test program's tail read: what [`Fold::tests`](crate::Fold::tests) hands back, and, its modules empty, what a program's compile is.
 #[derive(Debug)]
 pub struct TestProgram {
-    /// One per test the tail schedules, in schedule order — the report metadata execution alone cannot recover.
-    pub records: Vec<TestRecord>,
-    /// The path of every test in scope, scheduled or not: what a selection meeting none of them is answered with.
-    pub declared: Vec<Qualifier>,
+    /// Every test in scope, module by module, scheduled or skipped, in the order the tail runs them — the report metadata execution alone cannot recover. A test's index among every module's scheduled tests is the one it is run at.
+    pub modules: Vec<TestModule>,
+    /// Each prefix the tail selects tests at or under that selects none: what a run refuses where no subject's tail selects anything at it.
+    pub unmatched: Vec<Qualifier>,
     /// The program and the rows it imports — `None` for a test tail that schedules no test, since a program running nothing is built past nothing but the kernel's judgment of it.
     pub compiled: Option<(curios_wasm::Module, ForeignStore)>,
 }
@@ -1842,8 +1895,8 @@ where
     };
 
     Ok(TestProgram {
-        records: entered.records,
-        declared: entered.declared,
+        modules: entered.modules,
+        unmatched: entered.unmatched,
         compiled,
     })
 }

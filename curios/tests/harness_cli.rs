@@ -1,4 +1,4 @@
-//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, the count line, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
+//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, each module's tally, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
 use {
     curios_common::test_support::*,
@@ -126,10 +126,9 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "    Test/perform(() => let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
             "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
-            "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
-    // The library is taken on, its unit compiled and its test program linked, tested and tallied; the executable, which declares no tests, is taken on, compiled and linked and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
+    // The library is taken on, its unit compiled and its test program linked, its one module tested and tallied; the executable, which declares no tests, is taken on, compiled and linked and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
     in_order(
         &stderr(&output),
         &[
@@ -143,9 +142,15 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "↳ Linking      app; ",
         ],
     );
+    assert_eq!(
+        stderr(&output).matches("↳ Testing").count(),
+        1,
+        "a unit that declares no tests reports no module, stderr: {}",
+        stderr(&output)
+    );
     assert!(
-        !stderr(&output).contains("Testing      app"),
-        "a unit with nothing to run reports no testing step, stderr: {}",
+        !stderr(&output).contains("Finished"),
+        "a run of one module ends on its tally, stderr: {}",
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(1));
@@ -178,7 +183,7 @@ test fails_quietly =
 
     assert_eq!(
         stdout(&output),
-        "/app/quits_early: exited 0\n    Test/perform(() => Proc/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => Proc/exit(@Test({}), 1))\n0 passed, 0 failed, 2 exited\n",
+        "/app/quits_early: exited 0\n    Test/perform(() => Proc/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => Proc/exit(@Test({}), 1))\n",
         "stderr: {}",
         stderr(&output)
     );
@@ -192,7 +197,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let cold = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     assert_eq!(
         stdout(&cold),
-        "/app/addition_passes: passed\n1 passed, 0 failed\n",
+        "/app/addition_passes: passed\n",
         "stderr: {}",
         stderr(&cold)
     );
@@ -207,9 +212,81 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
             "Processing     /app\n",
             "↳ Linking      /app; reused\n",
             "↳ Testing      /app\n",
-            "↳ Tested       /app; 1 passed, 0 failed\n",
+            "↳ Tested       /app; 1 passed, 0 failed, 5 skipped\n",
             "Processing     app\n",
             "↳ Linking      app; reused\n",
+        ],
+    );
+}
+
+/// A module's tests run together however its declarations interleave with another's, each module tallied with the tests the filter skipped, one it selects nothing from included, and `Finished` sums them all.
+#[test]
+fn each_module_is_tallied_apart_with_the_tests_the_filter_skipped() {
+    let root = temporary("modules");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        r#"use /std/{Test};
+
+test first =
+    Test/assert(true);
+
+mod Inner
+    use /std/{Test};
+
+    test kept =
+        Test/assert(true);
+
+    test left =
+        Test/assert(true);
+end
+
+test second =
+    Test/assert(true);
+
+mod Left
+    use /std/{Test};
+
+    test out =
+        Test/assert(true);
+end
+"#,
+    );
+
+    let output = curios(
+        &root,
+        &[
+            "test",
+            "--filter",
+            "/app/first",
+            "--filter",
+            "/app/second",
+            "--filter",
+            "/app/Inner/kept",
+        ],
+    );
+
+    assert_eq!(
+        stdout(&output),
+        "/app/first: passed\n/app/second: passed\n/app/Inner/kept: passed\n",
+        "stderr: {}",
+        stderr(&output)
+    );
+    in_order(
+        &stderr(&output),
+        &[
+            "↳ Testing      /app\n",
+            "↳ Tested       /app; 2 passed, 0 failed\n",
+            "↳ Testing      /app/Inner\n",
+            "↳ Tested       /app/Inner; 1 passed, 0 failed, 1 skipped\n",
+            "↳ Testing      /app/Left\n",
+            "↳ Tested       /app/Left; 0 passed, 0 failed, 1 skipped\n",
+            "Finished       3 passed, 0 failed, 2 skipped\n",
         ],
     );
 }
@@ -265,7 +342,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     let executable = curios(&root, &["test", "app"]);
     assert_eq!(
         stdout(&executable),
-        "/in_app: passed\n1 passed, 0 failed\n",
+        "/in_app: passed\n",
         "stderr: {}",
         stderr(&executable)
     );
@@ -273,7 +350,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     let loose = curios(&root, &["test", "scratch/loose.crs"]);
     assert_eq!(
         stdout(&loose),
-        "/loose/in_loose: passed\n1 passed, 0 failed\n",
+        "/loose/in_loose: passed\n",
         "stderr: {}",
         stderr(&loose)
     );
@@ -289,7 +366,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     let tested = fed(&root, &["test", "-"], module);
     assert_eq!(
         stdout(&tested),
-        "/stdin/in_piped: passed\n1 passed, 0 failed\n",
+        "/stdin/in_piped: passed\n",
         "stderr: {}",
         stderr(&tested)
     );
@@ -395,19 +472,19 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Nat, Test};\n\ntest lib_first =\n    Test/assert(1 == 1);\n\ntest lib_second =\n    Test/assert(2 == 2);\n",
+        "use /std/{Nat, Test};\n\ntest lib_zeta =\n    Test/assert(1 == 1);\n\ntest lib_alpha =\n    Test/assert(2 == 2);\n",
     );
     write(
         &root,
         "app.crs",
-        "use /std/{Nat, Str, Io, Test};\n\ntest app_holds =\n    Test/assert(3 == 3);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Nat, Str, Io, Test};\n\ntest app_zeta =\n    Test/assert(3 == 3);\n\ntest app_alpha =\n    Test/assert(4 == 4);\n\n/std/print(\"ran\\n\")\n",
     );
 
-    // The package entire: the library's tests, then each executable's, in declaration order — and nothing executes, so the authored entry never prints.
+    // The package entire: the library's tests, then each executable's, in the order their test programs run them, which is declared rather than sorted — and nothing executes, so the authored entry never prints.
     let whole = curios(&root, &["wonder", "--tests"]);
     assert_eq!(
         stdout(&whole),
-        "/app/lib_first\n/app/lib_second\n/app_holds\n",
+        "/app/lib_zeta\n/app/lib_alpha\n/app_zeta\n/app_alpha\n",
         "stderr: {}",
         stderr(&whole)
     );
@@ -415,12 +492,12 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
 
     // An executable by name lists its own alone.
     let executable = curios(&root, &["wonder", "--tests", "app"]);
-    assert_eq!(stdout(&executable), "/app_holds\n");
+    assert_eq!(stdout(&executable), "/app_zeta\n/app_alpha\n");
     assert_eq!(executable.status.code(), Some(0));
 
     // A file is placed in the unit that declares it, so the library header answers as the library.
     let file = curios(&root, &["wonder", "--tests", "lib.crs"]);
-    assert_eq!(stdout(&file), "/app/lib_first\n/app/lib_second\n");
+    assert_eq!(stdout(&file), "/app/lib_zeta\n/app/lib_alpha\n");
     assert_eq!(file.status.code(), Some(0));
 }
 
