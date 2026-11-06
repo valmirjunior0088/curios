@@ -1,24 +1,29 @@
 //! Serving a browser on this machine: the files a browser build is, or a run of tests, held in memory and answered over loopback — a page until the process is stopped, a run until every test has reported.
 //!
-//! **Only what a page needs.** A request is a `GET` of a path, answered with the file at that page path, or with `index.html`, the page's own name for its document, for `/`; the page stands at the root, so its relative paths resolve there. Every reply says `Cache-Control: no-store`, since a page changes by running the command again, and `Connection: close`, so no connection outlives its one request.
+//! **Only what a page needs.** A request is a `GET` of a path, answered with the file at that page path, or with `index.html`, the page's own name for its document, for `/`; the page stands at the root, so its relative paths resolve there. Every reply says `Cache-Control: no-store`, since a page changes by running the command again, and `Connection: close`, so no connection outlives its one request but a run's socket.
 //!
-//! **A run is the runner at the root and one subject's page beside it.** `/` answers the runner, `index.html` and every other path the page of the subject in hand, and `POST /` takes a report of the step in hand — the first unreported test in plan order — under the run's token, answering what the command wrote for it and the next step; a report of any other step is answered with nothing and ignored. The page switches to the next subject with its last report, and the run is complete when every step is taken.
+//! **A run is the runner at the root, its socket, and one subject's page beside them.** `GET /` answers the runner, and the same request asking to upgrade opens the socket the runner drives the run over. The run is driven over one socket at a time: it is sent the step in hand — the first unreported test in plan order — and each outcome it sends back is taken as that step's, answered with what the command wrote for it and the next step. A socket asked for while another drives the run is refused, and one that closes, however it closes, lets the run go, so the next to open resumes it at the step in hand. `index.html` and every other path is the page of the subject in hand, which switches to the next subject with its last report; the run is complete when every step is taken.
 //!
-//! **Loopback, and only by its own name.** The server binds `127.0.0.1` and refuses a request whose `Host` is not that address or `localhost` at its port, which keeps a page some other site loads from reaching it through a name that resolves here.
+//! **Loopback, and only by its own name.** The server binds `127.0.0.1` and refuses a request whose `Host` is not that address or `localhost` at its port, which keeps a page some other site loads from reaching it through a name that resolves here, and a socket asked for under an `Origin` other than those, which a browser states for every page and which no page can forge, so only the runner a run serves drives it.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::Streams,
-    curios_browser::{ARGUMENT, INDEX_HTML, Posted, Reply, Report, Step, content_type, runner},
+    curios_browser::{ARGUMENT, INDEX_HTML, Posted, Reply, Step, content_type, runner},
     std::{
         collections::BTreeMap,
         ffi::OsString,
-        io::{self, BufRead, BufReader, Read, Write},
+        io::{self, BufRead, BufReader, Write},
         net::{Ipv4Addr, TcpListener, TcpStream},
         sync::{Mutex, PoisonError},
         thread,
+    },
+    tungstenite::{
+        Message, WebSocket,
+        handshake::derive_accept_key,
+        protocol::{CloseFrame, Role, WebSocketConfig, frame::coding::CloseCode},
     },
 };
 
@@ -28,8 +33,11 @@ pub(crate) const PORT: u16 = 8000;
 /// The most a request's head may hold before it is refused: far past any a browser sends for a page.
 const HEAD: usize = 16 * 1024;
 
-/// The most a report's body may hold before it is refused: past any output a test writes.
-const BODY: usize = 16 * 1024 * 1024;
+/// The most an outcome a runner sends may hold before its socket is refused: past any output a test writes.
+const OUTCOME: usize = 16 * 1024 * 1024;
+
+/// The WebSocket version the run's socket speaks, the one every browser asks for.
+const VERSION: &str = "13";
 
 /// A page held to serve: every file of it by its page path.
 pub(crate) struct Served {
@@ -52,44 +60,41 @@ impl Site<'_> {
     }
 }
 
-/// A run of tests served: the runner document, each subject's page in plan order with how many tests it schedules, the run's token, and where the run is.
+/// A run of tests served: the runner document, each subject's page in plan order with how many tests it schedules, and where the run is.
 pub(crate) struct Run<'a> {
     runner: Vec<u8>,
     pages: Vec<(Served, usize)>,
-    token: String,
     state: Mutex<State<'a>>,
 }
 
-/// What the command does with the step in hand's report — prints and tallies — answering what it wrote on each stream.
+/// What the command does with the step in hand's outcome — prints and tallies — answering what it wrote on each stream.
 type Reporting<'a> = Box<dyn FnMut(Step, Streams, &Posted) -> Streams + Send + 'a>;
 
-/// Where a run is, and what takes its reports.
+/// Where a run is, whether a socket drives it, and what takes its outcomes.
 struct State<'a> {
     /// The page in hand, past the last once the run is complete, and the test in hand on it.
     page: usize,
     test: usize,
+    driven: bool,
     report: Reporting<'a>,
 }
 
+/// The step in hand's outcome is read only over a socket that has been sent that step, which a run past its last never sends.
+const DRIVEN_WHILE_IN_HAND: &str = "an outcome is read only while a step is in hand";
+
 impl<'a> Run<'a> {
-    /// A run over `pages`, each with how many tests it schedules, under `token`, `report` taking each step's report.
+    /// A run over `pages`, each with how many tests it schedules, `report` taking each step's outcome.
     pub(crate) fn new(
-        token: String,
         pages: Vec<(Served, usize)>,
         report: impl FnMut(Step, Streams, &Posted) -> Streams + Send + 'a,
     ) -> Self {
-        let first = pages.first().map(|_| Step {
-            subject: 0,
-            test: 0,
-        });
-
         Self {
-            runner: runner(&token, first),
+            runner: runner(),
             pages,
-            token,
             state: Mutex::new(State {
                 page: 0,
                 test: 0,
+                driven: false,
                 report: Box::new(report),
             }),
         }
@@ -111,6 +116,41 @@ impl<'a> Run<'a> {
         let state = self.state();
 
         self.pages.get(state.page).map(|(page, _)| page)
+    }
+
+    /// The run held for a socket opening now, or none where another socket drives it.
+    fn held(&self) -> Option<Held<'_, 'a>> {
+        let mut state = self.state();
+        if state.driven {
+            return None;
+        }
+        state.driven = true;
+
+        Some(Held(self))
+    }
+
+    /// The step in hand's outcome taken, `guest` being the streams its page kept: what the command wrote for it, and the step in hand after it.
+    fn reported(&self, outcome: &Posted, guest: Streams) -> (Streams, Option<Step>) {
+        let mut state = self.state();
+        let step = step_of(&state, self.pages.len()).expect(DRIVEN_WHILE_IN_HAND);
+
+        let written = (state.report)(step, guest, outcome);
+        state.test += 1;
+        if state.test == self.pages[state.page].1 {
+            state.page += 1;
+            state.test = 0;
+        }
+
+        (written, step_of(&state, self.pages.len()))
+    }
+}
+
+/// A run while one socket drives it, let go however the socket ends.
+struct Held<'r, 'a>(&'r Run<'a>);
+
+impl Drop for Held<'_, '_> {
+    fn drop(&mut self) {
+        self.0.state().driven = false;
     }
 }
 
@@ -160,12 +200,12 @@ pub(crate) fn serve_page(listener: &TcpListener, served: Served) -> Result<(), S
     serve(listener, &Site::Page(served))
 }
 
-/// Answer every connection `listener` accepts with `run`, each on a thread of its own, until every step of the run is taken and its last reply written.
+/// Answer every connection `listener` accepts with `run`, each on a thread of its own, until every step of the run is taken and its last reply sent.
 pub(crate) fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), String> {
     serve(listener, &Site::Run(run))
 }
 
-/// Answer every connection `listener` accepts with `site`, each on a thread of its own, until the site is complete: the connection that takes a run's last step connects back once its reply is written, so the accept ends.
+/// Answer every connection `listener` accepts with `site`, each on a thread of its own, until the site is complete: the socket that takes a run's last step connects back once its reply is sent, so the accept ends.
 fn serve(listener: &TcpListener, site: &Site<'_>) -> Result<(), String> {
     let port = listener
         .local_addr()
@@ -189,12 +229,11 @@ fn serve(listener: &TcpListener, site: &Site<'_>) -> Result<(), String> {
     Ok(())
 }
 
-/// One response: its status line, the headers past the ones every response carries, its body, and whether it completes a run, which wakes the accept once it is written.
+/// One response: its status line, the headers past the ones every response carries, and its body.
 struct Response {
     status: &'static str,
     headers: Vec<(&'static str, String)>,
     body: Vec<u8>,
-    last: bool,
 }
 
 impl Response {
@@ -203,7 +242,6 @@ impl Response {
             status,
             headers: vec![("Content-Type", "text/plain; charset=utf-8".to_string())],
             body: format!("{body}\n").into_bytes(),
-            last: false,
         }
     }
 
@@ -212,53 +250,110 @@ impl Response {
             status: "200 OK",
             headers: vec![("Content-Type", content_type(path).to_string())],
             body: bytes.to_vec(),
-            last: false,
-        }
-    }
-
-    fn json(reply: &Reply, last: bool) -> Self {
-        Self {
-            status: "200 OK",
-            headers: vec![("Content-Type", "application/json".to_string())],
-            body: reply.render(),
-            last,
         }
     }
 }
 
-/// Read one request from `stream` and write its response.
+/// What a request is answered with: a response, or the switch to a run's socket under the accept key its handshake asked for, the run held for it.
+enum Answer<'r, 'a> {
+    Response(Response),
+    Socket { accept: String, held: Held<'r, 'a> },
+}
+
+impl From<Response> for Answer<'_, '_> {
+    fn from(response: Response) -> Self {
+        Answer::Response(response)
+    }
+}
+
+/// Read one request from `stream` and answer it: write its response, or switch to the run's socket and drive the run over it.
 fn answer(stream: TcpStream, site: &Site<'_>, port: u16) -> io::Result<()> {
     let mut reader = BufReader::new(&stream);
-    let response = match head(&mut reader)? {
-        Some(head) => match body(&head, &mut reader)? {
-            Ok(body) => replied(&head, &body, site, port),
-            Err(refused) => refused,
-        },
+    let answered = match head(&mut reader)? {
+        Some(head) => replied(&head, site, port),
         None => Response::text(
             "431 Request Header Fields Too Large",
             "the request's head is too large",
-        ),
+        )
+        .into(),
     };
+    // What the client sent past the head is the socket's, where one opens.
+    let past = reader.buffer().to_vec();
 
     let mut stream = &stream;
-    write!(stream, "HTTP/1.1 {}\r\n", response.status)?;
-    for (name, value) in &response.headers {
-        write!(stream, "{name}: {value}\r\n")?;
-    }
-    write!(
-        stream,
-        "Content-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-        response.body.len()
-    )?;
-    stream.write_all(&response.body)?;
-    stream.flush()?;
+    match answered {
+        Answer::Response(response) => {
+            write!(stream, "HTTP/1.1 {}\r\n", response.status)?;
+            for (name, value) in &response.headers {
+                write!(stream, "{name}: {value}\r\n")?;
+            }
+            write!(
+                stream,
+                "Content-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                response.body.len()
+            )?;
+            stream.write_all(&response.body)?;
+            stream.flush()
+        }
+        Answer::Socket { accept, held } => {
+            write!(
+                stream,
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            )?;
+            stream.flush()?;
+            let socket = WebSocket::from_partially_read(
+                stream,
+                past,
+                Role::Server,
+                Some(WebSocketConfig::default().max_message_size(Some(OUTCOME))),
+            );
 
-    if response.last {
-        // The accept is blocked until a connection arrives: this one is it, and the loop ends on it without answering it.
-        let _ = TcpStream::connect((Ipv4Addr::LOCALHOST, port));
+            drive(socket, held, port).map_err(io::Error::other)
+        }
     }
+}
+
+/// Drive the run `held` holds over `socket`: the step in hand sent at once, then each outcome the runner sends taken as that step's and answered with what the command wrote and the next step, until the last, after which the socket is closed and the accept, listening on `port`, woken. A message that is no outcome closes the socket saying so.
+fn drive(
+    mut socket: WebSocket<&TcpStream>,
+    held: Held<'_, '_>,
+    port: u16,
+) -> tungstenite::Result<()> {
+    let run = held.0;
+    let mut next = run.in_hand();
+    socket.send(said(&Reply::new(&[], &[], next)))?;
+
+    while next.is_some() {
+        let read = match socket.read()? {
+            Message::Text(text) => {
+                Posted::parse(text.as_bytes()).and_then(|outcome| Ok((outcome.streams()?, outcome)))
+            }
+            Message::Binary(_) => Err("an outcome is a text message".to_string()),
+            Message::Close(_) => return Ok(()),
+            Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => continue,
+        };
+        let Ok(((stdout, stderr), outcome)) = read else {
+            return socket.close(Some(CloseFrame {
+                code: CloseCode::Invalid,
+                reason: "the message is no outcome".into(),
+            }));
+        };
+
+        let (written, after) = run.reported(&outcome, Streams { stdout, stderr });
+        next = after;
+        socket.send(said(&Reply::new(&written.stdout, &written.stderr, next)))?;
+    }
+
+    socket.close(None)?;
+    // The accept is blocked until a connection arrives: this one is it, and the loop ends on it without answering it.
+    let _ = TcpStream::connect((Ipv4Addr::LOCALHOST, port));
 
     Ok(())
+}
+
+/// `reply` as the socket carries it.
+fn said(reply: &Reply) -> Message {
+    Message::text(String::from_utf8(reply.render()).expect("a reply renders as JSON"))
 }
 
 /// The request's head, its lines up to the blank one, or `None` where it runs past [`HEAD`].
@@ -293,74 +388,84 @@ fn header<'h>(head: &'h [String], name: &str) -> Option<&'h str> {
     })
 }
 
-/// The request's body, where its method carries one: a `POST`'s, read under its `Content-Length` up to [`BODY`], or the response refusing it — none stated, or more than the bound.
-fn body(head: &[String], reader: &mut impl Read) -> io::Result<Result<Vec<u8>, Response>> {
-    if !head.first().is_some_and(|line| line.starts_with("POST ")) {
-        return Ok(Ok(Vec::new()));
-    }
-
-    let Some(length) =
-        header(head, "content-length").and_then(|length| length.parse::<usize>().ok())
-    else {
-        return Ok(Err(Response::text(
-            "411 Length Required",
-            "a report states its Content-Length",
-        )));
-    };
-    if length > BODY {
-        return Ok(Err(Response::text(
-            "413 Content Too Large",
-            &format!("a report is at most {BODY} bytes"),
-        )));
-    }
-
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body)?;
-
-    Ok(Ok(body))
-}
-
-/// The response to the request whose head is `head` and body `body`, served on `port`.
-fn replied(head: &[String], body: &[u8], site: &Site<'_>, port: u16) -> Response {
+/// What answers the request whose head is `head`, served on `port`.
+fn replied<'r, 'a>(head: &[String], site: &'r Site<'a>, port: u16) -> Answer<'r, 'a> {
     let mut words = head.first().map_or("", String::as_str).split(' ');
     let (method, target) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
 
-    if !header(head, "host").is_some_and(|host| {
-        host == format!("127.0.0.1:{port}") || host == format!("localhost:{port}")
-    }) {
+    if !header(head, "host").is_some_and(|host| own(host, port)) {
         return Response::text(
             "421 Misdirected Request",
             "this server answers 127.0.0.1 and localhost at its own port alone",
-        );
+        )
+        .into();
     }
 
     let Some(path) = decoded(target.split(['?', '#']).next().unwrap_or("")) else {
-        return Response::text("400 Bad Request", "the path is not percent-encoded UTF-8");
+        return Response::text("400 Bad Request", "the path is not percent-encoded UTF-8").into();
     };
+    let upgrade =
+        header(head, "upgrade").is_some_and(|upgrade| upgrade.eq_ignore_ascii_case("websocket"));
 
     match (method, site) {
-        ("GET", Site::Page(served)) => file(served, &path),
-        // The root is the run; the page in hand stands beside it, by its own name for its document and its files' page paths.
-        ("GET", Site::Run(run)) if path == "/" => Response::file(INDEX_HTML, &run.runner),
+        ("GET", Site::Page(served)) => file(served, &path).into(),
+        // The root is the run, and its socket; the page in hand stands beside them, by its own name for its document and its files' page paths.
+        ("GET", Site::Run(run)) if path == "/" && upgrade => socket(head, run, port),
+        ("GET", Site::Run(run)) if path == "/" => Response::file(INDEX_HTML, &run.runner).into(),
         ("GET", Site::Run(run)) => match run.current() {
             Some(page) => file(page, &path),
             None => Response::text("404 Not Found", "the run is complete"),
-        },
-        ("POST", Site::Run(run)) if path == "/" => match header(head, "content-type") {
-            Some(content_type) if content_type.starts_with("application/json") => {
-                reported(run, body)
-            }
-            _ => Response::text(
-                "415 Unsupported Media Type",
-                "a report is JSON, under `Content-Type: application/json`",
-            ),
-        },
-        ("POST", Site::Run(_)) => Response::text("404 Not Found", "a report is posted to / alone"),
-        (_, Site::Page(_)) => refused("GET", "a page is read with GET alone"),
+        }
+        .into(),
+        (_, Site::Page(_)) => refused("GET", "a page is read with GET alone").into(),
         (_, Site::Run(_)) => refused(
-            "GET, POST",
-            "a run is read with GET and reported to with POST",
-        ),
+            "GET",
+            "a run is read with GET, and driven over the socket its runner opens at /",
+        )
+        .into(),
+    }
+}
+
+/// Whether `authority` names this server: `127.0.0.1` or `localhost` at `port`.
+fn own(authority: &str, port: u16) -> bool {
+    authority == format!("127.0.0.1:{port}") || authority == format!("localhost:{port}")
+}
+
+/// The socket of `run` the handshake whose head is `head` asks for: refused where it states an `Origin` other than this server's, where it speaks another version or states no key, and where another socket drives the run.
+fn socket<'r, 'a>(head: &[String], run: &'r Run<'a>, port: u16) -> Answer<'r, 'a> {
+    let foreign = header(head, "origin").is_some_and(|origin| {
+        !origin
+            .strip_prefix("http://")
+            .is_some_and(|authority| own(authority, port))
+    });
+    if foreign {
+        return Response::text(
+            "403 Forbidden",
+            "a run's socket is opened by the runner it serves alone",
+        )
+        .into();
+    }
+    if header(head, "sec-websocket-version") != Some(VERSION) {
+        let mut response = Response::text(
+            "426 Upgrade Required",
+            &format!("a run's socket speaks WebSocket version {VERSION}"),
+        );
+        response
+            .headers
+            .push(("Sec-WebSocket-Version", VERSION.to_string()));
+
+        return response.into();
+    }
+    let Some(key) = header(head, "sec-websocket-key") else {
+        return Response::text("400 Bad Request", "a socket's handshake states its key").into();
+    };
+
+    match run.held() {
+        Some(held) => Answer::Socket {
+            accept: derive_accept_key(key.as_bytes()),
+            held,
+        },
+        None => Response::text("409 Conflict", "the run is driven by another page").into(),
     }
 }
 
@@ -386,39 +491,6 @@ fn file(served: &Served, path: &str) -> Response {
         Some(bytes) => Response::file(file, bytes),
         None => Response::text("404 Not Found", "the page holds no file there"),
     }
-}
-
-/// The response to a report `body` spells of `run`: taken where it is the step in hand's, under the run's token, with what the command wrote for it and the next step; ignored otherwise.
-fn reported(run: &Run<'_>, body: &[u8]) -> Response {
-    let report = match Report::parse(body) {
-        Ok(report) => report,
-        Err(why) => return Response::text("400 Bad Request", &why),
-    };
-    if report.run != run.token {
-        return Response::text("403 Forbidden", "the report names no run served here");
-    }
-    let (stdout, stderr) = match report.outcome.streams() {
-        Ok(streams) => streams,
-        Err(why) => return Response::text("400 Bad Request", &why),
-    };
-
-    let mut state = run.state();
-    if step_of(&state, run.pages.len()) != Some(report.step()) {
-        return Response::json(&Reply::ignored(), false);
-    }
-
-    let written = (state.report)(report.step(), Streams { stdout, stderr }, &report.outcome);
-    state.test += 1;
-    if state.test == run.pages[state.page].1 {
-        state.page += 1;
-        state.test = 0;
-    }
-    let next = step_of(&state, run.pages.len());
-
-    Response::json(
-        &Reply::taken(&written.stdout, &written.stderr, next),
-        next.is_none(),
-    )
 }
 
 /// `path` percent-decoded, where what it decodes to is UTF-8: the page path a URL the page wrote names.

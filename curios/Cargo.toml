@@ -37,8 +37,8 @@ curios-browser = { workspace = true }
 # Cranelift behind the runtime's engine: what compiles a module, which the launcher never links. Wasmtime itself is named nowhere in this crate.
 curios-cranelift = { workspace = true }
 clap = { workspace = true }
-# The token a test serve admits reports under, on the workspace's one row for the OS's randomness.
-getrandom = { workspace = true }
+# The socket a test serve's runner drives the run over: its handshake's accept key and its frames, which the serve alone names.
+tungstenite = { version = "0.30.0" }
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]

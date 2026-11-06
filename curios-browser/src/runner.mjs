@@ -1,4 +1,4 @@
-// The runner of a test serve, which `curios test --target browser` answers at its root. It opens one iframe per test, one at a time — the current subject's page at `index.html`, the test's index as the program's argument — admits the page's posts by the window they come from and the origin they come at, reports each test's outcome to the command with `POST /` under the run's token, and shows the lines the command wrote back. The document hands it the token, the first step and the key the page spells its arguments under in a JSON block; the pure pieces are exported for the Node suite beside this file, and `main` runs where a document stands.
+// The runner of a test serve, which `curios test --target browser` answers at its root. It drives the run over a socket it opens at `/`, which the command takes from one runner at a time: each step it is sent it runs in an iframe of its own — the current subject's page at `index.html`, the test's index as the program's argument — admitting the page's posts by the window they come from and the origin they come at, sends the test's outcome back, and shows the lines the command wrote for it. The document hands it the key the page spells its arguments under in a JSON block; the pure pieces are exported for the Node suite beside this file, and `main` runs where a document stands.
 
 /** The outcome reported for a page whose document loaded with no `started` posted: its loader never ran, which a gateway that fails to import causes, and a run with no timeout would otherwise wait on it forever. */
 export const NEVER_STARTED = {
@@ -28,20 +28,19 @@ export const encoded = (bytes) => {
 export const decoded = (text) =>
   Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
 
-/** The report of `step`'s `outcome` under `token`, as `POST /` takes it: the streams in base64, the rest as the page posted it. */
-export const report = (token, step, outcome) =>
+/** `outcome` as the socket carries it to the command: the streams in base64, the rest as the page posted it. */
+export const posted = (outcome) =>
   JSON.stringify({
-    run: token,
-    subject: step.subject,
-    test: step.test,
-    outcome: {
-      stdout: encoded(outcome.stdout),
-      stderr: encoded(outcome.stderr),
-      exitCode: outcome.exitCode,
-      trap: outcome.trap,
-      held: outcome.held,
-    },
+    stdout: encoded(outcome.stdout),
+    stderr: encoded(outcome.stderr),
+    exitCode: outcome.exitCode,
+    trap: outcome.trap,
+    held: outcome.held,
   });
+
+/** What the runner says where its socket closes before the run is complete: never opened, it was refused, and once opened, the command went away. */
+export const UNREACHED = "the run is driven by another page, or has ended\n";
+export const DROPPED = "the command closed the run before it was complete\n";
 
 /** Open `step`'s test in an iframe under `container`, the page's key `argument` carrying the test's index, and resolve to the outcome its page posts — or to `NEVER_STARTED` once the document has loaded with no `started` taken, the check deferred one task so a post made while the loader evaluated is taken first. The iframe is removed once its page has answered. */
 const ran = (step, argument, container) =>
@@ -79,48 +78,37 @@ const ran = (step, argument, container) =>
     container.append(iframe);
   });
 
-/** Report `step`'s `outcome` to the command under `token`, and resolve to its reply: what it wrote, whether it took the report, and the next step. */
-const reported = async (token, step, outcome) => {
-  const response = await fetch("/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: report(token, step, outcome),
-  });
-
-  if (!response.ok) {
-    throw new Error(`the report was answered ${response.status}`);
-  }
-
-  return response.json();
-};
-
-/** Run every step from the document's first, showing what the command writes for each, until the command says the run is complete or that the step was not the one in hand — another runner is reporting the run. */
-export const main = async () => {
+/** Drive the run over a socket at `/`: show what the command writes in each reply, run the step it names and send its outcome back, until a reply names none. A socket closed before then was refused, or dropped by the command, and is said so. */
+export const main = () => {
   const run = JSON.parse(document.getElementById("run").textContent);
   const lines = document.getElementById("lines");
   const frame = document.getElementById("frame");
   const decoder = new TextDecoder();
-  let step = run.next;
+  const socket = new WebSocket(`ws://${globalThis.location.host}/`);
+  let opened = false;
+  let complete = false;
 
-  try {
-    while (step !== null) {
-      const outcome = await ran(step, run.argument, frame);
-      const reply = await reported(run.token, step, outcome);
+  socket.addEventListener("open", () => {
+    opened = true;
+  });
+  socket.addEventListener("message", async (event) => {
+    const reply = JSON.parse(event.data);
+    lines.append(decoder.decode(decoded(reply.stdout)));
+    lines.append(decoder.decode(decoded(reply.stderr)));
 
-      lines.append(decoder.decode(decoded(reply.stdout)));
-      lines.append(decoder.decode(decoded(reply.stderr)));
+    if (reply.next === null) {
+      complete = true;
 
-      if (!reply.taken) {
-        lines.append("the run is being reported by another page\n");
-
-        return;
-      }
-
-      step = reply.next;
+      return;
     }
-  } catch (error) {
-    lines.append(`${String(error)}\n`);
-  }
+
+    socket.send(posted(await ran(reply.next, run.argument, frame)));
+  });
+  socket.addEventListener("close", () => {
+    if (!complete) {
+      lines.append(opened ? DROPPED : UNREACHED);
+    }
+  });
 };
 
 if (globalThis.document !== undefined) {

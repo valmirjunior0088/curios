@@ -25,7 +25,7 @@ curios-archive = { workspace = true }
 # The engine without a backend, on the workspace's one row for Wasmtime: `curios-cranelift` takes the same row for the compiler, so the version that precompiles a `.cwasm` and the version this crate deserializes it with cannot drift.
 wasmtime = { workspace = true, features = ["runtime", "gc", "gc-copying", "std"] }
 log = { version = "0.4.33", optional = true }
-getrandom = { workspace = true }
+getrandom = { version = "0.4.3" }
 socket2 = { version = "0.6.4" }
 rustix = { version = "1.1.4", features = ["event", "fs", "pipe", "process", "stdio", "termios"] }
 # The thread that gives back every terminal a program took when a terminating signal arrives, then lets the signal end the process: the one place the native host handles a signal, through the crate's safe registration rather than a handler of ours.

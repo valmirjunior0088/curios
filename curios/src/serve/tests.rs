@@ -1,4 +1,8 @@
-use {super::*, std::io::Read};
+use {
+    super::*,
+    std::io::Read,
+    tungstenite::{Error, stream::MaybeTlsStream},
+};
 
 /// A page holding its document, its program and one file under a directory, served on a port of its own until the test's process ends.
 fn serving() -> u16 {
@@ -194,16 +198,12 @@ fn page(document: &str, program: &[u8]) -> Served {
     }
 }
 
-/// The token a run under test is served under.
-const TOKEN: &str = "0123abcd";
-
-/// A run of two pages, the first scheduling two tests and the second one, served on a port of its own: a report taken is answered with the guest's stdout and a line naming its step on stdout, and the posted trap, where there is one, on stderr; the thread serving the run ends once every step is taken.
+/// A run of two pages, the first scheduling two tests and the second one, served on a port of its own: an outcome taken is answered with the guest's stdout and a line naming its step on stdout, and the posted trap, where there is one, on stderr; the thread serving the run ends once every step is taken.
 fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
     let listener = bound(0).expect("a port of loopback's own");
     let port = listener.local_addr().unwrap().port();
     let served = thread::spawn(move || {
         let run = Run::new(
-            TOKEN.to_string(),
             vec![
                 (page("<!doctype html>first", b"\0asm1"), 2),
                 (page("<!doctype html>second", b"\0asm2"), 1),
@@ -226,42 +226,47 @@ fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
     (port, served)
 }
 
-/// `POST /` at `port` with `body`, under `content_type` where one is given.
-fn post(port: u16, content_type: Option<&str>, body: &str) -> (String, Vec<String>, Vec<u8>) {
-    let typed = content_type.map_or(String::new(), |content_type| {
-        format!("Content-Type: {content_type}\r\n")
-    });
+/// A run's socket, as a client holds it.
+type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
 
-    asked(
-        port,
-        &format!(
-            "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{typed}Content-Length: {}\r\n\r\n{body}",
-            body.len()
-        ),
-    )
+/// The run's socket at `port`, opened as a runner opens it.
+fn socket(port: u16) -> Result<Socket, Error> {
+    tungstenite::connect(format!("ws://127.0.0.1:{port}/")).map(|(socket, _)| socket)
 }
 
-/// A report of `step` under `token`: `stdout` in base64, and `trap` where there is one.
-fn report(token: &str, step: (usize, usize), stdout: &str, trap: Option<&str>) -> String {
+/// An outcome as a runner sends one: `stdout` in base64, and `trap` where there is one.
+fn outcome(stdout: &str, trap: Option<&str>) -> Message {
     let trap = trap.map_or("null".to_string(), |trap| format!("{trap:?}"));
 
-    format!(
-        "{{\"run\":\"{token}\",\"subject\":{},\"test\":{},\"outcome\":{{\"stdout\":\"{stdout}\",\"stderr\":\"\",\"exitCode\":0,\"trap\":{trap},\"held\":true}}}}",
-        step.0, step.1
-    )
+    Message::text(format!(
+        "{{\"stdout\":\"{stdout}\",\"stderr\":\"\",\"exitCode\":0,\"trap\":{trap},\"held\":true}}"
+    ))
 }
 
-/// The reply `body` spells: whether the report was taken, what was written on each stream, and the next step.
-fn replied_with(body: &[u8]) -> (bool, String, String, Option<Step>) {
-    let reply = Reply::parse(body).expect("a reply");
+/// The next reply `socket` is sent: what was written on each stream, and the next step.
+fn reply(socket: &mut Socket) -> (String, String, Option<Step>) {
+    let Message::Text(text) = socket.read().expect("a reply") else {
+        panic!("a reply is a text message");
+    };
+    let reply = Reply::parse(text.as_bytes()).expect("a reply");
     let (stdout, stderr) = reply.streams().expect("base64");
 
     (
-        reply.taken,
         String::from_utf8(stdout).unwrap(),
         String::from_utf8(stderr).unwrap(),
         reply.next,
     )
+}
+
+/// The status a handshake for the run's socket at `port` is answered with, stating `headers` beside the ones that ask for it.
+fn handshake(port: u16, headers: &str) -> String {
+    asked(
+        port,
+        &format!(
+            "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n{headers}\r\n"
+        ),
+    )
+    .0
 }
 
 #[test]
@@ -275,95 +280,87 @@ fn a_run_is_the_runner_at_the_root_and_the_page_in_hand_beside_it() {
         "{headers:?}"
     );
     let runner = String::from_utf8(runner).unwrap();
-    assert!(
-        runner.contains(&format!(
-            "\"token\":\"{TOKEN}\",\"next\":{{\"subject\":0,\"test\":0}}"
-        )),
-        "{runner}"
-    );
+    assert!(runner.contains("{\"argument\":\"arg\"}"), "{runner}");
     assert_eq!(get(port, "/index.html").2, b"<!doctype html>first");
     assert_eq!(get(port, "/index.wasm").2, b"\0asm1");
     assert_eq!(get(port, "/missing").0, "HTTP/1.1 404 Not Found");
     let (status, headers, _) = asked(
         port,
-        &format!("PUT / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        &format!("POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"),
     );
     assert_eq!(status, "HTTP/1.1 405 Method Not Allowed");
-    assert!(
-        headers.contains(&"Allow: GET, POST".to_string()),
-        "{headers:?}"
-    );
+    assert!(headers.contains(&"Allow: GET".to_string()), "{headers:?}");
 }
 
+/// A browser states the origin of every page that asks for a socket, so one stating another site's is no runner this run serves.
 #[test]
-fn a_report_is_refused_before_it_is_read_without_the_token_the_type_or_a_length_within_the_bound() {
+fn a_socket_is_refused_from_another_origin_at_another_version_or_without_a_key() {
     let (port, _served) = running();
-    let json = Some("application/json");
-    let held = report(TOKEN, (0, 0), "", None);
+    let key = "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n";
 
     assert_eq!(
-        post(port, json, &report("other", (0, 0), "", None)).0,
+        handshake(
+            port,
+            &format!("{key}Sec-WebSocket-Version: 13\r\nOrigin: http://attacker.example\r\n")
+        ),
         "HTTP/1.1 403 Forbidden"
     );
     assert_eq!(
-        post(port, Some("text/plain"), &held).0,
-        "HTTP/1.1 415 Unsupported Media Type"
-    );
-    assert_eq!(
-        post(port, None, &held).0,
-        "HTTP/1.1 415 Unsupported Media Type"
-    );
-    assert_eq!(post(port, json, "{").0, "HTTP/1.1 400 Bad Request");
-    assert_eq!(
-        asked(
+        handshake(
             port,
             &format!(
-                "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\n\r\n"
+                "{key}Sec-WebSocket-Version: 13\r\nOrigin: http://127.0.0.1:{}\r\n",
+                port + 1
             )
-        )
-        .0,
-        "HTTP/1.1 411 Length Required"
+        ),
+        "HTTP/1.1 403 Forbidden"
     );
     assert_eq!(
-        asked(
-            port,
-            &format!(
-                "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
-                BODY + 1
-            )
-        )
-        .0,
-        "HTTP/1.1 413 Content Too Large"
+        handshake(port, &format!("{key}Sec-WebSocket-Version: 8\r\n")),
+        "HTTP/1.1 426 Upgrade Required"
     );
     assert_eq!(
-        asked(
-            port,
-            &format!(
-                "POST /index.html HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"
-            )
-        )
-        .0,
-        "HTTP/1.1 404 Not Found"
+        handshake(port, "Sec-WebSocket-Version: 13\r\n"),
+        "HTTP/1.1 400 Bad Request"
     );
-    // Nothing above took a step: the first is still in hand, so the second is not.
-    assert!(!replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).0);
+    // Nothing above held the run: a runner's socket still opens, from the run's own origin.
+    let mut socket = tungstenite::connect(
+        tungstenite::ClientRequestBuilder::new(format!("ws://127.0.0.1:{port}/").parse().unwrap())
+            .with_header("Origin", format!("http://localhost:{port}")),
+    )
+    .expect("the runner's own origin opens the socket")
+    .0;
+    assert_eq!(
+        reply(&mut socket).2,
+        Some(Step {
+            subject: 0,
+            test: 0
+        })
+    );
 }
 
 #[test]
-fn a_report_is_taken_for_the_step_in_hand_alone_and_the_run_ends_with_its_last() {
+fn the_socket_is_sent_the_step_in_hand_and_drives_the_run_to_its_end() {
     let (port, served) = running();
-    let json = Some("application/json");
+    let mut socket = socket(port).expect("the run's socket opens");
 
-    // A step not in hand is answered with nothing and ignored.
+    // Opened, it is sent the step in hand with nothing written.
     assert_eq!(
-        replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2),
-        (false, String::new(), String::new(), None)
+        reply(&mut socket),
+        (
+            String::new(),
+            String::new(),
+            Some(Step {
+                subject: 0,
+                test: 0
+            })
+        )
     );
     // The first step, its guest having written `hi`: what was written, and the next step.
+    socket.send(outcome("aGk=", None)).unwrap();
     assert_eq!(
-        replied_with(&post(port, json, &report(TOKEN, (0, 0), "aGk=", None)).2),
+        reply(&mut socket),
         (
-            true,
             "histep 0/0\n".to_string(),
             String::new(),
             Some(Step {
@@ -373,8 +370,9 @@ fn a_report_is_taken_for_the_step_in_hand_alone_and_the_run_ends_with_its_last()
         )
     );
     // The first page's last step switches the page in hand.
+    socket.send(outcome("", None)).unwrap();
     assert_eq!(
-        replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).3,
+        reply(&mut socket).2,
         Some(Step {
             subject: 1,
             test: 0
@@ -382,13 +380,38 @@ fn a_report_is_taken_for_the_step_in_hand_alone_and_the_run_ends_with_its_last()
     );
     assert_eq!(get(port, "/index.html").2, b"<!doctype html>second");
     assert_eq!(get(port, "/index.wasm").2, b"\0asm2");
-    // A duplicate is ignored.
-    assert!(!replied_with(&post(port, json, &report(TOKEN, (0, 1), "", None)).2).0);
     // The last step, trapped: its trap on stderr, no next step, and the serve ends, its port closed.
+    socket.send(outcome("", Some("boom"))).unwrap();
     assert_eq!(
-        replied_with(&post(port, json, &report(TOKEN, (1, 0), "", Some("boom"))).2),
-        (true, "step 1/0\n".to_string(), "boom".to_string(), None)
+        reply(&mut socket),
+        ("step 1/0\n".to_string(), "boom".to_string(), None)
     );
     served.join().unwrap().unwrap();
     assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
+}
+
+#[test]
+fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_in_hand() {
+    let (port, _served) = running();
+    let mut driving = socket(port).expect("the run's socket opens");
+    reply(&mut driving);
+    driving.send(outcome("", None)).unwrap();
+    reply(&mut driving);
+
+    match socket(port) {
+        Err(Error::Http(response)) => assert_eq!(response.status(), 409),
+        other => panic!("a second socket is refused, not {:?}", other.map(|_| ())),
+    }
+
+    // Once the driving socket has closed, the run is let go, and the next to open resumes it where it stands.
+    driving.close(None).unwrap();
+    while driving.read().is_ok() {}
+    let mut resumed = socket(port).expect("a socket opens once none drives the run");
+    assert_eq!(
+        reply(&mut resumed).2,
+        Some(Step {
+            subject: 0,
+            test: 1
+        })
+    );
 }

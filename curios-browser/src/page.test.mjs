@@ -334,7 +334,7 @@ const serving = (t, directory) => {
   return { port, ended };
 };
 
-test("a test page served by the command answers its word through its gateway, and the run ends on its report", async (t) => {
+test("a test page served by the command answers its word through its gateway, and the run ends on its outcome", async (t) => {
   const gateway = "export const twice = (n) => n * 2n;\n";
   const root = tree(t, {
     "app/curios.toml": manifest({
@@ -351,12 +351,11 @@ test("a test page served by the command answers its word through its gateway, an
   const { port, ended } = serving(t, join(root, "app"));
   const base = `http://127.0.0.1:${await port}`;
 
-  // The runner at the root, with the run's token and its first step; the page beside it, fetched into a directory of its own as a browser fetches it.
+  // The runner at the root, with the key a page spells its arguments under; the page beside it, fetched into a directory of its own as a browser fetches it.
   const runner = await (await fetch(`${base}/`)).text();
   const run = JSON.parse(
     /<script type="application\/json" id="run">(.*?)<\/script>/.exec(runner)[1],
   );
-  assert.deepEqual(run.next, { subject: 0, test: 0 });
   const page = join(root, "fetched");
   for (const path of ["index.html", "index.js", "web/dom.js"]) {
     mkdirSync(dirname(join(page, path)), { recursive: true });
@@ -368,6 +367,25 @@ test("a test page served by the command answers its word through its gateway, an
   const program = new Uint8Array(
     await (await fetch(`${base}/index.wasm`)).arrayBuffer(),
   );
+
+  // The run's socket, as the runner opens it: sent the first step at once.
+  const socket = new WebSocket(`ws://127.0.0.1:${await port}/`);
+  const replies = [];
+  const waiting = [];
+  socket.addEventListener("message", (event) => {
+    const reply = JSON.parse(event.data);
+    const waiter = waiting.shift();
+    if (waiter === undefined) {
+      replies.push(reply);
+    } else {
+      waiter(reply);
+    }
+  });
+  const replied = () =>
+    replies.length > 0
+      ? Promise.resolve(replies.shift())
+      : new Promise((resolve) => waiting.push(resolve));
+  assert.deepEqual((await replied()).next, { subject: 0, test: 0 });
 
   const posted = [];
   globalThis.parent = {
@@ -388,25 +406,16 @@ test("a test page served by the command answers its word through its gateway, an
   assert.equal(posted[0][0].type, "started");
   assert.equal(posted[1][0].outcome.held, true);
 
-  const reply = await (
-    await fetch(`${base}/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        run: run.token,
-        subject: 0,
-        test: 0,
-        outcome: {
-          stdout: Buffer.from(posted[1][0].outcome.stdout).toString("base64"),
-          stderr: Buffer.from(posted[1][0].outcome.stderr).toString("base64"),
-          exitCode: outcome.exitCode,
-          trap: outcome.trap,
-          held: outcome.held,
-        },
-      }),
-    })
-  ).json();
-  assert.equal(reply.taken, true);
+  socket.send(
+    JSON.stringify({
+      stdout: Buffer.from(posted[1][0].outcome.stdout).toString("base64"),
+      stderr: Buffer.from(posted[1][0].outcome.stderr).toString("base64"),
+      exitCode: outcome.exitCode,
+      trap: outcome.trap,
+      held: outcome.held,
+    }),
+  );
+  const reply = await replied();
   assert.equal(reply.next, null);
   assert.equal(
     Buffer.from(reply.stdout, "base64").toString(),

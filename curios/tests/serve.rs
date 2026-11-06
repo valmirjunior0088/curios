@@ -1,6 +1,7 @@
-//! `run --target browser` and `test --target browser` end to end: the compiler started on a port of loopback's own, the port read off its `Serving` line, and its page or its run asked for over loopback as a browser asks — the runner's part played here with canned reports, since no engine runs a page in this suite, which the page suite under Node does.
+//! `run --target browser` and `test --target browser` end to end: the compiler started on a port of loopback's own, the port read off its `Serving` line, and its page or its run asked for over loopback as a browser asks — the runner's part played here with canned outcomes over the run's socket, since no engine runs a page in this suite, which the page suite under Node does.
 
 use {
+    curios_browser::{Reply, Step},
     curios_common::{digest, test_support::*},
     std::{
         fs,
@@ -11,6 +12,7 @@ use {
         sync::mpsc,
         thread::{self, JoinHandle},
     },
+    tungstenite::{Message, WebSocket, stream::MaybeTlsStream},
 };
 
 const GATEWAY: &[u8] = b"export const double = (n) => n * 2n;\n";
@@ -147,6 +149,13 @@ impl Serving {
         self.asked(&request)
     }
 
+    /// The run's socket, opened as a runner opens it.
+    fn socket(&self) -> WebSocket<MaybeTlsStream<TcpStream>> {
+        tungstenite::connect(format!("ws://127.0.0.1:{}/", self.port))
+            .expect("the run's socket opens")
+            .0
+    }
+
     /// Stop a command that serves until stopped, and take what it wrote.
     fn stopped(mut self) -> (Vec<u8>, Vec<u8>) {
         self.child.kill().unwrap();
@@ -228,29 +237,29 @@ fn tested(root: &Path) {
     fs::write(root.join("quiet.crs"), "/std/print(\"quiet\\n\")\n").unwrap();
 }
 
-/// The token the runner document `runner` carries.
-fn token_of(runner: &[u8]) -> String {
-    let document = String::from_utf8_lossy(runner);
-    let (_, after) = document
-        .split_once("\"token\":\"")
-        .expect("the runner carries the run's token");
-
-    after.split('"').next().unwrap().to_string()
-}
-
-/// A report of `step`'s `outcome`, as the runner posts one, under `token`.
-fn report(token: &str, step: (usize, usize), outcome: &str) -> String {
-    format!(
-        "{{\"run\":\"{token}\",\"subject\":{},\"test\":{},\"outcome\":{outcome}}}",
-        step.0, step.1
-    )
-}
-
-/// An outcome as a page posts one: the streams in base64 — `stdout` given encoded — and the rest as the harness resolves it.
-fn posted(stdout: &str, exit_code: &str, trap: &str, held: &str) -> String {
-    format!(
+/// An outcome as a runner sends one over the run's socket: the streams in base64 — `stdout` given encoded — and the rest as the harness resolves it.
+fn posted(stdout: &str, exit_code: &str, trap: &str, held: &str) -> Message {
+    Message::text(format!(
         "{{\"stdout\":\"{stdout}\",\"stderr\":\"\",\"exitCode\":{exit_code},\"trap\":{trap},\"held\":{held}}}"
+    ))
+}
+
+/// The next reply `socket` is sent: what the command wrote on stdout, and the next step.
+fn reply(socket: &mut WebSocket<MaybeTlsStream<TcpStream>>) -> (String, Option<Step>) {
+    let Message::Text(text) = socket.read().expect("a reply") else {
+        panic!("a reply is a text message");
+    };
+    let reply = Reply::parse(text.as_bytes()).expect("a reply");
+
+    (
+        String::from_utf8(reply.streams().expect("base64").0).unwrap(),
+        reply.next,
     )
+}
+
+/// The step `subject`/`test`.
+fn step(subject: usize, test: usize) -> Option<Step> {
+    Some(Step { subject, test })
 }
 
 /// Each needle's first occurrence sits after the previous one's.
@@ -264,7 +273,7 @@ fn in_order(haystack: &str, needles: &[&str]) {
     }
 }
 
-/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, takes each step's report in plan order — refusing one without the token or the type and ignoring one of a step not in hand — switches the page with a subject's last report, prints what native prints, and exits with the tri-state once every step is taken.
+/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, drives the run over the socket the runner opens there — sending each step in plan order and taking each outcome as its step's — switches the page with a subject's last outcome, prints what native prints, and exits with the tri-state once every step is taken.
 #[test]
 fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_taken() {
     let root = Temporary::new("cli-serve", "test");
@@ -276,12 +285,6 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     assert!(
         headers.contains(&"Content-Type: text/html; charset=utf-8".to_string()),
         "{headers:?}"
-    );
-    let token = token_of(&runner);
-    assert!(
-        String::from_utf8_lossy(&runner).contains("\"next\":{\"subject\":0,\"test\":0}"),
-        "{}",
-        String::from_utf8_lossy(&runner)
     );
     let (status, _, page) = serving.get("/index.html");
     assert_eq!(status, "HTTP/1.1 200 OK");
@@ -300,58 +303,22 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let exited = posted("", "7", "null", "null");
     let own = posted("L293bjogcGFzc2VkCg==", "0", "null", "true");
 
-    let json = Some("application/json");
-    assert_eq!(
-        serving
-            .post("/", json, report("nope", (0, 0), &held).as_bytes())
-            .0,
-        "HTTP/1.1 403 Forbidden"
-    );
-    assert_eq!(
-        serving
-            .post(
-                "/",
-                Some("text/plain"),
-                report(&token, (0, 0), &held).as_bytes()
-            )
-            .0,
-        "HTTP/1.1 415 Unsupported Media Type"
-    );
-    assert_eq!(serving.post("/", json, b"{").0, "HTTP/1.1 400 Bad Request");
-    let (status, _, body) = serving.post("/", json, report(&token, (0, 1), &failed).as_bytes());
-    assert_eq!(status, "HTTP/1.1 200 OK");
-    assert_eq!(
-        body,
-        b"{\"taken\":false,\"stdout\":\"\",\"stderr\":\"\",\"next\":null}"
-    );
-
-    for (step, outcome, next) in [
-        ((0, 0), &held, "{\"subject\":0,\"test\":1}"),
-        ((0, 1), &failed, "{\"subject\":0,\"test\":2}"),
-        ((0, 2), &exited, "{\"subject\":1,\"test\":0}"),
+    let mut socket = serving.socket();
+    assert_eq!(reply(&mut socket), (String::new(), step(0, 0)));
+    for (outcome, next) in [
+        (held, step(0, 1)),
+        (failed, step(0, 2)),
+        (exited, step(1, 0)),
     ] {
-        let (status, _, body) = serving.post("/", json, report(&token, step, outcome).as_bytes());
-        let body = String::from_utf8(body).unwrap();
-        assert_eq!(status, "HTTP/1.1 200 OK", "{step:?}");
-        assert!(
-            body.starts_with("{\"taken\":true,") && body.ends_with(&format!(",\"next\":{next}}}")),
-            "{step:?}: {body}"
-        );
+        socket.send(outcome).unwrap();
+        assert_eq!(reply(&mut socket).1, next);
     }
-    // A duplicate is ignored, and the page in hand is now the executable's.
-    let (_, _, body) = serving.post("/", json, report(&token, (0, 2), &exited).as_bytes());
-    assert!(String::from_utf8_lossy(&body).starts_with("{\"taken\":false,"));
+    // The library's last outcome switched the page in hand to the executable's.
     let (status, _, executable) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert_ne!(executable, library);
-
-    let (status, _, body) = serving.post("/", json, report(&token, (1, 0), &own).as_bytes());
-    assert_eq!(status, "HTTP/1.1 200 OK");
-    assert!(
-        String::from_utf8_lossy(&body).ends_with(",\"next\":null}"),
-        "{}",
-        String::from_utf8_lossy(&body)
-    );
+    socket.send(own).unwrap();
+    assert_eq!(reply(&mut socket), ("/own: passed\n".to_string(), None));
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(1));
@@ -387,19 +354,12 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     tested(&root);
     let serving = Serving::start(&root, &["test", "--target", "browser", "--filter", "/own"]);
 
-    let token = token_of(&serving.get("/").2);
-    let (status, _, body) = serving.post(
-        "/",
-        Some("application/json"),
-        report(
-            &token,
-            (0, 0),
-            &posted("L293bjogcGFzc2VkCg==", "0", "null", "true"),
-        )
-        .as_bytes(),
-    );
-    assert_eq!(status, "HTTP/1.1 200 OK");
-    assert!(String::from_utf8_lossy(&body).ends_with(",\"next\":null}"));
+    let mut socket = serving.socket();
+    assert_eq!(reply(&mut socket).1, step(0, 0));
+    socket
+        .send(posted("L293bjogcGFzc2VkCg==", "0", "null", "true"))
+        .unwrap();
+    assert_eq!(reply(&mut socket).1, None);
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(0), "{}", String::from_utf8_lossy(&stderr));

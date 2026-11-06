@@ -471,7 +471,7 @@ fn body(record: &TestRecord, lines: &mut String) {
     }
 }
 
-/// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root and the pages beside it one subject at a time, each report taken as the step in hand's and printed as native prints a test's end. `Ok(true)` when every selected test passed.
+/// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root, the socket it drives the run over, and the pages beside them one subject at a time, each outcome taken as the step in hand's and printed as native prints a test's end. `Ok(true)` when every selected test passed.
 pub(crate) fn serve_tests(
     budget: u64,
     selection: Selection,
@@ -521,7 +521,6 @@ pub(crate) fn serve_tests(
         return Ok(printer.green());
     }
 
-    let token = minted()?;
     let listener = bound(port)?;
     let port = listener
         .local_addr()
@@ -531,7 +530,7 @@ pub(crate) fn serve_tests(
     serving(&url(port, &[]));
     printer.opened(&planned[0]);
 
-    let run = Run::new(token, pages, |step, guest, posted| {
+    let run = Run::new(pages, |step, guest, posted| {
         let mut written = printer.ended(outcome_of(posted), Some(&guest));
 
         // The subject's last test closes it, and opens the next subject or ends the run, in the same reply.
@@ -559,12 +558,4 @@ fn outcome_of(posted: &Posted) -> Outcome {
             Outcome::Trapped("the page reported neither a word, an exit nor a trap".to_string())
         }
     }
-}
-
-/// A run's token: the OS's randomness in hex, rendered into the runner alone, so a page some other site loads cannot file a report.
-fn minted() -> Result<String, String> {
-    let mut bytes = [0; 32];
-    getrandom::fill(&mut bytes).map_err(|error| format!("cannot mint the run's token: {error}"))?;
-
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
