@@ -83,7 +83,7 @@ pub(crate) fn held<'a>(
 
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
 ///
-/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort. The polarity vector and the variance vector an entry carries are elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
+/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and the variance vector it carries, which a later unit's elaborator compares two instances by and `accept` holds to the vector the walk computes: an entry carrying another is judged again, as a walk over every declaration would judge it. The polarity vector it carries is elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
 pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
     let InductDecl {
         universe_context,
@@ -93,13 +93,14 @@ pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
         module: _,
         rep_public: _,
         polarities: _,
-        variances: _,
+        variances,
     } = this;
 
     *universe_context == that.universe_context
         && *arity == that.arity
         && *constructors == that.constructors
         && *result_sort == that.result_sort
+        && *variances == that.variances
 }
 
 /// [`induct_alike`] for two `struct` registry entries, whose fields its arity ends in.
@@ -111,12 +112,13 @@ pub(crate) fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
         module: _,
         rep_public: _,
         polarities: _,
-        variances: _,
+        variances,
     } = this;
 
     *universe_context == that.universe_context
         && *arity == that.arity
         && *result_sort == that.result_sort
+        && *variances == that.variances
 }
 
 /// One unit in scope, read where it stands: its module, the places its unit keeps for the module's names, and the record the certifier's walk over it filed.

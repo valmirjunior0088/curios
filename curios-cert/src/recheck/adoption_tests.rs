@@ -266,9 +266,9 @@ fn an_adopted_verdict_is_the_baselines_partiality_included() {
     );
 }
 
-/// A registry entry is the baseline's by what the certifier reads of it, its terms. Elaboration's stamps take no part — the polarity vector and the variance vector, in whose place a walk holds the ones the certifier computed, the owning module and the representation's privacy — so an entry differing from the baseline's in those alone is the baseline's, and one differing in its variance vector or in a field's type is not.
+/// A registry entry is the baseline's by what the certifier reads of it: its terms, and the variance vector it carries, which `accept` holds to the vector the walk computes. Elaboration's other stamps take no part — the polarity vector, in whose place a walk holds the one the certifier computed, the owning module and the representation's privacy — so an entry differing from the baseline's in those alone is the baseline's, and one differing in its variance vector or in a field's type is not.
 ///
-/// Mutation-checked against each comparison: taken over the whole entry, the stamped pair is another declaration, and so is the family carrying another variance vector; and with the arity left out the record is the baseline's.
+/// Mutation-checked against each comparison: taken over the whole entry, the stamped pair is another declaration; with the variance vector left out, the family carrying another is the baseline's; and with the arity left out the record is the baseline's.
 #[test]
 fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
     let held = two_registry_entries(Varied::Nothing);
@@ -283,11 +283,11 @@ fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
         "an entry differing from the baseline's in elaboration's stamps alone is another declaration",
     );
     assert!(
-        induct_alike(
+        !induct_alike(
             &family(&two_registry_entries(Varied::Variance)),
             &family(&held)
         ),
-        "a family differing from the baseline's in the variance vector it carries alone is another declaration",
+        "a family differing from the baseline's in the variance vector it carries alone is the baseline's",
     );
     assert!(
         !struct_alike(
@@ -556,12 +556,9 @@ fn varied_family(variances: Vec<Variance>) -> Definitions {
     )
 }
 
-/// The one check a judged item gets that an adopted one does not: `accept` refuses a carried variance vector claiming an irrelevance the walk denies, and `induct_alike` reads no carried vector, so the item is the baseline's and the walk adopts it.
-///
-/// What the adopted vector buys is nothing a judgment reads: the vector the kernel files for the entry is the baseline's, which the walk computed over the same telescopes, so every comparison of two instances reads the truthful one and the carried lie is the elaborator of a later unit's to be refused by.
+/// `accept` refuses a carried variance vector claiming an irrelevance the walk denies, and `induct_alike` reads the carried vector, so an item whose terms are the baseline's and whose vector is not is judged again, and refused, as a walk over every declaration refuses it: whole and baseline walks agree, and no unit is stored carrying a vector its walk denies, which a later unit's elaborator would compare instances by.
 #[test]
-fn a_carried_variance_the_walk_denies_is_refused_where_the_item_is_judged_and_not_where_it_is_adopted()
- {
+fn a_carried_variance_the_walk_denies_is_refused_over_its_baseline_as_over_none() {
     let truthful = versioned(varied_family(vec![Variance::Invariant]));
     let certification = walked(&truthful).certification;
     let claimed = versioned(varied_family(vec![Variance::Irrelevant]));
@@ -577,10 +574,12 @@ fn a_carried_variance_the_walk_denies_is_refused_where_the_item_is_judged_and_no
     );
 
     let over = walked_over(&claimed, &truthful, &certification);
-    assert_eq!(
+    assert!(
+        over.verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
+        "and the walk over the baseline adopts the carried irrelevance: {:?}",
         over.verdicts,
-        Vec::new(),
-        "and the walk over the baseline adopts the item without the check",
     );
     assert_eq!(
         over.certification.variances(&global("Levelled")),

@@ -1106,3 +1106,70 @@ let /lib/Q : Prop =
     let stepped = history.step("lib", Written::CoreText, reordered);
     assert!(undeclared(&stepped), "{stepped:?}");
 }
+
+/// A family whose one edit is the variance vector it carries, now claiming an irrelevance its telescope denies: a walk over every declaration refuses the claim where the family is declared, and so does a walk over the baseline, which held the family carrying another vector. Mutation-checked: with `induct_alike` reading no carried vector, the second step builds.
+#[test]
+fn a_family_stepped_to_a_variance_its_telescope_denies_is_refused_over_its_baseline() {
+    let carrying = |variance: &str| {
+        fill!(
+            r"#{universe_context = {parameter_count = 1}, variances = [${variance}]}
+induct /u/Box: #{level = u + 1} Type
+| box(T: #{level = u} Type)
+end
+",
+            variance = variance,
+        )
+    };
+    let denied = |stepped: &Result<(), Stopped>| {
+        matches!(
+            stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("u/Box")) && matches!(verdict.error, Error::VarianceDenied { .. })
+        )
+    };
+
+    let mut whole = History::new();
+    let alone = whole.step("u", Written::CoreText, &carrying("Irrelevant"));
+    assert!(denied(&alone), "{alone:?}");
+
+    let mut history = History::new();
+    history
+        .step("u", Written::CoreText, &carrying("Invariant"))
+        .expect("the family builds");
+    let stepped = history.step("u", Written::CoreText, &carrying("Irrelevant"));
+    assert!(denied(&stepped), "{stepped:?}");
+}
+
+/// [`a_family_stepped_to_a_variance_its_telescope_denies_is_refused_over_its_baseline`] for a record, whose entry `struct_alike` compares. Mutation-checked: with `struct_alike` reading no carried vector, the second step builds.
+#[test]
+fn a_record_stepped_to_a_variance_its_fields_deny_is_refused_over_its_baseline() {
+    let carrying = |variance: &str| {
+        fill!(
+            r"#{
+    universe_context = {parameter_count = 1},
+    value_sort = #{level = u + 1} Type,
+    variances = [${variance}]}
+struct /u/R: #{level = u + 1} Type { field: #{level = u} Type }
+",
+            variance = variance,
+        )
+    };
+    let denied = |stepped: &Result<(), Stopped>| {
+        matches!(
+            stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("u/R")) && matches!(verdict.error, Error::VarianceDenied { .. })
+        )
+    };
+
+    let mut whole = History::new();
+    let alone = whole.step("u", Written::CoreText, &carrying("Irrelevant"));
+    assert!(denied(&alone), "{alone:?}");
+
+    let mut history = History::new();
+    history
+        .step("u", Written::CoreText, &carrying("Invariant"))
+        .expect("the record builds");
+    let stepped = history.step("u", Written::CoreText, &carrying("Irrelevant"));
+    assert!(denied(&stepped), "{stepped:?}");
+}
