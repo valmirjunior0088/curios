@@ -203,6 +203,8 @@ pub enum Error {
     RepeatedTag(Atom),
     /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
+    /// A value of a case, or an arm of an elimination, at a tag its family does not declare: the family is held, and has no case of that name.
+    UndeclaredCase { family: Global, tag: Atom },
     /// A recursive member that is a proof or a type, in a group whose recursion does not descend. Assuming such a member at its declared type is what certifies `rec f : False = f` — erasure deletes proofs and types wholesale, so a non-descending one proves anything. A non-descending *value* recursion is not an error: `rec` is general recursion by design, and a program that loops is only a program that loops.
     NotDescending { type_: Box<Term> },
     /// A declaration that is not strictly positive: `part` of `name` reaches back to `name` at a non-accepting polarity. Without this gate, `induct Bad | c(f : (Bad) -> False) end` inhabits `False` in four lines with no recursion at all.
@@ -442,6 +444,11 @@ impl fmt::Display for Displayed<'_> {
             Error::MissingArm { family, tag } => write!(
                 formatter,
                 "no arm for `{tag}` of `{}`, and its case is not impossible",
+                family.faithful()
+            ),
+            Error::UndeclaredCase { family, tag } => write!(
+                formatter,
+                "`{}` declares no case `{tag}`",
                 family.faithful()
             ),
             Error::NotDescending { type_ } => {

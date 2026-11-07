@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_common::fill,
-    curios_core::{Atom, Term},
+    curios_common::{Qualifier, fill},
+    curios_core::{Atom, Global, Term},
 };
 
 /// `Box`'s case states its family's parameter as a proposition where the family declares a type, so read off the case as written its payload is a proof and `mk(true)` is `mk(false)`: `cast` carries `Code`'s `True` at the one to its `False` at the other, and the term the module closes with is `False`.
@@ -1282,6 +1282,27 @@ fn a_case_stating_fewer_parameters_than_its_family_is_refused_by_its_count() {
                         actual: 0
                     }
                 )),
+        "{verdicts:?}"
+    );
+}
+
+/// A value of a case its family does not declare is refused as that case, by the family and the tag: the family is declared, and naming it undeclared would send a reader to look for a declaration that is there. Mutation-checked: with the lookup refusing the family as undeclared, the error is `Undeclared`.
+#[test]
+fn a_value_of_a_case_its_family_does_not_declare_is_refused_by_the_tag() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n#{node = Variant} /std/Bool/False/mk()\n",
+        PROPOSITIONS
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::UndeclaredCase { family, tag },
+            }] if *family == Global::Authored(Qualifier::from(["std", "Bool", "False"]))
+                && tag.to_string() == "mk"
+        ),
         "{verdicts:?}"
     );
 }

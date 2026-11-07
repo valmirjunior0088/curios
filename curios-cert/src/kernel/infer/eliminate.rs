@@ -77,7 +77,10 @@ pub(super) fn check_induct_arms(
 
         let signature = at
             .signature(kernel, tag)?
-            .ok_or_else(|| Error::Undeclared(family.name))?;
+            .ok_or_else(|| Error::UndeclaredCase {
+                family: family.name,
+                tag: tag.clone(),
+            })?;
 
         let outcome = kernel.scoped(|kernel| {
             open_payload(kernel, signature, |kernel, binders, _payload, targets| {
@@ -108,7 +111,10 @@ fn check_arm(
 ) -> Result<(), Error> {
     let signature = at
         .signature(kernel, tag)?
-        .ok_or_else(|| Error::Undeclared(family.name))?;
+        .ok_or_else(|| Error::UndeclaredCase {
+            family: family.name,
+            tag: tag.clone(),
+        })?;
 
     if signature.len() != arm.arity() {
         return Err(Error::Arity {
@@ -186,7 +192,10 @@ pub(crate) fn enter_arm(
     let signature = kernel
         .induct_at(family)?
         .signature(kernel, tag)?
-        .ok_or_else(|| Error::Undeclared(family.name))?;
+        .ok_or_else(|| Error::UndeclaredCase {
+            family: family.name,
+            tag: tag.clone(),
+        })?;
     if signature.len() != binders.len() {
         return Err(Error::Arity {
             counted: Counted::ArmBinders,
@@ -389,7 +398,10 @@ pub(super) fn guard_large_elimination(
         [tag] => {
             let signature = at
                 .signature(kernel, tag)?
-                .ok_or_else(|| Error::Undeclared(family.name))?;
+                .ok_or_else(|| Error::UndeclaredCase {
+                    family: family.name,
+                    tag: tag.clone(),
+                })?;
 
             let pinned = kernel.scoped(|kernel| {
                 open_payload(kernel, signature, |_kernel, binders, _payload, targets| {

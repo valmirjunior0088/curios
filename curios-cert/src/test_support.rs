@@ -9,6 +9,7 @@ variants!(Error {
     Unbound,
     NotClosed,
     Undeclared,
+    UndeclaredCase,
     Redeclared,
     Unclassified,
     NotASort,

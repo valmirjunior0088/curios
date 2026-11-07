@@ -326,7 +326,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             check_along(kernel, at.parameters(), params)?;
             let signature = at
                 .signature(kernel, tag)?
-                .ok_or_else(|| Error::Undeclared(*name))?;
+                .ok_or_else(|| Error::UndeclaredCase {
+                    family: *name,
+                    tag: tag.clone(),
+                })?;
 
             if signature.len() != payload.len() {
                 return Err(Error::Arity {
