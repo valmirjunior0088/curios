@@ -562,3 +562,18 @@ fn a_form_that_implies_a_definition_needs_a_scope() {
         ));
     }
 }
+
+/// A level's `max` holds one part a head and one constant, as the printer writes it, so a `max` naming one twice is refused by name where the repeat stands rather than read as one of the two: `max(u + 1, u)` would otherwise be `u`, a level below the one written, and `max(5, 0)` would be `0`. Mutation-checked: with the parts folded by assignment, both read.
+#[test]
+fn a_max_naming_one_part_twice_is_refused_where_the_repeat_stands() {
+    for (text, part, at) in [
+        ("#{level = max(u + 1, u)} Type", "`u`", 21),
+        ("#{level = max(5, 0)} Type", "a constant", 17),
+    ] {
+        assert_eq!(
+            refused(text),
+            (Refusal::RepeatedLevelPart(part.to_string()), Some(at)),
+            "{text}"
+        );
+    }
+}

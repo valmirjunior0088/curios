@@ -261,7 +261,7 @@ pub fn quality_read(value: &CoreValue) -> Result<Quality, ReadError> {
     }
 }
 
-/// A level as the term it is: a constant, a parameter by its letter, an unsolved level `#{id = n} ?`, each under an offset, `u + 1`, and several as their `max`.
+/// A level as the term it is: a constant, a parameter by its letter, an unsolved level `#{id = n} ?`, each under an offset, `u + 1`, and several as their `max`, which names each head and the constant at most once, as the printer writes one.
 pub fn level_read(term: &crate::Term<CoreText>) -> Result<Level, ReadError> {
     let malformed = || {
         ReadError::at(
@@ -282,12 +282,25 @@ pub fn level_read(term: &crate::Term<CoreText>) -> Result<Level, ReadError> {
         _ => vec![term],
     };
     let mut level = Level::zero();
+    let mut constant = false;
     for part in parts {
-        match level_part(part).ok_or_else(malformed)? {
-            LevelPart::Constant(constant) => level.constant = constant,
-            LevelPart::Atom(head, offset) => {
-                level.atoms.insert(head, offset);
+        let repeated = match level_part(part).ok_or_else(malformed)? {
+            LevelPart::Constant(value) => {
+                level.constant = value;
+                let repeated = constant;
+                constant = true;
+                repeated.then(|| "a constant".to_string())
             }
+            LevelPart::Atom(head, offset) => level.atoms.insert(head, offset).map(|_| match head {
+                LevelHead::Param(param) => format!("`{}`", parameter_letter(param.0)),
+                LevelHead::Meta(meta) => format!("`#{{id = {}}} ?`", meta.0),
+            }),
+        };
+        if let Some(repeated) = repeated {
+            return Err(ReadError::at(
+                Refusal::RepeatedLevelPart(repeated),
+                part.span(),
+            ));
         }
     }
 

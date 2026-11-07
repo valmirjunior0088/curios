@@ -8,6 +8,7 @@ variants!(Refusal {
     ProgramForm,
     UnknownField,
     RepeatedField,
+    RepeatedLevelPart,
     UnknownNode,
     Malformed,
     UnknownIntrinsic,

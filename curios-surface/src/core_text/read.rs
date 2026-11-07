@@ -39,6 +39,8 @@ pub enum Refusal {
     UnknownField(String),
     /// A field the decorator states twice.
     RepeatedField(String),
+    /// A head, or the constant, a level's `max` names twice: the printer writes one part a head, and a reader taking either would read a level other than the one written.
+    RepeatedLevelPart(String),
     /// A `node` no form of this shape fills.
     UnknownNode(String),
     /// A value of a shape its field does not take.
@@ -68,6 +70,9 @@ impl fmt::Display for ReadError {
             }
             Refusal::RepeatedField(field) => {
                 write!(formatter, "a decorator states `{field}` twice")
+            }
+            Refusal::RepeatedLevelPart(part) => {
+                write!(formatter, "a `max` names {part} twice")
             }
             Refusal::UnknownNode(node) => {
                 write!(formatter, "`node = {node}` names no node this form fills")
