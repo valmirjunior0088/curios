@@ -345,7 +345,12 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     let right = Term::apply(handing_back(true), [Term::free_var(&a), Term::free_var(&n)]);
 
     assert_eq!(convert(&mut kernel, &nat_, &left, &right), Ok(false));
-    assert_eq!(kernel.convert_hit(&nat_, &left, &right), None);
+    assert_eq!(
+        kernel
+            .convert_hit(&nat_, &left, &right)
+            .map(|remembered| remembered.verdict),
+        None
+    );
 
     let ground = Term::type_ground();
     let x = binder(40, "x");
@@ -354,10 +359,20 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
         [nat_type()],
     );
     assert_eq!(convert(&mut kernel, &ground, &redex, &nat_type()), Ok(true));
-    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), Some(true));
+    assert_eq!(
+        kernel
+            .convert_hit(&ground, &redex, &nat_type())
+            .map(|remembered| remembered.verdict),
+        Some(true)
+    );
 
     kernel.restore_budget();
-    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), None);
+    assert_eq!(
+        kernel
+            .convert_hit(&ground, &redex, &nat_type())
+            .map(|remembered| remembered.verdict),
+        None
+    );
 }
 
 /// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.

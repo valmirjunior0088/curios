@@ -12,7 +12,7 @@
 //!
 //! # What is remembered
 //!
-//! A goal decided with no pair of heads left apart is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A refusal that left a pair of heads apart inside its own unfolding is not kept, the pair being one, perhaps, where it is met outside it. `Pairs::apart` counts them, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
+//! A goal decided with no pair of heads left apart is a fact of every path that unfolds none of the pairs its derivation unfolded, and its verdict is kept, with those pairs, for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. Inside the unfolding of a pair it unfolded, a derivation would meet that pair apart, so the verdict answers there no more than it answers a goal it was not reached for. A refusal that left a pair of heads apart inside its own unfolding is not kept, the pair being one, perhaps, where it is met outside it. `Pairs::apart` counts them, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
@@ -29,7 +29,7 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
+    super::{Converted, Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     crate::{case_target_indices, instantiate_universes, pinned_instance, struct_reaches_itself},
     curios_analysis::{Classes, Within},
     curios_common::recurse,
@@ -62,6 +62,8 @@ struct Pairs {
     unfolding: Vec<(Term, Term)>,
     /// How many times a pair of heads was met inside its own unfolding and left apart. A verdict reached while this moved rests on what was being unfolded then, and is a fact about that path alone; one reached while it stood still is what [`compare`] remembers.
     apart: u64,
+    /// For each comparison under way, innermost last, the pairs of heads its derivation has unfolded, each once: what a verdict it reaches rests on ([`Pairs::rested`]).
+    unfolded: Vec<Vec<(Term, Term)>>,
 }
 
 impl Pairs {
@@ -80,8 +82,43 @@ impl Pairs {
             return false;
         }
         self.unfolding.push((this.clone(), that.clone()));
+        self.rest_on(&[(this.clone(), that.clone())]);
 
         true
+    }
+
+    /// Whether any of `pairs` is being unfolded on the current path, whichever side each head is on.
+    fn unfolding_any(&self, pairs: &[(Term, Term)]) -> bool {
+        pairs.iter().any(|(this, that)| {
+            self.unfolding.iter().any(|(held_this, held_that)| {
+                (held_this == this && held_that == that) || (held_this == that && held_that == this)
+            })
+        })
+    }
+
+    /// Record that the comparison in hand rests on `pairs` having been unfolded.
+    fn rest_on(&mut self, pairs: &[(Term, Term)]) {
+        let Some(rested) = self.unfolded.last_mut() else {
+            return;
+        };
+        for pair in pairs {
+            if !rested.contains(pair) {
+                rested.push(pair.clone());
+            }
+        }
+    }
+
+    /// Run `compare` as a comparison of its own, handing back what it decided and the pairs its derivation unfolded, which the comparison around it rests on too.
+    fn rested<T>(&mut self, compare: impl FnOnce(&mut Self) -> T) -> (T, Vec<(Term, Term)>) {
+        self.unfolded.push(Vec::new());
+        let decided = compare(self);
+        let rested = self
+            .unfolded
+            .pop()
+            .expect("every comparison pushed its own");
+        self.rest_on(&rested);
+
+        (decided, rested)
     }
 
     /// Release the pair the last [`Pairs::unfold`] recorded, its comparison having returned.
@@ -117,42 +154,75 @@ fn compare(
 
         // Snapshotted before any rule runs: a pair left apart inside `by_their_own_type`'s own unfolding is one this comparison rested on as much as one left apart below, and a verdict reached across either is a fact about this path alone.
         let apart = pairs.apart;
+        let (decided, unfolded) = pairs.rested(|pairs| decide(kernel, pairs, type_, this, that));
 
-        // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
-        let untyped = matches!(&**type_, Subterm::Sort(_));
-        if untyped && by_their_own_type(kernel, pairs, this, that)? {
-            return Ok(true);
+        // Remembered where the rules below reached it and deciding it left no pair apart inside its own unfolding, with the pairs it unfolded, and never where it ran the budget out, which is no verdict.
+        match decided {
+            Ok(Decided::Reached(verdict)) => {
+                if pairs.apart == apart {
+                    kernel.convert_store(
+                        type_,
+                        this,
+                        that,
+                        Converted {
+                            verdict,
+                            unfolded: unfolded.into(),
+                        },
+                    );
+                }
+                Ok(verdict)
+            }
+            Ok(Decided::Answered(verdict)) => Ok(verdict),
+            Err(error) => Err(error),
         }
-
-        // Two projections of one recursive group at two universe instances are a verdict, not a comparison: unfolding either reproduces the pair one level down, so their levels decide here, before `reduce_forced` opens a function member into its lambda. A family's former reproduces nothing, so its levels refuse nothing here: the pair goes on to the nodes it builds, whose arm compares them by the family's variance.
-        if let Some(verdict) = rec_instances(kernel, this, that)
-            && (verdict || !projects_a_former(this))
-        {
-            return Ok(verdict);
-        }
-
-        // A verdict reached before with no pair left apart is the verdict here, whatever is being unfolded now: it rested on none of it.
-        if let Some(verdict) = kernel.convert_hit(type_, this, that) {
-            return Ok(verdict);
-        }
-
-        // Two calls of one definition by their spines, on the pair as posed and ahead of eta by the goal's type. Eta hands on each call applied to a binder or projected, which is no call of a definition at its head, so tried after it the spines would never be compared at a function or a record type.
-        // Then the same member of two recursive groups by the groups as binders, before `by_the_type` forces either into what it unfolds to.
-        let outcome = match one_definition_by_its_spines(kernel, pairs, this, that)?
-            || two_groups(kernel, pairs, this, that)?
-        {
-            true => Ok(true),
-            false => by_the_type(kernel, pairs, type_, this, that),
-        };
-
-        // Remembered where deciding it left no pair apart inside its own unfolding, and never where it ran the budget out, which is no verdict.
-        if let Ok(verdict) = &outcome
-            && pairs.apart == apart
-        {
-            kernel.convert_store(type_, this, that, *verdict);
-        }
-        outcome
     })
+}
+
+/// What [`decide`] made of a goal: a verdict its rules reached, which [`compare`] may remember, or one answered without them.
+enum Decided {
+    Reached(bool),
+    Answered(bool),
+}
+
+/// The rules [`compare`] decides a goal it could not discharge at once by, in their order, inside the comparison of its own [`Pairs::rested`] runs it as.
+fn decide(
+    kernel: &mut Kernel,
+    pairs: &mut Pairs,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<Decided, Error> {
+    // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
+    let untyped = matches!(&**type_, Subterm::Sort(_));
+    if untyped && by_their_own_type(kernel, pairs, this, that)? {
+        return Ok(Decided::Answered(true));
+    }
+
+    // Two projections of one recursive group at two universe instances are a verdict, not a comparison: unfolding either reproduces the pair one level down, so their levels decide here, before `reduce_forced` opens a function member into its lambda. A family's former reproduces nothing, so its levels refuse nothing here: the pair goes on to the nodes it builds, whose arm compares them by the family's variance.
+    if let Some(verdict) = rec_instances(kernel, this, that)
+        && (verdict || !projects_a_former(this))
+    {
+        return Ok(Decided::Answered(verdict));
+    }
+
+    // A verdict reached before with no pair left apart is the verdict here wherever none of the pairs its derivation unfolded is being unfolded: a derivation here would unfold each as that one did and reach what it reached, and this comparison rests on them as that one did.
+    if let Some(remembered) = kernel.convert_hit(type_, this, that)
+        && !pairs.unfolding_any(&remembered.unfolded)
+    {
+        pairs.rest_on(&remembered.unfolded);
+        return Ok(Decided::Answered(remembered.verdict));
+    }
+
+    // Two calls of one definition by their spines, on the pair as posed and ahead of eta by the goal's type. Eta hands on each call applied to a binder or projected, which is no call of a definition at its head, so tried after it the spines would never be compared at a function or a record type.
+    // Then the same member of two recursive groups by the groups as binders, before `by_the_type` forces either into what it unfolds to.
+    let verdict = match one_definition_by_its_spines(kernel, pairs, this, that)?
+        || two_groups(kernel, pairs, this, that)?
+    {
+        true => true,
+        false => by_the_type(kernel, pairs, type_, this, that)?,
+    };
+
+    Ok(Decided::Reached(verdict))
 }
 
 /// A goal the spines of one definition did not decide: eta where its type directs one, and the two sides' heads otherwise.

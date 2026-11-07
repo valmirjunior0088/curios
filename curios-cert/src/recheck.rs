@@ -25,6 +25,8 @@ mod case_tests;
 #[cfg(test)]
 mod closed_computation_tests;
 #[cfg(test)]
+mod conversion_tests;
+#[cfg(test)]
 mod elimination_tests;
 #[cfg(test)]
 mod entry_tests;

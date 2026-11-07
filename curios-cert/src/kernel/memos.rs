@@ -98,7 +98,7 @@ pub(super) struct Aside {
     halves: HashMap<Term, (Prefix, Option<Erased>)>,
     types: HashMap<Term, (Prefix, (Term, bool))>,
     checked: HashMap<Checked, (Prefix, bool)>,
-    converted: [HashMap<Compared, (Prefix, bool)>; 2],
+    converted: [HashMap<Compared, (Prefix, Converted)>; 2],
     classified: HashMap<Term, Rc<Classification>>,
 }
 
@@ -107,6 +107,13 @@ type Checked = Keyed<(Term, Term)>;
 
 /// A comparison as the table of verdicts is keyed, its type and then its two sides, told apart as a [`Checked`] is.
 type Compared = Keyed<(Term, Term, Term)>;
+
+/// A comparison's remembered verdict, with the pairs of heads its derivation unfolded: a fact wherever none of them is being unfolded, since a derivation there unfolds each as this one did ([Conversion recurrence](../../../../documentation/design/soundness/conversion-recurrence.md)).
+#[derive(Clone)]
+pub struct Converted {
+    pub verdict: bool,
+    pub unfolded: Rc<[(Term, Term)]>,
+}
 
 pub(super) struct Memos {
     /// Whether the memos are consulted at all. On by default; `Kernel::uncached` exists so a test can assert that switching them off changes no *semantic* verdict — the property that makes them an evaluation strategy rather than a store.
@@ -127,8 +134,8 @@ pub(super) struct Memos {
     types: Lives<Term, (Term, bool)>,
     /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept, and whether its check closed a group that does not descend: a refusal ends its item's check.
     checked: Lives<Checked, bool>,
-    /// The verdict of each comparison decided with no pair of heads left apart inside its own unfolding, at its type: `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that left a pair of heads apart is true of the path it was reached on, and is not kept — see `convert`'s `Pairs`. One for each of the two reductions, as the sorts have: a comparison reduces its sides, so a verdict plain reduction reached is not the verdict of a judgment's, which may have asked.
-    converted: [Lives<Compared, bool>; 2],
+    /// The verdict of each comparison decided with no pair of heads left apart inside its own unfolding, at its type, with the pairs its derivation unfolded ([`Converted`]): `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that left a pair of heads apart is true of the path it was reached on, and is not kept — see `convert`'s `Pairs`. One for each of the two reductions, as the sorts have: a comparison reduces its sides, so a verdict plain reduction reached is not the verdict of a judgment's, which may have asked.
+    converted: [Lives<Compared, Converted>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]): a closed term's value is a function of the definition store, as a local-free reduct is, and lives the declaration with them. With the memos off it lives one run ([`Memos::begin_closed_run`]), which the machine cannot do without: a fold over a neutral accumulator is linear by it.
     closed: ClosedMemo,
     /// What classifying each stuck operation found (`curios_analysis::Classification`), by the operation as reduction left it, for the stuck fold above it to extend rather than walk the operation again. One no conversion class entered reads the operation alone — its walk reduces nothing and asks nothing — so it lives the declaration, local-bearing as the operation is; one the kernel's conversion classed rests on what that question read, the equations in force and the types the locals stand at, as a local-bearing reduct does, and lives as long as they ([`Memos::begin_equations`]). Only a judgment's reduction takes a stuck fold again, so there is no table for plain reduction.
@@ -335,7 +342,7 @@ impl Memos {
         that: &Term,
         in_arm: bool,
         plain: bool,
-    ) -> Option<(Option<Prefix>, bool)> {
+    ) -> Option<(Option<Prefix>, Converted)> {
         let life = self.judged(&[type_, this, that], in_arm)?;
 
         self.converted[usize::from(plain)].get(
@@ -351,10 +358,10 @@ impl Memos {
         in_arm: bool,
         plain: bool,
         prefix: Prefix,
-        verdict: bool,
+        converted: Converted,
     ) {
         if let Some(life) = self.judged(&[&goal.0, &goal.1, &goal.2], in_arm) {
-            self.converted[usize::from(plain)].insert(Keyed::new(goal), life, prefix, verdict);
+            self.converted[usize::from(plain)].insert(Keyed::new(goal), life, prefix, converted);
         }
     }
 

@@ -770,8 +770,8 @@ impl<'s> Kernel<'s> {
         }
     }
 
-    /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has. Only a verdict reached with no pair of heads left apart is ever filed, so it is the verdict whatever is being unfolded now.
-    pub(crate) fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<bool> {
+    /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has, with the pairs of heads its derivation unfolded. Only a verdict reached with no pair of heads left apart is ever filed, so it is the verdict wherever none of those pairs is being unfolded.
+    pub(crate) fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<Converted> {
         self.standing(self.memos.converted(
             type_,
             this,
@@ -781,14 +781,20 @@ impl<'s> Kernel<'s> {
         ))
     }
 
-    /// Remember the verdict of comparing `this` with `that` at `type_`.
-    pub(crate) fn convert_store(&mut self, type_: &Term, this: &Term, that: &Term, verdict: bool) {
+    /// Remember the verdict of comparing `this` with `that` at `type_`, with the pairs of heads its derivation unfolded.
+    pub(crate) fn convert_store(
+        &mut self,
+        type_: &Term,
+        this: &Term,
+        that: &Term,
+        converted: Converted,
+    ) {
         self.memos.store_converted(
             (type_.clone(), this.clone(), that.clone()),
             self.has_refinements(),
             self.scope.plain(),
             self.scope.prefix(),
-            verdict,
+            converted,
         );
     }
 
