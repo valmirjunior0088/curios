@@ -3188,10 +3188,13 @@ fn into_core_unit_within(
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-unit-holds-its-own-definitions-and-the-prelude-is-an-environment.md`.
     //
     // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Definitions::ordered`).
-    let made = flat_items
-        .into_iter()
-        .map(FlatItem::into_core)
-        .collect::<Vec<_>>();
+    let made = {
+        let minted = shared.minted.borrow();
+        flat_items
+            .into_iter()
+            .map(|item| item.into_core(&minted))
+            .collect::<Vec<_>>()
+    };
     // Over a baseline, the unit is a version of the baseline's: its items, records, names and declarations, and what it minted, imported and anchored, the baseline's with what the walk changed.
     let (items, records, places, declared, bodies, texts, revision, renamed) = match &baseline {
         Some(baseline) => {

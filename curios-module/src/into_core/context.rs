@@ -288,27 +288,33 @@ impl FlatItem {
             .collect()
     }
 
-    pub(super) fn into_core(self) -> curios_core::Item {
+    /// The item, a group closed over locals its declaration's lowering never minted, as `minted` records it.
+    pub(super) fn into_core(self, minted: &curios_core::Minted) -> curios_core::Item {
         match self {
             FlatItem::Let(let_) => curios_core::Item::Let(Box::new(let_.into_core())),
             FlatItem::Kept(rec) => curios_core::Item::Rec(rec),
-            FlatItem::Rec(items) => curios_core::Item::Rec(group(items)),
+            FlatItem::Rec(items) => {
+                let floor = items
+                    .iter()
+                    .map(|let_| minted.of(&let_.name).binders)
+                    .max()
+                    .unwrap_or(0);
+
+                curios_core::Item::Rec(group(items, floor))
+            }
         }
     }
 }
 
-/// The group `items` are. Each member's written name stays as written in its siblings' terms and its own, its place kept for whatever reads the lowered text; elaboration, which knows the group, binds it. So the group's binder is named by nothing yet, and closes over locals counted from zero, which no lowered top-level term holds free.
-fn group(items: Vec<FlatLet>) -> curios_core::RecItem {
+/// The group `items` are. Each member's written name stays as written in its siblings' terms and its own, its place kept for whatever reads the lowered text; elaboration, which knows the group, binds it. So the group's binder is named by nothing yet, and closes over locals counted from `floor`, what the declaration's lowering minted: a name that resolved to nothing lowers to a local below it, which the group would otherwise take for one of its members.
+fn group(items: Vec<FlatLet>, floor: u64) -> curios_core::RecItem {
     curios_core::RecItem::new(
         items
             .into_iter()
-            .enumerate()
-            .map(|(index, let_)| {
+            .zip(floor..)
+            .map(|(let_, index)| {
                 let hint = let_.name.qualifier().map(Qualifier::last);
-                (
-                    curios_core::Free::local(index as u64, hint),
-                    let_.into_core(),
-                )
+                (curios_core::Free::local(index, hint), let_.into_core())
             })
             .collect(),
     )

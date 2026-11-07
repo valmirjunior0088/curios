@@ -240,3 +240,40 @@ fn a_name_under_a_root_out_of_reach_refuses_its_declaration_alone() {
         "{error}"
     );
 }
+
+// A name no declaration holds lowers to a local that elaboration reports, and a group is closed over locals of its own, so the one is never read as a member of the other: the call here would otherwise be a call of `g`, and the program would run.
+#[test]
+fn a_name_a_group_never_declares_is_never_read_as_its_member() {
+    let error = refused(
+        r#"
+        use /std/{Nat};
+
+        let f(n: Nat) -> Nat = Q(n)
+        and g(m: Nat) -> Nat = match m | 0 => 100 | k + 1 => f(k) end;
+
+        /std/print("x")
+    "#,
+    );
+    assert!(error.contains("`Q` is not in scope"), "{error}");
+}
+
+#[test]
+fn a_family_of_a_group_is_told_how_to_reach_a_name_its_parameter_reads() {
+    let error = refused(
+        r#"
+        use /std/{Bool};
+
+        induct A(n: Nat): Type | mkA(other: Zed(true))
+        and Zed(m: Bool): Type | mkB(other: A(0))
+        end
+
+        /std/print("x")
+    "#,
+    );
+    assert!(
+        error.contains(
+            "`Nat` is not in scope\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+        ),
+        "{error}"
+    );
+}
