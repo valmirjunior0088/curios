@@ -30,13 +30,6 @@ impl Euclid {
         }
     }
 
-    pub(super) fn kind(self) -> &'static str {
-        match self {
-            Euclid::Quotient => "Nat/div",
-            Euclid::Remainder => "Nat/rem",
-        }
-    }
-
     pub(super) fn fold(self, left: Nat, right: Nat) -> Option<Nat> {
         match self {
             Euclid::Quotient => left.checked_div(right),
@@ -251,7 +244,7 @@ pub(super) fn nat_euclid_split(dividend: &Term, divisor: &Natural) -> Option<(Te
     ))
 }
 
-/// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BytesGet`'s pattern), never a Rust panic.
+/// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero leaves the division stuck, past the domain its bound states (following `BytesGet`'s pattern), never a Rust panic.
 ///
 /// Past the closed fold, two unconditional laws let a literal divisor see through a symbolic dividend. Writing the dividend as `inner + floor` and the divisor as `n`:
 ///
@@ -267,16 +260,17 @@ pub(super) fn reduce_nat_division(
     non_zero: &Term,
     euclid: Euclid,
 ) -> Result<Subterm, ReduceError> {
-    let extent = right.extent().or_else(|| left.extent());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
+    // A literal zero divisor is past the domain `non_zero` states, which only a hypothesis stating the impossible reaches, and no natural answers it: the division stays stuck, and none of the laws below is read over it.
     let divisor = right.as_nat().and_then(|divisor| divisor.to_natural());
     if divisor.as_ref().is_some_and(Natural::is_zero) {
-        return Err(ReduceError::DivisionByZero {
-            kind: euclid.kind(),
-            extent,
-        });
+        return Ok(Subterm::Intrinsic(euclid.rebuild(
+            left,
+            right,
+            non_zero.clone(),
+        )));
     }
 
     if let (Some(dividend), Some(by)) = (left.as_nat(), right.as_nat())

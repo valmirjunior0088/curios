@@ -1755,33 +1755,6 @@ impl fmt::Display for Displayed<'_> {
                     "missing arm '{tag}': its index target is not provably impossible at the scrutinee's indices — write the arm"
                 )
             }
-            Error::BytesGetOutOfBounds { len, index } => {
-                write!(f, "Bytes.get index {index} out of bounds (length {len})")
-            }
-            Error::BytesSliceOutOfRange { len, start, length } => {
-                write!(
-                    f,
-                    "Bytes.slice window of {length} at {start} out of range (length {len})"
-                )
-            }
-            Error::ListGetOutOfBounds { len, index } => {
-                write!(f, "List.get index {index} out of bounds (length {len})")
-            }
-            Error::ListSliceOutOfRange { len, start, length } => {
-                write!(
-                    f,
-                    "List.slice window of {length} at {start} out of range (length {len})"
-                )
-            }
-            Error::DivisionByZero { kind } => {
-                write!(f, "division by zero in {kind}")
-            }
-            Error::IntToNatNegative { value } => {
-                write!(f, "Int/to_nat of {value}, a value no Nat holds")
-            }
-            Error::NatToByteAbove { value } => {
-                write!(f, "Nat/to_byte of {value}, a value no Byte holds")
-            }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(
                     f,

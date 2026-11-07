@@ -10,6 +10,8 @@ struct Host {
     stated: Option<Vec<Term>>,
     /// Which payloads of any constructor this host's entries state are proofs: none, unless a test states some.
     proofs: Vec<bool>,
+    /// The bodies of the declarations an instance names, as stated, before its levels are read into them: none, unless a test states some.
+    declared: BTreeMap<Global, Term>,
     memo: ClosedMemo,
 }
 
@@ -22,6 +24,7 @@ impl Host {
             minted: 0,
             stated: None,
             proofs: Vec::new(),
+            declared: BTreeMap::new(),
             memo: ClosedMemo::default(),
         }
     }
@@ -57,8 +60,8 @@ impl ClosedHost for Host {
         self.definitions.get(name)
     }
 
-    fn closed_body_at(&self, _: &Global, _: &Universes) -> Option<&Term> {
-        None
+    fn closed_body_at(&self, name: &Global, _: &Universes) -> Option<&Term> {
+        self.declared.get(name)
     }
 
     fn stated_payload(
@@ -101,11 +104,6 @@ fn bytes(data: Vec<u8>) -> Term {
 fn motive() -> Scope<Many> {
     let m = binder(100, "m");
     Scope::close(Many(1), &[&m], nat_type())
-}
-
-/// A stand-in for a discharged bound; reduction never inspects one.
-fn qed() -> Term {
-    nat(0)
 }
 
 /// The induction-hypothesis form: a structural fold whose cons arm combines the recursive result, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the hypothesis nesting — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
@@ -335,33 +333,42 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
     );
 }
 
-/// The substitution positions catch: an argument whose evaluation errors falls back to its unreduced spelling, so a dead erroring argument costs nothing observable — exactly the deferral the hosts get by substituting unreduced. The demanded twin below is the control: the same error at a demanded position surfaces.
+/// The substitution positions catch: an argument whose evaluation errors falls back to its unreduced spelling, so a dead erroring argument costs nothing observable — exactly the deferral the hosts get by substituting unreduced. The demanded twin below is the control: the same error at a demanded position surfaces. The error is an instance whose level, read into its declaration's body, overflows the offset a level holds.
 #[test]
 fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {
     let mut host = Host::new(100_000);
     let (x, y) = (binder(0, "x"), binder(1, "y"));
+    let parameter = UniverseParam(0);
+    let mut highest = Level::param(parameter);
+    highest.atoms.insert(LevelHead::Param(parameter), u32::MAX);
+    let overflowing = Global::Authored(curios_common::Qualifier::from(["overflowing"]));
+    host.declared.insert(overflowing, Term::type_at(highest));
+    let erroring = || {
+        Term::instance(
+            overflowing,
+            Universes {
+                levels: vec![
+                    Level::param(parameter)
+                        .succ()
+                        .expect("one past a parameter"),
+                ],
+                qualities: Vec::new(),
+            },
+        )
+    };
 
     let first = Term::apply(
-        Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&x)),
-        [
-            nat(7),
-            Term::intrinsic(Intrinsic::NatDiv {
-                dividend: nat(1),
-                divisor: nat(0),
-                non_zero: qed(),
-            }),
-        ],
+        Term::func(
+            [(x, nat_type()), (y, Term::type_ground())],
+            Term::free_var(&x),
+        ),
+        [nat(7), erroring()],
     );
     assert_eq!(reduce_closed(&mut host, first, Demand::Forced), Ok(nat(7)));
 
-    let demanded = Term::intrinsic(Intrinsic::NatDiv {
-        dividend: nat(1),
-        divisor: nat(0),
-        non_zero: qed(),
-    });
     assert!(matches!(
-        reduce_closed(&mut host, demanded, Demand::Forced),
-        Err(ReduceError::DivisionByZero { .. })
+        reduce_closed(&mut host, erroring(), Demand::Forced),
+        Err(ReduceError::Universe(_))
     ));
 }
 

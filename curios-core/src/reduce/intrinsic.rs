@@ -469,29 +469,25 @@ pub fn reduce_intrinsic(
                 _ => Intrinsic::ByteToNat(inner),
             }))
         }
-        // A closed operand past the carrier is *refused* rather than masked. Masking would make this total by changing a value, which is the one thing a narrowing may not do; the `below` field states the domain instead, so a program that cannot prove its operand small does not compile rather than silently computing a different byte.
+        // A closed operand past the carrier is *left stuck* rather than masked. Masking would make this total by changing a value, which is the one thing a narrowing may not do; the `below` field states the domain instead, so a program that cannot prove its operand small does not compile rather than silently computing a different byte, and one that reaches a closed operand past it does so under a hypothesis stating the impossible, where no byte answers the narrowing.
         Intrinsic::NatToByte { nat, below } => {
             let nat = reducer.reduce_forced(nat.clone())?;
             if let Some(operand) = intrinsic.undone(&nat) {
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
-            let extent = nat.extent();
-            match nat.as_nat().map(|value| value.to_natural()) {
-                Some(Some(value)) => {
-                    match u32::try_from(&value)
-                        .ok()
-                        .and_then(|value| u8::try_from(value).ok())
-                    {
-                        Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
-                        None => Err(ReduceError::NatToByteAbove { value, extent }),
-                    }
-                }
-                _ => Ok(Subterm::Intrinsic(Intrinsic::NatToByte {
+            let byte = nat
+                .as_nat()
+                .and_then(|value| value.to_natural())
+                .and_then(|value| u32::try_from(&value).ok())
+                .and_then(|value| u8::try_from(value).ok());
+            Ok(Subterm::Intrinsic(match byte {
+                Some(value) => Intrinsic::Byte(value),
+                None => Intrinsic::NatToByte {
                     nat,
                     below: below.clone(),
-                })),
-            }
+                },
+            }))
         }
         Intrinsic::NatEql(left, right) => reduce_nat_compare(
             reducer,
@@ -1090,9 +1086,8 @@ pub fn reduce_intrinsic(
             },
             |inner| Intrinsic::NatToFlt(*rounding, inner),
         ),
-        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
+        // `Int/to_nat` of a negative literal is a value no natural holds — left stuck like a zero divisor, never wrapped. The bound the operation states is false there, so only a hypothesis stating the impossible reaches it, and no natural answers it. A symbolic operand rebuilds the neutral term too, carrying the proof it was handed.
         Intrinsic::IntToNat { int, non_neg } => {
-            let extent = int.extent();
             let int = reducer.reduce_forced(int.clone())?;
 
             // The other half of the round trip: ℕ embeds in ℤ, so a natural widened to `Int` narrows back to itself whatever proof the narrowing was handed — `Intrinsic::undone` — and so does any non-negative combination of widened naturals, which is the image of its preimage. `int_preimage` reads it; a single widened atom is its one-summand case.
@@ -1106,11 +1101,11 @@ pub fn reduce_intrinsic(
                 }
             }
 
-            match int.as_int() {
-                Some(value) => match Natural::try_from(&value) {
-                    Ok(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
-                    Err(_) => Err(ReduceError::IntToNatNegative { value, extent }),
-                },
+            match int
+                .as_int()
+                .and_then(|value| Natural::try_from(&value).ok())
+            {
+                Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
                 None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat {
                     int,
                     non_neg: non_neg.clone(),
@@ -1258,17 +1253,18 @@ pub fn reduce_intrinsic(
             index,
             in_range,
         } => {
-            let extent = index.extent();
             let bytes = reducer.reduce_forced(bytes.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
-            // A concrete index into a literal run.
+            // A concrete index into a literal run. One past its end is past the domain `in_range` states, which only a hypothesis stating the impossible reaches, and no byte answers it: the read stays stuck.
             if let (Subterm::Intrinsic(Intrinsic::Bytes(run)), Some(i)) = (&*bytes, i) {
-                return element_of_run(run, i).ok_or(ReduceError::BytesGetOutOfBounds {
-                    len: run.len(),
-                    index: i,
-                    extent,
-                });
+                return Ok(element_of_run(run, i).unwrap_or_else(|| {
+                    Subterm::Intrinsic(Intrinsic::bytes_get(
+                        bytes.clone(),
+                        index_reduced.clone(),
+                        in_range.clone(),
+                    ))
+                }));
             }
             // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BytesSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
             if let Subterm::Intrinsic(Intrinsic::BytesAppend {
@@ -1307,12 +1303,13 @@ pub fn reduce_intrinsic(
                         )))
                         .map(Term::unwrap_or_clone);
                 }
-                Some(Windowed::Past { total, start, .. }) => {
-                    return Err(ReduceError::BytesGetOutOfBounds {
-                        len: total,
-                        index: start,
-                        extent,
-                    });
+                // Past the operand's end: as a literal run's, stuck.
+                Some(Windowed::Past) => {
+                    return Ok(Subterm::Intrinsic(Intrinsic::bytes_get(
+                        bytes.clone(),
+                        index_reduced.clone(),
+                        in_range.clone(),
+                    )));
                 }
                 None => {}
             }
@@ -1355,10 +1352,18 @@ pub fn reduce_intrinsic(
             length,
             within,
         } => {
-            let extent = start.extent().or_else(|| length.extent());
             let bytes = reducer.reduce_forced(bytes.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let length_reduced = reducer.reduce_forced(length.clone())?;
+            // A window past the operand's end is past the domain `within` states, which only a hypothesis stating the impossible reaches, and no run answers it: the slice stays stuck.
+            let stuck = |bytes: &Term, start: &Term, length: &Term| {
+                Subterm::Intrinsic(Intrinsic::bytes_slice(
+                    bytes.clone(),
+                    start.clone(),
+                    length.clone(),
+                    within.clone(),
+                ))
+            };
             // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — a window covering everything is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BytesSlice` reduce to its base, so a `Bytes/slice` over the whole value costs no copy and converts against the base directly.
             if matches!(
                 &*start_reduced,
@@ -1375,15 +1380,10 @@ pub fn reduce_intrinsic(
             let n = as_index(&length_reduced);
             // A concrete slice of a literal run.
             if let (Subterm::Intrinsic(Intrinsic::Bytes(run)), Some(s), Some(n)) = (&*bytes, s, n) {
-                return match s.checked_add(n).and_then(|e| run.slice(s, e)) {
-                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::Bytes(slice))),
-                    None => Err(ReduceError::BytesSliceOutOfRange {
-                        len: run.len(),
-                        start: s,
-                        length: n,
-                        extent,
-                    }),
-                };
+                return Ok(match s.checked_add(n).and_then(|e| run.slice(s, e)) {
+                    Some(slice) => Subterm::Intrinsic(Intrinsic::Bytes(slice)),
+                    None => stuck(&bytes, &start_reduced, &length_reduced),
+                });
             }
             // The window, by whichever strategy reaches it — see `FreeMonoid::window`.
             match FreeMonoid::Bytes.window(
@@ -1410,17 +1410,8 @@ pub fn reduce_intrinsic(
                         )))
                         .map(Term::unwrap_or_clone);
                 }
-                Some(Windowed::Past {
-                    total,
-                    start,
-                    count,
-                }) => {
-                    return Err(ReduceError::BytesSliceOutOfRange {
-                        len: total,
-                        start,
-                        length: count,
-                        extent,
-                    });
+                Some(Windowed::Past) => {
+                    return Ok(stuck(&bytes, &start_reduced, &length_reduced));
                 }
                 None => {}
             }
@@ -1627,7 +1618,7 @@ pub fn reduce_intrinsic(
             let list = reducer.reduce_forced(list.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
-            // A concrete index into a literal run.
+            // A concrete index into a literal run, and one past its end stuck, as `BytesGet`'s is.
             if let (
                 Subterm::Intrinsic(Intrinsic::List {
                     element: _,
@@ -1636,15 +1627,15 @@ pub fn reduce_intrinsic(
                 Some(i),
             ) = (&*list, i)
             {
-                let len = elems.len();
-                return match elems.get(i).cloned().map(Term::unwrap_or_clone) {
-                    Some(elem) => Ok(elem),
-                    None => Err(ReduceError::ListGetOutOfBounds {
-                        len,
-                        index: i,
-                        extent: index.extent(),
-                    }),
-                };
+                return Ok(match elems.get(i).cloned().map(Term::unwrap_or_clone) {
+                    Some(elem) => elem,
+                    None => Subterm::Intrinsic(Intrinsic::list_get(
+                        type_.clone(),
+                        list.clone(),
+                        index_reduced.clone(),
+                        in_range.clone(),
+                    )),
+                });
             }
             // An index into a map is the function at the index into its argument: a map is elementwise, and the bound carries over unchanged because `len(map(xs, f))` reduces to `len(xs)` and a bound is a proof. The `get` twin of the `len` law above.
             if let Subterm::Intrinsic(Intrinsic::ListMap {
@@ -1691,12 +1682,13 @@ pub fn reduce_intrinsic(
                         )))
                         .map(Term::unwrap_or_clone);
                 }
-                Some(Windowed::Past { total, start, .. }) => {
-                    return Err(ReduceError::ListGetOutOfBounds {
-                        len: total,
-                        index: start,
-                        extent: index.extent(),
-                    });
+                Some(Windowed::Past) => {
+                    return Ok(Subterm::Intrinsic(Intrinsic::list_get(
+                        type_.clone(),
+                        list.clone(),
+                        index_reduced.clone(),
+                        in_range.clone(),
+                    )));
                 }
                 None => {}
             }
@@ -1774,12 +1766,14 @@ pub fn reduce_intrinsic(
                             items: slice.to_vec(),
                         }))
                     }
-                    None => Err(ReduceError::ListSliceOutOfRange {
-                        len: elems.len(),
-                        start: s,
-                        length: n,
-                        extent: start.extent().or_else(|| length.extent()),
-                    }),
+                    // Past its end, stuck, as `BytesSlice`'s is.
+                    None => Ok(Subterm::Intrinsic(Intrinsic::list_slice(
+                        type_.clone(),
+                        list.clone(),
+                        start_reduced.clone(),
+                        length_reduced.clone(),
+                        within.clone(),
+                    ))),
                 };
             }
             // The window, by whichever strategy reaches it — see `FreeMonoid::window`.
@@ -1808,17 +1802,14 @@ pub fn reduce_intrinsic(
                         )))
                         .map(Term::unwrap_or_clone);
                 }
-                Some(Windowed::Past {
-                    total,
-                    start: from,
-                    count,
-                }) => {
-                    return Err(ReduceError::ListSliceOutOfRange {
-                        len: total,
-                        start: from,
-                        length: count,
-                        extent: start.extent().or_else(|| length.extent()),
-                    });
+                Some(Windowed::Past) => {
+                    return Ok(Subterm::Intrinsic(Intrinsic::list_slice(
+                        type_.clone(),
+                        list.clone(),
+                        start_reduced.clone(),
+                        length_reduced.clone(),
+                        within.clone(),
+                    )));
                 }
                 None => {}
             }

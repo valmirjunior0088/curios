@@ -1,6 +1,6 @@
 //! An intrinsic node as the kernel types it, written as Core text and put with nothing in scope: at what its variant produces and with each operand at what its variant demands, whatever the text around it states, so a bound proves the decision its own operands make, and a handle no host gave is a value of no proposition outside the description it stands in.
 
-use {super::test_support::*, crate::*, curios_common::fill};
+use {super::test_support::*, crate::*, curios_analysis::test_support::*, curios_common::fill};
 
 /// Every byte is below 256, which the carriers' algebra decides with nothing written, so `below` is `qed` at every byte; a byte narrowed from 300 would read back as 300, and `below` at it is a proof of `Holds(300 < 256)`, which is `False`. The narrowing's bound is stated over its own operand, `Holds(300 < 256)`, and `qed` proves `True`.
 const NARROWED_PAST_ITS_DOMAIN: &str = r#"
@@ -20,7 +20,7 @@ const NARROWED_PAST_ITS_DOMAIN: &str = r#"
 )
 "#;
 
-// `below` types, so the one refusal is the bound's, at the closing term: what stands first between the term and `False` is the operand `Intrinsic::signature` demands of `NatToByte`, and the fold's refusal of a narrowing past the carrier (`ReduceError::NatToByteAbove`) second.
+// `below` types, so the one refusal is the bound's, at the closing term: what stands between the term and `False` is the operand `Intrinsic::signature` demands of `NatToByte`, the fold leaving a narrowing past the carrier stuck and `Byte/to_nat` undoing it to `300`.
 //
 // Mutation-checked at `Intrinsic::signature`: with the `NatToByte` row's bound stated as `holds(Self::Bool(true))` rather than over its `nat` operand, the bound types, and no mismatch is refused.
 #[test]
@@ -40,6 +40,34 @@ fn a_narrowing_bound_is_a_proof_about_its_own_operand() {
             }]
         ),
         "{verdicts:?}"
+    );
+}
+
+/// A narrowing past the carrier and a division by zero, each under a hypothesis stating that its domain holds, which is the impossible: the bound's operand makes each node well typed, so the folds leave both stuck and the declarations holding them are judged as any other, `absurd` proving `False` from `Holds(300 < 256)` as `below` reads the narrowing back to `300`.
+const PAST_THEIR_DOMAINS: &str = r#"
+#{proof = true}
+let /below : (b: #ByteType) -> /std/Bool/Holds(#NatLt(#ByteToNat(b), 256)) =
+    (b: #ByteType) => /std/Bool/True/qed();
+#{proof = true}
+let /absurd : (h: /std/Bool/Holds(#NatLt(300, 256))) -> #{node = InductType} /std/Bool/False() =
+    (h: /std/Bool/Holds(#NatLt(300, 256))) => /below(#NatToByte(300, h));
+#{proof = true}
+let /divided : (h: /std/Bool/Holds(#NatLt(0, 0))) -> /std/Bool/Holds(#NatEql(#NatDiv(7, 0, h), #NatDiv(7, 0, h))) =
+    (h: /std/Bool/Holds(#NatLt(0, 0))) => /std/Bool/True/qed();
+"#;
+
+/// Mutation-checked: with either fold refusing past its domain, the declaration holding it is refused `Reduce`.
+#[test]
+fn a_narrowing_and_a_division_past_their_domains_are_stuck_under_hypotheses_stating_them() {
+    let module = core_text_module(&fill!(
+        "${PROPOSITIONS}\n${PAST_THEIR_DOMAINS}",
+        PROPOSITIONS,
+        PAST_THEIR_DOMAINS
+    ));
+
+    assert_eq!(
+        fixture_verdicts(&module, BUDGET, &Globals::default(), SYNTAX),
+        Vec::new()
     );
 }
 

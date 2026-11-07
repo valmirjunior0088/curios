@@ -185,3 +185,17 @@ fn a_channel_of_no_capacity_is_refused_and_one_of_capacity_one_compiles() {
         "{error}"
     );
 }
+
+/// Past its edge under a hypothesis stating that its bound holds, which is the impossible, a call is well typed by the hypothesis, and the declaration holding it compiles in both checkers: the fold leaves a call past its domain stuck, as it leaves one it has no value for. `below` reads the narrowing back to `300`, so `absurd` proves `False` from `Holds(300 < 256)`, as it should.
+#[test]
+fn a_call_past_its_edge_under_a_hypothesis_stating_the_impossible_compiles() {
+    let source = r#"
+        use /std/{Nat, Byte};
+        use /std/Bool/{Holds, True, False};
+        let below(b: Byte) -> Holds(Byte/to_nat(b) < 256) = True/qed();
+        pub let absurd(h: Holds(300 < 256)) -> False = below(Nat/to_byte(300));
+        /std/print("held")
+        "#;
+
+    assert_eq!(run(source), b"held");
+}

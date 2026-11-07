@@ -55,13 +55,6 @@ pub fn qed() -> Term {
 variants!(Error {
     ReduceExhausted,
     ConvertExhausted,
-    BytesGetOutOfBounds,
-    BytesSliceOutOfRange,
-    ListGetOutOfBounds,
-    ListSliceOutOfRange,
-    DivisionByZero,
-    IntToNatNegative,
-    NatToByteAbove,
     UniverseInconsistency,
     UniverseInvariant,
     ByteLiteralOutOfRange,

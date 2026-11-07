@@ -284,22 +284,15 @@ impl FreeMonoid {
     }
 }
 
-/// What a window came to: the pieces whose concatenation *is* it, the last operand it lies inside with the distance into that operand, or the measured total of a value it ran past.
+/// What a window came to: the pieces whose concatenation *is* it, the last operand it lies inside with the distance into that operand, or past the end of a value it measured.
 ///
-/// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. It carries the bounds it read as well as the total, because only that strategy has them as indices and the refusal names all three.
+/// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. A window past the end is past the domain its bound states, so the caller leaves its read stuck.
 ///
 /// `Inside` is the symbolic strategy's, and it is the one answer that names an operand *without* covering it whole: the caller rebuilds its own operation over that operand at `start`, with the same count and the same bound. The bound is reused, not derived — `curios-algebra`'s `seam_window` states why it proves the narrowed proposition.
 pub(super) enum Windowed {
     Parts(Vec<Term>),
-    Inside {
-        operand: Term,
-        start: Term,
-    },
-    Past {
-        total: usize,
-        start: usize,
-        count: usize,
-    },
+    Inside { operand: Term, start: Term },
+    Past,
 }
 
 impl FreeMonoid {
@@ -328,13 +321,7 @@ impl FreeMonoid {
 
                     return Ok(Some(Windowed::Parts(parts)));
                 }
-                Some(Err(total)) => {
-                    return Ok(Some(Windowed::Past {
-                        total,
-                        start,
-                        count,
-                    }));
-                }
+                Some(Err(_)) => return Ok(Some(Windowed::Past)),
                 None => {}
             }
         }

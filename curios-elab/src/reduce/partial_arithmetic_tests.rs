@@ -1,4 +1,4 @@
-//! Type-level partial arithmetic: a literal zero divisor reports through a `ReduceError`, never a panic.
+//! Type-level partial arithmetic: a literal zero divisor leaves its division stuck, as a symbolic one does, never a panic: it is past the domain the division's bound states, which only a hypothesis stating the impossible reaches, and no value answers it.
 //!
 //! Range, by contrast, never errors here: `Nat`/`Int` are unbounded at the type level and in the running program alike, folds compute exactly, and only materialization in `curios-emit` refuses a value its envelope cannot box.
 
@@ -6,47 +6,31 @@ use {
     super::test_support::*,
     crate::test_support::*,
     crate::*,
-    curios_core::{Intrinsic, Nat, ReduceError, Subterm, Term, Var},
+    curios_core::{Intrinsic, Nat, Subterm, Term, Var},
     curios_num::{Floating, Integer},
 };
 
 #[test]
-fn nat_div_by_zero_reports() {
+fn a_nat_division_by_a_literal_zero_stays_stuck() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::intrinsic(Intrinsic::nat_div(
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            )),
-        ),
-        Err(ReduceError::DivisionByZero {
-            kind: "Nat/div",
-            extent: None,
-        })
-    );
+    let by_zero = Term::intrinsic(Intrinsic::nat_div(
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    ));
+    assert_eq!(reduce(&mut context, by_zero.clone()), Ok(by_zero));
 
-    // The divisor alone forces the trap: a neutral dividend still reports.
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::intrinsic(Intrinsic::nat_div(
-                Term::free_var(&x),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            )),
-        ),
-        Err(ReduceError::DivisionByZero {
-            kind: "Nat/div",
-            extent: None,
-        })
-    );
+    // A neutral dividend over a literal zero divisor is as stuck.
+    let by_zero = Term::intrinsic(Intrinsic::nat_div(
+        Term::free_var(&x),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    ));
+    assert_eq!(reduce(&mut context, by_zero.clone()), Ok(by_zero));
 
-    // A symbolic divisor is not a zero divisor: the term just stays stuck.
+    // A symbolic divisor leaves it stuck too.
     let stuck = Term::intrinsic(Intrinsic::nat_div(
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         Subterm::Var(Var::free(y)),
@@ -56,56 +40,32 @@ fn nat_div_by_zero_reports() {
 }
 
 #[test]
-fn nat_rem_by_zero_reports() {
+fn a_nat_remainder_by_a_literal_zero_stays_stuck() {
     let mut context = context();
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::intrinsic(Intrinsic::nat_rem(
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            )),
-        ),
-        Err(ReduceError::DivisionByZero {
-            kind: "Nat/rem",
-            extent: None,
-        })
-    );
+    let by_zero = Term::intrinsic(Intrinsic::nat_rem(
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    ));
+    assert_eq!(reduce(&mut context, by_zero.clone()), Ok(by_zero));
 }
 
 #[test]
-fn int_div_by_zero_reports() {
+fn an_int_division_by_a_literal_zero_stays_stuck() {
     let mut context = context();
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::intrinsic(Intrinsic::int_div(
-                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
-                Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            )),
-        ),
-        Err(ReduceError::DivisionByZero {
-            kind: "Int/div",
-            extent: None,
-        })
-    );
+    let by_zero = Term::intrinsic(Intrinsic::int_div(
+        Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
+        Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    ));
+    assert_eq!(reduce(&mut context, by_zero.clone()), Ok(by_zero));
 
-    assert_eq!(
-        reduce(
-            &mut context,
-            Term::intrinsic(Intrinsic::int_rem(
-                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
-                Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            )),
-        ),
-        Err(ReduceError::DivisionByZero {
-            kind: "Int/rem",
-            extent: None,
-        })
-    );
+    let by_zero = Term::intrinsic(Intrinsic::int_rem(
+        Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
+        Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    ));
+    assert_eq!(reduce(&mut context, by_zero.clone()), Ok(by_zero));
 }
 
 #[test]

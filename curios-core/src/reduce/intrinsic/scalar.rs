@@ -104,7 +104,7 @@ pub(super) fn reduce_int_binary(
     }))
 }
 
-/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
+/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero leaves the division stuck — mathematically undefined, and past the domain its bound states, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 ///
 /// Beside the two-literal fold stand the laws a truncated division shares with ℕ's, each reading no sign. The floor law and the Euclidean split are not among them: each is false at a dividend below zero, where truncation rounds the other way.
 pub(super) fn reduce_int_division(
@@ -114,16 +114,16 @@ pub(super) fn reduce_int_division(
     half: Half,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
-    let (kind, fold): (_, fn(&Integer, &Integer) -> Option<Integer>) = match half {
-        Half::Quotient => ("Int/div", |dividend, divisor| dividend.div(divisor).ok()),
-        Half::Remainder => ("Int/rem", |dividend, divisor| dividend.rem(divisor).ok()),
+    let fold: fn(&Integer, &Integer) -> Option<Integer> = match half {
+        Half::Quotient => |dividend, divisor| dividend.div(divisor).ok(),
+        Half::Remainder => |dividend, divisor| dividend.rem(divisor).ok(),
     };
-    let extent = right.extent().or_else(|| left.extent());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
+    // A literal zero divisor is past the domain the division's bound states, which only a hypothesis stating the impossible reaches, and no integer answers it: the division stays stuck, and none of the laws below is read over it.
     if right.as_int().is_some_and(|divisor| divisor.is_zero()) {
-        return Err(ReduceError::DivisionByZero { kind, extent });
+        return Ok(Subterm::Intrinsic(rebuild(left, right)));
     }
 
     if let (Some(l), Some(r)) = (left.as_int(), right.as_int())

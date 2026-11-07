@@ -1,12 +1,9 @@
 mod intrinsic;
 pub use intrinsic::*;
 
-use {
-    super::{Apply, Category, Cost, Extent, Field, Free, Func, Subterm, Term, UniverseError},
-    curios_num::{Integer, Natural},
-};
+use super::{Apply, Category, Cost, Field, Free, Func, Subterm, Term, UniverseError};
 
-/// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's extent. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+/// The failure mode of type-level evaluation: the declaration's step budget ran out (`Exhausted`), or a universe instance did not fit its scheme. A partial intrinsic folded outside its domain is no failure: its bound is false there, so only a hypothesis stating the impossible reaches it, and the fold leaves it stuck. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError {
     /// The declaration's work budget ran out. Deterministic: the same program spends the same units on every machine, so this is a fact about the program rather than about the host that compiled it.
@@ -19,43 +16,6 @@ pub enum ReduceError {
         remaining: u64,
         /// What the refused charge came to. [`u64::MAX`] is a size that overflowed while being computed, which is refused without being compared.
         attempted: u64,
-    },
-    BytesGetOutOfBounds {
-        len: usize,
-        index: usize,
-        extent: Option<Extent>,
-    },
-    BytesSliceOutOfRange {
-        len: usize,
-        start: usize,
-        length: usize,
-        extent: Option<Extent>,
-    },
-    ListGetOutOfBounds {
-        len: usize,
-        index: usize,
-        extent: Option<Extent>,
-    },
-    ListSliceOutOfRange {
-        len: usize,
-        start: usize,
-        length: usize,
-        extent: Option<Extent>,
-    },
-    /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BytesGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)
-    DivisionByZero {
-        kind: &'static str,
-        extent: Option<Extent>,
-    },
-    /// An `Int/to_nat` whose operand reduced to a negative literal — a value no natural holds, so it is reported like [`ReduceError::DivisionByZero`] rather than folded by bit reinterpretation.
-    IntToNatNegative {
-        value: Integer,
-        extent: Option<Extent>,
-    },
-    /// A `Nat/to_byte` whose operand reduced past the carrier — reported rather than masked, for the reason [`ReduceError::IntToNatNegative`] is reported rather than reinterpreted. The operation's `below` field states this cannot happen, so reaching here means a proof was admitted that should not have been.
-    NatToByteAbove {
-        value: Natural,
-        extent: Option<Extent>,
     },
     Universe(UniverseError),
 }

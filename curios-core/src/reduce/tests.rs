@@ -7,11 +7,7 @@ fn exhausted() -> ReduceError {
 }
 
 fn refused() -> ReduceError {
-    ReduceError::ListGetOutOfBounds {
-        len: 2,
-        index: 5,
-        extent: None,
-    }
+    ReduceError::Universe(UniverseError::OffsetOverflow)
 }
 
 #[test]

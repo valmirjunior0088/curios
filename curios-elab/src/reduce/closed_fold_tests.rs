@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::test_support::*,
     crate::*,
-    curios_core::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
+    curios_core::{Free, Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Floating, Integer, Rounding},
 };
 
@@ -195,32 +195,23 @@ fn list_get_returns_element_at_index() {
     );
 }
 
+/// An index past a literal run's end is past the domain the read's bound states, so the read stays stuck rather than refusing the term that holds it.
 #[test]
-fn list_get_errors_on_out_of_bounds() {
+fn list_get_past_the_end_stays_stuck() {
     let mut context = context();
 
     let list = Subterm::Intrinsic(Intrinsic::List {
         element: Term::intrinsic(Intrinsic::NatType),
         items: vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
     });
+    let past = Term::from(Subterm::Intrinsic(Intrinsic::list_get(
+        Subterm::Intrinsic(Intrinsic::NatType),
+        list,
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        qed(),
+    )));
 
-    assert!(matches!(
-        reduce(
-            &mut context,
-            Subterm::Intrinsic(Intrinsic::list_get(
-                Subterm::Intrinsic(Intrinsic::NatType),
-                list,
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                qed(),
-            ))
-            .into(),
-        ),
-        Err(ReduceError::ListGetOutOfBounds {
-            len: 1,
-            index: 1,
-            ..
-        })
-    ));
+    assert_eq!(reduce(&mut context, past.clone()), Ok(past));
 }
 
 #[test]

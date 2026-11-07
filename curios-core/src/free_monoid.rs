@@ -523,7 +523,7 @@ impl FreeMonoid {
         }
     }
 
-    /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
+    /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end.
     ///
     /// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
     pub(crate) fn measured_window<'a>(
@@ -569,7 +569,7 @@ fn lengths(segments: &[(&Term, usize)]) -> Vec<usize> {
     segments.iter().map(|(_, length)| *length).collect()
 }
 
-/// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
+/// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end.
 ///
 /// One operand a window spans: whole, or narrowed to the half-open range within it.
 pub(crate) enum Piece<'a> {

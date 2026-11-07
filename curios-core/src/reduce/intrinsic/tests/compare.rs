@@ -88,7 +88,7 @@ fn nat_decides_a_bound_met_exactly_as_non_strict() {
     assert_eq!(mirrored, Comparison::Ge, "`6 >= x % 7` for every `x`");
 }
 
-// Soundness gate: the conversions preserve the number. `Nat/to_int` folds every literal — ℕ embeds in ℤ, both unbounded here — and `Int/to_nat` folds a non-negative to the same value and reports a negative like a zero divisor, never wrapping bits.
+// Soundness gate: the conversions preserve the number. `Nat/to_int` folds every literal — ℕ embeds in ℤ, both unbounded here — and `Int/to_nat` folds a non-negative to the same value and leaves a negative stuck like a zero divisor, never wrapping bits.
 #[test]
 fn conversion_folds_preserve_the_number() {
     for n in [
@@ -135,8 +135,8 @@ fn conversion_folds_preserve_the_number() {
             },
         );
         assert!(
-            matches!(reduced, Err(ReduceError::IntToNatNegative { .. })),
-            "Int/to_nat failed to report the negative {i}",
+            matches!(reduced, Ok(Subterm::Intrinsic(Intrinsic::IntToNat { .. }))),
+            "Int/to_nat of the negative {i} did not stay stuck",
         );
     }
 }

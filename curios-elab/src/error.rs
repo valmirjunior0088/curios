@@ -13,7 +13,6 @@ use {
         Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings, Term,
         UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
     },
-    curios_num::{Integer, Natural},
     curios_surface::{
         DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
         build_rename,
@@ -566,33 +565,6 @@ pub enum Error {
         /// As [`Error::ReduceExhausted`]'s.
         refusal: ReduceError,
     },
-    BytesGetOutOfBounds {
-        len: usize,
-        index: usize,
-    },
-    BytesSliceOutOfRange {
-        len: usize,
-        start: usize,
-        length: usize,
-    },
-    ListGetOutOfBounds {
-        len: usize,
-        index: usize,
-    },
-    ListSliceOutOfRange {
-        len: usize,
-        start: usize,
-        length: usize,
-    },
-    DivisionByZero {
-        kind: &'static str,
-    },
-    IntToNatNegative {
-        value: Box<Integer>,
-    },
-    NatToByteAbove {
-        value: Box<Natural>,
-    },
     UniverseInconsistency {
         lower: Level,
         upper: Level,
@@ -1116,35 +1088,6 @@ impl Error {
     pub fn from_reduce(error: ReduceError, exhausted: impl FnOnce(ReduceError) -> Error) -> Error {
         match error {
             refusal @ ReduceError::Exhausted { .. } => exhausted(refusal),
-            ReduceError::BytesGetOutOfBounds { len, index, extent } => {
-                Error::BytesGetOutOfBounds { len, index }.at_opt(extent)
-            }
-            ReduceError::BytesSliceOutOfRange {
-                len,
-                start,
-                length,
-                extent,
-            } => Error::BytesSliceOutOfRange { len, start, length }.at_opt(extent),
-            ReduceError::ListGetOutOfBounds { len, index, extent } => {
-                Error::ListGetOutOfBounds { len, index }.at_opt(extent)
-            }
-            ReduceError::ListSliceOutOfRange {
-                len,
-                start,
-                length,
-                extent,
-            } => Error::ListSliceOutOfRange { len, start, length }.at_opt(extent),
-            ReduceError::DivisionByZero { kind, extent } => {
-                Error::DivisionByZero { kind }.at_opt(extent)
-            }
-            ReduceError::IntToNatNegative { value, extent } => Error::IntToNatNegative {
-                value: Box::new(value),
-            }
-            .at_opt(extent),
-            ReduceError::NatToByteAbove { value, extent } => Error::NatToByteAbove {
-                value: Box::new(value),
-            }
-            .at_opt(extent),
             ReduceError::Universe(error) => Error::from(error),
         }
     }

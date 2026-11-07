@@ -5,7 +5,10 @@ use {
     crate::*,
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
     curios_common::Qualifier,
-    curios_core::{Cost, Exhaustion, Free, Global, Intrinsic, Term, Universes},
+    curios_core::{
+        Cost, Exhaustion, Free, Global, Intrinsic, Level, Term, UniverseContext, UniverseParam,
+        Universes,
+    },
 };
 
 /// A guard's equation is recorded on the guard's written spelling, and the false arm of `n < m` is the fact `m <= n` read the other way: the reducer asks the dual spelling with the literal negated, and the record stays as written.
@@ -327,17 +330,35 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     assert_eq!(answered, Ok(Term::intrinsic(Intrinsic::Bool(true))));
 }
 
-/// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses rather than refusing the judgment it serves.
+/// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses rather than refusing the judgment it serves. The operand here is an instance whose body, read at the level it states, asks for a successor no offset holds.
 #[test]
 fn an_operand_with_no_value_is_compared_as_written() {
     let mut kernel = kernel();
     let x = binder(1, "x");
     kernel.assume(&x, &nat_type());
-    let undefined = Term::intrinsic(Intrinsic::NatDiv {
-        dividend: nat(1),
-        divisor: nat(0),
-        non_zero: Term::free_var(&x),
-    });
+    let lifted = Global::Authored(Qualifier::from(["lifted"]));
+    let above = Level::param(UniverseParam(0))
+        .succ()
+        .expect("one past a parameter");
+    kernel
+        .define(
+            &lifted,
+            &Term::type_at(above.succ().expect("two past a parameter")),
+            &Term::type_at(above),
+            &UniverseContext {
+                parameter_count: 1,
+                quality_count: 0,
+                constraints: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
+    let undefined = Term::instance(
+        lifted,
+        Universes {
+            levels: vec![Level::constant(u32::MAX)],
+            qualities: Vec::new(),
+        },
+    );
     assert!(
         whnf(&mut kernel, undefined.clone()).is_err_and(|error| !error.is_exhausted()),
         "the operand has a value, so the probe is not put to the question"
