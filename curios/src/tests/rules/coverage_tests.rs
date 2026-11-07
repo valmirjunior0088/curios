@@ -186,3 +186,21 @@ fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
         matches!(error, Error::MatrixUncovered { indexed: true, .. })
     });
 }
+
+// Two `List` literals of one length are as many positions as a tuple's fields, so a definite clash at one element is a clash of the two, and two literals whose lengths differ clash whatever their elements: the empty match is excused at an element, a length and an element beside a shared one. The control is `two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash`, where the elements are two of a proposition's constructors.
+#[test]
+fn two_list_literals_apart_in_an_element_or_in_length_clash() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Eq};
+            use /std/Bool/{False};
+
+            pub let element(e: Eq()([0], [1])) -> False = match e end;
+            pub let length(e: Eq()([0], [1, 2])) -> False = match e end;
+            pub let beside(x: Nat, e: Eq()([0, x], [1, x])) -> False = match e end;
+
+            /std/print("ok")
+            "#),
+        b"ok"
+    );
+}

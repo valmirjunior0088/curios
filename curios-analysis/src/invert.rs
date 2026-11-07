@@ -11,7 +11,9 @@ use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
     curios_common::recurse,
-    curios_core::{Free, Names, Quality, Sort, Subterm, Telescope, Term, peel_intrinsic},
+    curios_core::{
+        Free, Intrinsic, Names, Quality, Sort, Subterm, Telescope, Term, peel_intrinsic,
+    },
     std::collections::{BTreeSet, HashMap},
 };
 
@@ -340,6 +342,12 @@ impl<'f> Unifier<'f> {
 
         match (&*actual, &*target) {
             (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
+
+            // Two `List` literals of one length are as many positions as a tuple's fields, each element its own: the word strip reads two leading elements that differ as terms not yet decided, and pointwise each is decided as any position is — a proposition's two constructors meeting, as irrelevance holds them one.
+            (
+                Subterm::Intrinsic(Intrinsic::List { items: this, .. }),
+                Subterm::Intrinsic(Intrinsic::List { items: that, .. }),
+            ) if this.len() == that.len() => self.unify_all(judge, this, that),
 
             (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                 match peel_intrinsic(this, that) {

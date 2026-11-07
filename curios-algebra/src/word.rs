@@ -201,7 +201,7 @@ impl<A: Alphabet> Word<A> {
     ///
     /// Runs are matched element by element; singles and chunks whole, by their symbol; and two windows whole where their lengths are one number and their starts one position of one root ([`same_position`]) — so a window of a window, `slice(slice(b, s, l), t, n)`, meets `slice(b, s + t, n)`, and a window of a concatenation meets the window of the operand it lies inside. Two windows sharing a start and differing in length could peel too, but that needs the two lengths ordered, so it is left undecided.
     ///
-    /// A strip that stops at two runs whose heads differ is [`Stripped::Impossible`] where the runs are decided and a residual where they are not; one that empties one word decides by whether what the other keeps has a positive length anywhere in it — `x ++ [5]` against the empty word clashes as `[5] ++ x` does.
+    /// A strip that stops at two runs whose heads differ is [`Stripped::Impossible`] where the runs are decided and a residual where they are not; one that empties one word decides by whether what the other keeps has a positive length anywhere in it — `x ++ [5]` against the empty word clashes as `[5] ++ x` does; and two residuals of runs and single elements alone, whose lengths are known, clash where those lengths differ, whatever their elements.
     pub fn strip_common_prefix(&mut self, alphabet: &A, other: &mut Self) -> Stripped {
         let mut peeled = false;
 
@@ -241,6 +241,13 @@ impl<A: Alphabet> Word<A> {
             (Some(Segment::Run(_)), Some(Segment::Run(_))) if A::Run::DECIDED => {
                 Stripped::Impossible
             }
+            _ if self
+                .known_length()
+                .zip(other.known_length())
+                .is_some_and(|(this, that)| this != that) =>
+            {
+                Stripped::Impossible
+            }
             _ => Stripped::Residual { peeled },
         }
     }
@@ -253,6 +260,18 @@ impl<A: Alphabet> Word<A> {
                 self.segments.pop_front();
             }
         }
+    }
+
+    /// How many elements this word holds, where it holds runs and single elements alone: `None` where a window or a chunk stands in it, whose length is not known.
+    fn known_length(&self) -> Option<usize> {
+        self.segments
+            .iter()
+            .map(|segment| match segment {
+                Segment::Run(run) => Some(run.len()),
+                Segment::Single(_) => Some(1),
+                Segment::Window(_) | Segment::Chunk(_) => None,
+            })
+            .try_fold(0usize, |total, length| total.checked_add(length?))
     }
 
     /// What this residual concludes against the empty word: a run (never empty, [`Word::push`] drops those) or a single element anywhere in it gives it a positive length, and windows and chunks alone might all be empty.

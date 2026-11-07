@@ -470,3 +470,27 @@ fn a_deep_pair_of_index_terms_is_inverted_on_the_default_stack() {
         Ok(Invert::Impossible)
     ));
 }
+
+/// Two `List` literals over `Nat` apart in an element, or in their lengths, are no case a value meets: inverted pointwise as a tuple's fields are, and by length where the strip leaves runs alone, through the kernel that judges them. Mutation-checked: with `unify_node` reading two literals as any two words, the element pair is undecided, and with the strip reading no length, so is the length pair.
+#[test]
+fn two_list_literals_apart_in_an_element_or_in_length_are_impossible() {
+    let list = |items: &[u64]| {
+        Term::intrinsic(Intrinsic::List {
+            element: Term::intrinsic(Intrinsic::NatType),
+            items: items
+                .iter()
+                .map(|item| Term::intrinsic(Intrinsic::Nat(Nat::new(*item))))
+                .collect(),
+        })
+    };
+
+    for (label, actual, target) in [
+        ("an element", list(&[0]), list(&[1])),
+        ("a length", list(&[0]), list(&[1, 2])),
+    ] {
+        let verdict =
+            solve_indices(&mut kernel(), &[actual], &[target], &[]).expect("the kernel answers");
+
+        assert!(matches!(verdict, Invert::Impossible), "{label}");
+    }
+}
