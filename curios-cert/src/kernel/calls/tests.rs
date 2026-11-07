@@ -358,3 +358,25 @@ fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
     assert_eq!(kernel.group_verdict(&rec.group), Some(Totality::Total));
     assert!(!kernel.member_encloses_partial(&rec.group, 0));
 }
+
+/// An arm that splits a lambda's binder splits what the binder stands for: in `((x) => match x | 0 => … | k + 1 => f(k) end)(n)` the lambda's body runs with `x` being `n`, so the arm's `k + 1` is `n`'s case too and `k` is below `n`. Mutation-checked: with the arm refining `x` alone, `k` is below nothing the caller's parameter reads, and this is refused.
+#[test]
+fn an_arm_splitting_an_applied_lambdas_binder_splits_what_the_binder_stands_for() {
+    let (f, signature) = member();
+    let n = binder(1, "n");
+    let x = binder(4, "x");
+    let term = group(
+        &f,
+        signature,
+        &n,
+        Term::apply(
+            Term::func(
+                [(x, nat_type())],
+                split(&x, |pred| call(&f, Term::free_var(pred))),
+            ),
+            [Term::free_var(&n)],
+        ),
+    );
+
+    assert!(infer(&mut kernel(), &term).is_ok());
+}

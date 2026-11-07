@@ -61,8 +61,8 @@ pub struct SizeContext {
 ///
 /// Recorded on the way in rather than recomputed on the way out, because only the entering side can tell the difference that matters: a binder an outer arm had already refined, or already knew nonzero, must be left standing as that outer arm left it.
 pub(super) struct Undo {
-    /// The refined binder and what it stood for before, `None` when the scope refined nothing.
-    refined: Option<(Free, Option<Shape>)>,
+    /// The refined binders, each with what it stood for before, empty when the scope refined nothing.
+    refined: Vec<(Free, Option<Shape>)>,
     /// The binder this scope added to `nonzero`, `None` when it added none — an already-known binder included.
     nonzero: Option<Free>,
     /// The binders this scope added to `payloads`, empty when it added none.
@@ -100,10 +100,24 @@ impl SizeContext {
         nonzero: Option<Free>,
         payloads: Vec<Free>,
     ) {
-        let refined = refine.map(|(binder, shape)| {
-            let previous = self.refined.insert(binder, shape);
-            (binder, previous)
-        });
+        // A binder that stands for another, bare — a lambda's binder applied on the spot to it — is one value with it wherever the lambda's body runs, so a case refining the one refines the other in the same bracket.
+        let mut refined = Vec::new();
+        if let Some((binder, shape)) = refine {
+            let mut next = Some(binder);
+            while let Some(binder) = next.take() {
+                next = match self.refined.get(&binder) {
+                    Some(Shape::Atom(stood_for))
+                        if *stood_for != binder
+                            && !refined.iter().any(|(seen, _)| seen == stood_for) =>
+                    {
+                        Some(*stood_for)
+                    }
+                    _ => None,
+                };
+                let previous = self.refined.insert(binder, shape.clone());
+                refined.push((binder, previous));
+            }
+        }
         let nonzero = match nonzero {
             Some(atom) if self.nonzero.insert(atom) => Some(atom),
             _ => None,
@@ -127,7 +141,7 @@ impl SizeContext {
             .pop()
             .expect("every exit is bracketed with its own enter");
 
-        if let Some((binder, previous)) = undo.refined {
+        for (binder, previous) in undo.refined.into_iter().rev() {
             match previous {
                 Some(previous) => self.refined.insert(binder, previous),
                 None => self.refined.remove(&binder),

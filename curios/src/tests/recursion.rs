@@ -638,3 +638,22 @@ fn two_spellings_of_one_recursion_are_one_function() {
 
     assert_eq!(run(source), b"6");
 }
+
+/// A proof that splits a lambda's binder, the lambda applied on the spot to the parameter or to a payload of it, descends on what the binder stands for, and both checkers hold it.
+#[test]
+fn a_proof_splitting_an_applied_lambdas_binder_descends_on_what_it_stands_for() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        pub let below(n: Nat) -> True =
+            ((x: Nat) => match x | 0 => True/qed() | k + 1 => below(k) end)(n);
+        pub let twice(n: Nat) -> True =
+            match n
+            | 0 => True/qed()
+            | k + 1 => ((x: Nat) => match x | 0 => True/qed() | j + 1 => twice(j) end)(k)
+            end;
+        /std/print("held")
+        "#;
+
+    assert_eq!(run(source), b"held");
+}
