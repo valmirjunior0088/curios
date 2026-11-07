@@ -96,38 +96,38 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `cf3aa6e85`, three takings: the units and the looks the same at every one.
+/// Over the checkers of `3b5c71a3c`, each claim read after it, two takings: the units and the looks the same at both.
 ///
 /// | runaway | budget | verdict | elaborator units | elaborator looks | looks a unit | kernel units | kernel looks | looks a unit |
 /// | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-/// | spin | 25 000 | budget | 25 000 | 96 320 | 3.9 | - | - | - |
-/// | spin | 50 000 | budget | 50 000 | 195 768 | 3.9 | - | - | - |
-/// | sums | 25 000 | apart | 5 129 | 3 738 | 0.7 | - | - | - |
-/// | sums | 50 000 | apart | 5 129 | 3 738 | 0.7 | - | - | - |
-/// | sums, apart | 25 000 | apart | 5 129 | 3 542 | 0.7 | - | - | - |
-/// | sums, apart | 50 000 | apart | 5 129 | 3 542 | 0.7 | - | - | - |
-/// | sums of calls | 25 000 | apart | 6 153 | 6 168 | 1.0 | - | - | - |
-/// | sums of calls | 50 000 | apart | 6 153 | 6 168 | 1.0 | - | - | - |
-/// | halvings | 25 000 | apart | 6 153 | 4 041 | 0.7 | - | - | - |
-/// | halvings | 50 000 | apart | 6 153 | 4 041 | 0.7 | - | - | - |
-/// | rounds | 25 000 | accepted | 4 105 | 3 987 | 1.0 | 1 060 | 850 | 0.8 |
-/// | rounds | 50 000 | accepted | 4 105 | 3 987 | 1.0 | 1 060 | 850 | 0.8 |
-/// | classes | 250 000 | apart | 130 300 | 392 035 | 3.0 | - | - | - |
-/// | classes | 500 000 | apart | 130 300 | 392 035 | 3.0 | - | - | - |
-/// | powers | 1 000 000 | budget | 1 000 000 | 1 546 561 | 1.5 | - | - | - |
-/// | powers | 2 000 000 | apart | 1 584 262 | 2 551 672 | 1.6 | - | - | - |
-/// | images | 1 250 000 | budget | 1 250 000 | 2 937 454 | 2.3 | - | - | - |
-/// | images | 2 500 000 | apart | 1 868 375 | 5 714 683 | 3.1 | - | - | - |
-/// | nests | 750 000 | apart | 595 985 | 300 516 | 0.5 | - | - | - |
-/// | nests | 1 500 000 | apart | 595 985 | 300 516 | 0.5 | - | - | - |
-/// | stacks | 200 000 | accepted | 44 294 | 342 037 | 7.7 | 20 740 | 458 074 | 22.1 |
-/// | stacks | 400 000 | accepted | 44 294 | 342 037 | 7.7 | 20 740 | 458 074 | 22.1 |
-/// | walks | 150 000 | accepted | 108 224 | 600 661 | 5.6 | 1 067 | 721 | 0.7 |
-/// | walks | 300 000 | accepted | 108 224 | 600 661 | 5.6 | 1 067 | 721 | 0.7 |
+/// | spin | 25 000 | budget | 25 000 | 101 439 | 4.1 | - | - | - |
+/// | spin | 50 000 | budget | 50 000 | 206 202 | 4.1 | - | - | - |
+/// | sums | 25 000 | apart | 5 129 | 3 825 | 0.7 | - | - | - |
+/// | sums | 50 000 | apart | 5 129 | 3 825 | 0.7 | - | - | - |
+/// | sums, apart | 25 000 | apart | 5 129 | 3 626 | 0.7 | - | - | - |
+/// | sums, apart | 50 000 | apart | 5 129 | 3 626 | 0.7 | - | - | - |
+/// | sums of calls | 25 000 | apart | 5 129 | 7 836 | 1.5 | - | - | - |
+/// | sums of calls | 50 000 | apart | 5 129 | 7 728 | 1.5 | - | - | - |
+/// | halvings | 25 000 | apart | 5 129 | 5 158 | 1.0 | - | - | - |
+/// | halvings | 50 000 | apart | 5 129 | 5 158 | 1.0 | - | - | - |
+/// | rounds | 25 000 | accepted | 4 105 | 2 892 | 0.7 | 3 485 | 3 438 | 1.0 |
+/// | rounds | 50 000 | accepted | 4 105 | 2 892 | 0.7 | 3 485 | 3 438 | 1.0 |
+/// | classes | 250 000 | apart | 130 300 | 393 352 | 3.0 | - | - | - |
+/// | classes | 500 000 | apart | 130 300 | 393 352 | 3.0 | - | - | - |
+/// | powers | 1 000 000 | budget | 1 000 000 | 1 549 145 | 1.5 | - | - | - |
+/// | powers | 2 000 000 | apart | 1 584 262 | 2 554 256 | 1.6 | - | - | - |
+/// | images | 1 250 000 | budget | 1 250 000 | 2 940 067 | 2.4 | - | - | - |
+/// | images | 2 500 000 | apart | 1 868 375 | 5 717 296 | 3.1 | - | - | - |
+/// | nests | 750 000 | apart | 595 985 | 310 452 | 0.5 | - | - | - |
+/// | nests | 1 500 000 | apart | 595 985 | 310 452 | 0.5 | - | - | - |
+/// | stacks | 200 000 | accepted | 44 294 | 347 105 | 7.8 | 20 740 | 463 099 | 22.3 |
+/// | stacks | 400 000 | accepted | 44 294 | 347 105 | 7.8 | 20 740 | 463 099 | 22.3 |
+/// | walks | 150 000 | accepted | 108 224 | 620 734 | 5.7 | 44 196 | 484 239 | 11.0 |
+/// | walks | 300 000 | accepted | 108 224 | 620 734 | 5.7 | 44 196 | 484 239 | 11.0 |
 ///
-/// **Seven rows read under three nodes a unit at either budget, and five read three or more: the spin, the classes, the image by the time it answers, the stacks and the walk.** The plain recursion reads 3.9 at either budget. The four pairs of calls whose unfolding meets them again are told apart at about one node a unit, and the recursions held by both checkers are held in what their program's definitions cost to elaborate. The product pays a square of its steps and reads one and a half nodes a unit, and the image 2.3 where its budget ends it and 3.1 by the time it answers.
+/// **Seven rows read under three nodes a unit at either budget, and five read three or more: the spin, the classes, the image by the time it answers, the stacks and the walk.** The plain recursion reads 4.1 at either budget. The four pairs of calls whose unfolding meets them again are told apart at about one node a unit, and the recursions held by both checkers are held in what their program's definitions cost to elaborate. The product pays a square of its steps and reads one and a half nodes a unit, and the image 2.4 where its budget ends it and 3.1 by the time it answers.
 ///
-/// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the kernel 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the kernel 1 067 at under one. The spin, the stacks and the walk read 1.7, 5.2 and 13.6, and 3.8 at `997cec045`, and as here at `41ca9548f` (`documentation/roadmap/compilation/000-findings.md`). Between `41ca9548f` and `cf3aa6e85` four rows moved, their units unmoved: the classification reads the nodes under a node of a sum for its image (`6b903abeb`, `curios-analysis/src/classify.rs`), and the product's looks rose from 1 356 061 and 2 359 663 and the image's from 2 923 934 and 5 681 388; a side against a literal read as it stands (`cf3aa6e85`, `compare_nat_among`) took four looks off the sums of calls and the halvings, and 38 420 and 113 498 off the image.
+/// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the kernel 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the kernel 44 196 at eleven, which reduces its claim a step of the recursion at a time, and the rounds cost the kernel 3 485 at one. A row's looks a unit count what its units buy and what readers that charge nothing read beside them, a key consed to a table's canonical node among them, so they move with those readers where the units stand still.
 #[test]
 #[ignore = "measurement, counted: reports what a runaway costs at two budgets rather than asserting"]
 fn runaway_measurements() {
