@@ -104,12 +104,15 @@ pub(super) fn runaway(shape: Runaway) -> String {
                 .to_string(),
             "let claim(x: Nat, y: Nat) -> Eq()(g(x, y), g(2, y))".to_string(),
         ),
-        Runaway::Rounds => (
-            "Nat, Eq, Io",
-            "let f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\n\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;"
-                .to_string(),
-            "let claim(n: Nat) -> Eq()(f(n), h(n))".to_string(),
-        ),
+        Runaway::Rounds => {
+            reader.push_str("let read(n: Nat) -> Nat = match claim(n) | refl => 0 end;\n\n");
+            (
+                "Nat, Eq, Io",
+                "let f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\n\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;"
+                    .to_string(),
+                "let claim(n: Nat) -> Eq()(f(n), h(n))".to_string(),
+            )
+        }
         Runaway::Classes(steps) => (
             "Nat, Eq, Io",
             "let acc(h: (Nat) -> Nat, n: Nat, c: Nat) -> Nat = match n | 0 => c | k + 1 => acc(h, k, c + h(k)) end;"
@@ -145,12 +148,17 @@ pub(super) fn runaway(shape: Runaway) -> String {
                 format!("let claim(g: (Nat) -> Nat) -> Eq()(tower(g, {steps}), stack(g, {steps}, 0))"),
             )
         }
-        Runaway::Walks(steps) => (
-            "Nat, Eq, Io",
-            "let walk(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => g(top) | k + 1 => walk(g, k, top) end;"
-                .to_string(),
-            format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x))"),
-        ),
+        Runaway::Walks(steps) => {
+            reader.push_str(
+                "let read(g: (Nat) -> Nat, x: Nat) -> Nat = match claim(g, x) | refl => 0 end;\n\n",
+            );
+            (
+                "Nat, Eq, Io",
+                "let walk(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => g(top) | k + 1 => walk(g, k, top) end;"
+                    .to_string(),
+                format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x))"),
+            )
+        }
         Runaway::Absorption(atoms) => {
             let names = (0..atoms).map(|index| format!("a{index}")).collect::<Vec<_>>();
             let binders = names
