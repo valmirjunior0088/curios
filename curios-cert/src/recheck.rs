@@ -1224,7 +1224,7 @@ fn revised(
 
 /// What a walk over a baseline finds changed of the module it judges, and what that could reach: by its own comparison of the two modules ([`Baseline::holds`]) and its own record read backwards ([`ReadBy`](curios_core::ReadBy)).
 ///
-/// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
+/// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached, and so is one held where the baseline held another or none whose filed reads name a declaration of the module stored after it, which a walk in the module's order meets before what it read is settled. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
 struct Changed {
     /// The places the module holds another item at than the baseline does, or every place where the two modules are not one a version of the other.
     touched: BTreeSet<usize>,
@@ -1303,6 +1303,21 @@ impl Changed {
         let mut frontier = changed.lost.clone();
         for place in changed.items.clone() {
             changed.visit(definitions, place, &mut frontier);
+        }
+        // A declaration the baseline holds, now stored ahead of one it read, is no adoption a walk in the module's order makes: in its turn what it read is not settled yet, so it is asked, as that walk would ask it.
+        for place in changed.touched.clone() {
+            let reads_ahead = definitions.items.names(place).into_iter().any(|name| {
+                baseline.certification.reads(name).is_some_and(|reads| {
+                    reads
+                        .signatures
+                        .iter()
+                        .chain(&reads.bodies)
+                        .any(|read| places.place(read).is_some_and(|held| held.item() > place))
+                })
+            });
+            if reads_ahead {
+                changed.visit(definitions, place, &mut frontier);
+            }
         }
         if !globals.settled() {
             let foreign = read_by

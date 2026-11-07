@@ -1071,3 +1071,38 @@ fn a_proof_over_a_unit_a_session_kept_is_judged_again_where_what_it_read_moved()
         "{refused:?}"
     );
 }
+
+/// `t` reads `Q`, and a step stores the two the other way round: a walk over every declaration meets `t` before `Q` is declared and refuses it, and so does a walk over the baseline, which held the two in the order `t` read them. Mutation-checked: with `Changed::of` visiting no held declaration stored ahead of what it read, the second step builds.
+#[test]
+fn a_declaration_stored_ahead_of_what_it_reads_is_refused_over_its_baseline() {
+    let ordered = "\
+let /lib/Q : Prop =
+    #{node = InductType} /sys/Bool/True();
+let /lib/t : /lib/Q =
+    /sys/Bool/True/qed();
+";
+    let reordered = "\
+let /lib/t : /lib/Q =
+    /sys/Bool/True/qed();
+let /lib/Q : Prop =
+    #{node = InductType} /sys/Bool/True();
+";
+    let undeclared = |stepped: &Result<(), Stopped>| {
+        matches!(
+            stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Undeclared(_))
+        )
+    };
+
+    let mut whole = History::new();
+    let alone = whole.step("lib", Written::CoreText, reordered);
+    assert!(undeclared(&alone), "{alone:?}");
+
+    let mut history = History::new();
+    history
+        .step("lib", Written::CoreText, ordered)
+        .expect("the library builds");
+    let stepped = history.step("lib", Written::CoreText, reordered);
+    assert!(undeclared(&stepped), "{stepped:?}");
+}
