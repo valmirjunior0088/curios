@@ -1,6 +1,7 @@
-//! What the rules' suites share: the programs more than one of them puts, and what a refusal is held to.
+//! What the rules' suites share: the programs more than one of them puts, the control a refusal is derived from, and what a refusal is held to.
 
 use {
+    crate::test_support::*,
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
     curios_core::{Global, Term, WitnessKey},
@@ -16,6 +17,38 @@ pub struct Refusals {
     kernel: Vec<Verdict>,
     /// Whether the kernel judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
     judged: bool,
+}
+
+/// A rule's sound neighbour: a program the rule admits, run as the program it is and checked by what it prints where it is made. A refusal of the rule is derived from it by the one thing the refusal turns on ([`Control::refused`]), so a rule that came to refuse everything of a shape fails at its control, which a refusal alone would pass: the soundness board's decision places each refusal beside its control.
+pub struct Control {
+    source: String,
+}
+
+/// The control `source`, which runs and prints `prints`.
+pub fn control(source: &str, prints: &[u8]) -> Control {
+    assert_eq!(run(source), prints, "what the control prints");
+
+    Control {
+        source: source.to_string(),
+    }
+}
+
+impl Control {
+    /// The control with each of `edits` made in turn, put to both checkers as [`refused`] puts a program. Each edit's text stands once in the program as the edits before it left it, so an edit the control has moved away from fails rather than drifting.
+    pub fn refused(&self, edits: &[(&str, &str)]) -> Refusals {
+        let source = edits
+            .iter()
+            .fold(self.source.clone(), |source, (from, to)| {
+                assert_eq!(
+                    source.matches(from).count(),
+                    1,
+                    "`{from}` stands once in the control as the edits before it left it"
+                );
+                source.replacen(from, to, 1)
+            });
+
+        refused(&source)
+    }
 }
 
 /// Put `source` to both checkers at the program contract: what they refused it with, which must be something.
@@ -2148,102 +2181,6 @@ pub const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
     /std/print("FORGED")
     "#;
 
-/// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
-pub const PARTIAL_DIRECT: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    let loop(n : Nat) -> Box = loop(n);
-    let bad : False = loop(0).p;
-    /std/print("FORGED")
-    "#;
-
-pub const PARTIAL_THROUGH_WITNESS: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    concept Make(A : Type) : pub Type { make(A) -> Box, }
-    let loop(n : Nat) -> Box = loop(n);
-    satisfy Make(Nat) { make(n) = loop(n), }
-    let bad : False = Make/make(0).p;
-    /std/print("FORGED")
-    "#;
-
-pub const PARTIAL_HIGHER_ORDER: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    let loop(n : Nat) -> Box = loop(n);
-    let apply(f : (Nat) -> Box, n : Nat) -> Box = f(n);
-    let bad : False = apply(loop, 0).p;
-    /std/print("FORGED")
-    "#;
-
-pub const PARTIAL_IN_FIELD: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    struct Holder : pub Type { run : (Nat) -> Box }
-    let loop(n : Nat) -> Box = loop(n);
-    let holder : Holder = Holder { run = loop };
-    let bad : False = holder.run(0).p;
-    /std/print("FORGED")
-    "#;
-
-/// A diverging proof in a position the judgment *infers* rather than checks — a match scrutinee — inside a definition whose own type is relevant, so the body is not a proof position either.
-///
-/// Both checkers record every settled node with the type it settled at, checked or inferred alike. Nothing here is a checked position, and the elimination conjures a `Nat` from a proof that never terminates, so a checker seeding only checked positions would accept it — the quadrant this matrix exists to make visible.
-pub const INFERRED_PROOF_POSITION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    let loop(n : Nat) -> Box = loop(n);
-    let conjured : Nat =
-        match loop(0).p : (_) => Nat
-        end;
-    /std/print(Nat/to_str(conjured))
-    "#;
-
-/// A non-descending `rec` written *inline*, at a `Type`-sorted type so the kernel's local descent gate does not apply, inside a definition that is not itself a proof position.
-///
-/// Nothing but the classification walk can see this one: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`.
-pub const INLINE_REC_UNDER_CARRIER: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    struct Box : pub Type { p : False }
-    let make : Box =
-        let r : Box = r;
-        r;
-    let bad : False = make.p;
-    /std/print("FORGED")
-    "#;
-
-/// A partial inhabitant of an index no constructor targets, eliminated by the arms it leaves out.
-///
-/// The four rows above reach the partial definition through a value a proof reads. This one reads nothing of it: `Pin(n + 1)` is a case every constructor's target clashes with, so the elimination enumerates no arm, and the proof is the ex falso that covers nothing. Reduction never takes the scrutinee apart and never needs to — which is exactly the shape where "a term left stuck admits nothing" has to be carried by obligation (V) rather than by reduction, since `spin(n + 1)` is a closed term of an uninhabited type that no rule ever reduces. A general recursion at a `Type`-sorted result is the language's design, so `spin` itself stands; what must not is a proof standing on it.
-pub const PARTIAL_UNDER_AN_EMPTY_ELIMINATION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    induct Pin : (n : Nat) -> pub Type
-    | only() : (0)
-    end
-    let spin(n : Nat) -> Pin(n) = spin(n);
-    let bad(n : Nat) -> False =
-        match spin(n + 1) : (i, p) => False
-        end;
-    /std/print("FORGED")
-    "#;
-
-/// Obligation **(T)** rather than (V): a *type* that reaches a definition which is not known to terminate.
-///
-/// `spin` is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this syntactically from written type positions; the kernel seeds it from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T).
-pub const TYPE_REACHING_PARTIAL: &str = r#"
-    use /std/{Nat, Vec};
-    let spin(n : Nat) -> Nat = spin(n);
-    let Sized(n : Nat) -> Type = Vec(Nat, spin(n));
-    /std/print("FORGED")
-    "#;
-
 /// The induction hypothesis of a `Nat` fold, at the wrong instance.
 ///
 /// In the successor arm the hypothesis is the motive at the *predecessor*, and the goal is the motive at the successor. Handing the hypothesis back directly proves `Eq()(k + 1, 0)` from `Eq()(k, 0)`, so a rule that typed the hypothesis at the scrutinee rather than at the peeled index would make every predicate provable by induction.
@@ -2267,30 +2204,6 @@ pub const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
         | 0 => Eq/refl()
         | _ => Eq/refl()
         end;
-    /std/print("FORGED")
-    "#;
-
-/// Saturating subtraction is not a descent.
-///
-/// Note which rule fires on each side: the elaborator refuses through the reach obligation — the definition is a proof position reaching something not known to terminate — while the kernel refuses through its own local gate, a recursive member at a proposition whose group does not descend. Two rules, two crates, one program; that is what the second opinion is supposed to look like.
-///
-/// `n - 1` is `0` at `0`, so `bogus(0)` calls itself forever. The declared result is a proposition, which obliges the group to descend, and the size-change engine decides that — an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and since erasure deletes the proof, `False` follows immediately.
-pub const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    let bogus(n : Nat) -> False = bogus(n - 1);
-    let bad : False = bogus(0);
-    /std/print("FORGED")
-    "#;
-
-/// Permuting the arguments is not a descent either.
-///
-/// The classic size-change subtlety: every call maps a parameter to a parameter, so each call matrix is full of `Same` entries and none is `Less`. Composing a swap with itself returns the identity, so no cycle carries a strict decrease and the group cannot be total — an engine reading "the argument came from a parameter" as progress would certify a recursion that runs forever.
-pub const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-    let bogus(a : Nat, b : Nat) -> False = bogus(b, a);
-    let bad : False = bogus(0, 1);
     /std/print("FORGED")
     "#;
 
