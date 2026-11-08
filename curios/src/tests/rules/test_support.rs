@@ -252,21 +252,6 @@ impl fmt::Display for Refusals {
     }
 }
 
-pub const A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
-    use /std/{Nat};
-
-    induct Box : pub Prop
-    | mk(n : Nat)
-    end
-
-    let extract(b : Box) -> Nat =
-        match b
-        | mk(n) => n
-        end;
-
-    extract(Box/mk(7))
-    "#;
-
 pub const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
@@ -338,88 +323,6 @@ pub const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: &str = 
     /std/Io/pure(())
     "#;
 
-pub const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
-    use /std/{Nat, Option};
-
-    let f(o : Option(Nat)) -> Nat =
-        match o
-        | some(x) => x
-        end;
-
-    f(Option/none())
-    "#;
-
-pub const A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER: &str = r#"
-    use /std/{Nat, Eq};
-    use /std/Bool/{False};
-
-    let blur(a : Nat) -> Nat = 0;
-
-    induct Loose : (n : Nat) -> pub Prop
-    | mk(a : Nat) : (blur(a))
-    end
-
-    let extract(p : Loose(0)) -> Nat =
-        match p : (m, q) => Nat
-        | mk(a) => a
-        end;
-
-    let same : Eq()(Loose/mk(0), Loose/mk(7)) = Eq/refl();
-
-    let boom : False =
-        Eq/subst((n : Nat) => match n : (_) => Type | 0 => {} | _ => False end,
-                 Eq/cong(extract, same),
-                 ());
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
-    use /std/Bool/{False};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Ind : (x : Two) -> pub Type
-    | only() : (Two/a())
-    end
-
-    let coerce(w : Ind(Two/a())) -> Ind(Two/b()) = w;
-
-    let boom(w : Ind(Two/b())) -> False =
-        match w : (x, q) => False
-        end;
-
-    let bad : False = boom(coerce(Ind/only()));
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
-    use /std/{Nat};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Ind : (x : Two) -> pub Type
-    | left() : (Two/a())
-    | right() : (Two/b())
-    end
-
-    let coerce(w : Ind(Two/b())) -> Ind(Two/a()) = w;
-
-    let f(w : Ind(Two/a())) -> Nat =
-        match w : (x, q) => Nat
-        | left() => 0
-        end;
-
-    /std/print(Nat/to_str(f(coerce(Ind/right()))))
-    "#;
-
 /// `drop`'s `@A` is constrained by nothing — no argument mentions it and no result determines it — so every use below leaves one unsolved term metavariable exactly where the fixture plants it.
 pub const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
     use /std/{Nat};
@@ -466,61 +369,6 @@ pub const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
     let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat = 0;
 
     /std/print(Nat/to_str(drop(@Nat, 0)))
-    "#;
-
-pub const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Pair : pub Type
-    | mk(n : Nat, p : Two)
-    end
-
-    induct Ind : (x : Pair) -> pub Type
-    | only() : (Pair/mk(0, Two/a()))
-    end
-
-    let coerce(w : Ind(Pair/mk(0, Two/a()))) -> Ind(Pair/mk(0, Two/b())) = w;
-
-    let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =
-        match w : (x, q) => False
-        end;
-
-    let bad : False = boom(coerce(Ind/only()));
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_NESTED_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM: &str = r#"
-    use /std/{Nat};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Pair : pub Type
-    | mk(n : Nat, p : Two)
-    end
-
-    induct Ind : (x : Pair) -> pub Type
-    | left()  : (Pair/mk(0, Two/a()))
-    | right() : (Pair/mk(0, Two/b()))
-    end
-
-    let coerce(w : Ind(Pair/mk(0, Two/b()))) -> Ind(Pair/mk(0, Two/a())) = w;
-
-    let f(w : Ind(Pair/mk(0, Two/a()))) -> Nat =
-        match w : (x, q) => Nat
-        | left() => 0
-        end;
-
-    /std/print(Nat/to_str(f(coerce(Ind/right()))))
     "#;
 
 pub const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
@@ -600,164 +448,6 @@ pub const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str = r#"
     /std/print("ok")
     "#;
 
-pub const TWO_PROOFS_FORCED_ON_ONE_VARIABLE_OF_THE_INDICES_DO_NOT_CLASH: &str = r#"
-    use /std/Bool/{False};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Apart : (x : Two, y : Two) -> pub Type
-    | apart() : (Two/a(), Two/b())
-    end
-
-    let absurd(x : Two, h : Apart(x, x)) -> False =
-        match h end;
-
-    let forged : False = absurd(Two/a(), Apart/apart());
-
-    /std/print("FORGED")
-    "#;
-
-pub const TWO_PROOFS_UNDER_A_CONSTRUCTOR_FORCED_ON_ONE_VARIABLE_DO_NOT_CLASH: &str = r#"
-    use /std/Bool/{False};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    induct Wrap : pub Type
-    | wrap(p : Two)
-    end
-
-    induct Apart : (x : Wrap, y : Wrap) -> pub Type
-    | apart() : (Wrap/wrap(Two/a()), Wrap/wrap(Two/b()))
-    end
-
-    let absurd(w : Wrap, h : Apart(w, w)) -> False =
-        match h end;
-
-    let forged : False = absurd(Wrap/wrap(Two/a()), Apart/apart());
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_VARIABLE_OF_THE_INDICES_FORCED_TO_ONE_VALUE_TWICE_DOES_NOT_CLASH: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{False};
-
-    induct Two : (a : Nat, b : Nat) -> Type
-    | mk() : (0, 1)
-    end
-
-    let absurd(m : Nat, x : Two(m, m + 1)) -> False =
-        match x end;
-
-    let forged : False = absurd(0, Two/mk());
-
-    /std/print("FORGED")
-    "#;
-
-pub const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
-    use /std/Bool/{False};
-
-    induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    let absurd(h : Same()(Two/a(), Two/b())) -> False =
-        match h end;
-
-    let forged : False = absurd(Same/same());
-
-    /std/print("FORGED")
-    "#;
-
-pub const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
-    use /std/{Eq};
-    use /std/Bool/{False};
-
-    induct Color : pub Type
-    | red()
-    | green()
-    end
-
-    let absurd(c : Color, h : Eq()(c, Color/red())) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#"
-    use /std/{Eq, Nat};
-    use /std/Bool/{False};
-
-    let absurd(f : (Nat) -> Nat, h : Eq()(f(0), f(1))) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
-    use /std/{Eq, Nat};
-    use /std/Bool/{False};
-
-    let absurd(x : Nat, y : Nat, h : Eq()(x * 2 + 1, y * 2)) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
-    use /std/{Eq, Nat};
-    use /std/Bool/{False};
-
-    let absurd(a : Nat, h : Eq()(a - 1, 0)) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
-    use /std/{Eq, Int};
-    use /std/Bool/{False};
-
-    let absurd(i : Int, h : Eq()(i + +1, +0)) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE: &str = r#"
-    use /std/{Eq, Nat, Bytes};
-    use /std/Bool/{False, Holds};
-
-    let absurd(
-        b : Bytes,
-        n : Nat,
-        @ok : Holds(0 + n <= Bytes/len(b)),
-        h : Eq()(Bytes/slice(b, 0, n), x[]),
-    ) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
-pub const A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT_THE_OTHER: &str = r#"
-    use /std/{Eq, Bytes};
-    use /std/Bool/{False};
-
-    let absurd(b : Bytes, c : Bytes, h : Eq()(x[..b, 0x01], x[0x01, ..c])) -> False =
-        match h end;
-
-    /std/print("FORGED")
-    "#;
-
 pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
     use /std/{Eq, Bytes};
     use /std/Bool/{False};
@@ -766,45 +456,6 @@ pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
         match h end;
 
     /std/print("ok")
-    "#;
-
-pub const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
-    use /std/{Nat};
-
-    induct Tight : (n : Nat) -> pub Prop
-    | mk(a : Nat) : (0)
-    end
-
-    let extract(p : Tight(0)) -> Nat =
-        match p : (m, q) => Nat
-        | mk(a) => a
-        end;
-
-    /std/print(Nat/to_str(extract(Tight/mk(7))))
-    "#;
-
-pub const A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE: &str = r#"
-    use /std/{Eq, Nat};
-    use /std/Bool/{False};
-
-    induct Box : pub Prop
-    | mk(A : Type)
-    end
-
-    let unbox(b : Box) -> Type =
-        match b : (_) => Type
-        | mk(A) => A
-        end;
-
-    let boxes_equal(A : Type, B : Type) -> Eq()(Box/mk(A), Box/mk(B)) = Eq/refl();
-
-    let types_equal(A : Type, B : Type) -> Eq()(A, B) =
-        Eq/cong(unbox, boxes_equal(A, B));
-
-    let bad : False =
-        Eq/subst((t : Type) => t, types_equal(Nat, False), 0);
-
-    /std/print("FORGED")
     "#;
 
 pub const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
@@ -963,40 +614,6 @@ pub const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &str = r#"
     pub let one(p : P(false), q : P(false)) -> Eq()(p, q) = Eq/refl();
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION: &str = r#"
-    use /std/{Nat, Eq};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    let into_record(t : Two) -> {Eq()(0, 0), Eq()(1, 1)} =
-        match t
-        | a() => (Eq/refl(), Eq/refl())
-        | b() => (Eq/refl(), Eq/refl())
-        end;
-
-    /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE: &str = r#"
-    use /std/{Nat};
-
-    induct Two : pub Prop
-    | a()
-    | b()
-    end
-
-    let into_record(t : Two) -> {Nat, Nat} =
-        match t
-        | a() => (0, 0)
-        | b() => (1, 1)
-        end;
-
-    /std/Io/pure(())
     "#;
 
 pub const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str = r#"
@@ -1607,17 +1224,6 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str 
     /std/print(Nat/to_str(1))
     "#;
 
-pub const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    let shift(m : Nat) -> (Nat) -> Nat = (x : Nat) => x + m;
-
-    let apart(a : Nat, b : Nat, g : (Nat) -> Nat, x : Eq(@((Nat) -> Nat))(shift(a), g))
-        -> Eq(@((Nat) -> Nat))(shift(b), g) = x;
-
-    /std/Io/pure(())
-    "#;
-
 pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
     use /std/{Eq, Nat, Bool, List};
 
@@ -1668,17 +1274,6 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT: &str = r#"
-    use /std/{Eq, Nat};
-
-    let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
-
-    let apart(a : Nat, b : Nat)
-        -> Eq(@(Nat))((let z = halved(a); z), (let z = halved(b); z)) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &str = r#"
     use /std/{Eq, Nat};
 
@@ -1695,15 +1290,6 @@ pub const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &st
         -> Eq()(r.0(q), 0) = x;
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    let apart(a : Nat, b : Nat, c : (Nat) -> (Nat) -> Nat, x : Eq()(c(0)(a), 0))
-        -> Eq()(c(0)(b), 0) = x;
-
-    /std/Io/pure(())
     "#;
 
 pub const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
@@ -1755,38 +1341,6 @@ pub const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{Holds};
-
-    induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
-    | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
-    end
-
-    let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
-
-    let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =
-        match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;
-
-    /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{Holds};
-
-    induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
-    | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
-    end
-
-    let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
-
-    let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
-        (y, r) => match a | intro(@_, below) => below(y, r) end;
-
-    /std/print(Nat/to_str(1))
-    "#;
-
 pub const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: &str = r#"
     use /std/{Eq, Nat};
 
@@ -1804,15 +1358,6 @@ pub const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
 
     let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
         -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
-
-    /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS: &str = r#"
-    use /std/{Eq, Nat};
-
-    let along(a : Nat, b : Nat, p : Eq()(a, b), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =
-        Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1856,19 +1401,6 @@ pub const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
         -> Eq()(boxed(e), Option/some(x)) = Eq/refl();
 
     /std/print(Nat/to_str(z_of(Eq/refl(@Nat, @41))))
-    "#;
-
-pub const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
-    use /std/{Nat};
-
-    induct Side : (Nat, Nat) -> pub Prop
-    | left(@a : Nat) : (a, 0)
-    | right(@a : Nat) : (a, 1)
-    end
-
-    let which(@n : Nat, p : Side(n, 0)) -> Nat = match p | left(@a) => a + 1 end;
-
-    /std/print(Nat/to_str(which(Side/left(@41))))
     "#;
 
 pub const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"
@@ -2181,32 +1713,6 @@ pub const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
     /std/print("FORGED")
     "#;
 
-/// The induction hypothesis of a `Nat` fold, at the wrong instance.
-///
-/// In the successor arm the hypothesis is the motive at the *predecessor*, and the goal is the motive at the successor. Handing the hypothesis back directly proves `Eq()(k + 1, 0)` from `Eq()(k, 0)`, so a rule that typed the hypothesis at the scrutinee rather than at the peeled index would make every predicate provable by induction.
-pub const INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE: &str = r#"
-    use /std/{Nat, Eq};
-    let bogus(n : Nat) -> Eq()(n, 0) =
-        match n : (m) => Eq()(m, 0)
-        | 0 => Eq/refl()
-        | k + 1; ih => ih
-        end;
-    /std/print("FORGED")
-    "#;
-
-/// A natural-number dispatch whose default is checked at a case's instance rather than the scrutinee's.
-///
-/// The default binds nothing and refines no index, so it must be checked at the scrutinee's own value: its goal here is `Eq()(n, 0)` for an arbitrary `n`, which `Eq/refl()` cannot inhabit. Were it checked at the `0` arm's instance — the shape a refinement leak would produce — reflexivity would discharge it and every natural would equal zero.
-pub const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
-    use /std/{Nat, Eq};
-    let bogus(n : Nat) -> Eq()(n, 0) =
-        match n : (m) => Eq()(m, 0)
-        | 0 => Eq/refl()
-        | _ => Eq/refl()
-        end;
-    /std/print("FORGED")
-    "#;
-
 /// Two distinct recursions are not the same function.
 ///
 /// Both fold to themselves, which is the shape two recursions meet in: unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq()(0, 1)`.
@@ -2225,92 +1731,6 @@ pub const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
     let same : Eq()(f, g) = Eq/refl();
     /std/print("FORGED")
     "#;
-
-/// A `Bool` arm is checked at *its own* case value.
-///
-/// The `false` arm's goal is the motive at `false`, so `Eq/refl()` would have to inhabit `Eq()(false, true)`. An arm rule that refined the scrutinee to the wrong case — or to none at all — would let reflexivity discharge it, and every boolean would equal `true`.
-pub const BOOL_ARM_AT_THE_WRONG_CASE: &str = r#"
-    use /std/{Bool, Eq};
-    let bogus(b : Bool) -> Eq()(b, true) =
-        match b : (c) => Eq()(c, true)
-        | true => Eq/refl()
-        | false => Eq/refl()
-        end;
-    /std/print("FORGED")
-    "#;
-
-/// A natural-number dispatch's *literal* arm is checked at that literal.
-///
-/// The `1` arm's goal is the motive at `1`, which `Eq/refl()` cannot inhabit for `Eq()(1, 0)`. This is the companion to the default-arm fixture: there the danger is refining an arm that binds nothing, here it is refining a literal arm to the wrong literal.
-pub const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
-    use /std/{Nat, Eq};
-    let bogus(n : Nat) -> Eq()(n, 0) =
-        match n : (m) => Eq()(m, 0)
-        | 0 => Eq/refl()
-        | 1 => Eq/refl()
-        | _ => Eq/refl()
-        end;
-    /std/print("FORGED")
-    "#;
-
-pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
-    use /std/{Nat, Eq};
-
-    let all_zero(n : Nat) -> Eq()(n, 0) =
-        match n : (_) => Eq()(n, 0)
-        | 0 => Eq/refl()
-        | k + 1; ih => ih
-        end;
-
-    let boom : Eq()(1, 0) = all_zero(1);
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
-    use /std/{Nat, Eq, List};
-
-    let all_empty(l : List(Nat)) -> Eq()(List/len(l), 0) =
-        match l : (_) => Eq()(List/len(l), 0)
-        | [] => Eq/refl()
-        | [h, ..t]; ih => ih
-        end;
-
-    let boom : Eq()(1, 0) = all_empty([7]);
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_EVERY_TAIL: &str = r#"
-    use /std/{Nat, Eq};
-
-    let twice(n : Nat) -> Nat = n + n;
-
-    let all_zero(n : Nat) -> Eq()(twice(n), 0) =
-        match twice(n) : (_) => Eq()(twice(n), 0)
-        | 0 => Eq/refl()
-        | k + 1; ih => ih
-        end;
-
-    let boom : Eq()(2, 0) = all_zero(1);
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_IT_AT_EVERY_TAIL: &str = r#"
-        use /std/{Nat, Eq};
-
-        let all_zero(n : Nat) -> Eq()(n, 0) =
-            let y = n;
-            match n : (_) => Eq()(y, 0)
-            | 0 => Eq/refl()
-            | k + 1; ih => ih
-            end;
-
-        let boom : Eq()(1, 0) = all_zero(1);
-
-        /std/print("unreachable")
-        "#;
 
 pub const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
     use /std/{Nat};
@@ -2337,69 +1757,6 @@ pub const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
         end;
 
     /std/print(Nat/to_str(3))
-    "#;
-
-pub const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True, False, Holds};
-
-    let f(n : Nat, h : Holds(n == 2)) -> False =
-        match n : (m) => False
-        | 0 => h
-        | k + 1; ih => ih
-        end;
-
-    let boom : False = f(2, True/qed());
-
-    /std/print("unreachable")
-    "#;
-
-pub const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
-    use /std/{Nat, proved};
-    use /std/Bool/{True, False, Holds};
-
-    let step(k : Nat, a : Holds(k + 1 == 2), b : Holds(k == 0)) -> Holds(k + 1 == 0) =
-        proved();
-
-    let f(n : Nat, h : Holds(n == 2)) -> Holds(n == 0) =
-        match n : (m) => Holds(m == 0)
-        | 0 => True/qed()
-        | k + 1; ih => step(k, h, ih)
-        end;
-
-    let boom : False = f(2, True/qed());
-
-    /std/print("unreachable")
-    "#;
-
-pub const AN_ARM_OF_A_FOLD_OVER_A_CALL_RECORDS_NO_EQUATION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True, False, Holds};
-
-    let f(g : (Nat) -> Nat, x : Nat, h : Holds(g(x) == 2)) -> False =
-        match g(x) : (m) => False
-        | 0 => h
-        | k + 1; ih => ih
-        end;
-
-    let boom : False = f((y : Nat) => y, 2, True/qed());
-
-    /std/print("unreachable")
-    "#;
-
-pub const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
-    use /std/{Nat, List};
-    use /std/Bool/{True, False, Holds};
-
-    let f(xs : List(Nat), h : Holds(List/len(xs) == 2)) -> False =
-        match xs : (m) => False
-        | [] => h
-        | [x, ..t]; ih => ih
-        end;
-
-    let boom : False = f([1, 2], True/qed());
-
-    /std/print("unreachable")
     "#;
 
 pub const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"

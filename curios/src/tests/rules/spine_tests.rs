@@ -19,12 +19,24 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
     );
 }
 
+// A relevant argument past a curried head keeps two applications apart. The control applies the head to one argument at both.
 #[test]
 fn a_relevant_argument_past_a_curried_head_stays_apart() {
-    refused(A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART)
-        .by_elaborator_in("/apart", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let apart(a : Nat, b : Nat, c : (Nat) -> (Nat) -> Nat, x : Eq()(c(0)(a), 0))
+            -> Eq()(c(0)(a), 0) = x;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("-> Eq()(c(0)(a), 0) = x", "-> Eq()(c(0)(b), 0) = x")])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // **Two applications of one definition are decided by their spines before either is unfolded, in both checkers.** Forcing both sides first would land the proof they differ in in a stuck match's scrutinee, which is compared at `Type`, and refuse what comparing the spines of one global first accepts.
@@ -47,12 +59,29 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
     );
 }
 
+// The control is the two calls at one argument.
 #[test]
 fn two_calls_that_differ_in_a_relevant_argument_stay_apart() {
-    refused(TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART)
-        .by_elaborator_in("/apart", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let shift(m : Nat) -> (Nat) -> Nat = (x : Nat) => x + m;
+
+        let apart(a : Nat, b : Nat, g : (Nat) -> Nat, x : Eq(@((Nat) -> Nat))(shift(a), g))
+            -> Eq(@((Nat) -> Nat))(shift(a), g) = x;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "-> Eq(@((Nat) -> Nat))(shift(a), g) = x",
+        "-> Eq(@((Nat) -> Nat))(shift(b), g) = x",
+    )])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // **Two calls of one definition converge wherever they sit, whichever rule reaches them.** The spine rules decide the pair only while it is still spelled as two calls. Under a lambda's body, a tuple's component, a `let`'s value, a list's element, a `match`'s scrutinee, an operation's operand and a projection's head, reduction reaches the call first and unfolds it, and the two proofs become a stuck elimination's scrutinees, which were compared at `Type` and held apart: by the kernel alone under the first two, by both checkers under the rest, and by the elaborator alone at a curried call read by reflexivity. A scrutinee is compared at the type a lookup gives it, where that is a proposition, so the unfolded forms converge and the verdict no longer follows which spelling survived. The last program is a proof past a stuck `match`'s head, an argument neither checker types, read the same way.
@@ -66,12 +95,29 @@ fn two_calls_of_one_definition_convert_wherever_they_sit() {
     );
 }
 
+// The control is the two calls at one argument.
 #[test]
 fn two_calls_that_differ_in_a_relevant_argument_stay_apart_wherever_they_sit() {
-    refused(TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT)
-        .by_elaborator_in("/apart", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
+
+        let apart(a : Nat, b : Nat)
+            -> Eq(@(Nat))((let z = halved(a); z), (let z = halved(a); z)) = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "(let z = halved(a); z)) = Eq/refl()",
+        "(let z = halved(b); z)) = Eq/refl()",
+    )])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // The same pair where the definition mentions `Eq`, which makes it universe-polymorphic: each occurrence is an instance at levels of its own. Its heads are compared after the spines, which is when their levels are identified; a spine rule matching a bare variable head only would refuse it.

@@ -2,13 +2,35 @@
 
 use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
-// The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
+// The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible. The control takes the same `Box` apart into a proposition.
 #[test]
 fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
-    refused(A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA)
-        .by_elaborator_in("/extract", |error| {
-            matches!(error, Error::LargeElimOfProp { .. })
-        });
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        induct Box : pub Prop
+        | mk(n : Nat)
+        end
+
+        let extract(b : Box) -> True =
+            match b
+            | mk(n) => True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("-> True =", "-> Nat ="),
+        ("| mk(n) => True/qed()", "| mk(n) => n"),
+        ("/std/print(\"ok\")", "extract(Box/mk(7))"),
+    ])
+    .by_elaborator_in("/extract", |error| {
+        matches!(error, Error::LargeElimOfProp { .. })
+    });
 }
 
 // The same guard, in the direction that matters for the language staying usable. A guard that rejected these would be indistinguishable from one that rejected everything, and `ex falso` and transport are both load-bearing: `/std/Eq/subst` in the prelude is the singleton case.
@@ -25,26 +47,55 @@ fn a_proposition_still_eliminates_into_another_proposition() {
     );
 }
 
-// The guard's other refusal: one constructor, holding a proof no index pins. Nothing a program computes could tell which proof it was handed, but the arm is handed the proof the match was given, and a recursion along it has a type reduce the lemma that built it. `f` is that recursion on an accessibility proof, the elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively: two proofs at one recursive call reduce through different eliminations, and nothing reconciles the calls one step further on.
+// The guard's other refusal: one constructor, holding a proof no index pins. Nothing a program computes could tell which proof it was handed, but the arm is handed the proof the match was given, and a recursion along it has a type reduce the lemma that built it. `f` is that recursion on an accessibility proof, the elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively: two proofs at one recursive call reduce through different eliminations, and nothing reconciles the calls one step further on. The control takes the same proposition apart into a proposition, which is how an accessibility proof is inverted.
 #[test]
 fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
-    refused(A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA)
-        .by_elaborator_in("/f", |error| matches!(error, Error::LargeElimOfProp { .. }));
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
+        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
+        end
+
+        let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
+
+        let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
+            (y, r) => match a | intro(@_, below) => below(y, r) end;
+
+        /std/print(Nat/to_str(1))
+        "#,
+        b"1",
+    )
+    .refused(&[
+        ("let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =\n            (y, r) => match a | intro(@_, below) => below(y, r) end;", "let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =\n            match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;"),
+    ])
+    .by_elaborator_in("/f", |error| matches!(error, Error::LargeElimOfProp { .. }));
 }
 
-// The control: the same proposition is taken apart into a proposition, which is how an accessibility proof is inverted.
-#[test]
-fn a_proposition_holding_a_proof_still_eliminates_into_a_proposition() {
-    assert_eq!(
-        run(A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION),
-        b"1"
-    );
-}
-
-// The guard counts the constructors a family declares, in the elaborator as in the kernel. `Side(n, 0)` leaves `left` alone and its payload is the index, so a guard that counted the arms the index left would admit `which`, which the kernel refuses. The refusal is the elaborator's own.
+// The guard counts the constructors a family declares, in the elaborator as in the kernel. `Side(n, 0)` leaves `left` alone and its payload is the index, so a guard that counted the arms the index left would admit `which`, which the kernel refuses. The refusal is the elaborator's own. The control's `Side` declares `left` alone, whose payload the index pins.
 #[test]
 fn a_constructor_an_index_rules_out_still_counts() {
-    refused(A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS).by_elaborator_in(
+    control(
+        r#"
+        use /std/{Nat};
+
+        induct Side : (Nat, Nat) -> pub Prop
+        | left(@a : Nat) : (a, 0)
+        end
+
+        let which(@n : Nat, p : Side(n, 0)) -> Nat = match p | left(@a) => a + 1 end;
+
+        /std/print(Nat/to_str(which(Side/left(@41))))
+        "#,
+        b"42",
+    )
+    .refused(&[(
+        "        | left(@a : Nat) : (a, 0)\n",
+        "        | left(@a : Nat) : (a, 0)\n        | right(@a : Nat) : (a, 1)\n",
+    )])
+    .by_elaborator_in(
         "/which",
         |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Side")),
     );
@@ -68,13 +119,26 @@ fn a_cast_along_a_proof_written_as_a_redex_is_its_argument() {
     );
 }
 
-// The control: where conversion does not hold the two ends one, the cast stands. Its statement is true, and proved by matching on `p`; a rule that fired on the shape of the match alone would accept it by reflexivity.
+// Where conversion does not hold the two ends one, the cast stands. Its statement is true, and proved by matching on `p`; a rule that fired on the shape of the match alone would accept it by reflexivity. The control is the cast along a hypothesis whose ends the algebra holds one, where it is its argument.
 #[test]
 fn a_cast_along_a_hypothesis_whose_ends_differ_stands() {
-    refused(A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS)
-        .by_elaborator_in("/along", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let along(a : Nat, b : Nat, p : Eq()(a + b, b + a), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =
+            Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#,
+        b"1",
+    )
+    .refused(&[
+        ("p : Eq()(a + b, b + a)", "p : Eq()(a, b)"),
+    ])
+    .by_elaborator_in("/along", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // No checker reduces a proof to take it into data. `slow(n)` proves `n = n` by an induction that reads its hypothesis, so at a hundred billion its proof is a hundred billion steps from `refl`, and a cast that reduced it to fire would run out of steps: closed, the cast is its argument outright; open, `slow(n)` is stuck on `n` and the indices are one all the same; and where a closed match's arm names a payload its equations leave open, as `inner`'s does, the closed machine is handed the payload the instance the match states says and evaluates no more of the proof. The running program casts along it too, with the proof erased.
@@ -101,19 +165,36 @@ fn a_match_on_a_pinned_proof_is_its_arm_at_the_index_under_every_case() {
     );
 }
 
-// The row's stated attack shape, answered: "a proposition arrived at by *formation* rather than by declaration, carrying something the guards above only ever check where a declaration is consulted". The large-elimination guard is one of those guards, and it does *not* only check where a declaration is consulted — it asks `Sort::of`, which computes formation. So eliminating a two-constructor proposition into an anonymous Σ of `Nat`s is refused exactly as into a bare `Nat`, and the control is the same elimination into an anonymous Σ of proofs, which must stay legal because a proposition eliminated into a proposition needs no condition at all.
+// The row's stated attack shape, answered: "a proposition arrived at by *formation* rather than by declaration, carrying something the guards above only ever check where a declaration is consulted". The large-elimination guard is one of those guards, and it does *not* only check where a declaration is consulted — it asks `Sort::of`, which computes formation. So eliminating a two-constructor proposition into an anonymous Σ of `Nat`s is refused exactly as into a bare `Nat`. A proposition eliminated into a proposition needs no condition at all. The control is the same elimination into an anonymous Σ of proofs.
 #[test]
 fn a_proposition_may_not_be_eliminated_into_a_formed_type() {
-    refused(A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE)
-        .by_elaborator_in("/into_record", |error| {
-            matches!(error, Error::LargeElimOfProp { .. })
-        });
-}
+    control(
+        r#"
+        use /std/{Nat, Eq};
 
-#[test]
-fn a_proposition_still_eliminates_into_a_formed_proposition() {
-    assert_eq!(
-        run(A_PROPOSITION_STILL_ELIMINATES_INTO_A_FORMED_PROPOSITION),
-        b"1"
-    );
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        let into_record(t : Two) -> {Eq()(0, 0), Eq()(1, 1)} =
+            match t
+            | a() => (Eq/refl(), Eq/refl())
+            | b() => (Eq/refl(), Eq/refl())
+            end;
+
+        /std/print(Nat/to_str(1))
+        "#,
+        b"1",
+    )
+    .refused(&[
+        ("{Nat, Eq}", "{Nat}"),
+        ("-> {Eq()(0, 0), Eq()(1, 1)} =", "-> {Nat, Nat} ="),
+        ("| a() => (Eq/refl(), Eq/refl())", "| a() => (0, 0)"),
+        ("| b() => (Eq/refl(), Eq/refl())", "| b() => (1, 1)"),
+        ("/std/print(Nat/to_str(1))", "/std/Io/pure(())"),
+    ])
+    .by_elaborator_in("/into_record", |error| {
+        matches!(error, Error::LargeElimOfProp { .. })
+    });
 }
