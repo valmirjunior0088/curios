@@ -56,41 +56,54 @@ fn a_member_of_a_group_that_owes_no_descent_is_read_once_known_to_terminate() {
     assert_eq!(run(source), b"ok");
 }
 
-// `b(n)` calls itself at `n`, nothing below it, so its turn withholds it, and `c`'s body reads `Holds(b(0))` over a `b` that stands for nothing, though `b(0)` is `true`: an equation of a member that need not terminate is no fact.
+// `b(n)` calls itself at `n`, nothing below it, so its turn withholds it, and `c`'s body reads `Holds(b(0))` over a `b` that stands for nothing, though `b(0)` is `true`: an equation of a member that need not terminate is no fact. The control's `b` calls itself at the predecessor, so its turn finds it known.
 #[test]
 fn a_member_on_a_cycle_that_does_not_descend_stands_for_nothing_in_its_bodies() {
-    let source = r#"
+    control(
+        r#"
         use /std/{Bool, Nat, print};
         use /std/Bool/{True, Holds};
 
         pub let outer(_: Nat) -> Bool =
-            let b(n: Nat) -> Bool = match n | 0 => true | _ + 1 => b(n) end
+            let b(n: Nat) -> Bool = match n | 0 => true | k + 1 => b(k) end
             and c: Bool =
                 let _: Holds(b(0)) = True/qed();
                 false;
             c;
 
         print("")
-        "#;
-    refused(source).by_elaborator_in("/outer", |error| {
+        "#,
+        b"",
+    )
+    .refused(&[
+        ("| k + 1 => b(k) end", "| _ + 1 => b(n) end"),
+    ])
+    .by_elaborator_in("/outer", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/sys/Bool/True" && pinned(expected) == "/sys/Bool/Holds(b(0))")
     });
 }
 
-// `b` calls itself with nothing below, so its turn withholds it and nothing unfolds it: the group, whose `b` is a type, is named for not descending before `c`'s body would unfold `b` into a list of itself without end.
+// `b` calls itself with nothing below, so its turn withholds it and nothing unfolds it: the group, whose `b` is a type, is named for not descending before `c`'s body would unfold `b` into a list of itself without end. The control declares `b` apart, a list of `Nat`.
 #[test]
 fn a_group_listing_itself_is_refused_for_not_descending() {
-    let source = r#"
+    control(
+        r#"
         use /std/{List, Nat, print};
 
         pub let outer(n: Nat) -> Nat =
-            let b: Type = List(b)
-            and c: b = [];
+            let b: Type = List(Nat);
+            let c: b = [];
             n;
 
         print("")
-        "#;
-    refused(source).by_elaborator_in("/outer", |error| {
+        "#,
+        b"",
+    )
+    .refused(&[(
+        "let b: Type = List(Nat);\n            let c: b = [];",
+        "let b: Type = List(b)\n            and c: b = [];",
+    )])
+    .by_elaborator_in("/outer", |error| {
         matches!(error, Error::PartialInErasedPosition { .. })
     });
 }
