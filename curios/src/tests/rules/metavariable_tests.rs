@@ -15,12 +15,24 @@ fn an_inferred_value_under_a_refined_proof_keeps_its_universe_instance() {
 //
 // The extent is where the soundness sits, because the assumption's second clause is that nothing can *later* be solved to a partial or negatively-occurring term. Positivity and the totality classification are decided of a declaration as it is published, on the item and entries zonking returned, and positivity reads a `Metavar` through `opaque`: its spine children at `Mixed`, and never its solution, which does not exist yet. A metavariable surviving into a registry telescope would therefore be analyzed as a hole while the term it is later solved to is analyzed not at all. Refusal before they are decided is what closes that, not the ordering by itself.
 //
-// Each fixture plants one unconstrained implicit in one of the four places, and all four are refused; the control is what keeps the row from being read as "declarations may not mention implicits" — it supplies the same argument in all four positions and requires the program to run.
+// Each fixture plants one unconstrained implicit in one of the four places, and all four are refused; the control is what keeps the row from being read as "declarations may not mention implicits" — it supplies the same argument in all four positions and requires the program to run. Each is derived from its own position with the argument supplied.
 #[test]
 fn a_metavariable_does_not_survive_into_an_induct_telescope() {
-    refused(&format!(
-        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_AN_INDUCT_TELESCOPE}"
-    ))
+    control(
+        r#"
+        use /std/{Nat};
+
+        let drop(@A : Type, n : Nat) -> Nat = n;
+
+        induct Bad : pub Type
+        | c(x : /std/Eq()(drop(@Nat, 0), 0))
+        end
+
+        /std/Io/pure(())
+        "#,
+        b"",
+    )
+    .refused(&[("drop(@Nat, 0)", "drop(0)")])
     .by_elaborator_in("/Bad", |error| {
         matches!(error, Error::UninferredImplicit { .. })
     });
@@ -28,9 +40,21 @@ fn a_metavariable_does_not_survive_into_an_induct_telescope() {
 
 #[test]
 fn a_metavariable_does_not_survive_into_a_struct_field() {
-    refused(&format!(
-        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_STRUCT_FIELD}"
-    ))
+    control(
+        r#"
+        use /std/{Nat};
+
+        let drop(@A : Type, n : Nat) -> Nat = n;
+
+        struct Bad : pub Type {
+            x : /std/Eq()(drop(@Nat, 0), 0)
+        }
+
+        /std/Io/pure(())
+        "#,
+        b"",
+    )
+    .refused(&[("drop(@Nat, 0)", "drop(0)")])
     .by_elaborator_in("/Bad", |error| {
         matches!(error, Error::UninferredImplicit { .. })
     });
@@ -38,9 +62,19 @@ fn a_metavariable_does_not_survive_into_a_struct_field() {
 
 #[test]
 fn a_metavariable_does_not_survive_a_definitions_type() {
-    refused(&format!(
-        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_A_DEFINITIONS_TYPE}"
-    ))
+    control(
+        r#"
+        use /std/{Nat};
+
+        let drop(@A : Type, n : Nat) -> Nat = n;
+
+        let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat = 0;
+
+        /std/Io/pure(())
+        "#,
+        b"",
+    )
+    .refused(&[("drop(@Nat, 0)", "drop(0)")])
     .by_elaborator_in("/f", |error| {
         matches!(error, Error::UninferredImplicit { .. })
     });
@@ -48,9 +82,17 @@ fn a_metavariable_does_not_survive_a_definitions_type() {
 
 #[test]
 fn a_metavariable_does_not_survive_the_entrypoint_body() {
-    refused(&format!(
-        "{AN_UNCONSTRAINED_IMPLICIT}{A_METAVARIABLE_IN_THE_ENTRYPOINT_BODY}"
-    ))
+    control(
+        r#"
+        use /std/{Nat};
+
+        let drop(@A : Type, n : Nat) -> Nat = n;
+
+        /std/print(Nat/to_str(drop(@Nat, 0)))
+        "#,
+        b"0",
+    )
+    .refused(&[("drop(@Nat, 0)", "drop(0)")])
     .by_elaborator_in("entry", |error| {
         matches!(error, Error::UninferredImplicit { .. })
     });

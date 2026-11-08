@@ -4,11 +4,11 @@
 
 ## What is wrong today
 
-Part of `tests::rules` still puts a refusal with `refused(source)`, which asks for no control, so nothing holds a refusal beside one and those files drift from the rule: 23 tests there put a refusal that way, 13 of them with no test running a program before or after them, counted after the totality files were written through controls (counted). By file, bare of refusals: `coherence_tests` 7 of 11, `effect_tests` 4 of 8 and `metavariable_tests` 2 of 4. The count reads adjacency and not what a control controls.
+Every refusal in `tests::rules` is derived from its control, but `rules::test_support`'s `refused(source)`, which asks for no control, is still public, so nothing keeps the next refusal from being put without one.
 
 ## Settled
 
-- **A refusal is derived from its control.** `rules::test_support`'s `control(source, prints)` runs its program and checks what it prints, and `Control::refused(edits)` puts the control with each edit made, each edit's text standing once in the program as the edits before it left it: the one thing the refusal turns on, and what the refused program needs besides, such as `False` where the control states `True`. Editing the control carries every refusal derived from it, and an edit the control has moved away from fails. `totality_tests`, the elimination files — `arm_tests`, `coverage_tests`, `fold_tests`, `index_tests`, `large_elimination_tests`, `proposition_elimination_tests` and `spine_tests` — the formation files — `proposition_tests`, `subsumption_tests`, `plicity_tests` and the four positivity files — the conversion files — `one_inhabitant_tests`, `sequence_tests`, `chain_tests`, `eta_tests` and `irrelevance_tests` — and the totality files — `totality_descent_tests`, `totality_partiality_tests`, `totality_proof_release_tests` and `group_tests` — are written so.
+- **A refusal is derived from its control.** `rules::test_support`'s `control(source, prints)` runs its program and checks what it prints, and `Control::refused(edits)` puts the control with each edit made, each edit's text standing once in the program as the edits before it left it: the one thing the refusal turns on, and what the refused program needs besides, such as `False` where the control states `True`. Editing the control carries every refusal derived from it, and an edit the control has moved away from fails. Every file of `tests::rules` is written so.
 - **A run-only test stays where it states a claim of its own**, a control broader than one refusal's or the twin of a kernel test under its name; one that only controlled the refusal before it is folded into that refusal's derivation.
 - **The last stage closes the door**: `refused` becomes private to `rules::test_support`, so a refusal without its control does not compile.
 
@@ -16,7 +16,6 @@ Part of `tests::rules` still puts a refusal with `refused(source)`, which asks f
 
 Each stage writes every refusal of its files through a control: a bare one gains the control it needs, the same construction with the one thing changed that the refusal turns on, and one beside a neighbouring control is derived from it, or from a nearer one where the neighbour controls another construction. A control prints a value its construction computes where it computes one.
 
-1. **Admission**: `effect_tests`, `metavariable_tests` and `coherence_tests`.
-2. **The door closed**: `refused` private to `rules::test_support`.
+1. **The door closed**: `refused` private to `rules::test_support`.
 
 Each stage's check is its files' tests, run by name, and `cargo xtask workspace lint`. Once the last lands, nothing references this specification, and it is deleted.
