@@ -3,20 +3,18 @@
 use {
     crate::{
         CoreEntry, CoreHead, CoreItem, CoreMember, CoreValue, Decoration, DecoratorField, Frame,
-        LetSignature, Shown, ShownForm, ShownOptions, TopForeign, TopLet, TopTest, Tree, binders,
-        bracketed, core_written, decoration_fields, family_declared, from_core, level_spelled,
-        literal_of, nested, print_shown, print_shown_entry, print_shown_item, print_term,
-        record_declared, shown, spell, string, sub, tree, universe_context_written, value, word,
-        word_value, written_entries,
+        LetSignature, Shown, ShownOptions, TopForeign, TopLet, TopTest, Tree, bracketed,
+        core_written, decoration_fields, family_declared, from_core, level_spelled, literal_of,
+        nested, print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
+        spell, string, sub, tree, universe_context_written, value, word, word_value,
     },
     curios_abi::{ForeignFunction, stdio},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
-        Arity, Atom, Bound, ConceptDecl, Cursor, Definition, DefinitionKind, Definitions, Field,
-        Free, Func, Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks,
-        Members, Mention, Nat, Nominal, Notation, Program, Scope, Spellings, StructDecl, Subterm,
-        Symbols, Telescope, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort,
-        suffixes_of,
+        Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
+        Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks, Members,
+        Mention, Nat, Nominal, Notation, Program, Scope, Spellings, StructDecl, Subterm, Symbols,
+        Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, run_printer, run_printer_within},
@@ -2316,7 +2314,7 @@ fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
     terms
 }
 
-/// What a nominal declaration's entry holds beside what its form spells and its former's: the module its representation belongs to where it is not its name's parent, the polarities and the variances its elaboration filed, and a scheme apart from its former's; and a concept's own parts where they are not read off its record — its parameters, its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
+/// What a nominal declaration's entry holds beside what its form spells and its former's: the module its representation belongs to where it is not its name's parent, the polarities and the variances its elaboration filed, and a scheme apart from its former's; and a concept's own parts where they are not read off its record — its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
 fn entry_fields(
     definition: &Definition,
     nominal: &Nominal,
@@ -2376,9 +2374,6 @@ fn entry_fields(
                 .unwrap_or_else(|| nested(Vec::new()));
             own.push(("universe_context", context));
         }
-        if concept.params != concept_params_of(record) {
-            own.push(("params", concept_params_written(concept, frame)));
-        }
         if concept.supers != concept_supers_read_off(definition.name, record) {
             own.push((
                 "supers",
@@ -2417,33 +2412,6 @@ fn module_written(module: &Qualifier, spelling: &Spelling) -> CoreValue<Shown> {
         true => CoreValue::Root,
         false => word_value(spelling.symbol(&Global::Authored(*module))),
     }
-}
-
-/// A concept's parameters where they are its record's: each type as the record states it, under no mark, as a concept holds its parameters.
-pub(crate) fn concept_params_of(record: &StructDecl) -> Telescope<()> {
-    let params = record.arity.prefix();
-    let marks = vec![Plicity::Explicit; params.len()];
-
-    params.with_marks(&marks)
-}
-
-/// A concept's parameters as it holds them: each type under its mark, ascribed to the word a later type reads it by where it has one.
-fn concept_params_written(concept: &ConceptDecl, frame: Frame) -> CoreValue<Shown> {
-    let entries = written_entries(&binders(&mut concept.params.cursor(), frame), frame)
-        .into_iter()
-        .map(|param| {
-            let entry = match param.label {
-                Some(label) => shown(ShownForm::Ascribed {
-                    term: word(label),
-                    type_: param.type_,
-                }),
-                None => param.type_,
-            };
-            (param.plicity, value(entry))
-        })
-        .collect();
-
-    CoreValue::List(entries)
 }
 
 /// The concepts a record's superclass edges reach, read off each edge's type, as a concept's are where its fields elaborate.

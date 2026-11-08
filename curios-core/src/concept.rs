@@ -1,11 +1,9 @@
 //! The registry entry for a concept — a record-shaped interface — carried on the [`Definitions`](super::Definitions) beside `induct_decls` and `struct_decls`.
 //!
-//! A concept lowers to a representation-public nominal structure, whose [`StructDecl`] entry drives literals and projections; this entry adds what resolution needs on top: the field labels, what each superclass edge reaches, and the parameter telescope. Resolution itself — witness keys, head keys, and the instance search — is elaboration machinery and lives in `curios-elab`.
+//! A concept lowers to a representation-public nominal structure, whose [`StructDecl`] entry drives literals and projections; this entry adds what resolution needs on top: the field labels and what each superclass edge reaches. Its parameters are its record's, stated once there. Resolution itself — witness keys, head keys, and the instance search — is elaboration machinery and lives in `curios-elab`.
 
 use {
-    super::{
-        Field, Free, Global, Proj, Sharing, StructDecl, Subterm, Telescope, Term, UniverseContext,
-    },
+    super::{Field, Free, Global, Proj, StructDecl, Subterm, Telescope, Term, UniverseContext},
     curios_common::Plicity,
 };
 
@@ -14,8 +12,6 @@ use {
 #[curios_archive::archived]
 pub struct ConceptDecl {
     pub universe_context: UniverseContext,
-    /// The declaration's parameter telescope, e.g. `(A : Type)` for `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.
-    pub params: Telescope<()>,
     /// Field labels in declaration order — the positions witness struct literals fill and method wrappers project.
     pub fields: Vec<String>,
     /// What each superclass edge reaches: the super concept's qualified name, one per `use` field of the concept's field telescope ([`StructDecl::fields`](super::StructDecl::fields)), in field order. Where an edge stands is its field's mark, which the telescope states; what it reaches is read off the field's elaborated type where the concept's fields are elaborated — so an alias of a concept application is an edge — and is empty until then. The graph over all concepts is acyclic, checked as each concept's edges are recorded.
@@ -35,11 +31,10 @@ impl ConceptDecl {
             .collect()
     }
 
-    /// This concept with every term hash-consed against `sharing`. See [`Definitions::shared`](crate::Definitions::shared).
-    pub fn shared(&self, sharing: &Sharing) -> Self {
+    /// This concept as a consed declaration carries it, its scheme unplaced ([`UniverseContext::unplaced`]): it holds no term to share. See [`Definitions::shared`](crate::Definitions::shared).
+    pub fn unplaced(&self) -> Self {
         Self {
             universe_context: self.universe_context.unplaced(),
-            params: sharing.share(&self.params),
             fields: self.fields.clone(),
             supers: self.supers.clone(),
         }

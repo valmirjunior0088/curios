@@ -93,7 +93,6 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
             &concept,
             ConceptDecl {
                 universe_context: UniverseContext::default(),
-                params: Telescope::done(()),
                 fields: Vec::new(),
                 supers: Vec::new(),
             },

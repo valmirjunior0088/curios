@@ -133,9 +133,6 @@ pub fn sort_family_levels(
             mentioned.extend(struct_decl.result_sort.universe_metas());
             telescopes.extend(universe_metas(&struct_decl.arity));
         }
-        if let Some(concept) = context.concept(name) {
-            mentioned.extend(universe_metas(&concept.params));
-        }
     }
 
     interface.extend(mentioned.iter().copied());
@@ -214,17 +211,6 @@ pub fn finalize_definition(
             },
         );
     }
-    if let Some(concept) = context.concept(name).cloned() {
-        context.update_concept(
-            name,
-            ConceptDecl {
-                universe_context: concept.universe_context,
-                params: zonk_solved_term_metas(context, &concept.params),
-                fields: concept.fields,
-                supers: concept.supers,
-            },
-        );
-    }
 
     // The signature and any registry telescope form the declaration's interface: a use site instantiates exactly these. Levels reachable only through the body are internal classifiers and are minimized instead, as are the levels of the result sort — see [`result_sort_only_metas`].
     let determined = result_sort_only_metas(context, &type_);
@@ -274,11 +260,6 @@ pub fn finalize_definition(
             name,
             ConceptDecl {
                 universe_context: universe_context.clone(),
-                params: stamp_declaration_instance(
-                    &context.zonk_universe_levels(&concept.params)?,
-                    &owned,
-                    &instance,
-                ),
                 fields: concept.fields,
                 supers: concept.supers,
             },

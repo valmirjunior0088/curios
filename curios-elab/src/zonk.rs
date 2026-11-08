@@ -85,15 +85,6 @@ impl<'a> Zonk<'a> {
         })
     }
 
-    fn zonk_concept_decl(&self, concept: &ConceptDecl) -> Result<ConceptDecl, Error> {
-        Ok(ConceptDecl {
-            universe_context: concept.universe_context.clone(),
-            params: self.zonk_field_telescope(&concept.params)?,
-            fields: concept.fields.clone(),
-            supers: concept.supers.clone(),
-        })
-    }
-
     fn zonk_item(&self, item: &Item) -> Result<Item, Error> {
         match item {
             Item::Let(def) => Ok(Item::Let(Box::new(self.zonk_definition(def)?))),
@@ -813,8 +804,9 @@ pub fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error
         if let Some(declaration) = context.struct_decl(name) {
             struct_decls.push((*name, zonk.zonk_struct_decl(declaration)?));
         }
+        // A concept holds no term: its parameters and its fields are its record's.
         if let Some(concept) = context.concept(name) {
-            concepts.push((*name, zonk.zonk_concept_decl(concept)?));
+            concepts.push((*name, concept.clone()));
         }
     }
 
@@ -939,9 +931,6 @@ pub fn goal_sites(
             &seen_goals,
             &referenced,
         );
-    }
-    for concept in definitions.concepts().values() {
-        scan(&concept.params, None, &goals, &seen_goals, &referenced);
     }
 
     let mut scanned = BTreeSet::new();

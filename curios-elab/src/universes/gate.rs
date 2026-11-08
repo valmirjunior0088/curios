@@ -298,7 +298,6 @@ fn validate_definitions_instance_arities(
     // A concept carries its record, so there is no concept without one to refuse.
     for (name, (_, concept)) in &concepts {
         let shown = name.faithful();
-        validate!(&concept.params, &format!("concept {shown} parameters"))?;
         let record = structs
             .get(name)
             .map(|(_, record)| *record)
@@ -471,11 +470,6 @@ pub fn validate_universes_in(
                 error.faithful()
             ))
         })?;
-        validate_bound_universes(
-            &concept.params,
-            concept.universe_context.parameter_count,
-            &format!("concept {shown} parameters"),
-        )?;
     }
     validate_definitions_instance_arities(definitions, places, items)?;
     Ok(())
@@ -532,9 +526,6 @@ pub fn validate_lowered_universe_seeds(
     for (name, declaration) in &definitions.struct_decls() {
         collect!(*name, &declaration.arity);
         collect!(*name, &declaration.result_sort);
-    }
-    for (name, concept) in &definitions.concepts() {
-        collect!(*name, &concept.params);
     }
 
     for (name, metas) in metas {

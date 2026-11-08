@@ -74,14 +74,6 @@ pub fn binders<B: Bound>(cursor: &mut Cursor<'_, B>, frame: Frame) -> Vec<Binder
     binders
 }
 
-/// Each binder written, read by nothing beyond its own telescope.
-pub fn written_entries(binders: &[Binder], frame: Frame) -> Vec<FuncTypeParam<Shown>> {
-    binders
-        .iter()
-        .map(|binder| binder.written(false, frame))
-        .collect()
-}
-
 /// What a value constructor takes a family's parameter under: a `use` one a witness slot, every other one hidden.
 pub fn hidden(mark: Plicity) -> Plicity {
     match mark {

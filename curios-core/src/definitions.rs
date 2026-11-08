@@ -707,12 +707,7 @@ impl Nominal {
     pub fn former_domains(&self) -> Vec<&Term> {
         match self {
             Nominal::Inductive(declaration) => declaration.former_domains(),
-            Nominal::Struct(record) => record.former_domains(),
-            Nominal::Concept { concept, record } => {
-                let mut domains = concept.former_domains();
-                domains.extend(record.former_domains());
-                domains
-            }
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => record.former_domains(),
         }
     }
 
@@ -720,12 +715,7 @@ impl Nominal {
     pub fn reaches(&self) -> BTreeSet<Global> {
         match self {
             Nominal::Inductive(declaration) => declaration.reaches(),
-            Nominal::Struct(record) => record.reaches(),
-            Nominal::Concept { concept, record } => {
-                let mut names = record.reaches();
-                names.extend(concept.reaches());
-                names
-            }
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => record.reaches(),
         }
     }
 
@@ -735,7 +725,7 @@ impl Nominal {
             Nominal::Inductive(declaration) => Nominal::Inductive(declaration.shared(sharing)),
             Nominal::Struct(record) => Nominal::Struct(record.shared(sharing)),
             Nominal::Concept { concept, record } => Nominal::Concept {
-                concept: concept.shared(sharing),
+                concept: concept.unplaced(),
                 record: record.shared(sharing),
             },
         }
@@ -1709,18 +1699,6 @@ impl StructDecl {
     }
 }
 
-impl ConceptDecl {
-    /// The top-level names this declaration reaches through its parameters; its fields are its record entry's.
-    pub fn reaches(&self) -> BTreeSet<Global> {
-        fields_reaches(&self.params)
-    }
-
-    /// The domains its former ranges over: its parameters' types.
-    pub fn former_domains(&self) -> Vec<&Term> {
-        entries(&self.params).0
-    }
-}
-
 /// The names `term` reaches: the declarations it references and its construction heads.
 fn term_reaches(term: &Term) -> BTreeSet<Global> {
     let mut names = term
@@ -1902,9 +1880,6 @@ fn item_positions(
         if let Some(record) = nominal.record() {
             visit(Some(name), &record.arity);
             visit(Some(name), &record.result_sort);
-        }
-        if let Some(concept) = nominal.concept() {
-            visit(Some(name), &concept.params);
         }
     }
 }

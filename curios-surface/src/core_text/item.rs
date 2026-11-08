@@ -13,7 +13,7 @@ use {
     },
     crate::{
         CoreFile, CoreItem, CoreMember, CoreText, CoreValue, FormScope, LetSignature, TopForeign,
-        TopTest, concept_params_of, concept_supers_read_off,
+        TopTest, concept_supers_read_off,
     },
     curios_abi::ForeignFunction,
     curios_common::Qualifier,
@@ -414,7 +414,6 @@ fn nominal_read(
             let (record, words) = concept_entry_read(concept, name, scheme, fields, reader)?;
             let mut declaration = ConceptDecl {
                 universe_context: record.universe_context.clone(),
-                params: concept_params_of(&record),
                 fields: words,
                 supers: concept_supers_read_off(*name, &record),
             };

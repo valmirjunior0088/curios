@@ -16,7 +16,7 @@ The writer builds Core text's own tree, `Term<CoreText>` and `CoreFile`, the rea
 
 ## Stages
 
-1. **Text written whole is Core text.** The writer, generic over the dialect it builds, builds Core text's tree where it writes whole, so what a reader reads back is a tree the grammar reads. Check: the round trip, and a module's dump written whole formatted to itself. Waits on the surface finding on a concept's own parameters (`surface/000-findings.md`), whose shown form Core text cannot write.
+1. **Text written whole is Core text.** The writer, generic over the dialect it builds, builds Core text's tree where it writes whole, so what a reader reads back is a tree the grammar reads. Check: the round trip, and a module's dump written whole formatted to itself.
 
 ## Retirement
 

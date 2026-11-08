@@ -300,7 +300,7 @@ pub fn item_part_digest(
             .map(|concept| {
                 let stored = ConceptDecl {
                     universe_context: UniverseContext::empty(),
-                    ..concept.shared(&sharing)
+                    ..concept.clone()
                 };
 
                 sealed(curios_archive::to_bytes(&(
@@ -403,7 +403,6 @@ pub fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
     this.universe_context == that.universe_context
         && this.fields == that.fields
         && this.supers == that.supers
-        && fields_alike(&this.params, &that.params)
 }
 
 fn fields_alike(this: &Telescope<()>, that: &Telescope<()>) -> bool {

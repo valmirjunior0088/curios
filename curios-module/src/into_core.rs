@@ -2043,10 +2043,6 @@ fn process_items(
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     drop(prefixes);
-                    let param_tys_unmarked = param_tys
-                        .iter()
-                        .map(|(_, n, t)| (*n, t.clone()))
-                        .collect::<Vec<_>>();
                     let param_vars = param_binders
                         .iter()
                         .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
@@ -2112,7 +2108,6 @@ fn process_items(
                         name,
                         curios_core::ConceptDecl {
                             universe_context: curios_core::UniverseContext::empty(),
-                            params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                             fields: field_labels.clone(),
                             // What each `use` field reaches is read off its elaborated type, where the fields are elaborated.
                             supers: Vec::new(),

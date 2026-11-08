@@ -753,17 +753,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 },
             );
         }
-        if let Some(concept) = context.concept(&def.name).cloned() {
-            context.update_concept(
-                &def.name,
-                ConceptDecl {
-                    universe_context: concept.universe_context,
-                    params: zonk_solved_term_metas(context, &concept.params),
-                    fields: concept.fields,
-                    supers: concept.supers,
-                },
-            );
-        }
     }
 
     // A top-level group is one cycle of what its members reach: read once their terms and registry entries are elaborated, so a witness's resolutions count, and before the group's levels close, which a member outside the cycle would share.
@@ -891,7 +880,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 &def.name,
                 ConceptDecl {
                     universe_context: universe_context.clone(),
-                    params: outside.stored(context, &concept.params)?,
                     fields: concept.fields,
                     supers: concept.supers,
                 },
@@ -1163,9 +1151,6 @@ fn indexed_by_its_group(
         if let Some(entry) = context.struct_decl(&def.name) {
             domains.extend(entry.former_domains().into_iter().cloned());
         }
-        if let Some(entry) = context.concept(&def.name) {
-            domains.extend(entry.former_domains().into_iter().cloned());
-        }
         defs.iter().zip(locals).find_map(|(member, local)| {
             domains
                 .iter()
@@ -1210,10 +1195,6 @@ fn group_parts(
                 reached.extend(entry.reaches());
                 frees.push(entry.arity.mentions());
                 frees.push(entry.result_sort.mentions());
-            }
-            if let Some(entry) = context.concept(name) {
-                reached.extend(entry.reaches());
-                frees.push(entry.params.mentions());
             }
             names
                 .iter()
