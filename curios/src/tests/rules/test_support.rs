@@ -514,22 +514,6 @@ pub const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA: &str = r#"
-    use /std/{Eq, Nat};
-
-    let dropped(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), g) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA: &str = r#"
-    use /std/{Eq, Nat};
-
-    let swapped(p : {Nat, Nat}) -> Eq()((p.1, p.0), p) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
@@ -572,28 +556,6 @@ pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM: &str = r#"
-    use /std/{Eq, Nat, Bool};
-
-    let dropped(b : Bool, g : (Nat) -> Nat)
-        -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(0) | false => g end,
-                match b: (_) => (Nat) -> Nat | true => g | false => g end)
-        = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &str = r#"
-    use /std/{Eq, Nat, Bool};
-
-    let swapped(b : Bool, p : {Nat, Nat})
-        -> Eq()(match b: (_) => {Nat, Nat} | true => (p.1, p.0) | false => p end,
-                match b: (_) => {Nat, Nat} | true => p | false => p end)
-        = Eq/refl();
-
-    /std/Io/pure(())
     "#;
 
 pub const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
@@ -640,14 +602,6 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    let apart(r : {Nat, {}}, s : {Nat, {}}) -> Eq(@({Nat, {}}))(r, s) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
@@ -689,61 +643,6 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    struct V: pub Type { n: Nat, u: {} }
-
-    let apart(r : V, s : V) -> Eq(@(V))(r, s) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    struct R: pub Type { next: (Nat) -> R }
-
-    let apart(r : R, s : R) -> Eq(@(R))(r, s) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    struct Pair(A: Type): pub Type { a: A, b: A }
-
-    let apart(r : Pair(Pair(Nat)), s : Pair(Pair(Nat)))
-        -> Eq(@(Pair(Pair(Nat))))(r, s)
-        = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    struct Left: pub Type { right: (Nat) -> Right }
-    and Right: pub Type { left: (Nat) -> Left }
-
-    let apart(r : Left, s : Left) -> Eq(@(Left))(r, s) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_ITS_DECLARATION: &str = r#"
-        use /std/{Eq, Nat};
-
-        struct R: pub Type {
-            g: (Nat) -> R,
-            h: Eq(@(R))(g(0), g(0)),
-            k: Eq(@(Eq(@(R))(g(0), g(1))))(h, h)
-        }
-
-        /std/Io/pure(())
-        "#;
-
 pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
     use /std/{Eq, Nat, Bool};
 
@@ -774,17 +673,6 @@ pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    struct Outer: pub Type { inner: Inner, u: {} }
-    and Inner: pub Type { n: Nat, outer: () -> Outer }
-
-    let apart(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
@@ -812,17 +700,6 @@ pub const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABIT
 
     /std/print(Nat/to_str(1))
     "#;
-
-pub const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD: &str = r#"
-        use /std/{Eq, Nat, Bool};
-
-        let apart(b : Bool, r : {Nat, {}}, s : {Nat, {}})
-            -> Eq(@(Nat))((match b: (_) => {{Nat, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                          (match b: (_) => {{Nat, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
-            = Eq/refl();
-
-        /std/Io/pure(())
-        "#;
 
 pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#"
     use /std/{Eq, Nat, Bool};
@@ -853,19 +730,6 @@ pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIABLE: &str = r#"
-    use /std/{Eq, Nat, Bool};
-
-    let apart(b : Bool, c : Bool, m : Nat, n : Nat)
-        -> Eq(@(Nat))((match c: (_) => {Nat, Nat}
-                       | true => (match b: (_) => Nat | true => m | false => n end, 1)
-                       | false => (m, 2) end).1,
-                      (match c: (_) => {Nat, Nat} | true => (m, 1) | false => (m, 2) end).1)
-        = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
     use /std/{Eq, Nat, Bool};
 
@@ -875,17 +739,6 @@ pub const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VARIABLE: &str = r#"
-    use /std/{Eq, Nat, Bool, Option};
-
-    let apart(b : Bool, o : Option(Nat))
-        -> Eq(@(Nat))((match b: (_) => {Option(Nat), Nat} | true => (o, 1) | false => (o, 2) end).1,
-                      (match b: (_) => {Option(Nat), Nat} | true => (Option/some(0), 1) | false => (Option/some(0), 2) end).1)
-        = Eq/refl();
-
-    /std/Io/pure(())
     "#;
 
 pub const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: &str = r#"
@@ -901,21 +754,6 @@ pub const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: 
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
-    use /std/{Eq, Nat};
-
-    induct Two : pub Type
-    | two(m : Nat, n : Nat)
-    end
-
-    let apart(t : Two)
-        -> Eq(@(Nat))((match t: (_) => {Nat, Nat} | two(m, n) => (m, 1) end).1,
-                      (match t: (_) => {Nat, Nat} | two(m, n) => (n, 1) end).1)
-        = Eq/refl();
-
-    /std/Io/pure(())
     "#;
 
 pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
@@ -980,40 +818,6 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA: &str = r#"
-    use /std/{Eq, Nat, Bool};
-
-    let apart(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
-        -> Eq(@({Nat, Nat}))(
-            match b: (_) => {Nat, Nat}
-            | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).1,
-                       (match c: (_) => {Nat, Nat} | true => p | false => q end).0)
-            | false => p
-            end,
-            match b: (_) => {Nat, Nat}
-            | true => match c: (_) => {Nat, Nat} | true => p | false => q end
-            | false => p
-            end)
-        = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
-pub const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA: &str = r#"
-    use /std/{Eq, Nat, Bool};
-
-    struct Record: pub Type { a: Nat, b: Nat }
-
-    let apart(c : Bool, s : Record, r : Record)
-        -> Eq(@(Record))(
-            Record { a = (match c: (_) => Record | true => s | false => r end).b,
-                     b = (match c: (_) => Record | true => s | false => r end).a },
-            match c: (_) => Record | true => s | false => r end)
-        = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
     use /std/{Eq, Nat};
 
@@ -1024,14 +828,6 @@ pub const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED: &str = r#"
-    use /std/{Eq, Nat};
-
-    let same(g : (Nat) -> Nat, h : (Nat) -> Nat) -> Eq()(g, h) = Eq/refl();
-
-    /std/Io/pure(())
-    "#;
-
 pub const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
     use /std/{Eq, Nat};
 
@@ -1039,14 +835,6 @@ pub const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
         -> Eq()(g, (x : Nat) => (g(x).0, p)) = Eq/refl();
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT: &str = r#"
-    use /std/{Eq, Nat};
-
-    let same(p : {Nat, Eq()(0, 0)}) -> Eq()(p, (0, p.1)) = Eq/refl();
-
-    /std/Io/pure(())
     "#;
 
 pub const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
@@ -1593,25 +1381,6 @@ pub const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
     /std/print("FORGED")
     "#;
 
-/// Two distinct recursions are not the same function.
-///
-/// Both fold to themselves, which is the shape two recursions meet in: unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq()(0, 1)`.
-pub const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
-    use /std/{Nat, Eq};
-    let f(n : Nat) -> Nat =
-        match n
-        | 0 => 0
-        | k + 1; _ => f(k)
-        end;
-    let g(n : Nat) -> Nat =
-        match n
-        | 0 => 1
-        | k + 1; _ => g(k)
-        end;
-    let same : Eq()(f, g) = Eq/refl();
-    /std/print("FORGED")
-    "#;
-
 pub const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True, Holds};
@@ -1663,34 +1432,6 @@ pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     let through(b: Fine, p: True) -> True = match b | c(f) => f(True)(p) end;
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_SUM_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
-    use /std/{Nat, Eq};
-
-    let swapped(a: Nat, b: Nat) -> Eq()(a + b, b + a) = Eq/refl();
-    /std/print("ok")
-    "#;
-
-pub const A_DIFFERENCE_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
-    use /std/{Nat, Eq};
-
-    let swapped(a: Nat, b: Nat) -> Eq()(a - b, b - a) = Eq/refl();
-    /std/print("FORGED")
-    "#;
-
-pub const A_CONJUNCTION_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
-    use /std/{Bool, Eq};
-
-    let swapped(a: Bool, b: Bool) -> Eq()(a && b, b && a) = Eq/refl();
-    /std/print("ok")
-    "#;
-
-pub const A_CONJUNCTION_STATED_AS_THE_DISJUNCTION_OF_ITS_OPERANDS: &str = r#"
-    use /std/{Bool, Eq};
-
-    let confused(a: Bool, b: Bool) -> Eq()(a && b, a || b) = Eq/refl();
-    /std/print("FORGED")
     "#;
 
 /// The negative functor every exploit below is built from. It is *accepted* — strict positivity asks whether a declaration reaches itself, and `Sink` never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct` can express that.

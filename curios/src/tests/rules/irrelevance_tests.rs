@@ -13,10 +13,24 @@ fn a_function_into_a_proposition_is_discharged_before_eta() {
     );
 }
 
+// Its control is the same two binders into a proposition, equated by `Eq`.
 #[test]
 fn a_function_into_a_type_is_not_discharged_uncompared() {
-    refused(A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED)
-        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Eq()(g, h) = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)",
+        "g : (Nat) -> Nat, h : (Nat) -> Nat",
+    )])
+    .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // The same composition where it *is* reachable, which is Σ rather than Π. `tuple_sort` makes a record a proposition only when every component is one, so `{Nat, Eq()(0, 0)}` stays relevant, irrelevance does not preempt eta, and eta is what hands the second component to a `Prop`-sorted goal. Both rules fire in one equation here — eta at Π opens the binder, eta at Σ splits the record — and only the relevant component is ever compared.
@@ -30,10 +44,21 @@ fn hands_a_records_proof_component_to_irrelevance() {
     );
 }
 
+// Its control is the record's own expansion.
 #[test]
 fn still_compares_a_records_relevant_component() {
-    refused(ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT)
-        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let same(p : {Nat, Eq()(0, 0)}) -> Eq()(p, (p.0, p.1)) = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(p.0, p.1)", "(0, p.1)")])
+    .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. Both checkers compare fields and payloads at the telescope; compared at `Type`, every proof-carrying value built from a different proof of the same fact would be refused, and `Str/concat` would not associate. The four equations below are those shapes: a field, a payload, a standard-library constructor, and the string law.

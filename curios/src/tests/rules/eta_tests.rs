@@ -11,19 +11,42 @@ fn converts_a_function_and_a_record_with_their_expansions() {
     );
 }
 
+// The control is the expansion that keeps its binder.
 #[test]
 fn an_expansion_that_drops_its_binder_is_not_eta() {
-    refused(AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA).by_elaborator_in("/dropped", |error| {
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let dropped(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(x : Nat) => g(x)", "(x : Nat) => g(0)")])
+    .by_elaborator_in("/dropped", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
 }
 
+// The control is the expansion in order.
 #[test]
 fn an_expansion_that_swaps_its_components_is_not_eta() {
-    refused(AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA)
-        .by_elaborator_in("/swapped", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat};
+
+        let swapped(p : {Nat, Nat}) -> Eq()((p.0, p.1), p) = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(p.0, p.1)", "(p.1, p.0)")])
+    .by_elaborator_in("/swapped", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // **Eta by a literal needs no type, so it holds where none directs it.** The elaborator fires eta by a side's shape at every goal, and the kernel by the goal's type, which a child it compares at `Type` does not have: a stuck elimination's arm, a projection's head, a lambda's body inside one, and — with no `match` written — the arms a definition unfolds to once a record's eta has projected its two calls. An expansion equal to its neutral at the goal was refused there, by the kernel alone, so conversion was no congruence in the trusted checker and the refusal reached the author as the kernel's. A lambda and a tuple literal against a neutral fire the rule by their own shape (`function_eta`, `tuple_eta`), as a struct literal always has.
@@ -34,20 +57,48 @@ fn a_literals_eta_holds_where_no_type_directs_it() {
     assert_eq!(run(A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT), b"1");
 }
 
+// The control is the expansion that keeps its binder.
 #[test]
 fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
-    refused(AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM)
-        .by_elaborator_in("/dropped", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat, Bool};
+
+        let dropped(b : Bool, g : (Nat) -> Nat)
+            -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(x + 0) | false => g end,
+                    match b: (_) => (Nat) -> Nat | true => g | false => g end)
+            = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(x : Nat) => g(x + 0)", "(x : Nat) => g(0)")])
+    .by_elaborator_in("/dropped", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
+// The control is the expansion in order.
 #[test]
 fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
-    refused(AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM)
-        .by_elaborator_in("/swapped", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat, Bool};
+
+        let swapped(b : Bool, p : {Nat, Nat})
+            -> Eq()(match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end,
+                    match b: (_) => {Nat, Nat} | true => p | false => p end)
+            = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(p.0, p.1)", "(p.1, p.0)")])
+    .by_elaborator_in("/swapped", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // **A literal's eta is taken against every neutral, one set in both checkers.** The kernel took it against a variable, a projection and a stuck application, and the elaborator against any term, so a literal against a stuck elimination elaborated and was refused by the kernel alone: a tuple literal and a lambda in a stuck elimination's arm, where no type directs the rule, a tuple literal there against a definition that unfolds to one, and a struct literal at the struct's own type. A neutral is every term whose head does not show its type, which is what a shape can tell where the goal states no type.
@@ -61,20 +112,60 @@ fn a_literals_eta_is_taken_against_a_stuck_elimination() {
     );
 }
 
+// The control is the literal in order.
 #[test]
 fn a_tuple_that_swaps_a_stuck_eliminations_components_is_not_its_eta() {
-    refused(A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA)
-        .by_elaborator_in("/apart", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat, Bool};
+
+        let apart(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
+            -> Eq(@({Nat, Nat}))(
+                match b: (_) => {Nat, Nat}
+                | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).0,
+                           (match c: (_) => {Nat, Nat} | true => p | false => q end).1)
+                | false => p
+                end,
+                match b: (_) => {Nat, Nat}
+                | true => match c: (_) => {Nat, Nat} | true => p | false => q end
+                | false => p
+                end)
+            = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("q end).0,", "q end).1,"), ("q end).1)", "q end).0)")])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
+// The control is the literal in order.
 #[test]
 fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
-    refused(A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA)
-        .by_elaborator_in("/apart", |error| {
-            matches!(error, Error::TypeMismatch { .. })
-        });
+    control(
+        r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct Record: pub Type { a: Nat, b: Nat }
+
+        let apart(c : Bool, s : Record, r : Record)
+            -> Eq(@(Record))(
+                Record { a = (match c: (_) => Record | true => s | false => r end).a,
+                         b = (match c: (_) => Record | true => s | false => r end).b },
+                match c: (_) => Record | true => s | false => r end)
+            = Eq/refl();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("r end).a,", "r end).b,"), ("r end).b }", "r end).a }")])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
 }
 
 // **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
@@ -110,17 +201,38 @@ fn two_struct_literals_compare_their_function_fields() {
     assert_eq!(run(TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS), b"1");
 }
 
-// Two recursions of one shape that part in their base case. Unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ.
+// Two recursions of one shape that part in their base case. Unfolded once, each poses the same two calls again, and a conversion that took a pair it met again as held would equate two definitions that differ. The control's two recursions share their base case too, and convert.
 #[test]
 fn two_distinct_recursions_do_not_convert() {
-    refused(DISTINCT_RECURSIONS_ARE_NOT_EQUAL)
-        .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
+    control(
+        r#"
+        use /std/{Nat, Eq};
+        let f(n : Nat) -> Nat =
+            match n
+            | 0 => 0
+            | k + 1; _ => f(k)
+            end;
+        let g(n : Nat) -> Nat =
+            match n
+            | 0 => 0
+            | k + 1; _ => g(k)
+            end;
+        let same : Eq()(f, g) = Eq/refl();
+        /std/print(Nat/to_str(f(3) + g(3)))
+        "#,
+        b"0",
+    )
+    .refused(&[(
+        "| 0 => 0\n            | k + 1; _ => g(k)",
+        "| 0 => 1\n            | k + 1; _ => g(k)",
+    )])
+    .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
 // **A hidden member is a slot of the value, and a literal's eta reads it.** `S`'s one relevant field, `k`, is hidden and its plain field is a unit, so an eta that walked only what an author writes would hold `S { @k = 0, u = () }` one with every `S`, and `cast` would carry `F` at `S { @k = 1, u = () }`, which is `True`, to `F` at `@k = 0`, which is `False`. The control is the literal that states the neutral's own `k`, which is its eta. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
 #[test]
 fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
-    refused(
+    control(
         r#"
         use /std/{Nat};
         use /std/Bool/{Holds, True, False};
@@ -129,33 +241,17 @@ fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
 
         let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
 
-        let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = 0, u = () }) = y;
+        let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = s.k, u = () }) = y;
 
-        let _forged: False = cast(S { @k = 1, u = () }, F, True/qed());
+        let _held: F(S { @k = 1, u = () }) = cast(S { @k = 1, u = () }, F, True/qed());
 
-        /std/print("unreachable")
+        /std/print("1")
         "#,
+        b"1",
     )
+    .refused(&[
+        ("G(S { @k = s.k, u = () })", "G(S { @k = 0, u = () })"),
+        ("let _held: F(S { @k = 1, u = () })", "let _forged: False"),
+    ])
     .by_elaborator_in("/cast", |error| matches!(error, Error::TypeMismatch { .. }));
-}
-
-#[test]
-fn a_struct_literal_stating_a_neutrals_hidden_field_is_its_eta() {
-    assert_eq!(
-        run(r#"
-            use /std/{Nat, print};
-            use /std/Bool/{Holds, True};
-
-            struct S: pub Type { @k: Nat, u: {} }
-
-            let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
-
-            let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = s.k, u = () }) = y;
-
-            let _held: F(S { @k = 1, u = () }) = cast(S { @k = 1, u = () }, F, True/qed());
-
-            print("1")
-            "#),
-        b"1"
-    );
 }
