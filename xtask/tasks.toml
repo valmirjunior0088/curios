@@ -27,8 +27,8 @@ description = "Run every check the hand-off runs: each subject's steps, each aft
 requires = ["launcher", "workspace", "instrumented", "docs", "compiler", "bundle", "grammar", "vscode", "zed", "tools"]
 
 [clean]
-description = "Remove the build products git ignores, keeping untracked work and the worktrees under .claude/worktrees"
-# `-X` removes what the ignore rules mark as a build product and nothing else: an untracked file is work no commit holds yet. A worktree under `.claude/worktrees` is ignored, and a nested checkout `-ff` would delete with whatever another session has not committed in it, so the negated pattern un-ignores it, which leaves it to `-X`.
+description = "Remove the build products git ignores, keeping untracked work, the worktrees under .claude/worktrees and the hunts' snapshots under .claude/snapshots"
+# `-X` removes what the ignore rules mark as a build product and nothing else: an untracked file is work no commit holds yet. A worktree under `.claude/worktrees` is ignored, and a nested checkout `-ff` would delete with whatever another session has not committed in it, so the negated pattern un-ignores it, which leaves it to `-X`. A snapshot under `.claude/snapshots` is ignored too, and a hunt running over it would lose its tree, its binaries and what its hunters wrote, so it is kept the same way.
 run = [
-    ["git", "clean", "-Xffd", "--exclude", "!/.claude/worktrees"],
+    ["git", "clean", "-Xffd", "--exclude", "!/.claude/worktrees", "--exclude", "!/.claude/snapshots"],
 ]
