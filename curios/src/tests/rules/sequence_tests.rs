@@ -170,7 +170,7 @@ fn a_map_by_a_function_that_is_the_identity_almost_everywhere_is_not_its_list() 
         ("List/map(xs, (v: Nat) => v + 1 - 1)", "List/map(xs, (v: Nat) => v - 1 + 1)"),
         ("List/map([0], (v: Nat) => v + 1 - 1)", "List/map([0], (v: Nat) => v - 1 + 1)"),
     ])
-    .by_elaborator_in("/moved", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(List(Nat))(List/map(@Nat, @Nat, xs, (v) => (v - 1) + 1), xs)"));
+    .by_elaborator_in("/moved", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(List(Nat))(List/map(@Nat, @Nat, xs, (v) => v - 1 + 1), xs)"));
 }
 
 // A left fold over a concatenation threads its accumulator through the operands in order; read in the other order, the fold of `[1] ++ [2]` by a step that does not commute would be `21` where it is `12`. The control states the order the fold threads.
@@ -194,7 +194,7 @@ fn a_fold_over_a_concatenation_threads_its_operands_in_order() {
     .refused(&[
         ("List/fold(ys, List/fold(xs, 0, step), step)", "List/fold(xs, List/fold(ys, 0, step), step)"),
     ])
-    .by_elaborator_in("/swapped", |error| matches!(error, curios_elab::Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => (acc * 10) + x), (x2, acc2) => (acc2 * 10) + x2), List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x3, acc3) => (acc3 * 10) + x3), (x4, acc4) => (acc4 * 10) + x4))" && pinned(expected) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => (acc * 10) + x), (x2, acc2) => (acc2 * 10) + x2), List/fold(@Nat, @Nat, xs, List/fold(@Nat, @Nat, ys, 0, (x3, acc3) => (acc3 * 10) + x3), (x4, acc4) => (acc4 * 10) + x4))"));
+    .by_elaborator_in("/swapped", |error| matches!(error, curios_elab::Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => acc * 10 + x), (x2, acc2) => acc2 * 10 + x2), List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x3, acc3) => acc3 * 10 + x3), (x4, acc4) => acc4 * 10 + x4))" && pinned(expected) == "/std/Eq/Eq(Nat)(List/fold(@Nat, @Nat, ys, List/fold(@Nat, @Nat, xs, 0, (x, acc) => acc * 10 + x), (x2, acc2) => acc2 * 10 + x2), List/fold(@Nat, @Nat, xs, List/fold(@Nat, @Nat, ys, 0, (x3, acc3) => acc3 * 10 + x3), (x4, acc4) => acc4 * 10 + x4))"));
 }
 
 // A pointwise operation reads the bytes its operands' runs spell, wherever the runs past the fusion cap split them: `not` over a 65-byte run beside a 66-byte one flips the first 65 bytes of one value and the next 66 of the other. A fold that placed the seam at 64 would answer `misaligned`; carried along `grouping` to the same bytes grouped otherwise, the claim becomes `not(regrouped) == misaligned`, which the fold over the other grouping refutes, so the closing term would be a proof of `False`. The control claims the bytes the runs spell, flipped.

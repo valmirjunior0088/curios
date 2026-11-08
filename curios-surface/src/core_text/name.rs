@@ -4,59 +4,65 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, bracketed, core_read, literal_fields,
-        literal_variant, malformed, nested, term_global, term_number, term_string, term_word,
-        universe_suffix, universes_read, universes_written, value_number, value_term,
-        value_unmarked, value_variant,
+        Decoration, Fields, ReadError, Reader, Refusal, Tree, bracketed, called, core_read,
+        literal_fields, literal_of, literal_variant, malformed, shown, string, term_global,
+        term_number, term_string, term_word, universe_suffix, universes_read, universes_written,
+        value, value_number, value_term, value_unmarked, value_variant, verbatim, word,
     },
-    crate::{Apply, CoreText, CoreValue, Frame, escaped, sub},
+    crate::{Apply, CoreText, CoreValue, Frame, ShownForm, sub},
     curios_common::{InfixOp, Span},
     curios_core::{
         Binding, CalleeId, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
         MetavarOrigin, Subterm, Term, Universes, Var, WitnessOrigin,
     },
-    curios_print::{Printer, flat, pure, sep_flat},
 };
 
 /// A global at an instance: its name, under a decorator stating the instance where it states one.
-pub fn instance_written(Instance { name, universes }: Instance, frame: Frame) -> Printer {
+pub fn instance_written(Instance { name, universes }: Instance, frame: Frame) -> Tree {
     if !frame.core_text() {
-        return pure(format!(
-            "{}{}",
-            frame.spelling.symbol(&name),
-            universe_suffix(&universes, frame)
-        ));
+        return match universe_suffix(&universes, frame) {
+            suffix if suffix.is_empty() => frame.global(&name),
+            suffix => verbatim(format!("{}{suffix}", frame.spelling.symbol(&name))),
+        };
     }
     let fields = universes_written(&universes, frame)
         .map(|universes| vec![("universes", universes)])
         .unwrap_or_default();
 
-    frame.decorated(fields, pure(frame.spelling.symbol(&name)), true)
+    frame.decorated(fields, frame.global(&name))
 }
 
 /// A variable: a free one by the word its binder is printed under, a bound one by its index.
-pub fn var_written(var: Var, frame: Frame) -> Printer {
+pub fn var_written(var: Var, frame: Frame) -> Tree {
     match var.binding() {
         Binding::Bound(index) => frame.decorated(
-            vec![("binding", pure(format!("Bound({index})")))],
-            pure("_"),
-            true,
+            vec![(
+                "binding",
+                value(called(
+                    word("Bound"),
+                    vec![super::numeral(*index, curios_common::Sign::Unmarked)],
+                )),
+            )],
+            super::tree(crate::Subterm::Held),
         ),
-        Binding::Free(free) => pure(frame.spelling.label(free)),
+        Binding::Free(free) => frame.variable(free),
     }
 }
 
 /// A metavariable as `?` under what states it, or bare where the spelling writes none.
-pub fn metavar_written(metavar: Metavar, frame: Frame) -> Printer {
+pub fn metavar_written(metavar: Metavar, frame: Frame) -> Tree {
     if frame.spelling.anonymizes_metavariables() {
-        return pure("?");
+        return super::tree(crate::Subterm::Goal);
     }
     if !frame.core_text() {
         return reader_metavar(metavar, frame);
     }
-    let mut fields = Vec::<Decoration>::from([("id", pure(metavar.id.0.to_string()))]);
+    let mut fields = Vec::<Decoration>::from([(
+        "id",
+        value(super::numeral(metavar.id.0, curios_common::Sign::Unmarked)),
+    )]);
     if metavar.origin != MetavarOrigin::Goal {
-        fields.push(("origin", origin_written(&metavar.origin, frame)));
+        fields.push(("origin", value(origin_written(&metavar.origin, frame))));
     }
     if !metavar.spine.is_empty() {
         fields.push((
@@ -65,54 +71,51 @@ pub fn metavar_written(metavar: Metavar, frame: Frame) -> Printer {
                 metavar
                     .spine
                     .iter()
-                    .map(|entry| sub(entry.clone(), frame))
+                    .map(|entry| value(sub(entry.clone(), frame)))
                     .collect(),
             ),
         ));
     }
 
-    frame.decorated(fields, pure("?"), true)
+    frame.decorated(fields, super::tree(crate::Subterm::Goal))
 }
 
 /// A metavariable as a reader is shown it: its id, and its spine after it where an entry is other than a variable, the case worth seeing.
-fn reader_metavar(metavar: Metavar, frame: Frame) -> Printer {
+fn reader_metavar(metavar: Metavar, frame: Frame) -> Tree {
     let renaming = metavar.spine.is_identity()
         || metavar
             .spine
             .iter()
             .all(|entry| matches!(&**entry, Subterm::Var(_)));
-    if renaming {
-        return pure(format!("?{}", metavar.id));
-    }
+    let spine = match renaming {
+        true => Vec::new(),
+        false => metavar
+            .spine
+            .iter()
+            .map(|entry| sub(entry.clone(), frame))
+            .collect(),
+    };
 
-    flat([
-        pure(format!("?{}[", metavar.id)),
-        sep_flat(
-            metavar
-                .spine
-                .iter()
-                .map(|entry| sub(entry.clone(), frame))
-                .collect::<Vec<_>>(),
-            || pure(", "),
-        ),
-        pure("]"),
-    ])
+    shown(ShownForm::Metavar {
+        id: metavar.id.to_string(),
+        spine,
+    })
 }
 
 /// Why a metavariable was made, as Core names it.
-fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Printer {
+fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Tree {
     match origin {
-        MetavarOrigin::Hole => pure("Hole"),
-        MetavarOrigin::Goal => pure("Goal"),
-        MetavarOrigin::Domain(binder) => flat([pure("Domain("), optional(binder), pure(")")]),
-        MetavarOrigin::Implicit(implicit) => variant_of_fields(
+        MetavarOrigin::Hole => word("Hole"),
+        MetavarOrigin::Goal => word("Goal"),
+        MetavarOrigin::Domain(binder) => called(word("Domain"), vec![optional(binder)]),
+        MetavarOrigin::Implicit(implicit) => literal_of(
             "Implicit",
             vec![
                 ("func", callee_written(&implicit.func, frame)),
                 ("binder", optional(&implicit.binder)),
             ],
         ),
-        MetavarOrigin::Witness(witness) => variant_of_fields(
+        MetavarOrigin::Witness(witness) => literal_of(
             "Witness",
             vec![
                 ("func", callee_written(&witness.func, frame)),
@@ -123,48 +126,41 @@ fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Printer {
 }
 
 /// The callee an implicit or a witness slot belongs to, as Core names it.
-fn callee_written(callee: &CalleeId, frame: Frame) -> Printer {
-    let named = |variant: &str, name: String| pure(format!("{variant}({name})"));
+fn callee_written(callee: &CalleeId, frame: Frame) -> Tree {
+    let named = |variant: &str, name: Tree| called(word(variant), vec![name]);
     match callee {
-        CalleeId::Function(Mention::Declaration(name)) => named(
-            "Function",
-            format!("Declaration({})", frame.spelling.symbol(name)),
-        ),
-        CalleeId::Function(Mention::Local(local)) => named(
-            "Function",
-            format!("Local({})", frame.spelling.label(local)),
-        ),
-        CalleeId::Constructor { owner, tag } => variant_of_fields(
+        CalleeId::Function(Mention::Declaration(name)) => {
+            named("Function", named("Declaration", frame.global(name)))
+        }
+        CalleeId::Function(Mention::Local(local)) => {
+            named("Function", named("Local", frame.variable(local)))
+        }
+        CalleeId::Constructor { owner, tag } => literal_of(
             "Constructor",
             vec![
-                ("owner", pure(frame.spelling.symbol(owner))),
-                ("tag", pure(format!("\"{}\"", escaped(tag)))),
+                ("owner", frame.global(owner)),
+                ("tag", string(tag.as_str())),
             ],
         ),
-        CalleeId::Method { concept, field } => variant_of_fields(
+        CalleeId::Method { concept, field } => literal_of(
             "Method",
             vec![
-                ("concept", pure(frame.spelling.symbol(concept))),
-                ("field", pure(format!("\"{}\"", escaped(field)))),
+                ("concept", frame.global(concept)),
+                ("field", string(field.as_str())),
             ],
         ),
-        CalleeId::Witness(name) => named("Witness", frame.spelling.symbol(name)),
-        CalleeId::Operator(op) => named("Operator", format!("{op:?}")),
-        CalleeId::Anonymous => pure("Anonymous"),
-        CalleeId::Structure(name) => named("Structure", frame.spelling.symbol(name)),
+        CalleeId::Witness(name) => named("Witness", frame.global(name)),
+        CalleeId::Operator(op) => named("Operator", word(format!("{op:?}"))),
+        CalleeId::Anonymous => word("Anonymous"),
+        CalleeId::Structure(name) => named("Structure", frame.global(name)),
     }
 }
 
-/// A variant that holds fields, as a structure's literal is written: `Implicit { func = …, binder = None }`.
-fn variant_of_fields(variant: &str, fields: Vec<Decoration>) -> Printer {
-    flat([pure(format!("{variant} ")), nested(fields)])
-}
-
 /// An optional text as Core holds it: `None`, or the text under `Some`.
-fn optional(text: &Option<String>) -> Printer {
+fn optional(text: &Option<String>) -> Tree {
     match text {
-        Some(text) => pure(format!("Some(\"{}\")", escaped(text))),
-        None => pure("None"),
+        Some(text) => called(word("Some"), vec![string(text.as_str())]),
+        None => word("None"),
     }
 }
 

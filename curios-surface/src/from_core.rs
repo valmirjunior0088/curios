@@ -158,7 +158,7 @@ fn named(spelled: &str) -> Term {
 }
 
 /// [`named`], as the name itself.
-fn name_of(spelled: &str) -> Name {
+pub(crate) fn name_of(spelled: &str) -> Name {
     let (absolute, path) = match spelled.strip_prefix('/') {
         Some(path) => (true, path),
         None => (false, spelled),
@@ -526,8 +526,8 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
     Some(Subterm::Match(Match { head, motive, arms }).into())
 }
 
-/// A row's pattern as a program writes it, each binder under the next of `names`.
-fn written_pattern(
+/// A row's pattern as a program writes it, each binder under the next of `names`: what a report names an arm by.
+pub fn written_pattern(
     pattern: &curios_core::Pattern,
     names: &mut dyn Iterator<Item = Label>,
 ) -> MatchPattern {

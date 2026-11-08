@@ -212,7 +212,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
 
     assert!(
         unlaid(row).contains(&unlaid(
-            "/std/Eq/Eq/refl)(@#NatType, @#{field = Struct(/Q, 0)} (/f(n)).0)"
+            "/std/Eq/Eq/refl)(@#NatType, @#{field = Struct(/Q, 0)} /f(n).0)"
         )),
         "{row}"
     );
@@ -251,7 +251,7 @@ fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection
 
     assert!(
         unlaid(row).contains(&unlaid(
-            "/std/Eq/Eq/refl)(@#NatType, @#{field = Struct(/P, 0)} (p).0)"
+            "/std/Eq/Eq/refl)(@#NatType, @#{field = Struct(/P, 0)} p.0)"
         )),
         "{row}"
     );

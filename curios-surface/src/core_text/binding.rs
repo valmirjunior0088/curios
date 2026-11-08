@@ -3,45 +3,49 @@
 //! **`let x: T = v; tail` builds a block**, and consecutive `let`s one block of them all, as Core holds them; a block whose tail is a block of its own writes it between parentheses. **`let f: T = b and g: U = c; tail` builds a group**, and a group of one member is that `let` under `#{node = Rec}`, a member being in scope of its own body.
 
 use {
-    super::{ReadError, Reader, Refusal, core_read},
+    super::{ReadError, Reader, Refusal, Tree, core_read, tree, word_value},
     crate::{CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, label_terms, sub},
     curios_core::{Bound, Free, Let, Many, Rec, Scope, Subterm, Term},
-    curios_print::{Printer, flat, indent, pure, sep_flat},
 };
 
-/// A block: each binding under the ones before it, then its tail.
-pub fn let_written(Let { bindings, tail }: Let, frame: Frame) -> Printer {
+/// One binding of a block or a group: its word, its type and its value.
+fn binding(word: String, type_: Tree, body: Tree) -> LetBinding<crate::Shown> {
+    LetBinding {
+        binder: Pattern::Binder(crate::Label::from(word)),
+        signature: LetSignature::Name {
+            type_: Some(type_),
+            body,
+        },
+    }
+}
+
+/// A block: each binding under the ones before it, then its tail. The printer writes a tail that is a block of its own between parentheses, since a run of statements reads as one block.
+pub fn let_written(Let { bindings, tail }: Let, frame: Frame) -> Tree {
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
-    let lines = bindings
+    let groups = bindings
         .iter()
         .enumerate()
-        .map(|(index, binding)| {
-            let type_ = binding.type_().release(&terms[..index]);
-            let value = binding.value().release(&terms[..index]);
-            flat([
-                pure("let "),
-                pure(frame.spelling.word(&labels[index])),
-                pure(": "),
-                sub(type_, frame),
-                pure(" =\n"),
-                indent(sub(value, frame)),
-                pure(";\n"),
-            ])
+        .map(|(index, each)| {
+            let type_ = each.type_().release(&terms[..index]);
+            let value = each.value().release(&terms[..index]);
+            LetGroup {
+                members: vec![binding(
+                    frame.spelling.word(&labels[index]),
+                    sub(type_, frame),
+                    sub(value, frame),
+                )],
+            }
         })
         .collect::<Vec<_>>();
-    let body = tail.open(&terms);
-    let body = match &*body {
-        Subterm::Let(_) => flat([pure("("), sub(body, frame), pure(")")]),
-        _ => sub(body, frame),
-    };
+    let tail = sub(tail.open(&terms), frame);
 
-    flat([flat(lines), body])
+    tree(crate::Subterm::Let(crate::Let { groups, tail }))
 }
 
-/// A group: each member under every member's name, then its tail.
-pub fn rec_written(Rec { group, tail }: Rec, frame: Frame) -> Printer {
+/// A group: each member under every member's name, then its tail; a group of one member under `#{node = Rec}`, which a block of that one binding would otherwise be.
+pub fn rec_written(Rec { group, tail }: Rec, frame: Frame) -> Tree {
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -50,25 +54,21 @@ pub fn rec_written(Rec { group, tail }: Rec, frame: Frame) -> Printer {
         .cloned()
         .enumerate()
         .map(|(index, member)| {
-            flat([
-                pure(frame.spelling.word(&labels[index])),
-                pure(": "),
+            binding(
+                frame.spelling.word(&labels[index]),
                 sub(member.type_.open(&terms), frame),
-                pure(" =\n"),
-                indent(sub(member.body.open(&terms), frame)),
-            ])
+                sub(member.body.open(&terms), frame),
+            )
         })
         .collect::<Vec<_>>();
     let single = members.len() == 1;
-    let written = flat([
-        pure("let "),
-        sep_flat(members, || pure("\nand ")),
-        pure(";\n"),
-        sub(tail.open(&terms), frame),
-    ]);
+    let written = tree(crate::Subterm::Let(crate::Let {
+        groups: vec![LetGroup { members }],
+        tail: sub(tail.open(&terms), frame),
+    }));
 
     match single {
-        true => frame.decorated(vec![("node", pure("Rec"))], written, false),
+        true => frame.decorated(vec![("node", word_value("Rec"))], written),
         false => written,
     }
 }

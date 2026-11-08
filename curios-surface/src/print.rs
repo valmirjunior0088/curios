@@ -16,12 +16,12 @@ use {
         FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
         Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Program, Proj, ProofLiteral, Radix, StructField, StructLit, StructLitEntry,
-        Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod,
-        TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam,
-        UseGroup, WitnessField, intrinsic_form, intrinsic_path,
+        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
+        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
+        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
     },
-    crate::{Writer, op_precedence, written_intrinsic},
+    crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Plicity, recurse},
     curios_num::{Floating, Natural},
@@ -30,7 +30,6 @@ use {
         FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
         named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
     },
-    std::marker::PhantomData,
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -337,7 +336,7 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer {
 }
 
 /// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Variant` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror `print_pattern`'s own field-printing exactly.
-fn print_match_pattern(pattern: MatchPattern) -> Printer {
+pub fn print_match_pattern(pattern: MatchPattern) -> Printer {
     match pattern {
         MatchPattern::Binder(name) => pure(name),
         MatchPattern::Variant { tag, args } => flat([
@@ -525,6 +524,9 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
 
 /// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a case's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Core text.
 trait Layout: Dialect {
+    /// What a render of this dialect is told beside the tree it prints.
+    type Options: Copy;
+
     /// An operand only this dialect writes, followed by `suffix`, the call chain and the marks after it.
     fn form(printer: TreePrinter<Self>, form: Self::Form, suffix: Printer) -> Printer;
 
@@ -548,6 +550,8 @@ trait Layout: Dialect {
 }
 
 impl Layout for Program {
+    type Options = ();
+
     fn form(_: TreePrinter<Self>, form: Self::Form, _: Printer) -> Printer {
         match form {}
     }
@@ -577,8 +581,10 @@ impl Layout for Program {
     }
 }
 
-/// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, and Core text's. It learns nothing while printing.
-struct TreePrinter<D: Layout>(PhantomData<D>);
+/// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, Core text's, and a shown term's. It holds what a render of `D` is told beside the tree, and learns nothing while printing.
+struct TreePrinter<D: Layout> {
+    options: D::Options,
+}
 
 impl<D: Layout> Clone for TreePrinter<D> {
     fn clone(&self) -> Self {
@@ -589,7 +595,7 @@ impl<D: Layout> Clone for TreePrinter<D> {
 impl<D: Layout> Copy for TreePrinter<D> {}
 
 /// The printer of a program.
-const PROGRAM: TreePrinter<Program> = TreePrinter(PhantomData);
+const PROGRAM: TreePrinter<Program> = TreePrinter { options: () };
 
 impl<D: Layout> TreePrinter<D> {
     /// Simple entries pack together; spreads and structured expressions stand apart in a broken layout. Packed literals always retain their outer group as a break opportunity for enclosing expressions; a plain list of atoms packs directly from its opener.
@@ -1171,7 +1177,14 @@ impl<D: Layout> TreePrinter<D> {
                         flat(parts)
                     })
                     .collect::<Vec<_>>();
-                flat(statements.into_iter().chain([self.term(tail)]))
+                // A run of statements reads as one block, so a block written as the tail of another is one only between parentheses.
+                let tail = match tail.as_subterm() {
+                    Subterm::Let(_) => {
+                        flat([pure("("), self.term(tail), indent(ends()), pure(")")])
+                    }
+                    _ => self.term(tail),
+                };
+                flat(statements.into_iter().chain([tail]))
             }
             Subterm::Bang(term) => return self.suffix_head(term, flat([pure("!"), suffix])),
             // An overflowing operator chain breaks with the operator leading the continuation line.
@@ -1494,11 +1507,19 @@ impl<D: Layout> TreePrinter<D> {
         ])
     }
 
-    /// A concept field as written: a superclass as `use T`, a method by its name and type, sugar included.
+    /// A concept field as written: a superclass as `use T`, by the word a later field reads it by where Core text names one, `use w: T`, and a method by its name and type, sugar included.
     fn concept_field_written(self, field: ConceptField<D>) -> Printer {
-        // A superclass edge is a `use` member: the mark and its type, no label.
-        let (false, Some(label)) = (field.is_super(), field.label) else {
-            return flat([pure("use "), self.term(field.type_)]);
+        // A superclass edge is a `use` member: the mark and its type, and no label but the word Core text reads it by.
+        let (false, Some(label)) = (field.is_super(), field.label.clone()) else {
+            return match field.label {
+                Some(label) if field.is_super() => flat([
+                    pure("use "),
+                    pure(label.to_string()),
+                    pure(": "),
+                    self.term(field.type_),
+                ]),
+                _ => flat([pure("use "), self.term(field.type_)]),
+            };
         };
         match field.func_params {
             Some(params) => flat([
@@ -1571,68 +1592,70 @@ impl<D: Layout> TreePrinter<D> {
     }
 }
 
+/// A dialect that writes Core text's forms over its own terms: a declaration under its decorator and its absolute name, a case under its decorator, and an operand under a decorator, a witness by its identity and an intrinsic node by its variant.
+trait CoreWritten: Layout + Dialect<Head = CoreHead<Self>, Fields = Vec<DecoratorField<Self>>> {
+    /// The form of Core text `form` is, where it is one.
+    fn as_core(form: &Self::Form) -> Option<&CoreForm<Self>>;
+
+    /// Whether a render under `options` writes a decorator above its operand where the two do not fit their line, as a text is written, rather than beside it, as a sentence quotes one.
+    fn decorators_above(options: Self::Options) -> bool;
+}
+
 /// Whether `term` is what a decorator takes bare: a held place, or an applied atom — a primary with its call chain — which every form is but a binding, a lambda, an arrow, an operator, a decorated term and the text stage's intrinsic node, each parenthesized under it.
-fn decorates_bare(term: &Term<CoreText>) -> bool {
+fn decorates_bare<D: CoreWritten>(term: &Term<D>) -> bool {
     match term.as_subterm() {
         Subterm::Let(_)
         | Subterm::Func(_)
         | Subterm::FuncType(_)
         | Subterm::Infix(_)
         | Subterm::Intrinsic(_) => false,
-        Subterm::Core(form) => CoreText::form_is_atom(form),
+        Subterm::Core(form) => D::form_is_atom(form),
         _ => true,
     }
 }
 
 /// Whether `sort` is what a head's sort is written as bare: `Type` or `Prop`, under a decorator or not.
-fn sort_written_bare(sort: &Term<CoreText>) -> bool {
-    let bare = |term: &Term<CoreText>| matches!(term.as_subterm(), Subterm::Type | Subterm::Prop);
+fn sort_written_bare<D: CoreWritten>(sort: &Term<D>) -> bool {
+    let bare = |term: &Term<D>| matches!(term.as_subterm(), Subterm::Type | Subterm::Prop);
+    let decorated = match sort.as_subterm() {
+        Subterm::Core(form) => match D::as_core(form) {
+            Some(CoreForm::Decorated(Decorated { term, .. })) => bare(term),
+            _ => false,
+        },
+        _ => false,
+    };
 
-    bare(sort)
-        || matches!(sort.as_subterm(), Subterm::Core(CoreForm::Decorated(Decorated { term, .. })) if bare(term))
+    bare(sort) || decorated
 }
 
-/// Core text's forms: an operand under a decorator, a witness by its identity, an intrinsic node by its variant, and the decorator before a declaration and a case, with each declaration named by its absolute name ([`CoreText`]).
+/// Whether a form of Core text prints as one indivisible piece: all but a decorated term.
+fn core_form_is_atom<D: Dialect>(form: &CoreForm<D>) -> bool {
+    !matches!(form, CoreForm::Decorated(_))
+}
+
+/// Whether a call chain may follow a form of Core text as it stands: an intrinsic written with no operand list would take a call's arguments as its own.
+fn core_takes_suffix<D: Dialect>(form: &CoreForm<D>) -> bool {
+    match form {
+        CoreForm::Decorated(_) => false,
+        CoreForm::Witness(_) => true,
+        CoreForm::Intrinsic(CoreIntrinsic { operands, .. }) => operands.is_some(),
+    }
+}
+
+/// Core text's forms: an operand under a decorator, a witness by its identity, an intrinsic node by its variant, and the decorator before a declaration and a case, with each declaration named by its absolute name ([`CoreText`]). A file is laid out as a text, each decorator above what it decorates where the two do not fit their line.
 impl Layout for CoreText {
+    type Options = ();
+
     fn form(printer: TreePrinter<Self>, form: CoreForm, suffix: Printer) -> Printer {
-        let written = match form {
-            CoreForm::Decorated(Decorated { fields, term }) => {
-                let operand = match decorates_bare(&term) {
-                    true => printer.term(term),
-                    false => flat([pure("("), printer.term(term), indent(ends()), pure(")")]),
-                };
-                printer.decorated(fields, operand)
-            }
-            CoreForm::Witness(id) => pure(id.to_string()),
-            CoreForm::Intrinsic(CoreIntrinsic { variant, operands }) => flat([
-                pure(format!("#{variant}")),
-                match operands {
-                    Some(operands) => listed(
-                        "(",
-                        operands
-                            .into_iter()
-                            .map(|operand| printer.value(operand))
-                            .collect(),
-                        ")",
-                    ),
-                    None => pure(""),
-                },
-            ]),
-        };
-        flat([written, suffix])
+        flat([printer.core_form(form), suffix])
     }
 
     fn form_is_atom(form: &CoreForm) -> bool {
-        !matches!(form, CoreForm::Decorated(_))
+        core_form_is_atom(form)
     }
 
-    // An intrinsic written with no operand list would take a call's arguments as its own.
     fn takes_suffix(form: &CoreForm) -> bool {
-        match form {
-            CoreForm::Decorated(_) => false,
-            CoreForm::Witness(_) => true,
-            CoreForm::Intrinsic(CoreIntrinsic { operands, .. }) => operands.is_some(),
-        }
+        core_takes_suffix(form)
     }
 
     fn cased(printer: TreePrinter<Self>, fields: Vec<DecoratorField>, case: Printer) -> Printer {
@@ -1647,27 +1670,167 @@ impl Layout for CoreText {
         pure(head.name.faithful().to_string())
     }
 
-    // Bare, a name would read the field block after it as a literal of its own.
     fn result_sort(printer: TreePrinter<Self>, sort: Term<CoreText>) -> Printer {
-        match sort_written_bare(&sort) {
-            true => printer.term(sort),
-            false => flat([pure("("), printer.term(sort), indent(ends()), pure(")")]),
-        }
+        printer.core_result_sort(sort)
     }
 }
 
-impl TreePrinter<CoreText> {
-    /// `node` under a decorator setting each of `fields`, or `node` alone where it sets none: the two on the line they are reached on where they fit it whole, and otherwise the decorator on a line of its own and `node` on the line beneath it.
-    fn decorated(self, fields: Vec<DecoratorField>, node: Printer) -> Printer {
+impl CoreWritten for CoreText {
+    fn as_core(form: &CoreForm) -> Option<&CoreForm> {
+        Some(form)
+    }
+
+    fn decorators_above((): ()) -> bool {
+        true
+    }
+}
+
+/// What a render of a shown term is told.
+#[derive(Clone, Copy)]
+pub struct ShownOptions {
+    /// Whether a decorator stands above its operand where the two do not fit their line, as a dump written as a text has it, or beside it, as a refusal quoted in a sentence does.
+    pub decorators_above: bool,
+}
+
+/// A shown term's forms: Core text's, and the ones only a bounded print or a reader's spelling writes ([`Shown`]).
+impl Layout for Shown {
+    type Options = ShownOptions;
+
+    fn form(printer: TreePrinter<Self>, form: ShownForm, suffix: Printer) -> Printer {
+        let written = match form {
+            ShownForm::Core(form) => printer.core_form(form),
+            ShownForm::Elided => pure(ELIDED),
+            ShownForm::Spelled(text) => pure(text),
+            ShownForm::Metavar { id, spine } if spine.is_empty() => pure(format!("?{id}")),
+            ShownForm::Metavar { id, spine } => flat([
+                pure(format!("?{id}[")),
+                sep_flat(
+                    spine
+                        .into_iter()
+                        .map(|entry| printer.term(entry))
+                        .collect::<Vec<_>>(),
+                    || pure(", "),
+                ),
+                pure("]"),
+            ]),
+            ShownForm::Ascribed { term, type_ } => listed(
+                "(",
+                vec![flat([printer.term(term), pure(": "), printer.term(type_)])],
+                ")",
+            ),
+        };
+        flat([written, suffix])
+    }
+
+    fn form_is_atom(form: &ShownForm) -> bool {
+        match form {
+            ShownForm::Core(form) => core_form_is_atom(form),
+            ShownForm::Elided
+            | ShownForm::Spelled(_)
+            | ShownForm::Metavar { .. }
+            | ShownForm::Ascribed { .. } => true,
+        }
+    }
+
+    fn takes_suffix(form: &ShownForm) -> bool {
+        match form {
+            ShownForm::Core(form) => core_takes_suffix(form),
+            ShownForm::Elided
+            | ShownForm::Spelled(_)
+            | ShownForm::Metavar { .. }
+            | ShownForm::Ascribed { .. } => true,
+        }
+    }
+
+    fn cased(
+        printer: TreePrinter<Self>,
+        fields: Vec<DecoratorField<Shown>>,
+        case: Printer,
+    ) -> Printer {
+        printer.decorated(fields, case)
+    }
+
+    fn headed(printer: TreePrinter<Self>, head: &CoreHead<Shown>, member: Printer) -> Printer {
+        printer.decorated(head.fields.clone(), member)
+    }
+
+    fn declared(head: &CoreHead<Shown>, _: Label) -> Printer {
+        pure(head.name.faithful().to_string())
+    }
+
+    fn result_sort(printer: TreePrinter<Self>, sort: Term<Shown>) -> Printer {
+        printer.core_result_sort(sort)
+    }
+}
+
+impl CoreWritten for Shown {
+    fn as_core(form: &ShownForm) -> Option<&CoreForm<Shown>> {
+        match form {
+            ShownForm::Core(form) => Some(form),
+            ShownForm::Elided
+            | ShownForm::Spelled(_)
+            | ShownForm::Metavar { .. }
+            | ShownForm::Ascribed { .. } => None,
+        }
+    }
+
+    fn decorators_above(options: ShownOptions) -> bool {
+        options.decorators_above
+    }
+}
+
+impl<D: CoreWritten> TreePrinter<D> {
+    /// A form of Core text: an operand under its decorator, parenthesized where it is larger than an applied atom, a witness by its identity, an intrinsic node by its variant over its operands.
+    fn core_form(self, form: CoreForm<D>) -> Printer {
+        match form {
+            CoreForm::Decorated(Decorated { fields, term }) => {
+                let operand = match decorates_bare(&term) {
+                    true => self.term(term),
+                    false => flat([pure("("), self.term(term), indent(ends()), pure(")")]),
+                };
+                self.decorated(fields, operand)
+            }
+            CoreForm::Witness(id) => pure(id.to_string()),
+            CoreForm::Intrinsic(CoreIntrinsic { variant, operands }) => flat([
+                pure(format!("#{variant}")),
+                match operands {
+                    Some(operands) => listed(
+                        "(",
+                        operands
+                            .into_iter()
+                            .map(|operand| self.value(operand))
+                            .collect(),
+                        ")",
+                    ),
+                    None => pure(""),
+                },
+            ]),
+        }
+    }
+
+    /// The sort a head lands in: bare where it is a sort, and between parentheses otherwise, where a name would read the field block after it as a literal of its own.
+    fn core_result_sort(self, sort: Term<D>) -> Printer {
+        match sort_written_bare(&sort) {
+            true => self.term(sort),
+            false => flat([pure("("), self.term(sort), indent(ends()), pure(")")]),
+        }
+    }
+
+    /// `node` under a decorator setting each of `fields`, or `node` alone where it sets none: where the render writes decorators above, the two on the line they are reached on where they fit it whole and otherwise the decorator on a line of its own and `node` on the line beneath it, and beside it otherwise.
+    fn decorated(self, fields: Vec<DecoratorField<D>>, node: Printer) -> Printer {
         if fields.is_empty() {
             return node;
         }
+        let decorator = self.decorator_fields("#{", fields);
 
-        own_line_if_broken(flat([self.decorator_fields("#{", fields), line(), node]))
+        match D::decorators_above(self.options) {
+            true => own_line_if_broken(flat([decorator, line(), node])),
+            false => flat([decorator, pure(" "), node]),
+        }
     }
 
     /// `fields` after `open` and before the brace that closes them, each `label = value`.
-    fn decorator_fields(self, open: &'static str, fields: Vec<DecoratorField>) -> Printer {
+    fn decorator_fields(self, open: &'static str, fields: Vec<DecoratorField<D>>) -> Printer {
         listed(
             open,
             fields
@@ -1681,7 +1844,7 @@ impl TreePrinter<CoreText> {
     }
 
     /// What a decorator's field holds and an intrinsic takes: a term, fields between braces, a list of values each under its mark, or the root module.
-    fn value(self, value: CoreValue) -> Printer {
+    fn value(self, value: CoreValue<D>) -> Printer {
         match value {
             CoreValue::Term(term) => self.term(term),
             CoreValue::Fields(fields) => self.decorator_fields("{", fields),
@@ -1698,7 +1861,7 @@ impl TreePrinter<CoreText> {
     }
 
     /// One member of a group: the first under its own word, a later one after `and`, a nominal one keeping its word there, and a family closed by its own `end`.
-    fn core_member(self, member: CoreMember, first: bool) -> Printer {
+    fn core_member(self, member: CoreMember<D>, first: bool) -> Printer {
         let keyword = |word: &'static str, later: &'static str| match first {
             true => word,
             false => later,
@@ -1722,7 +1885,7 @@ impl TreePrinter<CoreText> {
     }
 
     /// One item of Core text: a group, its members a line apart and closed by the `;` a `let` owes where it is the last, a foreign row, or a test.
-    fn core_item(self, item: CoreItem) -> Printer {
+    fn core_item(self, item: CoreItem<D>) -> Printer {
         match item {
             CoreItem::Group(members) => {
                 let owes = matches!(members.last(), Some(CoreMember::Let(_)));
@@ -1744,7 +1907,7 @@ impl TreePrinter<CoreText> {
     }
 
     /// The term a program closes with, and the type it states on the line beneath it.
-    fn core_entry(self, entry: CoreEntry) -> Printer {
+    fn core_entry(self, entry: CoreEntry<D>) -> Printer {
         match entry.type_ {
             Some(type_) => flat([
                 self.term(entry.body),
@@ -1758,7 +1921,7 @@ impl TreePrinter<CoreText> {
 }
 
 /// The printer of Core text.
-const CORE_TEXT: TreePrinter<CoreText> = TreePrinter(PhantomData);
+const CORE_TEXT: TreePrinter<CoreText> = TreePrinter { options: () };
 
 /// One item of a `.crsc`, as the formatter writes it.
 pub(crate) fn print_core_item(item: CoreItem) -> Printer {
@@ -1772,6 +1935,21 @@ pub(crate) fn print_core_entry(entry: CoreEntry) -> Printer {
 
 pub(crate) fn print_term(term: Term) -> Printer {
     PROGRAM.term(term)
+}
+
+/// A shown term, laid out as `options` say.
+pub fn print_shown(term: Term<Shown>, options: ShownOptions) -> Printer {
+    TreePrinter::<Shown> { options }.term(term)
+}
+
+/// One item of a shown module, laid out as `options` say.
+pub fn print_shown_item(item: CoreItem<Shown>, options: ShownOptions) -> Printer {
+    TreePrinter::<Shown> { options }.core_item(item)
+}
+
+/// The entry a shown program closes with, laid out as `options` say.
+pub fn print_shown_entry(entry: CoreEntry<Shown>, options: ShownOptions) -> Printer {
+    TreePrinter::<Shown> { options }.core_entry(entry)
 }
 
 fn print_top_use(item: TopUse) -> Printer {

@@ -6,29 +6,31 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Refusal, bracketed, malformed, nested, term_number,
-        term_word, value_fields, value_number, value_term, value_unmarked, value_variant,
+        Decoration, Fields, ReadError, Refusal, Tree, bracketed, called, decorated, malformed,
+        nested, numeral, term_number, term_word, tree, value, value_fields, value_number,
+        value_term, value_unmarked, value_variant, verbatim, word,
     },
-    crate::{Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Spelling, Subterm},
-    curios_common::{InfixOp, Plicity},
+    crate::{
+        Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Shown, Spelling, Subterm,
+    },
+    curios_common::{InfixOp, Plicity, Sign},
     curios_core::{
         Level, LevelHead, Quality, QualityMetaId, QualityParam, Sort, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
         UniverseParam, Universes,
     },
-    curios_print::{Printer, flat, pure},
 };
 
 /// `sort` as its word, under a decorator where its level or quality is not the word's; in a reader's spelling, with its level after it where it is not 0.
-pub fn sort_written(Sort { quality, level }: Sort, frame: Frame) -> Printer {
+pub fn sort_written(Sort { quality, level }: Sort, frame: Frame) -> Tree {
     if !frame.core_text() {
         let word = reader_quality(&quality);
         // A level is the sort's whole content, so a concrete one is shown; an unsolved one names nothing a reader can act on.
         if level.is_zero() || (frame.spelling.erases_universes() && level.metas().next().is_some())
         {
-            return pure(word);
+            return quality_word(word);
         }
-        return pure(format!("{word}.{{{}}}", reader_level(&level)));
+        return verbatim(format!("{word}.{{{}}}", reader_level(&level)));
     }
     let (word, template) = match quality {
         Quality::Type => ("Type", Quality::Type),
@@ -37,15 +39,24 @@ pub fn sort_written(Sort { quality, level }: Sort, frame: Frame) -> Printer {
     };
     let mut fields = Vec::<Decoration>::new();
     if quality != template {
-        fields.push(("quality", pure(quality_written(&quality))));
+        fields.push(("quality", value(quality_written(&quality))));
     }
     // A diagnostic leaves an unsolved level out: it names nothing a reader can act on.
     let erased = frame.spelling.erases_universes() && level.metas().next().is_some();
     if !level.is_zero() && !erased {
-        fields.push(("level", level_written(&level)));
+        fields.push(("level", value(level_written(&level))));
     }
 
-    frame.decorated(fields, pure(word), true)
+    frame.decorated(fields, quality_word(word))
+}
+
+/// The sort word `word` is, as the tree's node of it.
+fn quality_word(word: &str) -> Tree {
+    tree(match word {
+        "Type" => Subterm::Type,
+        "Prop" => Subterm::Prop,
+        _ => Subterm::Sort,
+    })
 }
 
 /// The word a reader writes a sort of `quality` by: an open one by the word a program leaves one with.
@@ -112,21 +123,46 @@ pub fn universe_suffix(universes: &Universes, frame: Frame) -> String {
 }
 
 /// A quality as Core names it.
-fn quality_written(quality: &Quality) -> String {
+fn quality_written(quality: &Quality) -> Tree {
     match quality {
-        Quality::Type => "Type".to_string(),
-        Quality::Prop => "Prop".to_string(),
-        Quality::Param(param) => format!("Param({})", param.0),
-        Quality::Meta(meta) => format!("Meta({})", meta.0),
+        Quality::Type => word("Type"),
+        Quality::Prop => word("Prop"),
+        Quality::Param(param) => called(word("Param"), vec![numeral(param.0, Sign::Unmarked)]),
+        Quality::Meta(meta) => called(word("Meta"), vec![numeral(meta.0, Sign::Unmarked)]),
     }
 }
 
-/// `level` as the term it is.
-pub fn level_written(level: &Level) -> Printer {
-    pure(level_text(level))
+/// `level` as the term it is: a constant, a parameter by its letter and an unsolved level as `#{id = 4} ?`, each under its offset, and their `max` where there are several.
+pub fn level_written(level: &Level) -> Tree {
+    let mut parts = Vec::new();
+    if level.constant != 0 || level.atoms.is_empty() {
+        parts.push(numeral(level.constant, Sign::Unmarked));
+    }
+    for (head, offset) in &level.atoms {
+        let atom = match head {
+            LevelHead::Param(param) => word(parameter_letter(param.0)),
+            LevelHead::Meta(meta) => decorated(
+                vec![("id", value(numeral(meta.0, Sign::Unmarked)))],
+                tree(Subterm::Goal),
+            ),
+        };
+        parts.push(match offset {
+            0 => atom,
+            offset => tree(Subterm::Infix(Infix {
+                op: InfixOp::Add,
+                left: atom,
+                right: numeral(*offset, Sign::Unmarked),
+            })),
+        });
+    }
+
+    match parts.len() {
+        1 => parts.remove(0),
+        _ => called(word("max"), parts),
+    }
 }
 
-/// [`level_written`] as text: a level holds no break.
+/// [`level_written`] as text, which a level's own print is.
 pub fn level_text(level: &Level) -> String {
     let mut parts = Vec::new();
     if level.constant != 0 || level.atoms.is_empty() {
@@ -160,7 +196,7 @@ fn parameter_letter(index: usize) -> String {
 }
 
 /// An instance's universes as a struct-valued field's value, or `None` where it states none.
-pub fn universes_written(universes: &Universes, frame: Frame) -> Option<Printer> {
+pub fn universes_written(universes: &Universes, frame: Frame) -> Option<CoreValue<Shown>> {
     if universes.is_empty() || frame.spelling.erases_universes() {
         return None;
     }
@@ -168,7 +204,13 @@ pub fn universes_written(universes: &Universes, frame: Frame) -> Option<Printer>
     if !universes.levels.is_empty() {
         fields.push((
             "levels",
-            bracketed(universes.levels.iter().map(level_written).collect()),
+            bracketed(
+                universes
+                    .levels
+                    .iter()
+                    .map(|level| value(level_written(level)))
+                    .collect(),
+            ),
         ));
     }
     if !universes.qualities.is_empty() {
@@ -178,7 +220,7 @@ pub fn universes_written(universes: &Universes, frame: Frame) -> Option<Printer>
                 universes
                     .qualities
                     .iter()
-                    .map(|quality| pure(quality_written(quality)))
+                    .map(|quality| value(quality_written(quality)))
                     .collect(),
             ),
         ));
@@ -188,13 +230,19 @@ pub fn universes_written(universes: &Universes, frame: Frame) -> Option<Printer>
 }
 
 /// A declaration's scheme as a struct-valued field's value, or `None` where it is the empty one.
-pub fn universe_context_written(context: &UniverseContext) -> Option<Printer> {
+pub fn universe_context_written(context: &UniverseContext) -> Option<CoreValue<Shown>> {
     let mut fields = Vec::<Decoration>::new();
     if context.parameter_count != 0 {
-        fields.push(("parameter_count", pure(context.parameter_count.to_string())));
+        fields.push((
+            "parameter_count",
+            value(numeral(context.parameter_count, Sign::Unmarked)),
+        ));
     }
     if context.quality_count != 0 {
-        fields.push(("quality_count", pure(context.quality_count.to_string())));
+        fields.push((
+            "quality_count",
+            value(numeral(context.quality_count, Sign::Unmarked)),
+        ));
     }
     if !context.constraints.is_empty() {
         fields.push((
@@ -204,11 +252,11 @@ pub fn universe_context_written(context: &UniverseContext) -> Option<Printer> {
                     .constraints
                     .iter()
                     .map(|constraint| {
-                        flat([
-                            level_written(&constraint.lower),
-                            pure(" <= "),
-                            level_written(&constraint.upper),
-                        ])
+                        value(tree(Subterm::Infix(Infix {
+                            op: InfixOp::Le,
+                            left: level_written(&constraint.lower),
+                            right: level_written(&constraint.upper),
+                        })))
                     })
                     .collect(),
             ),

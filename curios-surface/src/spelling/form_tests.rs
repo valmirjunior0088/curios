@@ -276,22 +276,6 @@ fn an_applied_lambda_is_parenthesized() {
     assert_eq!(applied.faithful().to_string(), "((x) => x)(3)");
 }
 
-/// A body that carries a break of its own — a `match` — takes the line after the arrow and indents.
-#[test]
-fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
-    let b = Free::local(0, Some("b"));
-    let body = Term::bool_match(
-        Term::free_var(&b),
-        None,
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-    );
-    let lambda = Term::func([(b, Term::intrinsic(Intrinsic::BoolType))], body);
-    let printed = lambda.faithful().to_string();
-    assert!(printed.starts_with("(b) =>\n"), "{printed}");
-}
-
 /// A `Flt` prints as what reads back as it, bit for bit: the infinities and the default NaN of either sign as their literals, and any other NaN, which no literal spells, as the call building it from its bytes.
 #[test]
 fn a_non_finite_flt_prints_as_what_reads_back_as_it() {

@@ -4,18 +4,17 @@
 
 use {
     super::{
-        Fields, ReadError, Reader, Refusal, core_read, malformed, telescope_read, term_global,
-        term_number, value_variant,
+        Fields, ReadError, Reader, Refusal, Tree, called, core_read, malformed, numeral,
+        telescope_read, term_global, term_number, tree, value, value_variant, word,
     },
-    crate::{CoreText, Frame, listed, sub},
-    curios_common::Plicity,
+    crate::{CoreText, Frame, TupleField, TupleTypeParam, sub},
+    curios_common::{Plicity, Sign},
     curios_core::{Field, Proj, Term, Tuple, TupleType},
-    curios_print::{Printer, flat, indent, pure},
 };
 
 /// A tuple type: each field's type, under its label where it has one a reader wrote or a later field reads.
-pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> Printer {
-    let mut items = Vec::with_capacity(telescope.len());
+pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> Tree {
+    let mut fields = Vec::with_capacity(telescope.len());
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
         let raw = cursor.label();
@@ -25,54 +24,63 @@ pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> P
             Some(name) => name.hint().is_some() || cursor.binder_used(),
             None => false,
         };
-        let typed = sub(type_, frame);
-        items.push(indent(match named {
-            true => flat([pure(frame.spelling.label(&label)), pure(": "), typed]),
-            false => typed,
-        }));
+        let type_ = sub(type_, frame);
+        fields.push(TupleTypeParam {
+            label: named.then(|| crate::Label::from(frame.spelling.label(&label))),
+            func_params: None,
+            type_,
+        });
         cursor.advance(Term::free_var(&label));
     }
 
-    listed("{".into(), false, items, "}")
+    tree(crate::Subterm::TupleType(crate::TupleType { fields }))
 }
 
-/// A tuple: each field's value, under its label where it carries one, a lone unlabelled one before a comma, which no parenthesized term ends with.
-pub fn tuple_written(Tuple { fields, names }: Tuple, frame: Frame) -> Printer {
+/// A tuple: each field's value, under its label where it carries one; the printer writes a lone unlabelled one before a comma, which no parenthesized term ends with.
+pub fn tuple_written(Tuple { fields, names }: Tuple, frame: Frame) -> Tree {
     let mut names = names.into_iter().chain(std::iter::repeat(None));
-    let lone = fields.len() == 1;
     let fields = fields
         .into_iter()
-        .map(|field| match names.next().flatten() {
-            Some(name) => flat([pure(name), pure(" = "), sub(field, frame)]),
-            None if lone => flat([sub(field, frame), pure(",")]),
-            None => sub(field, frame),
+        .map(|field| TupleField {
+            label: names.next().flatten(),
+            func_params: None,
+            value: sub(field, frame),
         })
         .collect();
 
-    listed("(".into(), false, fields, ")")
+    tree(crate::Subterm::Tuple(crate::Tuple { fields }))
 }
 
-/// A projection: its head between parentheses, then the field it reads.
-pub fn projection_written(Proj { head, field }: Proj, frame: Frame) -> Printer {
-    let read = |field: String| flat([pure("("), sub(head, frame), pure(format!(").{field}"))]);
+/// A projection: its head, then the field it reads, under the record and place it reads where a declaration resolved it or none did.
+pub fn projection_written(Proj { head, field }: Proj, frame: Frame) -> Tree {
+    let read = |field: crate::Field| {
+        tree(crate::Subterm::Proj(crate::Proj {
+            head: sub(head, frame),
+            field,
+        }))
+    };
     match field {
-        Field::Tuple(index) => read(index.to_string()),
-        Field::Label(label) => read(label),
+        Field::Tuple(index) => read(crate::Field::Index(index)),
+        Field::Label(label) => read(crate::Field::Label(label)),
         Field::Position(index) => frame.decorated(
-            vec![("field", pure(format!("Position({index})")))],
-            read(index.to_string()),
-            true,
+            vec![(
+                "field",
+                value(called(
+                    word("Position"),
+                    vec![numeral(index, Sign::Unmarked)],
+                )),
+            )],
+            read(crate::Field::Index(index)),
         ),
         Field::Struct(record, index) => frame.decorated(
             vec![(
                 "field",
-                pure(format!(
-                    "Struct({}, {index})",
-                    frame.spelling.symbol(&record)
+                value(called(
+                    word("Struct"),
+                    vec![frame.global(&record), numeral(index, Sign::Unmarked)],
                 )),
             )],
-            read(index.to_string()),
-            true,
+            read(crate::Field::Index(index)),
         ),
     }
 }

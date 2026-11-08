@@ -4,39 +4,40 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, core_read, reader_infix, standalone_head,
-        term_global, value_term,
+        Decoration, Fields, ReadError, Reader, Refusal, Tree, call, core_read, numeral, shown,
+        term_global, tree, value, value_term, word, word_value,
     },
     crate::{
-        BytesPattern, CoreText, Frame, ListPattern, MatchPattern, NatPattern, ProofLiteral,
-        escape_character, lambda_parameters, sub, written_pattern,
+        BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm, NatPattern,
+        ProofLiteral, ShownForm, lambda_parameters, sub, written_pattern,
     },
+    curios_common::Plicity,
     curios_core::{
         Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
         Subterm, Term, Transient,
     },
-    curios_print::{Printer, flat, indent, line, pure},
 };
 
 /// An elaboration-only form under the node it is.
-pub fn transient_written(transient: Transient, frame: Frame) -> Printer {
-    let node = |name: &'static str| vec![("node", pure(name))];
+pub fn transient_written(transient: Transient, frame: Frame) -> Tree {
+    let node = |name: &'static str| vec![("node", word_value(name))];
     if !frame.core_text() {
         match transient {
             Transient::Infix(Infix { op, left, right }) => {
-                return reader_infix(op.symbol(), left, right, frame);
+                return tree(crate::Subterm::Infix(crate::Infix {
+                    op,
+                    left: sub(left, frame),
+                    right: sub(right, frame),
+                }));
             }
             // No surface form states a type beside a bare term, so a reader is shown the pair bracketed.
             Transient::Ascribed(Ascribed { term, type_ }) => {
-                return flat([
-                    pure("("),
-                    sub(term, frame),
-                    pure(": "),
-                    sub(type_, frame),
-                    pure(")"),
-                ]);
+                return shown(ShownForm::Ascribed {
+                    term: sub(term, frame),
+                    type_: sub(type_, frame),
+                });
             }
-            Transient::Derive => return pure("derive"),
+            Transient::Derive => return tree(crate::Subterm::Derive),
             transient => return transient_written_as_core(transient, frame, node),
         }
     }
@@ -49,53 +50,44 @@ fn transient_written_as_core(
     transient: Transient,
     frame: Frame,
     node: impl Fn(&'static str) -> Vec<Decoration>,
-) -> Printer {
+) -> Tree {
     match transient {
         Transient::Infix(Infix { op, left, right }) => frame.decorated(
             node("Infix"),
-            flat([
-                sub(left, frame),
-                pure(format!(" {} ", op.symbol())),
-                sub(right, frame),
-            ]),
-            false,
+            tree(crate::Subterm::Infix(crate::Infix {
+                op,
+                left: sub(left, frame),
+                right: sub(right, frame),
+            })),
         ),
-        Transient::NumLit(NumLit::Number { magnitude, sign }) => frame.decorated(
-            node("NumLit"),
-            pure(format!("{}{magnitude}", sign.symbol())),
-            true,
-        ),
+        Transient::NumLit(NumLit::Number { magnitude, sign }) => {
+            frame.decorated(node("NumLit"), numeral(magnitude, sign))
+        }
         Transient::NumLit(NumLit::Character(character)) => frame.decorated(
             node("NumLit"),
-            pure(format!("'{}'", escape_character(character))),
-            true,
+            tree(crate::Subterm::ProofLiteral(ProofLiteral::Char(character))),
         ),
-        // The rest of the region called over the action's result, as the `!` it is: `(k)((action)!)`.
+        // The rest of the region called over the action's result, as the `!` it is: `k(action!)`.
         Transient::Bang(Bang {
             action,
             continuation,
         }) => frame.decorated(
             node("Bang"),
-            flat([
-                pure("("),
+            call(
                 sub(continuation, frame),
-                pure(")(("),
-                sub(action, frame),
-                pure(")!)"),
-            ]),
-            true,
+                vec![crate::Argument {
+                    term: tree(crate::Subterm::Bang(sub(action, frame))),
+                    plicity: Plicity::Explicit,
+                }],
+            ),
         ),
         Transient::Ascribed(Ascribed { term, type_ }) => {
             let mut fields = node("Ascribed");
-            fields.push(("type_", sub(type_, frame)));
-            // The term is the operand as it stands only where it writes no decorator of its own, which a second decorator would not attach to.
-            let primary = standalone_head(&term);
-            frame.decorated(fields, sub(term, frame), primary)
+            fields.push(("type_", value(sub(type_, frame))));
+            frame.decorated(fields, sub(term, frame))
         }
-        Transient::Derive => frame.decorated(node("Derive"), pure("?"), true),
-        Transient::Name(name) => {
-            frame.decorated(node("Name"), pure(frame.spelling.symbol(&name)), true)
-        }
+        Transient::Derive => frame.decorated(node("Derive"), tree(crate::Subterm::Goal)),
+        Transient::Name(name) => frame.decorated(node("Name"), frame.global(&name)),
         Transient::Method(Method { concept, field }) => {
             let path = match concept.qualifier() {
                 Some(concept) => frame
@@ -103,60 +95,52 @@ fn transient_written_as_core(
                     .symbol(&Global::Authored(concept.with(&field))),
                 None => format!("{}/{field}", frame.spelling.symbol(&concept)),
             };
-            frame.decorated(node("Method"), pure(path), true)
+            frame.decorated(node("Method"), word(path))
         }
-        Transient::Matrix(matrix) => {
-            frame.decorated(node("Matrix"), matrix_written(matrix, frame), true)
-        }
+        Transient::Matrix(matrix) => frame.decorated(node("Matrix"), matrix_written(matrix, frame)),
     }
 }
 
 /// A match as it was written: its head and motive, then each row as its pattern over the names its body binds — in Core text, its pattern over places and its body as the function over its binders it is, each over the domain Core holds for it.
-fn matrix_written(Matrix { head, motive, rows }: Matrix, frame: Frame) -> Printer {
-    let motive = match motive {
-        Some(motive) => flat([pure(": "), sub(motive, frame)]),
-        None => pure(""),
-    };
-    let rows = rows
+fn matrix_written(Matrix { head, motive, rows }: Matrix, frame: Frame) -> Tree {
+    let motive = motive.map(|motive| sub(motive, frame));
+    let arms = rows
         .into_iter()
         .map(|Row { pattern, body }| {
             if frame.core_text() {
-                let places = &mut std::iter::repeat_with(|| "_".to_string());
-                return flat([
-                    pure("\n| "),
-                    pure(written_pattern(&pattern, places)),
-                    pure(" =>"),
-                    indent(flat([line(), sub(body, frame)])),
-                ]);
+                let places = &mut std::iter::repeat_with(|| crate::Label::from("_".to_string()));
+                return MatrixArm {
+                    pattern: written_pattern(&pattern, places),
+                    body: sub(body, frame),
+                    span: None,
+                };
             }
             let Subterm::Func(Func { telescope }) = &*body else {
                 unreachable!("a row's body is a function over its binders");
             };
-            let mut names = Vec::with_capacity(telescope.len());
-            let body = lambda_parameters(
-                telescope.cursor(),
-                &telescope.marks(),
-                frame,
-                &mut names,
-                &mut Vec::new(),
-            );
+            let mut params = Vec::with_capacity(telescope.len());
+            let body =
+                lambda_parameters(telescope.cursor(), &telescope.marks(), frame, &mut params);
+            let mut names = params.into_iter().map(|param| match param.pattern {
+                crate::Pattern::Binder(name) => name,
+                crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => {
+                    unreachable!("a lambda's parameter is written as a name")
+                }
+            });
 
-            flat([
-                pure("\n| "),
-                pure(written_pattern(&pattern, &mut names.into_iter())),
-                pure(" =>"),
+            MatrixArm {
+                pattern: written_pattern(&pattern, &mut names),
                 body,
-            ])
+                span: None,
+            }
         })
         .collect::<Vec<_>>();
 
-    flat([
-        pure("match "),
-        sub(head, frame),
+    tree(crate::Subterm::Match(crate::Match {
+        head: sub(head, frame),
         motive,
-        flat(rows),
-        pure("\nend"),
-    ])
+        arms,
+    }))
 }
 
 /// An operator, `#{node = Infix} (a + b)`: its operands, each a term of Core text.

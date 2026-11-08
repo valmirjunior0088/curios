@@ -6,19 +6,19 @@
 
 use {
     super::{
-        Decoration, Fields, OpenedEntry, ReadError, Reader, Refusal, bracketed, core_read,
-        malformed, telescope_read, universe_context_read, value_fields, value_list, value_module,
+        Fields, OpenedEntry, ReadError, Reader, Refusal, Tree, core_read, malformed,
+        telescope_read, universe_context_read, value, value_fields, value_list, value_module,
         value_term, value_unmarked, value_word,
     },
     crate::{
-        CoreText, Frame, TopCase, TopConcept, TopInduct, TopStruct, listed, plicity_mark, sub,
+        CasePayloadParam, CoreHead, CoreText, CoreValue, Frame, FuncTypeParam, Shown, TopCase,
+        TopConcept, TopInduct, TopStruct, decoration_fields, sub,
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Polarity, StructDecl, Subterm,
+        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Polarity, StructDecl,
         Telescope, Term, UniverseContext, Variance,
     },
-    curios_print::{Printer, flat, pure},
 };
 
 /// One binder of a declaration's telescope: its mark, its type, the variable a later type reads it by, whether the rest of its own telescope reads it, and whether it has a hint or is so read.
@@ -37,17 +37,17 @@ impl Binder {
         term.mentions_free(&self.label)
     }
 
+    /// The word this binder is written by where it has a hint or `read` says something reads it, and none where it is written as its type alone.
+    fn word(&self, read: bool, frame: Frame) -> Option<String> {
+        (self.named || read).then(|| frame.spelling.label(&self.label))
+    }
+
     /// This binder under its mark: by its word where it has a hint or `read` says something reads it, and as its type alone otherwise.
-    pub fn written(&self, read: bool, frame: Frame) -> Printer {
-        let typed = sub(self.type_.clone(), frame);
-        match self.named || read {
-            true => flat([
-                pure(plicity_mark(Some(&self.mark))),
-                pure(frame.spelling.label(&self.label)),
-                pure(": "),
-                typed,
-            ]),
-            false => flat([pure(plicity_mark(Some(&self.mark))), typed]),
+    pub fn written(&self, read: bool, frame: Frame) -> FuncTypeParam<Shown> {
+        FuncTypeParam {
+            plicity: self.mark,
+            label: self.word(read, frame),
+            type_: sub(self.type_.clone(), frame),
         }
     }
 }
@@ -75,7 +75,7 @@ pub fn binders<B: Bound>(cursor: &mut Cursor<'_, B>, frame: Frame) -> Vec<Binder
 }
 
 /// Each binder written, read by nothing beyond its own telescope.
-pub fn written_entries(binders: &[Binder], frame: Frame) -> Vec<Printer> {
+pub fn written_entries(binders: &[Binder], frame: Frame) -> Vec<FuncTypeParam<Shown>> {
     binders
         .iter()
         .map(|binder| binder.written(false, frame))
@@ -90,24 +90,24 @@ pub fn hidden(mark: Plicity) -> Plicity {
     }
 }
 
-/// A list of binders between parentheses, or nothing where there are none.
-fn parameters(printers: Vec<Printer>) -> Printer {
-    match printers.is_empty() {
-        true => pure(""),
-        false => listed("(".into(), false, printers, ")"),
+/// The head a declaration of `name` is written under, its decorator empty: the caller states what it sets.
+fn head_of(name: &Global) -> CoreHead<Shown> {
+    CoreHead {
+        fields: Vec::new(),
+        name: *name,
     }
 }
 
-/// The sort a declaration's head lands in: bare where it is a sort, and between parentheses otherwise, where a name would read the field block after it as a literal of its own.
-fn result_sort_written(sort: Term, frame: Frame) -> Printer {
-    match &*sort {
-        Subterm::Sort(_) => sub(sort, frame),
-        _ => flat([pure("("), sub(sort, frame), pure(")")]),
-    }
+/// The label a declaration of `name` declares: its path's last segment, or a witness's identity.
+fn label_of(name: &Global) -> crate::Label {
+    crate::Label::from(match name {
+        Global::Authored(path) => path.last().to_string(),
+        Global::Witness(id) => id.to_string(),
+    })
 }
 
-/// A family's form: its head, then each case, then `end`.
-pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> Printer {
+/// A family's form: its head, then each case; `end` is the printer's.
+pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> TopInduct<Shown> {
     let mut cursor = entry.arity.cursor();
     let params = binders(&mut cursor, frame);
     let indices = cursor
@@ -129,28 +129,27 @@ pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> Print
         .zip(read)
         .map(|(param, read)| param.written(read, frame))
         .collect();
-    let indices = written_entries(&indices, frame);
     let indexed = !indices.is_empty();
-    let arrow = match indexed {
-        true => flat([parameters(indices), pure(" -> ")]),
-        false => pure(""),
-    };
-    let head = flat([
-        pure("induct "),
-        pure(frame.spelling.symbol(name)),
-        parameters(written),
-        pure(": "),
-        arrow,
-        pure(if entry.rep_public { "pub " } else { "" }),
-        result_sort_written(entry.result_sort.clone(), frame),
-    ]);
     let cases = entry
         .constructors
         .iter()
         .map(|(tag, signature)| case_written(tag, signature, &params, indexed, frame))
         .collect::<Vec<_>>();
 
-    flat([head, flat(cases), pure("\nend")])
+    TopInduct {
+        doc: None,
+        core: head_of(name),
+        vis_pub: false,
+        rep_pub: entry.rep_public,
+        label: label_of(name),
+        params: written,
+        indices: indices
+            .iter()
+            .map(|index| (index.word(false, frame), sub(index.type_.clone(), frame)))
+            .collect(),
+        result_sort: sub(entry.result_sort.clone(), frame),
+        cases,
+    }
 }
 
 /// Whether a case whose signature is `telescope` reads the family's parameter `param` past its own parameters, which are read at `params`.
@@ -181,7 +180,7 @@ fn case_written(
     params: &[Binder],
     indexed: bool,
     frame: Frame,
-) -> Printer {
+) -> TopCase<Shown> {
     let mut cursor = signature.telescope.cursor();
     let mut stated = Vec::with_capacity(params.len());
     let mut own = true;
@@ -191,49 +190,101 @@ fn case_written(
             break;
         };
         own &= type_ == param.type_ && mark == hidden(param.mark);
-        stated.push(flat([pure(plicity_mark(Some(&mark))), sub(type_, frame)]));
+        stated.push((mark, value(sub(type_, frame))));
         cursor.advance(param.variable.clone());
     }
-    let payload = written_entries(&binders(&mut cursor, frame), frame);
+    let payload = binders(&mut cursor, frame)
+        .iter()
+        .map(|binder| CasePayloadParam {
+            plicity: binder.mark,
+            label: binder.word(false, frame),
+            type_: sub(binder.type_.clone(), frame),
+        })
+        .collect();
     let targets = cursor.body().unwrap_or_default();
-    let targets = match indexed || !targets.is_empty() {
-        true => flat([
-            pure(": "),
-            listed(
-                "(".into(),
-                false,
-                targets
-                    .into_iter()
-                    .map(|target| sub(target, frame))
-                    .collect(),
-                ")",
-            ),
-        ]),
-        false => pure(""),
-    };
-    let payload = listed("(".into(), false, payload, ")");
+    let target = (indexed || !targets.is_empty()).then(|| {
+        targets
+            .into_iter()
+            .map(|target| sub(target, frame))
+            .collect()
+    });
     let fields = match own {
-        true => Vec::<Decoration>::new(),
-        false => vec![("params", bracketed(stated))],
+        true => Vec::new(),
+        false => decoration_fields(vec![("params", CoreValue::List(stated))]),
     };
 
-    flat([
-        pure("\n| "),
-        frame.decorated(
-            fields,
-            flat([pure(tag.as_string()), payload, targets]),
-            true,
-        ),
-    ])
+    TopCase {
+        doc: None,
+        core: fields,
+        label: crate::Label::from(tag.as_string()),
+        payload,
+        target,
+    }
 }
 
-/// A record's form under `keyword`, its fields between braces, with the word each field is written by in order — empty for a superclass edge and for a field nothing names.
-pub fn record_declared(
-    keyword: &'static str,
-    name: &Global,
-    record: &StructDecl,
-    frame: Frame,
-) -> (Printer, Vec<String>) {
+/// A record's form: its parameters, its sort and its fields, each field under its mark and by the word it is written by where it has one, with the word each is written by in order — empty for a superclass edge and for a field nothing names.
+pub struct RecordWritten {
+    pub params: Vec<FuncTypeParam<Shown>>,
+    pub rep_pub: bool,
+    pub result_sort: Tree,
+    pub fields: Vec<(Plicity, Option<String>, Tree)>,
+    pub words: Vec<String>,
+}
+
+impl RecordWritten {
+    /// The record as a `struct` declaration of `name`.
+    pub fn structure(self, name: &Global) -> TopStruct<Shown> {
+        TopStruct {
+            doc: None,
+            core: head_of(name),
+            vis_pub: false,
+            rep_pub: self.rep_pub,
+            label: label_of(name),
+            params: self.params,
+            result_sort: self.result_sort,
+            fields: self
+                .fields
+                .into_iter()
+                .map(|(plicity, label, type_)| crate::StructField {
+                    doc: None,
+                    plicity,
+                    param: crate::TupleTypeParam {
+                        label: label.map(crate::Label::from),
+                        func_params: None,
+                        type_,
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    /// The record as a `concept` declaration of `name`.
+    pub fn concept(self, name: &Global) -> TopConcept<Shown> {
+        TopConcept {
+            doc: None,
+            core: head_of(name),
+            vis_pub: false,
+            rep_pub: self.rep_pub,
+            label: label_of(name),
+            params: self.params,
+            result_sort: self.result_sort,
+            fields: self
+                .fields
+                .into_iter()
+                .map(|(plicity, label, type_)| crate::ConceptField {
+                    doc: None,
+                    plicity,
+                    label: label.map(crate::Label::from),
+                    func_params: None,
+                    type_,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A record's form.
+pub fn record_declared(record: &StructDecl, frame: Frame) -> RecordWritten {
     let mut cursor = record.arity.cursor();
     let params = binders(&mut cursor, frame);
     let fields = cursor
@@ -248,7 +299,6 @@ pub fn record_declared(
             param.written(read, frame)
         })
         .collect::<Vec<_>>();
-    let printers = written_entries(&fields, frame);
     let words = fields
         .iter()
         .map(|field| match (field.mark, field.named) {
@@ -257,41 +307,27 @@ pub fn record_declared(
         })
         .collect();
     // A superclass edge is a field a program never names, which resolution reaches: its word is written where a later field reads it, as a witness binder's is.
-    let body = listed(
-        "{".into(),
-        true,
-        printers
-            .into_iter()
-            .zip(&fields)
-            .map(|(printer, field)| match (field.mark, field.read) {
-                (Plicity::Witness, true) => flat([
-                    pure("use "),
-                    pure(frame.spelling.label(&field.label)),
-                    pure(": "),
-                    sub(field.type_.clone(), frame),
-                ]),
-                (Plicity::Witness, false) => flat([pure("use "), sub(field.type_.clone(), frame)]),
-                _ => printer,
-            })
-            .collect(),
-        "}",
-    );
-    let form = flat([
-        pure(keyword),
-        pure(" "),
-        pure(frame.spelling.symbol(name)),
-        parameters(params),
-        pure(": "),
-        pure(if record.rep_public { "pub " } else { "" }),
-        result_sort_written(record.result_sort.clone(), frame),
-        pure(" "),
-        body,
-    ]);
+    let written = fields
+        .iter()
+        .map(|field| {
+            let label = match field.mark {
+                Plicity::Witness => field.read.then(|| frame.spelling.label(&field.label)),
+                _ => field.word(false, frame),
+            };
+            (field.mark, label, sub(field.type_.clone(), frame))
+        })
+        .collect();
 
-    (form, words)
+    RecordWritten {
+        params,
+        rep_pub: record.rep_public,
+        result_sort: sub(record.result_sort.clone(), frame),
+        fields: written,
+        words,
+    }
 }
 
-/// The parts of an entry its decorator sets, each in place over its template: the module its representation belongs to, the polarities and the variances its elaboration filed, and its scheme apart from its former's — what the printer's `entry_fields` writes of an entry beside its form.
+/// The parts of an entry its decorator sets, each in place over its template: the module its representation belongs to, the polarities and the variances its elaboration filed, and its scheme apart from its former's — what the writer's `entry_fields` writes of an entry beside its form.
 pub fn entry_fields_read(
     fields: &mut Fields<'_>,
     universe_context: &mut UniverseContext,

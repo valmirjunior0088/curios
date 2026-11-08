@@ -4,20 +4,20 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, core_read, malformed, nested, value_fields,
-        value_term, value_variant,
+        Decoration, Fields, ReadError, Reader, Refusal, Tree, called, core_read, malformed, nested,
+        tree, value, value_fields, value_term, value_variant, word,
     },
     crate::{
-        BytesPattern, CoreText, Frame, ListPattern, MatchPattern, NatPattern, Pattern, label_terms,
-        plicity_mark, sub,
+        BytesPattern, CoreText, Frame, FuncParam, ListPattern, MatchPattern, MatrixArm, NatLiteral,
+        NatPattern, Pattern, Radix, label_terms, sub,
     },
+    curios_common::Plicity,
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, Scope, Term, Three, Two,
     },
-    curios_print::{Printer, flat, indent, pure},
 };
 
-/// A match: its head and motive, then each arm, then `end`.
+/// A match: its head and motive, then each arm.
 pub fn match_written(
     Match {
         head,
@@ -25,16 +25,16 @@ pub fn match_written(
         cases,
     }: Match,
     frame: Frame,
-) -> Printer {
+) -> Tree {
     let mut fields = Vec::<Decoration>::new();
     let motive = match result {
-        MatchResult::Family(motive) => motive_written(motive, frame),
+        MatchResult::Family(motive) => Some(motive_written(motive, frame)),
         MatchResult::Ambient(goal) => {
             fields.push((
                 "result",
-                flat([pure("Ambient("), sub(goal, frame), pure(")")]),
+                value(called(word("Ambient"), vec![sub(goal, frame)])),
             ));
-            pure("")
+            None
         }
     };
     let mut held = Vec::<Decoration>::new();
@@ -43,13 +43,19 @@ pub fn match_written(
             false_case,
             true_case,
         } => vec![
-            arm(pure("false"), false_case, frame),
-            arm(pure("true"), true_case, frame),
+            arm(MatchPattern::Bool(false), false_case, frame),
+            arm(MatchPattern::Bool(true), true_case, frame),
         ],
         Cases::Switch { cases, default } => cases
             .into_iter()
-            .map(|(key, body)| arm(pure(key.to_string()), body, frame))
-            .chain([arm(pure("_"), default, frame)])
+            .map(|(key, body)| {
+                arm(
+                    MatchPattern::Nat(NatPattern::Lit(NatLiteral(key, Radix::Dec(0)))),
+                    body,
+                    frame,
+                )
+            })
+            .chain([arm(binder("_"), default, frame)])
             .collect(),
         Cases::Induct {
             cases,
@@ -57,12 +63,12 @@ pub fn match_written(
             stated,
         } => {
             if let Some(stated) = stated {
-                held.push(("stated", sub(stated, frame)));
+                held.push(("stated", value(sub(stated, frame))));
             }
             cases
                 .into_iter()
                 .map(|(tag, induct_arm)| constructor_arm(&tag.as_string(), induct_arm, frame))
-                .chain(default.map(|default| arm(pure("_"), default, frame)))
+                .chain(default.map(|default| arm(binder("_"), default, frame)))
                 .collect()
         }
         Cases::FreeMonoid { carrier } => match carrier {
@@ -72,13 +78,14 @@ pub fn match_written(
             } => {
                 let ((predecessor, hypothesis), step) = frame.open_two(cons_case);
                 vec![
-                    arm(pure("0"), empty_case, frame),
+                    arm(MatchPattern::Nat(NatPattern::Zero), empty_case, frame),
                     arm(
-                        pure(format!(
-                            "{} + 1; {}",
-                            frame.spelling.word(&predecessor),
-                            frame.spelling.word(&hypothesis)
-                        )),
+                        MatchPattern::Nat(NatPattern::Succ {
+                            pred_label: crate::Label::from(frame.spelling.word(&predecessor)),
+                            ih: Some(Pattern::Binder(crate::Label::from(
+                                frame.spelling.word(&hypothesis),
+                            ))),
+                        }),
                         step,
                         frame,
                     ),
@@ -87,19 +94,43 @@ pub fn match_written(
             Carrier::Bytes {
                 empty_case,
                 cons_case,
-            } => vec![
-                arm(pure("x[]"), empty_case, frame),
-                cons_arm("x[", cons_case, frame),
-            ],
+            } => {
+                let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
+                vec![
+                    arm(MatchPattern::Bytes(BytesPattern::End), empty_case, frame),
+                    arm(
+                        MatchPattern::Bytes(BytesPattern::Atom {
+                            head_label: crate::Label::from(frame.spelling.word(&head)),
+                            tail_label: crate::Label::from(frame.spelling.word(&tail)),
+                            ih: Some(Pattern::Binder(crate::Label::from(
+                                frame.spelling.word(&hypothesis),
+                            ))),
+                        }),
+                        step,
+                        frame,
+                    ),
+                ]
+            }
             Carrier::List {
                 elem,
                 empty_case,
                 cons_case,
             } => {
-                held.push(("carrier", nested(vec![("elem", sub(elem, frame))])));
+                held.push(("carrier", nested(vec![("elem", value(sub(elem, frame)))])));
+                let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
                 vec![
-                    arm(pure("[]"), empty_case, frame),
-                    cons_arm("[", cons_case, frame),
+                    arm(MatchPattern::List(ListPattern::Nil), empty_case, frame),
+                    arm(
+                        MatchPattern::List(ListPattern::Cons {
+                            head_label: crate::Label::from(frame.spelling.word(&head)),
+                            tail_label: crate::Label::from(frame.spelling.word(&tail)),
+                            ih: Some(Pattern::Binder(crate::Label::from(
+                                frame.spelling.word(&hypothesis),
+                            ))),
+                        }),
+                        step,
+                        frame,
+                    ),
                 ]
             }
         },
@@ -107,70 +138,75 @@ pub fn match_written(
     if !held.is_empty() {
         fields.push(("cases", nested(held)));
     }
-    let elimination = flat([
-        pure("match "),
-        sub(head, frame),
+    let elimination = tree(crate::Subterm::Match(crate::Match {
+        head: sub(head, frame),
         motive,
-        flat(arms),
-        pure("\nend"),
-    ]);
+        arms,
+    }));
 
-    frame.decorated(fields, elimination, true)
+    frame.decorated(fields, elimination)
 }
 
-/// A written motive: its binders, then the family it states.
-fn motive_written(motive: Scope<curios_core::Many>, frame: Frame) -> Printer {
+/// A binder pattern by its word.
+fn binder(word: &str) -> MatchPattern {
+    MatchPattern::Binder(crate::Label::from(word))
+}
+
+/// A written motive: the function over its binders the family it states is.
+fn motive_written(motive: Scope<curios_core::Many>, frame: Frame) -> Tree {
     let labels = frame.labels(motive.label_iter());
     let terms = label_terms(&labels);
     let opened = motive.open(&terms.iter().collect::<Vec<_>>());
-    let binders = labels
+    let params = labels
         .iter()
-        .map(|label| frame.spelling.word(label))
-        .collect::<Vec<_>>()
-        .join(", ");
+        .map(|label| FuncParam {
+            plicity: Plicity::Explicit,
+            pattern: Pattern::Binder(crate::Label::from(frame.spelling.word(label))),
+            annotation: None,
+        })
+        .collect();
 
-    flat([pure(format!(": ({binders}) => ")), sub(opened, frame)])
+    tree(crate::Subterm::Func(crate::Func {
+        params,
+        body: sub(opened, frame),
+    }))
 }
 
-/// One arm: its pattern, then its body indented under it.
-fn arm(pattern: Printer, body: Term, frame: Frame) -> Printer {
-    flat([
-        pure("\n| "),
+/// One arm: its pattern, then its body.
+fn arm(pattern: MatchPattern, body: Term, frame: Frame) -> MatrixArm<crate::Shown> {
+    MatrixArm {
         pattern,
-        pure(" =>\n"),
-        indent(sub(body, frame)),
-    ])
+        body: sub(body, frame),
+        span: None,
+    }
 }
 
 /// A family's arm: its constructor's tag over its payload's binders, each under its mark.
-fn constructor_arm(tag: &str, induct_arm: InductArm, frame: Frame) -> Printer {
+fn constructor_arm(tag: &str, induct_arm: InductArm, frame: Frame) -> MatrixArm<crate::Shown> {
     let labels = frame.labels(induct_arm.label_iter());
     let terms = label_terms(&labels);
-    let binders = labels
+    let args = labels
         .iter()
         .enumerate()
         .map(|(index, label)| {
-            let mark = plicity_mark(induct_arm.plicities().get(index));
-            format!("{mark}{}", frame.spelling.word(label))
+            let mark = induct_arm
+                .plicities()
+                .get(index)
+                .copied()
+                .unwrap_or(Plicity::Explicit);
+            (mark, binder(&frame.spelling.word(label)))
         })
-        .collect::<Vec<_>>()
-        .join(", ");
+        .collect();
     let body = induct_arm.open(&terms.iter().collect::<Vec<_>>());
 
-    arm(pure(format!("{tag}({binders})")), body, frame)
-}
-
-/// A packed or list fold's step: its head and tail under the bracket that opens it, and its hypothesis after `;`.
-fn cons_arm(open: &str, cons_case: Scope<Three>, frame: Frame) -> Printer {
-    let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
-    let pattern = format!(
-        "{open}{}, ..{}]; {}",
-        frame.spelling.word(&head),
-        frame.spelling.word(&tail),
-        frame.spelling.word(&hypothesis)
-    );
-
-    arm(pure(pattern), step, frame)
+    arm(
+        MatchPattern::Variant {
+            tag: tag.to_string(),
+            args,
+        },
+        body,
+        frame,
+    )
 }
 
 /// A match: its head, its motive where one is written, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a fold's `0` and `p + 1; ih`, `[]` and `[h, ..t]; ih`, `x[]` and `x[h, ..t]; ih`. A match with no motive states the goal it is checked against, `#{result = Ambient(T)}`, and what its cases hold beside their arms is set in `cases`.

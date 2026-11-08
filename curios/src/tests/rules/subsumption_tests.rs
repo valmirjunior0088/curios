@@ -551,7 +551,7 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         ("x: S(c)", "x: F(c)"),
     ])
     .by_elaborator_in("/either", |error| {
-        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "(/S)(c)" && pinned(expected) == "Type")
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/S(c)" && pinned(expected) == "Type")
     });
 }
 

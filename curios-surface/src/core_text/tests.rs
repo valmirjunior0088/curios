@@ -142,7 +142,7 @@ fn a_projection_out_of_a_record_states_the_record() {
         field: Field::Struct(global(&["Pair"]), 0),
     }));
 
-    assert_eq!(written(&projection), "#{field = Struct(/Pair, 0)} (p).0");
+    assert_eq!(written(&projection), "#{field = Struct(/Pair, 0)} p.0");
 }
 
 /// A match is written in the surface's spelling of its cases, and one with no motive states the goal its arms are checked against.
@@ -161,7 +161,7 @@ fn a_match_states_the_goal_it_is_checked_against() {
 
     assert_eq!(
         written(&matched),
-        "#{result = Ambient(#NatType)} match b\n| false =>\n    0\n| true =>\n    1\nend"
+        "#{result = Ambient(#NatType)} match b | false => 0 | true => 1 end"
     );
 }
 
@@ -219,7 +219,7 @@ fn a_method_named_by_its_path_is_its_path_under_its_node() {
     );
     assert_eq!(
         written(&goal),
-        "#{id = 3, origin = Witness {func = Method {concept = /std/Show/Show, field = \"show\"}, role = None}} ?"
+        "#{id = 3, origin = Witness { func = Method { concept = /std/Show/Show, field = \"show\" }, role = None }} ?"
     );
 }
 
@@ -310,7 +310,7 @@ fn a_constructor_its_family_does_not_make_is_written_out() {
 
     let written = module(bit(), constructors).faithful().to_string();
     assert!(
-        written.contains("#{kind = InductiveConstructor {owner = /Bit, tag = one}} let /Bit/one"),
+        written.contains("#{kind = InductiveConstructor { owner = /Bit, tag = one }} let /Bit/one"),
         "{written}"
     );
     assert!(!written.contains("let /Bit/zero"), "{written}");
@@ -357,7 +357,7 @@ fn a_record_is_written_in_its_form() {
 
     assert_eq!(
         definitions.faithful().to_string(),
-        "struct /Pair(A: Type, B: Type): pub Type { fst: A, snd: B }\n"
+        "struct /Pair(A: Type, B: Type): pub Type {\n    fst: A,\n    snd: B,\n}\n"
     );
 }
 

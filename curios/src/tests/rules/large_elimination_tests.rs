@@ -28,7 +28,7 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
     .refused(&[
         ("-> True = match t : (i, _) => True | qa() => True/qed() | qb() => True/qed() end", "-> Nat = match t : (i, _) => F(i) | qa() => True/qed() | qb() => 7 end"),
     ])
-    .by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "(/S)(i)"));
+    .by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/S(i)"));
 }
 
 // A clash is concluded between two forcings of one binder only where they do not convert. `refl(@A)` forces `A` to `Nat` and to `Id(Nat)`, which are one type through `Id`'s definition, so the deletion rule keeps one and the arm stays mandatory: excused, `absurd(TEq/refl(@Nat))` is a closed inhabitant of `False`. The control writes the arm.
@@ -425,7 +425,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
     for (at, statement) in [
         (
             "/u_subst",
-            "/std/Eq/Eq(Nat)((/std/Eq/subst)(@Nat, @a, @b, (_) => Nat, p, v), v)",
+            "/std/Eq/Eq(Nat)(/std/Eq/subst(@Nat, @a, @b, (_) => Nat, p, v), v)",
         ),
         (
             "/u_match",
@@ -433,15 +433,15 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         ),
         (
             "/u_lemma",
-            "/std/Eq/Eq(Nat)((/cast)((_) => Nat, @a, @b, p, v), v)",
+            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @a, @b, p, v), v)",
         ),
         (
             "/u_sym",
-            "/std/Eq/Eq(Nat)((/std/Eq/subst)(@Nat, @a, @b, (_) => Nat, (/std/Eq/sym)(@Nat, @b, @a, (/std/Eq/sym)(@Nat, @a, @b, p)), v), v)",
+            "/std/Eq/Eq(Nat)(/std/Eq/subst(@Nat, @a, @b, (_) => Nat, /std/Eq/sym(@Nat, @b, @a, /std/Eq/sym(@Nat, @a, @b, p)), v), v)",
         ),
         (
             "/u_trans",
-            "/std/Eq/Eq(Nat)((/cast)((_) => Nat, @a, @b, (/std/Eq/trans)(@Nat, @a, @b, @b, p, /std/Eq/Eq/refl(b)), v), v)",
+            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @a, @b, /std/Eq/trans(@Nat, @a, @b, @b, p, /std/Eq/Eq/refl(b)), v), v)",
         ),
     ] {
         refusals.by_elaborator_in(at, |error| {

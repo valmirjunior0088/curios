@@ -388,11 +388,11 @@ impl<'m> Compiler<'m> {
 
     /// The pattern of the row at `row` as it is written.
     fn written(&self, row: usize) -> String {
-        let mut names = self.labels[row]
-            .iter()
-            .map(|(hint, _)| hint.clone().unwrap_or_else(|| "_".to_string()));
+        let mut names = self.labels[row].iter().map(|(hint, _)| {
+            curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string()))
+        });
 
-        written_pattern(&self.matrix.rows[row].pattern, &mut names)
+        written_pattern(&self.matrix.rows[row].pattern, &mut names).to_string()
     }
 
     /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value.

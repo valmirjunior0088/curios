@@ -1,7 +1,7 @@
 use {
     super::{
         Dialect, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix, parse_whole_term,
-        print_term,
+        print_match_pattern, print_term,
     },
     curios_common::{InfixOp, Plicity, Sign, Source, Span},
     curios_num::Natural,
@@ -77,6 +77,12 @@ impl FromStr for Term {
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(print_term(self.clone()), formatter, 4)
+    }
+}
+
+impl fmt::Display for MatchPattern {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_match_pattern(self.clone()), formatter, 4)
     }
 }
 

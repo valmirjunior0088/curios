@@ -10,7 +10,7 @@
 //!
 //! **What Core's equality does not read is not written.** A term's position, a constraint's origin and a binder's place among the written ones are left out, and a binder is written by its hint, renamed where it would capture or has none: two terms printed alike are one term to every judgment.
 //!
-//! **Each node kind's form and template live in a module of their own, its reader beside its writer.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form. A reader builds what its form builds and sets what the decorator states, refusing a field its node does not hold; [`to_core`] reads a file's items, making the items a form implies where a reader puts them, and [`term_to_core`] a term on its own.
+//! **Each node kind's form and template live in a module of their own, its reader beside its writer.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form. A reader builds what its form builds and sets what the decorator states, refusing a field its node does not hold; [`to_core`] reads a file's items, making the items a form implies where a reader puts them, and [`term_to_core`] a term on its own. A writer builds the shown tree its form is ([`Tree`]), which the program's printer lays out as it lays out a program.
 
 #[cfg(test)]
 mod tests;
@@ -55,16 +55,10 @@ use transient::*;
 mod tuple;
 use tuple::*;
 
-use {
-    crate::Spelling,
-    curios_core::{Subterm, Term},
-    curios_print::{
-        Printer, flat, group, indent, line, own_line_if_broken, pure, sep_flat, soft_line,
-    },
-};
+use curios_core::{Subterm, Term};
 
-/// `term` written as Core text under `frame`, with no bound on its descent: [`sub`] is the guarded door every child goes through.
-pub fn core_written(term: Term, frame: Frame) -> Printer {
+/// `term` as the shown tree a print lays out under `frame`, with no bound on its descent: [`sub`] is the guarded door every child goes through.
+pub fn core_written(term: Term, frame: Frame) -> Tree {
     match Term::unwrap_or_clone(term) {
         Subterm::Sort(sort) => sort_written(sort, frame),
         Subterm::Intrinsic(intrinsic) => intrinsic_written(intrinsic, frame),
@@ -87,74 +81,4 @@ pub fn core_written(term: Term, frame: Frame) -> Printer {
         Subterm::Metavar(metavar) => metavar_written(metavar, frame),
         Subterm::Transient(transient) => transient_written(transient, frame),
     }
-}
-
-/// One field a decorator sets: its Core label and the value it is set to.
-pub type Decoration = (&'static str, Printer);
-
-impl Frame<'_> {
-    /// Whether this render writes Core text proper, every field stated, or its reader's spelling.
-    pub fn core_text(&self) -> bool {
-        self.spelling.writes_core_text()
-    }
-
-    /// [`decorated`] in Core text proper, and `node` as it stands in a reader's spelling, which writes no decorator.
-    pub fn decorated(&self, fields: Vec<Decoration>, node: Printer, primary: bool) -> Printer {
-        match self.core_text() {
-            true => decorated(self.spelling, fields, node, primary),
-            false => node,
-        }
-    }
-}
-
-/// `node` under a decorator setting each of `fields`, or `node` alone where there is none. `primary` says whether `node` is a whole operand as it is written; one that is not is parenthesized, so the decorator attaches to all of it. Where `spelling` writes Core text as a text of its own, the two stay on the line they are reached on where they fit there whole, and otherwise the decorator takes a line of its own and `node` the line beneath it ([`Spelling::written_as_text`]).
-pub fn decorated(
-    spelling: &Spelling,
-    fields: Vec<Decoration>,
-    node: Printer,
-    primary: bool,
-) -> Printer {
-    if fields.is_empty() {
-        return node;
-    }
-    let node = match primary {
-        true => node,
-        false => flat([pure("("), node, pure(")")]),
-    };
-    let decorator = hugged("#{", decoration_fields(fields), "}");
-
-    match spelling.writes_as_text() {
-        true => own_line_if_broken(flat([decorator, line(), node])),
-        false => flat([decorator, pure(" "), node]),
-    }
-}
-
-/// A decorator's fields, or a nested struct literal's, each as `label = value`: the items of a list that stays on one line where it fits and otherwise takes a line for each, so a value that spans lines opens a block.
-pub fn decoration_fields(fields: Vec<Decoration>) -> Vec<Printer> {
-    fields
-        .into_iter()
-        .map(|(label, value)| flat([pure(label), pure(" = "), value]))
-        .collect()
-}
-
-/// A struct-valued field's value: the fields of it that differ from the template's, between braces.
-pub fn nested(fields: Vec<Decoration>) -> Printer {
-    hugged("{", decoration_fields(fields), "}")
-}
-
-/// A list-valued field's value: its entries between brackets.
-pub fn bracketed(entries: Vec<Printer>) -> Printer {
-    hugged("[", entries, "]")
-}
-
-/// `items` a comma apart between `open` and `close`: on one line where they fit, and otherwise each on a line of its own a level deeper, with `close` on the last one's.
-fn hugged(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
-    group(flat([
-        pure(open),
-        indent(flat([
-            soft_line(),
-            sep_flat(items, || flat([pure(","), line()])),
-        ])),
-        pure(close),
-    ]))
 }

@@ -11,7 +11,7 @@ fn declaration(elaborated: &str, name: &str) -> String {
     let lines = elaborated.lines().collect::<Vec<_>>();
     let head = lines
         .iter()
-        .position(|line| line.contains(&format!("let {name} :")))
+        .position(|line| line.contains(&format!("let {name}:")))
         .unwrap_or_else(|| panic!("{name} is declared:\n{elaborated}"));
     let start = (0..head)
         .rev()
