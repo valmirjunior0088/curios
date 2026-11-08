@@ -673,3 +673,47 @@ fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
         "{verdicts:?}"
     );
 }
+
+/// A closed match on a call that never returns, whose one arm its indices rule out: `/loop` stands at `/F(1)` and `c` builds `/F(0)`, so the arm is typed by no rule, and a closed match whose arm names no payload is that arm with its scrutinee unread. `/forged`'s arm is `qed` at `False`, untyped, and `/typed`'s type reads as `True`. The term the module closes with is `/forged`.
+const A_RULED_OUT_ARM_OVER_A_PARTIAL_CALL: &str = r#"
+induct /F: (n: #NatType) -> pub Type
+| c(): (0)
+end
+#{node = Rec}
+let /loop : (u: {}) -> #{node = InductType} /F()(1) =
+    (u: {}) => /loop(u);
+let /forged : #{node = InductType} /std/Bool/False() =
+    #{result = Ambient(#{node = InductType} /std/Bool/False())}
+    match /loop(())
+    | c() => /std/Bool/True/qed()
+    end;
+let /typed : #{result = Ambient(Prop)} match /loop(()) | c() => #{node = InductType} /std/Bool/True() end =
+    /std/Bool/True/qed();
+/forged
+"#;
+
+// No value of `/F(1)` is `c`, so reduction reaches the ruled-out arm only through a scrutinee that is no value, a call not known to terminate, and totality is what stands between the module and `False`: the proof and the type that reach `/loop` are refused, and the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality_tests` puts the program to the elaborator under this name.
+#[test]
+fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_RULED_OUT_ARM_OVER_A_PARTIAL_CALL}",
+        PROPOSITIONS,
+        A_RULED_OUT_ARM_OVER_A_PARTIAL_CALL
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [
+                Verdict { name: Some(forged), error: Error::NotTotal { reached: Some(first), .. } },
+                Verdict { name: Some(typed), error: Error::NotTotal { reached: Some(second), .. } },
+                Verdict { name: None, error: Error::NotTotal { reached: Some(third), .. } },
+            ] if *forged == global("forged")
+                && *first == global("loop")
+                && *typed == global("typed")
+                && *second == global("loop")
+                && *third == global("forged")
+        ),
+        "{verdicts:?}"
+    );
+}

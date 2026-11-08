@@ -1306,3 +1306,180 @@ fn a_value_of_a_case_its_family_does_not_declare_is_refused_by_the_tag() {
         "{verdicts:?}"
     );
 }
+
+/// Each index meets its family's one case at some value: two lists of proofs apart only in their order, a list of pairs apart only in a proof, an open element, a spread, an append and a window against `[0]`, and a binder forced at two positions to two lists of proofs and to a symbolic byte beside a literal one. The term the module closes with types at `False` through `/swapped`.
+const TWO_LISTS_THAT_MEET_THEIR_CASE_AT_SOME_VALUE: &str = r#"
+induct /Pr: pub Prop
+| a()
+| b()
+end
+induct /Ix: (l: #ListType(#{node = InductType} /Pr())) -> pub Type
+| mk(): (#List(#{node = InductType} /Pr(), [/Pr/a(), /Pr/b()]))
+end
+induct /Mx: (l: #ListType({#{node = InductType} /Pr(), #NatType})) -> pub Type
+| mk(): (#List({#{node = InductType} /Pr(), #NatType}, [(/Pr/a(), 0)]))
+end
+induct /Ln: (l: #ListType(#NatType)) -> pub Type
+| one(): (#List(#NatType, [0]))
+end
+induct /D: (x: #ListType(#{node = InductType} /Pr()), y: #ListType(#{node = InductType} /Pr())) -> pub Type
+| dup(l: #ListType(#{node = InductType} /Pr())): (l, l)
+end
+induct /E: (x: #BytesType, y: #BytesType) -> pub Type
+| dup(l: #BytesType): (l, l)
+end
+let /swapped : (
+    v: #{node = InductType} /Ix()(#List(#{node = InductType} /Pr(), [/Pr/b(), /Pr/a()]))) -> /std/Bool/False =
+    (v: #{node = InductType} /Ix()(#List(#{node = InductType} /Pr(), [/Pr/b(), /Pr/a()]))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /mixed : (
+    v: #{node = InductType} /Mx()(#List({#{node = InductType} /Pr(), #NatType}, [(/Pr/b(), 0)]))) -> /std/Bool/False =
+    (v: #{node = InductType} /Mx()(#List({#{node = InductType} /Pr(), #NatType}, [(/Pr/b(), 0)]))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /open : (x: #NatType, v: #{node = InductType} /Ln()(#List(#NatType, [x]))) -> /std/Bool/False =
+    (x: #NatType, v: #{node = InductType} /Ln()(#List(#NatType, [x]))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /spread : (
+    x: #NatType,
+    xs: #ListType(#NatType),
+    v: #{node = InductType} /Ln()(#ListConcat(#NatType, [#List(#NatType, [x]), xs]))) -> /std/Bool/False =
+    (
+        x: #NatType,
+        xs: #ListType(#NatType),
+        v: #{node = InductType} /Ln()(#ListConcat(#NatType, [#List(#NatType, [x]), xs]))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /appended : (
+    x: #NatType,
+    xs: #ListType(#NatType),
+    v: #{node = InductType} /Ln()(#ListAppend(#NatType, xs, x))) -> /std/Bool/False =
+    (
+        x: #NatType,
+        xs: #ListType(#NatType),
+        v: #{node = InductType} /Ln()(#ListAppend(#NatType, xs, x))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /window : (
+    xs: #ListType(#NatType),
+    s: #NatType,
+    p: /std/Bool/Holds(#NatLe(#NatAdd(s, 1), #ListLen(#NatType, xs))),
+    v: #{node = InductType} /Ln()(#ListSlice(#NatType, xs, s, 1, p))) -> /std/Bool/False =
+    (
+        xs: #ListType(#NatType),
+        s: #NatType,
+        p: /std/Bool/Holds(#NatLe(#NatAdd(s, 1), #ListLen(#NatType, xs))),
+        v: #{node = InductType} /Ln()(#ListSlice(#NatType, xs, s, 1, p))) =>
+        match v: (i, w) => /std/Bool/False end;
+let /twice : (
+    v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) -> /std/Bool/False =
+    (v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) =>
+        match v: (i, j, w) => /std/Bool/False end;
+let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) -> /std/Bool/False =
+    (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) =>
+        match v: (i, j, w) => /std/Bool/False end;
+/swapped(#{node = Variant} /Ix/mk())
+"#;
+
+// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. So each case stays mandatory, and the eight refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name, with its control. Mutation-checked: with the `Variant` arm of `Unifier::unify_node` (`curios-analysis/src/invert.rs`) deciding a proposition's constructors by their tags, the declarations over lists of proofs are excused and this fails.
+#[test]
+fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${TWO_LISTS_THAT_MEET_THEIR_CASE_AT_SOME_VALUE}",
+        PROPOSITIONS,
+        TWO_LISTS_THAT_MEET_THEIR_CASE_AT_SOME_VALUE
+    ));
+    let missing = |name: &str, family: &str, tag: &str| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name))
+                && verdict.error
+                    == Error::MissingArm {
+                        family: global(family),
+                        tag: Atom::from(tag),
+                    }
+        })
+    };
+
+    for (name, family, tag) in [
+        ("swapped", "Ix", "mk"),
+        ("mixed", "Mx", "mk"),
+        ("open", "Ln", "one"),
+        ("spread", "Ln", "one"),
+        ("appended", "Ln", "one"),
+        ("window", "Ln", "one"),
+        ("twice", "D", "dup"),
+        ("bytes", "E", "dup"),
+    ] {
+        assert!(missing(name, family, tag), "{name}: {verdicts:?}");
+    }
+    assert_eq!(verdicts.len(), 8, "{verdicts:?}");
+}
+
+/// `Short`'s case states none of its family's one parameter, and an arm of `/reads`, placed ahead of the family, opens it.
+const A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY: &str = r#"
+let /reads : (v: #{node = InductType} /Short(#NatType)()) -> #NatType =
+    (v: #{node = InductType} /Short(#NatType)()) =>
+        match v: (w) => #NatType
+        | mk() => 0
+        end;
+induct /Short(A: Type): pub Type
+| #{params = []} mk()
+end
+/std/Bool/True/qed()
+"#;
+
+// The count is the scan's, before any judgment, so an arm judged ahead of the family never opens the short prefix: the module is refused whole, by `Short`'s count, and nothing else is judged.
+#[test]
+fn a_short_case_is_refused_by_its_count_before_an_arm_ahead_of_its_family_reads_it() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY}",
+        PROPOSITIONS,
+        A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: Some(short),
+                error: Error::Arity { counted: Counted::Parameters, expected: 1, actual: 0 },
+            }] if *short == global("Short")
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// A value of a case holding one payload past its case's, and an arm binding one past it: read by a zip, the value would type as `mk(true)` and the arm would open its second binder at the `false` reduction carries.
+const A_VALUE_AND_AN_ARM_ONE_PAYLOAD_LONG: &str = r#"
+induct /Box: pub Type
+| mk(x: #BoolType)
+end
+let /pick : (b: #{node = InductType} /Box()) -> #BoolType =
+    (b: #{node = InductType} /Box()) =>
+        #{result = Ambient(#BoolType)}
+        match b
+        | mk(x, y) => y
+        end;
+let /forged : /std/Bool/Holds(/pick(#{node = Variant} /Box/mk(true, false))) =
+    /std/Bool/True/qed();
+/forged
+"#;
+
+// A constructor value's payload and an arm's binders are each counted against the case's signature, so the long value and the long arm are refused by their counts, under the names that hold them.
+#[test]
+fn a_value_and_an_arm_one_payload_past_their_case_are_refused_by_their_counts() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_VALUE_AND_AN_ARM_ONE_PAYLOAD_LONG}",
+        PROPOSITIONS,
+        A_VALUE_AND_AN_ARM_ONE_PAYLOAD_LONG
+    ));
+    let counted = |name: &str, what: Counted| {
+        verdicts.iter().any(|verdict| {
+            verdict.name == Some(global(name))
+                && matches!(
+                    verdict.error,
+                    Error::Arity { counted, expected: 1, actual: 2 } if counted == what
+                )
+        })
+    };
+
+    assert!(counted("pick", Counted::ArmBinders), "{verdicts:?}");
+    assert!(counted("forged", Counted::Payload), "{verdicts:?}");
+}

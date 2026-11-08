@@ -467,3 +467,39 @@ fn a_restatement_stands_aside_past_the_brackets_its_arm_closes() {
         "{verdicts:?}"
     );
 }
+
+/// The false arm of a `Flt` comparison, typed at its mirror: `/f`'s false arm stands at `/M(false, x, y)`, `Holds(y <= x)`, under the case equation `x < y = false`, and the term the module closes with stands at `/M(#FltLt(+nan.0, 0.0), +nan.0, 0.0)`, which is `Holds(0.0 <= +nan.0)`, `False`.
+const A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR: &str = r#"
+let /M : (b: #BoolType, x: #FltType, y: #FltType) -> Prop =
+    (b: #BoolType, x: #FltType, y: #FltType) =>
+        #{result = Ambient(Prop)}
+        match b
+        | false => /std/Bool/Holds(#FltLe(y, x))
+        | true => #{node = InductType} /std/Bool/True()
+        end;
+let /f : (x: #FltType, y: #FltType) -> /M(#FltLt(x, y), x, y) =
+    (x: #FltType, y: #FltType) =>
+        match #FltLt(x, y): (b) => /M(b, x, y)
+        | false => /std/Bool/True/qed()
+        | true => /std/Bool/True/qed()
+        end;
+/f(#Flt(+nan.0), #Flt(0.0))
+"#;
+
+// Against a NaN both directions of an ordered comparison are false, so a `Flt` comparison has no dual the refinement probe may ask its guard under, and the false arm's `Holds(y <= x)` is left standing: `qed` is refused there, the one refusal between the module and `False`. `curios`'s `tests::rules::arm_tests` puts the program to the elaborator under this name, over `Nat`, where the mirror is the guard's negation, as its control.
+#[test]
+fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR}",
+        PROPOSITIONS,
+        A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(f), error: Error::Mismatch { .. } }] if *f == global("f")
+        ),
+        "{verdicts:?}"
+    );
+}

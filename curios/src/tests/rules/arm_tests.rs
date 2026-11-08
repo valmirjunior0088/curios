@@ -415,3 +415,32 @@ fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
     ])
     .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// The false arm of `x < y` knows `y <= x` over `Nat`, its guard's negation on a total order, and not over `Flt`, where against a NaN both directions are false: the arm stays typed at `Holds(y <= x)` and `qed` is refused there, where `forged` would be `False` at a NaN. `curios_cert`'s `recheck::equation_tests` puts the module to the kernel under this name. The control is the same program over `Nat`.
+#[test]
+fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, False, Holds};
+
+        pub let M(b: Bool, x: Nat, y: Nat) -> Prop =
+            match b | true => True | false => Holds(y <= x) end;
+
+        pub let f(x: Nat, y: Nat) -> M(x < y, x, y) =
+            match x < y: (b) => M(b, x, y) | true => True/qed() | false => True/qed() end;
+
+        let forged = f;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("use /std/{Nat, Bool};", "use /std/{Flt, Bool};"),
+        ("M(b: Bool, x: Nat, y: Nat)", "M(b: Bool, x: Flt, y: Flt)"),
+        ("f(x: Nat, y: Nat)", "f(x: Flt, y: Flt)"),
+        ("let forged = f;", "let forged: False = f(+nan.0, 0.0);"),
+    ])
+    .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
+}

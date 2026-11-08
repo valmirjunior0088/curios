@@ -391,3 +391,28 @@ fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
         b"ok"
     );
 }
+
+// Two byte runs are apart by their lengths only where those lengths differ: `x[c, d]` against `x[1, 2]` is one value at `c = 1` and `d = 2`, so the fold of `!=` stays stuck on the two bytes and `qed` does not inhabit it, where `forged` would be `False`. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the kernel under this name. The control's literal run is three bytes long, which no two bytes meet.
+#[test]
+fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
+    control(
+        r#"
+        use /std/{Byte};
+        use /std/Bool/{True, False, Holds};
+
+        pub let apart(c: Byte, d: Byte) -> Holds(x[c, d] != x[1, 2, 3]) = True/qed();
+
+        let forged = apart;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("x[1, 2, 3]", "x[1, 2]"),
+        ("let forged = apart;", "let forged: False = apart(1, 2);"),
+    ])
+    .by_elaborator_in("/apart", |error| {
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    });
+}

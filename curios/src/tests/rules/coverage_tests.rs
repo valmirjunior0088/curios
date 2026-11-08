@@ -247,3 +247,76 @@ fn two_list_literals_apart_in_an_element_or_in_length_clash() {
         b"ok"
     );
 }
+
+// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name. The control's elements are values of a type, whose constructors clash, each list index faces the empty list, which a run and an appended element are longer than, and the symbolic run forced beside a literal byte is two bytes long.
+#[test]
+fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
+    let refusals = control(
+        r#"
+        use /std/{List, Nat, Byte, Bytes};
+        use /std/Bool/{False, Holds};
+
+        induct Pr: Type
+        | a()
+        | b()
+        end
+
+        induct Ix: (l: List(Pr)) -> Type
+        | mk(): ([Pr/a(), Pr/b()])
+        end
+
+        induct Mx: (l: List({Pr, Nat})) -> Type
+        | mk(): ([(Pr/a(), 0)])
+        end
+
+        induct Ln: (l: List(Nat)) -> Type
+        | one(): ([])
+        end
+
+        induct D: (x: List(Pr), y: List(Pr)) -> Type
+        | dup(l: List(Pr)): (l, l)
+        end
+
+        induct E: (x: Bytes, y: Bytes) -> Type
+        | dup(l: Bytes): (l, l)
+        end
+
+        pub let swapped(v: Ix([Pr/b(), Pr/a()])) -> False = match v end;
+        pub let mixed(v: Mx([(Pr/b(), 0)])) -> False = match v end;
+        pub let open(x: Nat, v: Ln([x])) -> False = match v end;
+        pub let spread(x: Nat, xs: List(Nat), v: Ln([x, ..xs])) -> False = match v end;
+        pub let appended(x: Nat, xs: List(Nat), v: Ln([..xs, x])) -> False = match v end;
+        pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/len(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =
+            match v end;
+        pub let twice(v: D([Pr/a()], [Pr/b()])) -> False = match v end;
+        pub let bytes(c: Byte, v: E(x[c, c], x[1])) -> False = match v end;
+
+        let forged = swapped;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("induct Pr: Type", "induct Pr: Prop"),
+        ("| one(): ([])", "| one(): ([0])"),
+        ("Ln([..List/slice(xs, s, 1), 0])", "Ln(List/slice(xs, s, 1))"),
+        ("E(x[c, c], x[1])", "E(x[c], x[1])"),
+        ("let forged = swapped;", "let forged: False = swapped(Ix/mk());"),
+    ]);
+
+    for at in [
+        "/swapped",
+        "/mixed",
+        "/open",
+        "/spread",
+        "/appended",
+        "/window",
+        "/twice",
+        "/bytes",
+    ] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(error, Error::MatrixUncovered { indexed: true, .. })
+        });
+    }
+}

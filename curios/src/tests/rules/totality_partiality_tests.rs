@@ -578,3 +578,41 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
         )
     });
 }
+
+// A closed match whose one arm reads nothing is that arm with its scrutinee unread, and where the indices rule the arm out the kernel types none of it: so a call that never returns, at an instance no case builds, may be read only where nothing is erased, and the type and the proof that would read it are refused, while the elaborator types the arm a reader wrote. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the kernel under this name. The control's call returns the case the arm names.
+#[test]
+fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
+    let refusals = control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        induct F: (n: Nat) -> Type
+        | c(): (0)
+        end
+
+        pub let loop(u: {}) -> F(0) = F/c();
+
+        pub let T: Prop = match loop(()) | c() => True end;
+        pub let typed: T = True/qed();
+        pub let forged: True = match loop(()) | c() => True/qed() end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("use /std/Bool/{True};", "use /std/Bool/{True, False};"),
+        ("-> F(0) = F/c();", "-> F(1) = loop(u);"),
+        ("pub let forged: True", "pub let forged: False"),
+    ]);
+
+    for at in ["/T", "/typed"] {
+        refusals.by_elaborator_in(at, |error| {
+            matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+        });
+    }
+    refusals.by_elaborator_in("/forged", |error| {
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    });
+}
