@@ -15,15 +15,15 @@ The writer builds the tree, `Term<CoreText>` and `CoreFile`, the reader's invers
 
 - **A decorator stays beside what it decorates where the two fit their line**, and takes a line of its own above it where they do not (`own_line_if_broken`, `curios-print`); the writer lays its decorators out so today.
 - **Core text needs no new grammar for the program's layout**, as probed above.
-- **A declined term's reader notation is a dialect of its own.** The forms only a report shows — `…`, a name's instance `.{…}`, a level metavariable `?u1`, a metavariable `?7`, a witness by its identity — are a third dialect, which no grammar reads and the one printer lays out: a parsed tree cannot hold one, and `to_core` is never handed one. Rejected: those nodes in Core text's dialect, which every reader would refuse by hand; a declined term shown as Core text proper, decorators and all; a printer of the notation's own, which keeps a second layout.
+- **What a print shows and no grammar reads back is a dialect of its own, the shown dialect.** It writes Core text's forms over its own terms and the forms only a bounded print or a reader's spelling writes: `…`, a name's instance `.{…}`, a metavariable `?7`. A bounded dump, a kernel's refusal and a report's declined term are shown, since each may elide; text written whole, which a reader reads back, is Core text. Rejected: those nodes in Core text's dialect, which every reader would refuse by hand; a dialect for the reader's notation alone, which leaves `…` to both; a declined term shown as Core text proper, decorators and all; a printer of the notation's own, which keeps a second layout.
 - **Core text takes the program's conventions wholesale**: the layout branches on the dialect only at its hooks.
 - **The printer is a value carrying what a render of its dialect is told**: Core text's whether a decorator stands above its operand where the two do not fit their line, as a text is written, or beside it, as a refusal quotes one. A program's is told nothing.
-- **The writer builds trees in one commit**: every node kind nests every other, so no stage can build half a tree, and `every_unit_of_the_prelude_reads_back_from_its_core_text` holds the whole.
+- **The writer builds shown trees in one commit**: every node kind nests every other, so no stage can build half a tree, the two notations it writes are one walk, and `every_unit_of_the_prelude_reads_back_from_its_core_text` holds the whole.
 
 ## Stages
 
-1. **The writer builds trees.** Each writer module builds the tree its form is, under the same spelling, minting and elision (`Minting`, [A printer states each fact once, where it is bound](../design/tools/a-printer-states-each-fact-once-where-it-is-bound.md)'s bound on a print), and the program's printer lays it out; Core text takes the program's conventions. Check: `every_unit_of_the_prelude_reads_back_from_its_core_text`, each pinned Core printout restated where its layout moved, and a module's dump formatted to itself.
-2. **The reader's notation**, as settled above. Check: the diagnostics that pin a declined term.
+1. **The writer builds shown trees.** Each writer module builds the tree its form is, as a shown term, under the same spelling, minting and elision (`Minting`, [A printer states each fact once, where it is bound](../design/tools/a-printer-states-each-fact-once-where-it-is-bound.md)'s bound on a print), the program's printer lays it out, and the writer's printer goes; Core text takes the program's conventions. Check: `every_unit_of_the_prelude_reads_back_from_its_core_text`, and each pinned printout restated where its layout moved.
+2. **Text written whole is Core text.** The writer, generic over the dialect it builds, builds Core text's tree where it writes whole, so what a reader reads back is a tree the grammar reads. Check: the round trip, and a module's dump written whole formatted to itself.
 
 ## Retirement
 
