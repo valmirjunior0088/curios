@@ -2,20 +2,22 @@
 
 use {super::test_support::*, crate::test_support::*, curios_core::Polarity, curios_elab::Error};
 
-// The whole reason the gate exists. `Bad` is not the initial algebra of any functor — the payload is a function *out of* `Bad` — and admitting it hands back an eliminator that inhabits `False` in four lines with no recursion.
+// The whole reason the gate exists. `Bad` is not the initial algebra of any functor — the payload is a function *out of* `Bad` — and admitting it hands back an eliminator that inhabits `False` in four lines with no recursion. The control's payload produces a `Bad`.
 #[test]
 fn a_negative_occurrence_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/Bool/{False};
 
         induct Bad : pub Type
-        | c(f : (Bad) -> False)
+        | c(f : (False) -> Bad)
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("(False) -> Bad", "(Bad) -> False")])
     .by_elaborator_in("/Bad", |error| {
         matches!(
             error,
@@ -46,20 +48,22 @@ fn a_negative_occurrence_of_an_unrelated_type_is_admitted() {
     assert_eq!(run(source), b"unrelated");
 }
 
-// Positive but not strictly positive: two arrows, so the sign flips back. This records `documentation/design/theory/strict-positivity-modulo-polarity.md`'s refusal of the merely positive as a test rather than as prose: a family that is its own double function space has no model as a set, so the merely-positive relaxation other systems allow is not available here.
+// Positive but not strictly positive: two arrows, so the sign flips back. This records `documentation/design/theory/strict-positivity-modulo-polarity.md`'s refusal of the merely positive as a test rather than as prose: a family that is its own double function space has no model as a set, so the merely-positive relaxation other systems allow is not available here. The control's payload holds `Bad2` right of both arrows.
 #[test]
 fn a_positive_but_not_strictly_positive_occurrence_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/Bool/{False};
 
         induct Bad2 : pub Type
-        | c(f : ((Bad2) -> False) -> False)
+        | c(f : ((False) -> False) -> Bad2)
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("((False) -> False) -> Bad2", "((Bad2) -> False) -> False")])
     .by_elaborator_in("/Bad2", |error| {
         matches!(
             error,
@@ -113,20 +117,22 @@ fn an_io_payload_is_a_strictly_positive_occurrence() {
     assert_eq!(run(source), b"suspended");
 }
 
-// A struct is checked on the same footing as an inductive: it is a nominal record, so a field that consumes the record it belongs to is the same unsoundness wearing different syntax.
+// A struct is checked on the same footing as an inductive: it is a nominal record, so a field that consumes the record it belongs to is the same unsoundness wearing different syntax. The control's field produces the record.
 #[test]
 fn a_negative_struct_field_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/Bool/{False};
 
         struct Consume : pub Type {
-            run : (Consume) -> False,
+            run : (False) -> Consume,
         }
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("(False) -> Consume", "(Consume) -> False")])
     .by_elaborator_in("/Consume", |error| {
         matches!(
             error,
@@ -140,19 +146,27 @@ fn a_negative_struct_field_is_rejected() {
 
 // The other support the argument names, at a shape positivity's own probes do not spell: they run the negative and the double negative bare, through an `induct` parameter, through a `struct` parameter, through a type alias, under `List`, behind a type-level `match`, and at a higher-kinded parameter — never behind an anonymous Σ, which is the construct this row is about.
 //
-// The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out, a family that is its own double function space having no model as a set, so this is the pairing the row rests on, checked where the row lives.
+// The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out, a family that is its own double function space having no model as a set, so this is the pairing the row rests on, checked where the row lives. The control holds `Bad` right of both arrows behind the same Σ.
 #[test]
 fn a_non_strict_occurrence_behind_a_record_is_still_refused() {
-    refused(A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED).by_elaborator_in(
-        "/Bad",
-        |error| {
-            matches!(
-                error,
-                Error::NotStrictlyPositive {
-                    polarity: Polarity::Pos,
-                    ..
-                }
-            )
-        },
-    );
+    control(
+        r#"
+        induct Bad : pub Type
+        | mk(f : {((Prop) -> Prop) -> Bad})
+        end
+
+        /std/Io/pure(())
+        "#,
+        b"",
+    )
+    .refused(&[("((Prop) -> Prop) -> Bad", "((Bad) -> Prop) -> Prop")])
+    .by_elaborator_in("/Bad", |error| {
+        matches!(
+            error,
+            Error::NotStrictlyPositive {
+                polarity: Polarity::Pos,
+                ..
+            }
+        )
+    });
 }

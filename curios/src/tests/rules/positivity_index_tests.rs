@@ -45,38 +45,48 @@ fn recursion_beside_a_propositional_equality_over_the_declaration_is_admitted() 
     assert_eq!(run(source), b"equated");
 }
 
-// The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is not positivity: a declaration is in scope from its own signature on and never inside it, so the elaborator refuses the name before the positivity pass runs at all, and were it in scope kinding would refuse it, `x : Foo` needing `Foo` to be a type where `Foo` is a family until it is applied to the very index this declaration is introducing. That is what makes skipping the position safe rather than lucky.
+// The skip above is a *reachability* claim, and this pins its first half. `Split::of` walks constructor payloads and struct fields and nothing else; if an index binder type could name the declaration being declared, a negative occurrence there would go unseen. It cannot, and the reason is not positivity: a declaration is in scope from its own signature on and never inside it, so the elaborator refuses the name before the positivity pass runs at all, and were it in scope kinding would refuse it, `x : Foo` needing `Foo` to be a type where `Foo` is a family until it is applied to the very index this declaration is introducing. That is what makes skipping the position safe rather than lucky. The control indexes `Foo` by `Nat`.
 #[test]
 fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
-    refused(
+    control(
         r#"
-        induct Foo : (x : Foo) -> pub Type
+        use /std/{Nat};
+
+        induct Foo : (x : Nat) -> pub Type
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("(x : Nat)", "(x : Foo)")])
     .by_elaborator_in(
         "/Foo",
         |error| matches!(error, Error::UnboundVariable { term, .. } if pinned(term) == "/Foo"),
     );
 }
 
-// The reachability claim's second half, held by a rule rather than by kinding: a second declaration of the group is well-kinded in an index domain, `A` being a type already, so the position the walk skips could name the group, and a family's parameters and indices name nothing its group declares. `S`, indexed by `W` beside a `W` whose `wrap` holds an `S`, is refused, as is `Ty`, whose parameter is a `Ctx` beside a `Ctx` whose `ext` holds a `Ty`, and `B`, whose index domain `(A) -> False` carries a negative occurrence of `A` beside an `A` whose `mk` holds a `B`, the occurrence the payload walk sees only once `mk` stores its witness. A family indexed by a family that holds it is induction-induction, which no decision admits. `curios-cert`'s `recheck::positivity_tests` puts the kernel to the same rule under this name, with the pair declared apart too.
+// The reachability claim's second half, held by a rule rather than by kinding: a second declaration of the group is well-kinded in an index domain, `A` being a type already, so the position the walk skips could name the group, and a family's parameters and indices name nothing its group declares. `S`, indexed by `W` beside a `W` whose `wrap` holds an `S`, is refused, as is `Ty`, whose parameter is a `Ctx` beside a `Ctx` whose `ext` holds a `Ty`, and `B`, whose index domain `(A) -> False` carries a negative occurrence of `A` beside an `A` whose `mk` holds a `B`, the occurrence the payload walk sees only once `mk` stores its witness. A family indexed by a family that holds it is induction-induction, which no decision admits. `curios-cert`'s `recheck::positivity_tests` puts the kernel to the same rule under this name, with the pair declared apart too. Each control declares its pair apart, the holder holding nothing of the family, and the refusal is the holder taking the family into its group.
 #[test]
 fn a_family_is_indexed_by_nothing_that_holds_it() {
-    for (source, declaration, holder) in [
+    for (source, edit, declaration, holder) in [
         (
             r#"
             induct W: pub Prop
             | base()
-            | wrap(x: W, s: S(x))
-            and S: (W) -> pub Prop
+            | wrap(x: W)
+            end
+
+            induct S: (W) -> pub Prop
             | mk(v: W): (v)
             end
 
-            /std/print("unreachable")
+            /std/print("ok")
             "#,
+            (
+                "| wrap(x: W)\n            end\n\n            induct S",
+                "| wrap(x: W, s: S(x))\n            and S",
+            ),
             "/S",
             "/W",
         ),
@@ -84,13 +94,19 @@ fn a_family_is_indexed_by_nothing_that_holds_it() {
             r#"
             induct Ctx: pub Type
             | empty()
-            | ext(g: Ctx, a: Ty(g))
-            and Ty(g: Ctx): pub Type
+            | ext(g: Ctx)
+            end
+
+            induct Ty(g: Ctx): pub Type
             | unit()
             end
 
-            /std/print("unreachable")
+            /std/print("ok")
             "#,
+            (
+                "| ext(g: Ctx)\n            end\n\n            induct Ty",
+                "| ext(g: Ctx, a: Ty(g))\n            and Ty",
+            ),
             "/Ty",
             "/Ctx",
         ),
@@ -99,18 +115,24 @@ fn a_family_is_indexed_by_nothing_that_holds_it() {
             use /std/Bool/{False};
 
             induct A: pub Type
-            | mk(@f: (A) -> False, b: B(f))
-            and B: (f: (A) -> False) -> pub Type
+            | mk()
+            end
+
+            induct B: (f: (A) -> False) -> pub Type
             | unit(@g: (A) -> False): (g)
             end
 
-            /std/print("unreachable")
+            /std/print("ok")
             "#,
+            (
+                "| mk()\n            end\n\n            induct B",
+                "| mk(@f: (A) -> False, b: B(f))\n            and B",
+            ),
             "/B",
             "/A",
         ),
     ] {
-        refused(source).by_elaborator_in(declaration, |error| {
+        control(source, b"ok").refused(&[edit]).by_elaborator_in(declaration, |error| {
             matches!(error, Error::IndexedByItsGroup { name, member } if *name == global(declaration) && *member == global(holder))
         });
     }

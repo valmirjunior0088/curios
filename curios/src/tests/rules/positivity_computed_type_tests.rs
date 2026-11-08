@@ -5,22 +5,24 @@ use {
     curios_elab::Error,
 };
 
-// A `let`-defined alias is unfolded rather than read as an opaque former, so the arrow it hides counts where it stands — once for the negative, twice for the merely positive.
+// A `let`-defined alias is unfolded rather than read as an opaque former, so the arrow it hides counts where it stands — once for the negative, twice for the merely positive. The control's alias holds its argument right of the arrow.
 #[test]
 fn a_negative_occurrence_behind_an_alias_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/{Bool};
 
-        let Neg(X : Type) -> Type = (X) -> Bool;
+        let Arrow(X : Type) -> Type = (Bool) -> X;
 
         induct Bad : pub Type
-        | c(Neg(Bad))
+        | c(Arrow(Bad))
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("(Bool) -> X", "(X) -> Bool")])
     .by_elaborator_in("/Bad", |error| {
         matches!(
             error,
@@ -32,21 +34,24 @@ fn a_negative_occurrence_behind_an_alias_is_rejected() {
     });
 }
 
+// The same twice over. The control's alias holds its argument right of the arrow.
 #[test]
 fn a_non_strict_occurrence_behind_an_alias_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/{Bool};
 
-        let Neg(X : Type) -> Type = (X) -> Bool;
+        let Arrow(X : Type) -> Type = (Bool) -> X;
 
         induct Bad : pub Type
-        | c(Neg(Neg(Bad)))
+        | c(Arrow(Arrow(Bad)))
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("(Bool) -> X", "(X) -> Bool")])
     .by_elaborator_in("/Bad", |error| {
         matches!(
             error,
@@ -75,10 +80,10 @@ fn a_field_type_bound_by_a_plain_alias_is_admitted() {
     assert_eq!(run(source), b"aliased");
 }
 
-// A type-level `match` whose scrutinee is decided is unfolded to the arm it takes, so the occurrence is read where that arm puts it.
+// A type-level `match` whose scrutinee is decided is unfolded to the arm it takes, so the occurrence is read where that arm puts it. The control decides it at the arm `X`.
 #[test]
 fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/{Bool};
 
@@ -89,12 +94,14 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
             end;
 
         induct Bad : pub Type
-        | c(Pick(true, Bad))
+        | c(Pick(false, Bad))
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("Pick(false, Bad)", "Pick(true, Bad)")])
     .by_elaborator_in("/Bad", |error| {
         matches!(
             error,
@@ -106,10 +113,10 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
     });
 }
 
-// The same `match` stuck on a parameter is no arm at all: the analysis answers that it cannot see through it, whatever the arms hold — here both are strict — which is the safe reading of a position it has not read.
+// The same `match` stuck on a parameter is no arm at all: the analysis answers that it cannot see through it, whatever the arms hold — here both are strict — which is the safe reading of a position it has not read. The control decides the same `match` at `true`.
 #[test]
 fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
-    refused(
+    control(
         r#"
         use /std/{Bool, Nat};
 
@@ -121,12 +128,14 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
 
         induct Stuck(b : Bool) : pub Type
         | leaf()
-        | c(Pick(b, Stuck(b)))
+        | c(Pick(true, Stuck(b)))
         end
 
-        /std/print("unreachable")
+        /std/print("ok")
         "#,
+        b"ok",
     )
+    .refused(&[("Pick(true, Stuck(b))", "Pick(b, Stuck(b))")])
     .by_elaborator_in("/Stuck", |error| {
         matches!(
             error,
@@ -138,29 +147,34 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
     });
 }
 
-// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the kernel under this name.
+// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the kernel under this name. The control's arm holds no occurrence.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
-    let source = r#"
+    control(
+        r#"
         use /std/{Eq};
         use /std/Bool/{False};
 
         induct Bad(@A: Sort, x: A, y: A, h: Eq()(x, y)): pub Type
-        | c(f: match h | refl() => (Bad(x, y, h)) -> False end)
+        | c(f: match h | refl() => (False) -> False end)
         end
 
         /std/print("")
-        "#;
-    refused(source).by_elaborator_in(
+        "#,
+        b"",
+    )
+    .refused(&[("(False) -> False", "(Bad(x, y, h)) -> False")])
+    .by_elaborator_in(
         "/Bad",
         |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/Bad")),
     );
 }
 
-// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the kernel under this name. Rename both or neither.
+// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the kernel under this name. Rename both or neither. The control's `G` holds an `F` at `{}` in `B`.
 #[test]
 fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
-    let source = r#"
+    control(
+        r#"
         use /std/{Eq};
         use /std/Bool/{True, False};
 
@@ -169,12 +183,15 @@ fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
         end
 
         induct G: pub Type
-        | g(w: F(True/qed(), True/qed(), Eq/refl(), G))
+        | g(w: F(True/qed(), True/qed(), Eq/refl(), {}))
         end
 
         /std/print("")
-        "#;
-    refused(source).by_elaborator_in(
+        "#,
+        b"",
+    )
+    .refused(&[("Eq/refl(), {}))", "Eq/refl(), G))")])
+    .by_elaborator_in(
         "/G",
         |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/G")),
     );

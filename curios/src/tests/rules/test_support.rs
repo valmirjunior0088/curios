@@ -281,48 +281,6 @@ pub const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS: &str = r#"
-    use /std/{Nat};
-
-    struct Bad : pub Prop {
-        value : Nat
-    }
-
-    /std/Io/pure(())
-    "#;
-
-pub const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS: &str = r#"
-    use /std/{Nat};
-
-    concept Bad(A : Type) : pub Prop {
-        get(A) -> Nat,
-    }
-
-    /std/Io/pure(())
-    "#;
-
-/// A hidden field takes no position among the fields a literal writes, and is held as a written one is: two values apart in `n` alone would be one value, and `read` would tell them apart.
-pub const A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{Holds};
-
-    struct Hid : pub Prop { @n : Nat, Holds(n == n) }
-
-    let read(h : Hid) -> Nat = h.n;
-
-    /std/Io/pure(())
-    "#;
-
-pub const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: &str = r#"
-    use /std/{Show};
-
-    concept Carry(A : Type) : pub Prop {
-        use Show(A),
-    }
-
-    /std/Io/pure(())
-    "#;
-
 /// `drop`'s `@A` is constrained by nothing — no argument mentions it and no result determines it — so every use below leaves one unsolved term metavariable exactly where the fixture plants it.
 pub const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
     use /std/{Nat};
@@ -458,14 +416,6 @@ pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
     /std/print("ok")
     "#;
 
-pub const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
-    struct Bad : pub Prop {
-        carried : Type
-    }
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &str = r#"
     use /std/{Bool};
     use /std/Bool/{True, Holds};
@@ -485,24 +435,6 @@ pub const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &s
         end;
 
     /std/print("ok")
-    "#;
-
-pub const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
-    use /std/{List, Option};
-    use /std/Bool/{True};
-
-    induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
-
-    let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
-        Same/same();
-
-    let one : List(Option(True)) = [Option/some(True/qed())];
-    let none : List(Option(True)) = [];
-
-    let bad : Same()(one, none) =
-        all_equal(one, none);
-
-    /std/print("FORGED")
     "#;
 
 /// The witness's lemma at a *genuine* proposition, which must stay accepted: `all_equal` is sound, and a fix that closed the hole by refusing `Prop`-abstracted binders would take this with it.
@@ -562,14 +494,6 @@ pub const A_RECORD_OF_PROPOSITIONS_IS_A_PROPOSITION: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-pub const THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION: &str = r#"
-    struct Holder : pub Prop {
-        field : {}
-    }
-
-    /std/Io/pure(())
-    "#;
-
 pub const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
     use /std/{Nat, Eq};
 
@@ -578,50 +502,6 @@ pub const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
     }
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION: &str = r#"
-    struct Holder : pub Prop {
-        field : (A : Type) -> A
-    }
-
-    /std/Io/pure(())
-    "#;
-
-pub const A_DECLARATION_INTO_PROP_WITH_A_RELEVANT_VALUE: &str = r#"
-    use /std/{Nat, Bool};
-    use /std/Bool/{True};
-
-    pub let P(b : Bool) -> Prop =
-        match b: (_) => Prop
-        | true => True
-        | false => Nat
-        end;
-
-    /std/Io/pure(())
-    "#;
-
-pub const A_DECLARATION_INTO_PROP_IS_A_PROPOSITION_AT_EVERY_ARGUMENT: &str = r#"
-    use /std/{Nat, Bool, Eq};
-    use /std/Bool/{True};
-
-    pub let P(b : Bool) -> Prop =
-        match b: (_) => Prop
-        | true => True
-        | false => True
-        end;
-
-    pub let one(p : P(false), q : P(false)) -> Eq()(p, q) = Eq/refl();
-
-    /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED: &str = r#"
-    induct Bad : pub Type
-    | mk(f : {((Bad) -> Prop) -> Prop})
-    end
-
-    /std/Io/pure(())
     "#;
 
 pub const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
@@ -1772,48 +1652,6 @@ pub const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
     /std/print(Nat/to_str(counted(3, 5, True/qed())))
     "#;
 
-pub const A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT: &str = r#"
-    use /std/Bool/{False};
-
-    induct Bad: Prop
-    | c(f: (A: Prop) -> (A) -> A)
-    end
-
-    let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end;
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX: &str = r#"
-    use /std/Bool/{False};
-
-    induct I: (f: (A: Type) -> (A) -> A) -> Type
-    | c(@f: (A: Type) -> (A) -> A): (f)
-    end
-
-    let bad(f: (A: Type) -> (A) -> A, b: I(f)) -> False =
-        match b | c(@g) => bad(g, g(I(g))(b)) end;
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH: &str = r#"
-    use /std/Bool/{False};
-
-    induct T: Type
-    | c(f: (A: Prop) -> (A) -> A)
-    end
-
-    induct Sq(A: Type): Prop
-    | sq(a: A)
-    end
-
-    let bad(t: T) -> False =
-        match t | c(f) => match f(Sq(T))(Sq/sq(t)) | sq(u) => bad(u) end end;
-
-    /std/print("unreachable")
-    "#;
-
 pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
@@ -1825,108 +1663,6 @@ pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     let through(b: Fine, p: True) -> True = match b | c(f) => f(True)(p) end;
 
     /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT: &str = r#"
-    use /std/Bool/{False};
-
-    struct Bad: Prop
-    { f: (A: Prop) -> (A) -> A }
-
-    let bad(b: Bad) -> False = bad(b.0(Bad)(b));
-
-    /std/print("unreachable")
-    "#;
-
-pub const A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True};
-
-    struct Fine: Prop
-    { f: (A: Prop) -> (A) -> A }
-
-    let through(b: Fine, p: True) -> True = b.0(True)(p);
-
-    /std/print(Nat/to_str(1))
-    "#;
-
-pub const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
-    use /std/{Nat, Bool};
-
-    let F(b: Bool) -> Type =
-        match b
-        | true => (@x: Nat) -> Nat
-        | false => (x: Nat) -> Nat
-        end;
-    let pass(@T: Type, t: T) -> T = t;
-    let f: F(true) = (@x) => x;
-    let g: F(true) = pass(@F(true), f);
-    /std/print(Nat/to_str(g(@3)))
-    "#;
-
-pub const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
-    use /std/{Nat, Bool};
-
-    let F(b: Bool) -> Type =
-        match b
-        | true => (@x: Nat) -> Nat
-        | false => (x: Nat) -> Nat
-        end;
-    let pass(@T: Type, t: T) -> T = t;
-    let f: F(true) = (@x) => x;
-    let g: F(false) = pass(@F(true), f);
-    /std/print("FORGED")
-    "#;
-
-pub const TWO_FUNCTIONS_EQUATED_UNDER_ONE_MARK: &str = r#"
-    use /std/{Nat, Eq};
-
-    let stated: Eq()((n: Nat) => n, (n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
-    /std/print("ok")
-    "#;
-
-pub const TWO_FUNCTIONS_EQUATED_UNDER_A_HIDDEN_MARK: &str = r#"
-    use /std/{Nat, Eq};
-
-    let stated: Eq()((@n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
-    /std/print("ok")
-    "#;
-
-pub const TWO_FUNCTIONS_EQUATED_ACROSS_A_MARK: &str = r#"
-    use /std/{Nat, Eq};
-
-    let stated: Eq()((n: Nat) => n, (@n: Nat) => ((x: Nat) => x)(n)) = Eq/refl();
-    /std/print("FORGED")
-    "#;
-
-pub const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True, Holds};
-
-    induct Tagged: Type
-    | tag(a: Nat, @size: Nat, k: Nat)
-    end
-    struct Sized: Type { a: Nat, @len: Nat, items: Nat }
-    let f: (a: Nat, @b: Nat, c: Nat) -> Nat = (x, z) => z;
-    let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
-    let s: Sized = Sized { a = 1, @len = 2, items = 3 };
-    let fact: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 9) = True/qed();
-    /std/print(Nat/to_str(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1))
-    "#;
-
-pub const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True, Holds};
-
-    induct Tagged: Type
-    | tag(a: Nat, @size: Nat, k: Nat)
-    end
-    struct Sized: Type { a: Nat, @len: Nat, items: Nat }
-    let f: (a: Nat, @b: Nat, c: Nat) -> Nat = (x, z) => z;
-    let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
-    let s: Sized = Sized { a = 1, @len = 2, items = 3 };
-    let lie: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 6) = True/qed();
-    /std/print("FORGED")
     "#;
 
 pub const A_SUM_STATED_WITH_ITS_OPERANDS_SWAPPED: &str = r#"
