@@ -7,12 +7,12 @@ use {
         *,
     },
     curios_abi::HostOp,
-    curios_common::Report,
+    curios_common::{Report, Source},
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term},
     curios_core::{Definitions, Item},
     curios_module::{SYNTAX, prepare_prelude},
     curios_surface::{
-        CoreFile, FormScope, GroupItem, Module, ReadError, Spellable, TopItem, UseGroup,
+        CoreFile, FormScope, Formatted, GroupItem, Module, ReadError, Spellable, TopItem, UseGroup,
         intrinsic_former, to_core,
     },
     std::{
@@ -407,21 +407,29 @@ fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
     mentions
 }
 
-/// Every unit of the prelude reads back from the Core text it prints as the unit it is, item for item and by Core's equality, each read over the units before it, which its tests' and foreign rows' forms are made against: the printer and the reader hold one another to every form the prelude's terms take.
+/// The scope the unit at `index` of `prelude` is written against, the units before it, which its tests' and foreign rows' forms are made against; and the spelling it is written whole in, as a text of its own.
+fn written_whole(
+    prelude: &[&curios_unit::Unit],
+    index: usize,
+) -> (Rc<FormScope>, Rc<curios_surface::Spelling>) {
+    let scope = Rc::new(FormScope::over(
+        SYNTAX,
+        prelude[..index].iter().map(|unit| unit.core()),
+    ));
+    let spelling = curios_surface::Spelling::core_text()
+        .with_form_scope(Rc::clone(&scope))
+        .written_whole()
+        .written_as_text();
+
+    (scope, Rc::new(spelling))
+}
+
+/// Every unit of the prelude reads back from the Core text it prints as the unit it is, item for item and by Core's equality, each read over the units before it: the printer and the reader hold one another to every form the prelude's terms take.
 #[test]
 fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
     with_prelude(|prelude| {
         for (index, unit) in prelude.iter().enumerate() {
-            let scope = Rc::new(FormScope::over(
-                SYNTAX,
-                prelude[..index].iter().map(|unit| unit.core()),
-            ));
-            let spelling = Rc::new(
-                curios_surface::Spelling::core_text()
-                    .with_form_scope(Rc::clone(&scope))
-                    .written_whole()
-                    .written_as_text(),
-            );
+            let (scope, spelling) = written_whole(prelude, index);
             let written = unit.core();
             let text = written.spelled(&spelling).to_string();
             let file = text
@@ -447,6 +455,43 @@ fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
                 );
             }
             assert_eq!(read.items.len(), written.items.len(), "the unit's items");
+        }
+    });
+}
+
+/// **Every unit of the prelude is written whole as `curios format` writes it**: a dump and a formatted `.crsc` are laid out by one printer, so formatting what Core prints changes nothing.
+#[test]
+fn every_unit_of_the_prelude_is_written_as_curios_format_writes_it() {
+    with_prelude(|prelude| {
+        for (index, unit) in prelude.iter().enumerate() {
+            let (_, spelling) = written_whole(prelude, index);
+            let text = unit.core().spelled(&spelling).to_string();
+            match Formatted::from_source(&Source::held("unit.crsc", text.as_str())) {
+                Ok(Formatted::Unchanged(_)) => {}
+                Ok(Formatted::Changed(formatted)) => {
+                    let line = text
+                        .lines()
+                        .zip(formatted.lines())
+                        .position(|(written, formatted)| written != formatted)
+                        .unwrap_or_else(|| text.lines().count().min(formatted.lines().count()));
+                    panic!(
+                        "unit {index} formats otherwise from line {}:\n{}\nas\n{}",
+                        line + 1,
+                        text.lines()
+                            .skip(line)
+                            .take(8)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        formatted
+                            .lines()
+                            .skip(line)
+                            .take(8)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    );
+                }
+                Err(refusal) => panic!("unit {index} is refused by the formatter: {refusal}"),
+            }
         }
     });
 }
