@@ -16,7 +16,7 @@ use {
     curios_core::{
         Certification, Concluded, Definition, DefinitionKind, Definitions, Global, InductDecl,
         Item, ItemRun, Nominal, Places, Polarity, Reads, RecDefinition, RecItem, Sharing,
-        StructDecl, Totality, UniverseContext, Variance,
+        StructDecl, Totality, Variance,
     },
     std::collections::{BTreeMap, HashMap},
 };
@@ -134,7 +134,7 @@ fn member_alike(this: &RecDefinition, that: &RecDefinition) -> bool {
     *name == that.name && authored(kind) == authored(&that.kind)
 }
 
-/// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context by what it is compared by ([`UniverseContext::inequalities`]), the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, the variance vector it carries aside, which no judgment of another unit reads, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
+/// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context, the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, the variance vector it carries aside, which no judgment of another unit reads, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
 ///
 /// **The certifier's own, of what [`Stood`] says of a declaration of the walk's unit.** A walk records it of each part it read of another unit, and a walk over that walk's unit as a baseline digests the part again where the unit it reads is not the one that was read: the terms are the ones in its scope and the function is this one, so a verdict adopted across units rests on nothing another component computed. Each term is consed alone (`Sharing`), so it is digested under no position and under its binders' names: two parts that digest alike are one to every judgment, and two that differ in a name alone are judged again, which costs a judgment and admits nothing.
 pub(crate) fn read_digest(
@@ -225,36 +225,26 @@ impl Readable<'_> {
             return curios_archive::to_bytes(&unfolds).map(|bytes| digest(&bytes));
         }
 
-        // An entry as the certifier reads one: what elaboration alone records is left out, and its scheme is held by what it is compared by.
-        let family = self.family.map(|declaration| {
-            let read = InductDecl {
-                universe_context: UniverseContext::empty(),
-                module: Qualifier::default(),
-                rep_public: false,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-                ..declaration.shared(&sharing)
-            };
-
-            (read, declaration.universe_context.inequalities())
+        // An entry as the certifier reads one: what elaboration alone records is left out.
+        let family = self.family.map(|declaration| InductDecl {
+            module: Qualifier::default(),
+            rep_public: false,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+            ..declaration.shared(&sharing)
         });
-        let record = self.record.map(|declaration| {
-            let read = StructDecl {
-                universe_context: UniverseContext::empty(),
-                module: Qualifier::default(),
-                rep_public: false,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-                ..declaration.shared(&sharing)
-            };
-
-            (read, declaration.universe_context.inequalities())
+        let record = self.record.map(|declaration| StructDecl {
+            module: Qualifier::default(),
+            rep_public: false,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+            ..declaration.shared(&sharing)
         });
         let part = (
             sharing.share(self.held.type_),
             // Held by both parts: the publication is read by `Sort::of` with nothing run, and a reader's own value sort is stated through it, so a verdict may rest on it whichever read the asking walk recorded, and covering it twice refuses an adoption that would have stood rather than standing on one that would not.
             self.held.value_sort.map(|sort| sharing.share(sort)),
-            self.held.universes.inequalities(),
+            self.held.universes.clone(),
             family,
             record,
             self.partial,

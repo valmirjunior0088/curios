@@ -13,7 +13,6 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
         constraints: vec![UniverseConstraint {
             lower: Level::param(UniverseParam(0)).succ().unwrap(),
             upper: Level::param(UniverseParam(1)),
-            origin: origin("residual"),
         }],
     };
     universe_context_validate(&context).unwrap();

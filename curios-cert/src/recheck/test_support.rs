@@ -13,9 +13,8 @@ use {
         Atom, Certification, Certified, Definition, DefinitionKind, Definitions, Entrypoint, Free,
         Func, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat,
         Nominal, Places, Polarity, Program, Reads, RecGroup, RecItem, Scope, StructDecl,
-        StructType, Subterm, Telescope, Term, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseParam, Universes, Variance,
-        test_support::*,
+        StructType, Subterm, Telescope, Term, UniverseConstraint, UniverseContext, UniverseParam,
+        Universes, Variance, test_support::*,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -2600,7 +2599,6 @@ pub(super) fn scheme_context() -> UniverseContext {
             .checked_add(1)
             .expect("level admits the offset"),
         upper: Level::param(UniverseParam(1)),
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
 
     UniverseContext {
@@ -2734,7 +2732,6 @@ pub(super) fn universe_refinement_definitions(target: Level, route: Route) -> De
             .succ()
             .expect("level has a successor"),
         upper: two,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
 
     let wrap_at =
@@ -3526,7 +3523,6 @@ pub(super) fn index_target_definitions(variances: Vec<Variance>) -> (Global, Def
             constraints: vec![UniverseConstraint {
                 lower: payload_level.succ().expect("a parameter has a successor"),
                 upper: index_level.clone(),
-                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
             }],
         },
         arity: Telescope::done(Telescope::build(
@@ -3731,7 +3727,6 @@ pub(super) fn stuck_arm_definitions(variances: Vec<Variance>) -> (Global, Defini
             constraints: vec![UniverseConstraint {
                 lower: payload_level.succ().expect("a parameter has a successor"),
                 upper: sort_level.clone(),
-                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
             }],
         },
         arity: Telescope::build([(flag, bool_type.clone())], Telescope::done(())),
@@ -3962,7 +3957,6 @@ pub(super) fn russell_carrier(family: Global, variances: Vec<Variance>) -> Induc
             constraints: vec![UniverseConstraint {
                 lower: payload_level.succ().expect("a parameter has a successor"),
                 upper: own_level.clone(),
-                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
             }],
         },
         arity: Telescope::done(Telescope::done(())),

@@ -4,16 +4,12 @@
 //!
 //! Reusable declarations bind surviving input levels in a [`UniverseContext`]. Flexible classifier levels take their principal least solution when one exists; genuinely non-principal choices remain residual constrained parameters. Every external occurrence instantiates the stored context freshly. Local schemes may temporarily refer to ambient metas and are capture-safely rewritten beneath the enclosing declaration's parameters; recursive members instead share one context and one internal instance.
 //!
-//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their extents and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before ANF.
+//! A constraint is its inequality alone, so its equality, its hash and its archived bytes are the inequality's, and a context's are its counts' and its constraints': where a constraint was raised is the elaborator's solver's, which holds it beside the constraint ([`UniverseConstraintOrigin`]). Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before ANF.
 
 use {
     super::{Extent, Global},
     curios_common::Mint,
-    std::{
-        collections::BTreeMap,
-        fmt,
-        hash::{Hash, Hasher},
-    },
+    std::{collections::BTreeMap, fmt, hash::Hash},
 };
 
 /// A lowering- or elaboration-minted universe metavariable.
@@ -378,12 +374,35 @@ pub enum UniverseRole {
 
 /// Lowering-time metadata for one densely numbered universe metavariable.
 ///
-/// The role controls finalization, while the origin survives the Text/Core boundary so a later constraint failure can still point at the written `Type` that introduced the level.
+/// The role controls finalization, while where its `Type` was written survives the Text/Core boundary so a later constraint failure can still point at the written `Type` that introduced the level.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct UniverseSeed {
     pub role: UniverseRole,
-    pub origin: Option<UniverseConstraintOrigin>,
+    pub written: Option<WrittenSort>,
+}
+
+/// Where a written `Type`, `Prop` or `Sort` stands and which of them it is: what the lowering keeps of the level or the sort it minted for one, archived with the lowered module, which keeps its positions. The solver makes of it the origin of what that level or sort raises ([`WrittenSort::origin`]), and nothing else stored holds one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct WrittenSort {
+    pub extent: Option<Extent>,
+    pub kind: UniverseConstraintKind,
+    /// The path the declaration it was written in stands under, where that is not the root.
+    pub declaration: Option<String>,
+}
+
+impl WrittenSort {
+    /// Where a constraint raised on this sort's level or quality was raised, as the solver that raised it holds it.
+    pub fn origin(&self) -> UniverseConstraintOrigin {
+        UniverseConstraintOrigin {
+            extent: self.extent,
+            kind: self.kind.clone(),
+            declaration: self.declaration.clone(),
+            binder: None,
+            instantiated: None,
+        }
+    }
 }
 
 /// The semantic reason a universe inequality was introduced.
@@ -444,9 +463,8 @@ pub fn inconsistent_sort(path: &[UniverseConstraintOrigin]) -> &'static str {
     }
 }
 
-/// User-facing provenance for one universe constraint.
+/// Where a universe constraint was raised, as the solver that raised it holds it beside the constraint, and as a conflict's path reports it: a scheme stores its constraints as their inequalities alone ([`UniverseConstraint`]), so nothing stored holds one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
 pub struct UniverseConstraintOrigin {
     pub extent: Option<Extent>,
     pub kind: UniverseConstraintKind,
@@ -468,38 +486,12 @@ impl UniverseConstraintOrigin {
     }
 }
 
-/// One normalized inequality `lower ≤ upper`.
-#[derive(Debug, Clone)]
+/// One normalized inequality `lower ≤ upper`, and nothing of where it was raised: that is the solver's that raised it ([`UniverseConstraintOrigin`]), so a scheme says what it means and the same inequality raised twice is one constraint.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct UniverseConstraint {
     pub lower: Level,
     pub upper: Level,
-    pub origin: UniverseConstraintOrigin,
-}
-
-// Provenance explains an inequality but is not part of its semantic identity: one inequality raised at two positions, or restored from an archive under none, is one constraint, so a replayed or archive-restored scheme compares as the one it was.
-impl PartialEq for UniverseConstraint {
-    fn eq(&self, other: &Self) -> bool {
-        self.lower == other.lower && self.upper == other.upper
-    }
-}
-
-impl Eq for UniverseConstraint {}
-
-impl Hash for UniverseConstraint {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.lower.hash(state);
-        self.upper.hash(state);
-    }
-}
-
-/// What two contexts are compared by ([`UniverseContext`]'s equality): how many levels and sorts each binds, and each constraint's inequality in order, with nothing of where a constraint came from. What a digest of a declaration holds of its scheme, so two digest alike exactly where they compare equal ([`UniverseContext::inequalities`]).
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Inequalities {
-    parameter_count: u64,
-    quality_count: u64,
-    constraints: Vec<(Level, Level)>,
 }
 
 /// A closed, declaration-local residual universe context.
@@ -518,19 +510,6 @@ impl UniverseContext {
 
     pub fn empty() -> Self {
         Self::default()
-    }
-
-    /// What this context is compared by: see [`Inequalities`].
-    pub fn inequalities(&self) -> Inequalities {
-        Inequalities {
-            parameter_count: self.parameter_count as u64,
-            quality_count: self.quality_count as u64,
-            constraints: self
-                .constraints
-                .iter()
-                .map(|constraint| (constraint.lower.clone(), constraint.upper.clone()))
-                .collect(),
-        }
     }
 
     /// How many universe parameters of either kind the declaration binds, which is how much an instance of it states: nothing, for a monomorphic declaration.
@@ -572,26 +551,6 @@ impl UniverseContext {
             qualities: (0..self.quality_count)
                 .map(QualityParam)
                 .map(Quality::Param)
-                .collect(),
-        }
-    }
-
-    /// This context with no constraint saying where in a text it was raised; its kind, its declaration and its binder stand. What a consed declaration carries, and every group a consed term holds ([`Sharing`](crate::Sharing)): the position is read by a report about that declaration's own elaboration, which is over by the time it is stored.
-    pub fn unplaced(&self) -> Self {
-        Self {
-            parameter_count: self.parameter_count,
-            quality_count: self.quality_count,
-            constraints: self
-                .constraints
-                .iter()
-                .map(|constraint| UniverseConstraint {
-                    lower: constraint.lower.clone(),
-                    upper: constraint.upper.clone(),
-                    origin: UniverseConstraintOrigin {
-                        extent: None,
-                        ..constraint.origin.clone()
-                    },
-                })
                 .collect(),
         }
     }

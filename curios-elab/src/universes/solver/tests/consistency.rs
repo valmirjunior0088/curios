@@ -7,32 +7,19 @@ use {
     curios_core::{Anchor, Anchored, Extent, Global},
 };
 
-/// A scheme stating one constraint, raised in a declaration of another unit.
+/// A scheme stating one constraint.
 fn raised_in_a_scheme() -> UniverseContext {
-    let raised = UniverseConstraintOrigin {
-        extent: Some(Extent {
-            anchor: Anchor::of(Anchored::Entry),
-            start: 0,
-            end: 4,
-            stamp: 0,
-        }),
-        kind: UniverseConstraintKind::Cumulativity,
-        declaration: Some("/lib/wrap".into()),
-        binder: Some("A".into()),
-        instantiated: None,
-    };
     UniverseContext {
         parameter_count: 2,
         quality_count: 0,
         constraints: vec![UniverseConstraint {
             lower: Level::param(UniverseParam(0)),
             upper: Level::param(UniverseParam(1)),
-            origin: raised,
         }],
     }
 }
 
-/// A constraint instantiated from a scheme with no occurrence in hand carries no position, and names the declaration and binder the scheme's own was raised for: where that was raised is a line of the scheme's declaration, another unit's among them.
+/// A constraint instantiated from a scheme with no occurrence in hand is raised at no place and names nothing: a scheme stores its inequalities alone, so nothing of where its declaration raised one reaches an instance of it.
 #[test]
 fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
     let scheme = raised_in_a_scheme();
@@ -40,20 +27,14 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
 
     solver.instantiate(&scheme, None).unwrap();
 
-    let [instantiated] = solver.constraints() else {
-        panic!("one constraint, got {:?}", solver.constraints());
+    let constraints = solver.constraints();
+    let [(_, origin)] = constraints.as_slice() else {
+        panic!("one constraint, got {constraints:?}");
     };
-    assert_eq!(instantiated.origin.extent, None);
     assert_eq!(
-        instantiated.origin.kind,
-        UniverseConstraintKind::SchemeInstantiation
+        **origin,
+        UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation)
     );
-    assert_eq!(
-        instantiated.origin.declaration.as_deref(),
-        Some("/lib/wrap")
-    );
-    assert_eq!(instantiated.origin.binder.as_deref(), Some("A"));
-    assert_eq!(instantiated.origin.instantiated, None);
 }
 
 /// A constraint an occurrence instantiates is restated where the occurrence is written and names the declaration the occurrence instantiates: the conflict it closes is reported at a term its reader wrote, with whose bound it is.
@@ -79,15 +60,13 @@ fn a_constraint_an_occurrence_instantiates_takes_its_place_and_names_what_it_ins
         )
         .unwrap();
 
-    let [instantiated] = solver.constraints() else {
-        panic!("one constraint, got {:?}", solver.constraints());
+    let constraints = solver.constraints();
+    let [(_, origin)] = constraints.as_slice() else {
+        panic!("one constraint, got {constraints:?}");
     };
-    assert_eq!(instantiated.origin.extent, Some(written));
-    assert_eq!(
-        instantiated.origin.kind,
-        UniverseConstraintKind::SchemeInstantiation
-    );
-    assert_eq!(instantiated.origin.instantiated, Some(used));
+    assert_eq!(origin.extent, Some(written));
+    assert_eq!(origin.kind, UniverseConstraintKind::SchemeInstantiation);
+    assert_eq!(origin.instantiated, Some(used));
 }
 
 #[test]
@@ -132,11 +111,15 @@ fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
 
 #[test]
 fn seeded_written_type_origin_survives_into_an_inconsistency_path() {
-    let written = UniverseConstraintOrigin::new(UniverseConstraintKind::WrittenType);
+    let written = WrittenSort {
+        extent: None,
+        kind: UniverseConstraintKind::WrittenType,
+        declaration: None,
+    };
     let mut solver = UniverseSolver::new(0);
     solver.seed(&[UniverseSeed {
         role: UniverseRole::Generalizable,
-        origin: Some(written.clone()),
+        written: Some(written.clone()),
     }]);
 
     solver
@@ -150,7 +133,7 @@ fn seeded_written_type_origin_survives_into_an_inconsistency_path() {
 
     assert!(matches!(
         error,
-        UniverseError::Inconsistency { path, .. } if path.contains(&written)
+        UniverseError::Inconsistency { path, .. } if path.contains(&written.origin())
     ));
 }
 
@@ -225,11 +208,8 @@ fn consistency_checks_match_the_exact_solver() {
         for step in 0..12 {
             let lower = levels[draw() % levels.len()].clone();
             let upper = levels[draw() % levels.len()].clone();
-            let constraint = UniverseConstraint {
-                lower,
-                upper,
-                origin: origin(&format!("trial {trial}, step {step}")),
-            };
+            let constraint = UniverseConstraint { lower, upper };
+            let origin = origin(&format!("trial {trial}, step {step}"));
 
             // The exact side: the same normalization and insertion-time discharges `add_constraint` performs, then the ground-up exponential check over the pushed store.
             let mut exact = solver.clone();
@@ -237,7 +217,6 @@ fn consistency_checks_match_the_exact_solver() {
             let normalized = UniverseConstraint {
                 lower: exact.zonk(&constraint.lower).unwrap(),
                 upper: exact.zonk(&constraint.upper).unwrap(),
-                origin: constraint.origin.clone(),
             };
             let exact_result = if normalized.lower.structurally_leq(&normalized.upper) {
                 Ok(())
@@ -248,11 +227,11 @@ fn consistency_checks_match_the_exact_solver() {
                     Err(UniverseError::Inconsistency {
                         lower: normalized.lower,
                         upper: normalized.upper,
-                        path: vec![normalized.origin],
+                        path: vec![origin.clone()],
                     })
                 }
             } else {
-                exact.constraints.push(normalized);
+                exact.constraints.push(normalized, origin.clone());
                 exact.check_consistent_full().map(|_| ())
             };
 
@@ -267,7 +246,7 @@ fn consistency_checks_match_the_exact_solver() {
 
             // The incremental side decides in two moves — `add_constraint` refuses only the ground case and records otherwise; `check_consistent` is the verdict — so the comparison targets the pair, not the insertion alone.
             let incremental_result = solver
-                .add_constraint(constraint)
+                .add_constraint(constraint, origin)
                 .and_then(|()| solver.check_consistent());
             assert_eq!(
                 incremental_result.is_ok(),
@@ -326,11 +305,7 @@ fn rollback_restores_constraints_and_solutions() {
 /// The final two assertions are the control: a table whose contexts were all valid, or all invalid, would pass this while comparing nothing.
 #[test]
 fn both_checkers_decide_universe_context_validity_alike() {
-    let leq = |lower: Level, upper: Level| UniverseConstraint {
-        lower,
-        upper,
-        origin: origin("differential"),
-    };
+    let leq = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
     let param = |index: usize| Level::param(UniverseParam(index));
 
     let contexts: Vec<(&str, UniverseContext)> = vec![
@@ -542,7 +517,6 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
     let constraint = |lower: &Level, upper: &Level| UniverseConstraint {
         lower: lower.clone(),
         upper: upper.clone(),
-        origin: origin("sweep"),
     };
 
     let singles = levels

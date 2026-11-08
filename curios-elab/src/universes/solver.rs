@@ -1,6 +1,8 @@
 //! The transactional universe constraint solver.
 //!
 //! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `curios-core`'s `universe`, which knows nothing about any of this.
+//!
+//! **A constraint's origin is live, and a scheme's constraint has none.** Where each constraint was raised — the written sort a level was minted for, the check that put one level below another, the use that instantiated a scheme — is held beside it in the store and read by the report of a conflict; what generalization hands out is the inequalities alone (`UniverseConstraint`), so a scheme says what it means wherever it is held, and an instance raises its scheme's constraints again where the use is written ([`UniverseSolver::instantiate`]).
 
 mod constraints;
 use constraints::*;
@@ -19,7 +21,7 @@ use {
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
+        UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes, WrittenSort,
     },
     std::{
         cell::RefCell,
@@ -778,7 +780,7 @@ impl UniverseSolver {
             .iter()
             .map(|seed| UniverseMeta {
                 provenance: seed.role.into(),
-                origin: seed.origin.clone(),
+                origin: seed.written.as_ref().map(WrittenSort::origin),
                 solution: None,
             })
             .collect();
@@ -957,11 +959,7 @@ impl UniverseSolver {
         upper: Level,
         origin: UniverseConstraintOrigin,
     ) -> Result<(), UniverseError> {
-        self.add_constraint(UniverseConstraint {
-            lower,
-            upper,
-            origin,
-        })
+        self.add_constraint(UniverseConstraint { lower, upper }, origin)
     }
 
     pub fn add_eq(
@@ -1196,11 +1194,7 @@ impl UniverseSolver {
         }
 
         let index = self.constraints.len();
-        let constraint = UniverseConstraint {
-            lower,
-            upper,
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-        };
+        let constraint = UniverseConstraint { lower, upper };
         self.consistency.as_mut()?.refuses(&constraint, index)
     }
 
@@ -1254,6 +1248,7 @@ impl UniverseSolver {
     pub fn add_constraint(
         &mut self,
         mut constraint: UniverseConstraint,
+        origin: UniverseConstraintOrigin,
     ) -> Result<(), UniverseError> {
         constraint.lower = self.zonk(&constraint.lower)?;
         constraint.upper = self.zonk(&constraint.upper)?;
@@ -1267,11 +1262,11 @@ impl UniverseSolver {
                 Err(UniverseError::Inconsistency {
                     lower: constraint.lower,
                     upper: constraint.upper,
-                    path: vec![constraint.origin],
+                    path: vec![origin],
                 })
             };
         }
-        self.constraints.push(constraint);
+        self.constraints.push(constraint, origin);
         Ok(())
     }
 
@@ -1725,23 +1720,19 @@ impl UniverseSolver {
             };
             let instantiated = match (substitute(&constraint.lower), substitute(&constraint.upper))
             {
-                (Ok(lower), Ok(upper)) => UniverseConstraint {
-                    lower,
-                    upper,
-                    // Where the scheme's declaration raised it is that declaration's, in a text this compilation may never have read. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is restated where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is. One restated with no occurrence in hand carries neither. The declaration and the binder its scheme's own was raised for stay, either way.
-                    origin: UniverseConstraintOrigin {
-                        extent: occurrence.and_then(|occurrence| occurrence.extent),
-                        kind: UniverseConstraintKind::SchemeInstantiation,
-                        instantiated: occurrence.map(|occurrence| occurrence.instantiated),
-                        ..constraint.origin.clone()
-                    },
-                },
+                (Ok(lower), Ok(upper)) => UniverseConstraint { lower, upper },
                 (Err(error), _) | (_, Err(error)) => {
                     self.release(mark);
                     return Err(error);
                 }
             };
-            if let Err(error) = self.add_constraint(instantiated) {
+            // A scheme stores its inequalities alone, so where its declaration raised one is no part of it. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is raised again where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is. One restated with no occurrence in hand carries neither.
+            let origin = UniverseConstraintOrigin {
+                extent: occurrence.and_then(|occurrence| occurrence.extent),
+                instantiated: occurrence.map(|occurrence| occurrence.instantiated),
+                ..UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation)
+            };
+            if let Err(error) = self.add_constraint(instantiated, origin) {
                 self.rollback(mark);
                 self.release(mark);
                 return Err(error);
@@ -1794,11 +1785,6 @@ impl UniverseSolver {
                 constraints.push(UniverseConstraint {
                     lower: rewrite(&constraint.lower)?,
                     upper: rewrite(&constraint.upper)?,
-                    // Whose scheme an instance restated a constraint of is the instance's to say: a scheme stores where its own declaration came by each.
-                    origin: UniverseConstraintOrigin {
-                        instantiated: None,
-                        ..constraint.origin.clone()
-                    },
                 });
             } else {
                 return Err(UniverseError::EscapingLevel);
@@ -2210,17 +2196,21 @@ impl UniverseSolver {
 
     /// Explain an inconsistency from the constraint indices that closed the cycle, widening the path with the origins of the levels it names.
     fn inconsistency_from_path(&self, path: Vec<usize>) -> UniverseError {
-        let constraints = self.constraints.as_slice();
+        let constraint = |index: usize| {
+            self.constraints
+                .get(index)
+                .expect("a cycle's path names constraints the store holds")
+        };
         let witness = path.first().copied().unwrap_or(0);
         let mut origins = path
             .iter()
-            .map(|index| constraints[*index].origin.clone())
+            .filter_map(|index| self.constraints.origin(*index).cloned())
             .collect::<Vec<_>>();
         for index in path.iter().copied().chain([witness]) {
-            for meta in constraints[index]
+            for meta in constraint(index)
                 .lower
                 .metas()
-                .chain(constraints[index].upper.metas())
+                .chain(constraint(index).upper.metas())
             {
                 if let Some(origin) = self.origin(meta)
                     && !origins.contains(origin)
@@ -2230,8 +2220,8 @@ impl UniverseSolver {
             }
         }
         UniverseError::Inconsistency {
-            lower: constraints[witness].lower.clone(),
-            upper: constraints[witness].upper.clone(),
+            lower: constraint(witness).lower.clone(),
+            upper: constraint(witness).upper.clone(),
             path: origins,
         }
     }
@@ -2266,7 +2256,7 @@ impl UniverseSolver {
             }
         }
 
-        let constraints = self.constraints.as_slice();
+        let constraints = &self.constraints;
         let mut nodes = BTreeSet::new();
         let mut edges = Vec::new();
         let mut forced = true;
@@ -2305,11 +2295,11 @@ impl UniverseSolver {
     /// Decide consistency from scratch, branching on genuine right-hand maxima, and hand back what a consistent store was decided from. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
     fn check_consistent_full(&self) -> Result<ConsistencyCache, UniverseError> {
         curios_profile::profile!("universe::check_consistent_full");
-        let constraints = self.constraints.as_slice();
+        let constraints = &self.constraints;
 
         // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
         let mut nodes = BTreeSet::from([DifferenceNode::Zero]);
-        for constraint in constraints {
+        for constraint in constraints.iter() {
             nodes.extend(
                 constraint
                     .lower
@@ -2418,8 +2408,12 @@ pub fn universe_context_validate(context: &UniverseContext) -> Result<(), Univer
     }
 
     let mut solver = UniverseSolver::new(0);
+    // A stored scheme holds no origin: each constraint is raised again as its scheme's, at no place.
     for constraint in &context.constraints {
-        solver.add_constraint(constraint.clone())?;
+        solver.add_constraint(
+            constraint.clone(),
+            UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation),
+        )?;
     }
     // Insertion records; it does not decide (see `add_constraint`). Satisfiability is this function's whole question, so the boundary it is decided at is here.
     solver.check_consistent()

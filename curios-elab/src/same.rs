@@ -15,7 +15,6 @@ use {
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Definitions, InductDecl, Item,
         MetaRenaming, Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
-        UniverseContext,
     },
 };
 
@@ -149,7 +148,7 @@ impl Same {
 
 /// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
 ///
-/// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is held by its inequalities, which is what its equality reads ([`UniverseContext::inequalities`]). Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
+/// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is its inequalities alone ([`UniverseContext`](curios_core::UniverseContext)), so its bytes are what its equality reads. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
 pub fn part_digest(
     definitions: &Definitions,
     places: &Places,
@@ -216,7 +215,7 @@ pub fn item_part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                definition.universe_context.inequalities(),
+                definition.universe_context.clone(),
                 type_,
             )))
         }
@@ -236,7 +235,7 @@ pub fn item_part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                rec.universe_context.inequalities(),
+                rec.universe_context.clone(),
                 members,
             )))
         }
@@ -266,48 +265,18 @@ pub fn item_part_digest(
 
             sealed(curios_archive::to_bytes(&sort)).map(Some)
         }
-        // An entry's scheme is read by what it is compared by, the rest of it as it is stored.
+        // An entry is read as it is stored.
         Question::Induct(_) => entry
             .and_then(Nominal::inductive)
-            .map(|declaration| {
-                let stored = InductDecl {
-                    universe_context: UniverseContext::empty(),
-                    ..declaration.shared(&sharing)
-                };
-
-                sealed(curios_archive::to_bytes(&(
-                    stored,
-                    declaration.universe_context.inequalities(),
-                )))
-            })
+            .map(|declaration| sealed(curios_archive::to_bytes(&declaration.shared(&sharing))))
             .transpose(),
         Question::Struct(_) => entry
             .and_then(Nominal::record)
-            .map(|record| {
-                let stored = StructDecl {
-                    universe_context: UniverseContext::empty(),
-                    ..record.shared(&sharing)
-                };
-
-                sealed(curios_archive::to_bytes(&(
-                    stored,
-                    record.universe_context.inequalities(),
-                )))
-            })
+            .map(|record| sealed(curios_archive::to_bytes(&record.shared(&sharing))))
             .transpose(),
         Question::Concept(_) => entry
             .and_then(Nominal::concept)
-            .map(|concept| {
-                let stored = ConceptDecl {
-                    universe_context: UniverseContext::empty(),
-                    ..concept.clone()
-                };
-
-                sealed(curios_archive::to_bytes(&(
-                    stored,
-                    concept.universe_context.inequalities(),
-                )))
-            })
+            .map(|concept| sealed(curios_archive::to_bytes(concept)))
             .transpose(),
         Question::Witness(..) | Question::WitnessDeclared(..) | Question::Lemmas => Ok(None),
     }

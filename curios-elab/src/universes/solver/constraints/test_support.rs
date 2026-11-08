@@ -12,4 +12,11 @@ impl ConstraintStore {
     pub fn journal_len(&self) -> usize {
         self.rewrites.len()
     }
+
+    /// Each constraint the store holds, beside where it was raised.
+    pub fn raised(&self) -> impl Iterator<Item = (&UniverseConstraint, &UniverseConstraintOrigin)> {
+        self.raised
+            .iter()
+            .map(|raised| (&raised.constraint, &raised.origin))
+    }
 }

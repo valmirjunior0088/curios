@@ -1,6 +1,5 @@
 use {
     super::*,
-    crate::*,
     std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -8,11 +7,7 @@ use {
 };
 
 fn leq(lower: Level, upper: Level) -> UniverseConstraint {
-    UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    }
+    UniverseConstraint { lower, upper }
 }
 
 fn param(index: usize) -> Level {
@@ -49,10 +44,6 @@ fn hash(value: &impl Hash) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     hasher.finish()
-}
-
-fn origin(label: &str) -> UniverseConstraintOrigin {
-    UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
 }
 
 /// [`Level::substitute`] accumulates into its result instead of building one part per atom, and the arm that made that worth doing is the *unreplaced* one — where the part is the atom back again.
@@ -118,59 +109,4 @@ fn successor_distributes_and_overflow_is_checked() {
         Level::constant(u32::MAX).succ(),
         Err(UniverseError::OffsetOverflow)
     );
-}
-
-#[test]
-fn constraint_identity_ignores_diagnostic_provenance() {
-    let semantic = || UniverseConstraint {
-        lower: Level::param(UniverseParam(0)),
-        upper: Level::param(UniverseParam(1)),
-        origin: origin("first"),
-    };
-    let left = semantic();
-    let mut right = semantic();
-    right.origin = origin("second");
-    right.origin.extent = Some(Extent {
-        anchor: Anchor::of(Anchored::Entry),
-        start: 0,
-        end: 4,
-        stamp: 0,
-    });
-
-    assert_eq!(left, right);
-    assert_eq!(hash(&left), hash(&right));
-}
-
-/// A context's inequalities are what its equality reads: two contexts whose constraints were raised for other reasons, one of them at a position, compare equal and hold one set of inequalities, and a context with another inequality holds another.
-#[test]
-fn a_contexts_inequalities_are_what_it_is_compared_by() {
-    let context = |origin: UniverseConstraintOrigin, upper: usize| UniverseContext {
-        parameter_count: 3,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: param(0),
-            upper: param(upper),
-            origin,
-        }],
-    };
-    let raised = context(origin("first"), 1);
-    let placed = context(
-        UniverseConstraintOrigin {
-            extent: Some(Extent {
-                anchor: Anchor::of(Anchored::Entry),
-                start: 0,
-                end: 4,
-                stamp: 0,
-            }),
-            declaration: Some("/lib/held".into()),
-            ..origin("second")
-        },
-        1,
-    );
-    let other = context(origin("first"), 2);
-
-    assert_eq!(raised, placed);
-    assert_eq!(raised.inequalities(), placed.inequalities());
-    assert_ne!(raised, other);
-    assert_ne!(raised.inequalities(), other.inequalities());
 }

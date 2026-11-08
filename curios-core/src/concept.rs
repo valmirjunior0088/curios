@@ -30,15 +30,6 @@ impl ConceptDecl {
             .zip(self.supers.iter().copied())
             .collect()
     }
-
-    /// This concept as a consed declaration carries it, its scheme unplaced ([`UniverseContext::unplaced`]): it holds no term to share. See [`Definitions::shared`](crate::Definitions::shared).
-    pub fn unplaced(&self) -> Self {
-        Self {
-            universe_context: self.universe_context.unplaced(),
-            fields: self.fields.clone(),
-            supers: self.supers.clone(),
-        }
-    }
 }
 
 /// The method at field `field` of the concept `name`, whose entries are `concept` and its `record`, as a call of it fills it, at the concept's own levels: its type, the one group a call fills — the concept's parameters, each hidden, the witness the call is to find, then where the field's type is a function its parameters, under their marks — ending in the field's type or its function's result; and its η-form, the field projected off the witness, applied to those parameters where it has them. `None` where the concept declares no such field, and for a superclass edge, which has no label.

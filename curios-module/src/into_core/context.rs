@@ -93,7 +93,7 @@ impl SortSite {
 #[derive(Default)]
 pub(super) struct WrittenSorts {
     /// Where each was written, by the id of its quality, from zero for each declaration.
-    seeds: RefCell<Vec<Option<curios_core::UniverseConstraintOrigin>>>,
+    seeds: RefCell<Vec<Option<curios_core::WrittenSort>>>,
     /// The quality of each written `Sort`, by its span: one written `Sort` is one quality however many times its text is lowered.
     allocations: RefCell<HashMap<Span, curios_core::QualityMetaId>>,
     site: Cell<SortSite>,
@@ -930,12 +930,10 @@ impl<'a> Context<'a> {
         assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
         seeds.push(curios_core::UniverseSeed {
             role: self.universe_role(),
-            origin: span.map(|span| curios_core::UniverseConstraintOrigin {
+            written: span.map(|span| curios_core::WrittenSort {
                 extent: self.extent(span),
                 kind: written,
                 declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
-                binder: None,
-                instantiated: None,
             }),
         });
         let id = curios_core::UniverseMetaId(id);
@@ -968,12 +966,10 @@ impl<'a> Context<'a> {
 
         let mut seeds = self.shared.declaring.sorts.seeds.borrow_mut();
         let id = curios_core::QualityMetaId(seeds.len());
-        seeds.push(span.map(|span| curios_core::UniverseConstraintOrigin {
+        seeds.push(span.map(|span| curios_core::WrittenSort {
             extent: self.extent(span),
             kind: curios_core::UniverseConstraintKind::WrittenSort,
             declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
-            binder: None,
-            instantiated: None,
         }));
         if let Some(span) = span {
             self.shared

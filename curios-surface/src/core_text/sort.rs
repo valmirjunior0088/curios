@@ -16,8 +16,7 @@ use {
     curios_common::{InfixOp, Plicity, Sign},
     curios_core::{
         Level, LevelHead, Quality, QualityMetaId, QualityParam, Sort, Term, UniverseConstraint,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        UniverseParam, Universes,
+        UniverseContext, UniverseMetaId, UniverseParam, Universes,
     },
 };
 
@@ -465,9 +464,6 @@ pub fn universe_context_read(value: &CoreValue) -> Result<UniverseContext, ReadE
                     }) => Ok(UniverseConstraint {
                         lower: level_read(left)?,
                         upper: level_read(right)?,
-                        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Other(
-                            String::new(),
-                        )),
                     }),
                     _ => Err(malformed("a constraint, `lower <= upper`", constraint)),
                 }

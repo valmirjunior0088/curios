@@ -6,8 +6,7 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, DefinitionKind, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam,
+        UniverseConstraint, UniverseContext, UniverseParam,
     },
 };
 
@@ -145,11 +144,7 @@ fn a_definition_checks_under_its_own_constraints() {
     let constrained = UniverseContext {
         parameter_count: 2,
         quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: u,
-            upper: w,
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-        }],
+        constraints: vec![UniverseConstraint { lower: u, upper: w }],
     };
     let mut kernel = kernel();
     assert!(
@@ -201,7 +196,6 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
                 constraints: vec![UniverseConstraint {
                     lower: u.succ().expect("level has a successor"),
                     upper: w,
-                    origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
                 }],
             },
         )

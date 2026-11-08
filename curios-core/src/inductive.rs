@@ -207,7 +207,7 @@ impl InductDecl {
     /// This declaration with every term hash-consed against `sharing`. See [`Definitions::shared`](crate::Definitions::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
-            universe_context: self.universe_context.unplaced(),
+            universe_context: self.universe_context.clone(),
             arity: sharing.share(&self.arity),
             constructors: self
                 .constructors

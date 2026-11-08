@@ -8,9 +8,8 @@ use {
     curios_core::{
         Definition, DefinitionKind, Definitions, Entrypoint, Free, Global, InductDecl, Intrinsic,
         Item, Level, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
-        ReduceError, StructDecl, Telescope, Term, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
-        Universes, test_support::*,
+        ReduceError, StructDecl, Telescope, Term, UniverseConstraint, UniverseContext,
+        UniverseError, UniverseMetaId, UniverseParam, Universes, test_support::*,
     },
     curios_surface::Spelling,
 };
@@ -25,7 +24,6 @@ fn an_unsatisfiable_universe_context_is_refused() {
             .succ()
             .expect("level has a successor"),
         upper: Level::param(UniverseParam(0)),
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
     let universe_context = UniverseContext {
         parameter_count: 1,
@@ -62,7 +60,6 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     let escaping = UniverseConstraint {
         lower: Level::param(UniverseParam(3)),
         upper: Level::param(UniverseParam(0)),
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     };
     let universe_context = UniverseContext {
         parameter_count: 1,
@@ -144,7 +141,6 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
                 .succ()
                 .expect("a parameter has a successor"),
             upper: Level::param(UniverseParam(0)),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }]
     };
     let context = |constraints: Vec<UniverseConstraint>, qualities: usize| UniverseContext {
@@ -627,7 +623,6 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
         constraints: vec![UniverseConstraint {
             lower: p.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definitions = |claimed: Level| Definitions {
@@ -698,7 +693,6 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
         constraints: vec![UniverseConstraint {
             lower: p.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definition =
@@ -803,7 +797,6 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
         constraints: vec![UniverseConstraint {
             lower: p.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definitions = |inhabitant: Level| Definitions {
@@ -904,7 +897,6 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
         constraints: vec![UniverseConstraint {
             lower: p.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definitions = |stated: Level| Definitions {
@@ -994,7 +986,6 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
         constraints: vec![UniverseConstraint {
             lower: p.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definitions = |claimed: Level| {
@@ -1090,7 +1081,6 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
         constraints: vec![UniverseConstraint {
             lower: second.clone(),
             upper: Level::zero(),
-            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
         }],
     };
     let definitions = |parameters: usize, instance: Vec<Level>, claimed: Level| Definitions {
@@ -1151,11 +1141,7 @@ fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_satu
             .checked_add(offset)
             .expect("an offset below the top of the range")
     };
-    let bounded = |lower: Level, upper: Level| UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    };
+    let bounded = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
     let held = Global::Authored(Qualifier::from(["held"]));
     let definitions =
         |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Definitions {

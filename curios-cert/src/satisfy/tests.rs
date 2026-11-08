@@ -2,9 +2,7 @@
 
 use {
     super::*,
-    curios_core::{
-        Level, LevelHead, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
-    },
+    curios_core::{Level, LevelHead, UniverseParam},
 };
 
 fn param(index: usize) -> Level {
@@ -12,11 +10,7 @@ fn param(index: usize) -> Level {
 }
 
 fn leq(lower: Level, upper: Level) -> UniverseConstraint {
-    UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    }
+    UniverseConstraint { lower, upper }
 }
 
 #[test]

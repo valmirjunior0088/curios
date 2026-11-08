@@ -725,7 +725,7 @@ impl Nominal {
             Nominal::Inductive(declaration) => Nominal::Inductive(declaration.shared(sharing)),
             Nominal::Struct(record) => Nominal::Struct(record.shared(sharing)),
             Nominal::Concept { concept, record } => Nominal::Concept {
-                concept: concept.unplaced(),
+                concept: concept.clone(),
                 record: record.shared(sharing),
             },
         }
@@ -1180,7 +1180,7 @@ impl Item {
             Item::Let(definition) => Item::Let(Box::new(Definition {
                 name: definition.name,
                 kind: kind(&definition.kind),
-                universe_context: definition.universe_context.unplaced(),
+                universe_context: definition.universe_context.clone(),
                 island: definition.island,
                 proof: definition.proof,
                 value_sort: definition
@@ -1203,7 +1203,7 @@ impl Item {
                     .collect(),
                 // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.
                 group: rec.group.map_members(|term| sharing.share(term)),
-                universe_context: rec.universe_context.unplaced(),
+                universe_context: rec.universe_context.clone(),
             }),
         }
     }

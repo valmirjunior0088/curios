@@ -35,7 +35,7 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
             curios_core::UniverseRole::Flexible,
         ],
     );
-    assert!(written.iter().all(|seed| seed.origin.is_some()));
+    assert!(written.iter().all(|seed| seed.written.is_some()));
     assert_eq!(minted.each().count(), 1);
 }
 

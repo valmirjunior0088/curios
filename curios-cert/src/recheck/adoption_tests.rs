@@ -861,9 +861,7 @@ fn hurkens(
 
 /// `u + 1 <= w`, `v <= w`, `v + 1 <= x`, `w + 1 <= x`: the cumulativity the carrier's four products need, as `xboard`'s formation ticket states them.
 fn carrier_context() -> curios_core::UniverseContext {
-    use curios_core::{
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-    };
+    use curios_core::{UniverseConstraint, UniverseContext};
 
     let param = |index: usize| Level::param(UniverseParam(index));
     let raised = |index: usize| {
@@ -871,11 +869,7 @@ fn carrier_context() -> curios_core::UniverseContext {
             .checked_add(1)
             .expect("level admits the offset")
     };
-    let bounded = |lower: Level, upper: Level| UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    };
+    let bounded = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
 
     UniverseContext {
         parameter_count: 4,

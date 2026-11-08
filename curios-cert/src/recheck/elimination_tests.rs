@@ -8,8 +8,7 @@ use {
     curios_core::{
         Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam,
         Intrinsic, Item, Level, Many, Nat, Quality, Scope, Subterm, Telescope, Term,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam, test_support::*,
+        UniverseConstraint, UniverseContext, UniverseParam, test_support::*,
     },
     curios_surface::Spellable,
     std::collections::BTreeMap,
@@ -737,11 +736,7 @@ fn refined_at(variable: impl Fn(&Level) -> Term) -> Definitions {
     );
     let binders = || [(outer, variable(&p)), (subject, at(Term::free_var(&outer)))];
     // The reader's own level, pinned at eight from both sides: what a captured bound would be read at, and the hypotheses that would then grant the fit.
-    let bounded = |lower: Level, upper: Level| UniverseConstraint {
-        lower,
-        upper,
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-    };
+    let bounded = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
     let readers_context = UniverseContext {
         parameter_count: 1,
         quality_count: 0,

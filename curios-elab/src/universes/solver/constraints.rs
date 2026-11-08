@@ -8,6 +8,8 @@
 //!
 //! That journal is recorded only while a speculative scope is open. A scope that succeeds releases, and once none is live the pre-images are unreachable — nothing can name a state before them — so they are neither kept nor, at depth zero, ever taken. Recording them unconditionally would make a declaration's peak footprint superlinear: a substitution *widens* the constraints it lands in, so an unconditional journal keeps every intermediate width of every constraint it ever rewrote.
 //!
+//! **Each constraint is held beside where it was raised.** A scheme stores its constraints as their inequalities alone ([`UniverseConstraint`]), so where one was raised, what a conflict's report reads, is this store's alone: one entry holds the two, so a mark and a release move them as one, and a rewrite moves the inequality and never its origin.
+//!
 //! Change detection therefore cannot read the journal's length, which does not count every rewrite. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
 #[cfg(test)]
@@ -15,7 +17,7 @@ mod test_support;
 
 use {
     curios_common::Entropy,
-    curios_core::{Level, LevelHead, UniverseConstraint, UniverseError},
+    curios_core::{Level, LevelHead, UniverseConstraint, UniverseConstraintOrigin, UniverseError},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -48,9 +50,16 @@ pub struct StoreScope {
     depth: usize,
 }
 
+/// One live constraint: its inequality, which an assignment rewrites, and where it was raised, which nothing does.
+#[derive(Debug, Clone)]
+struct Raised {
+    constraint: UniverseConstraint,
+    origin: UniverseConstraintOrigin,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ConstraintStore {
-    constraints: Vec<UniverseConstraint>,
+    raised: Vec<Raised>,
     occurrences: BTreeMap<LevelHead, BTreeSet<usize>>,
     rewrites: Vec<(usize, UniverseConstraint)>,
     /// Ticked once per rewrite actually applied, so a no-op substitution stays invisible to change detection.
@@ -61,25 +70,26 @@ pub struct ConstraintStore {
 
 impl ConstraintStore {
     pub fn len(&self) -> usize {
-        self.constraints.len()
-    }
-
-    pub fn as_slice(&self) -> &[UniverseConstraint] {
-        &self.constraints
+        self.raised.len()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &UniverseConstraint> {
-        self.constraints.iter()
+        self.raised.iter().map(|raised| &raised.constraint)
     }
 
     pub fn get(&self, index: usize) -> Option<&UniverseConstraint> {
-        self.constraints.get(index)
+        self.raised.get(index).map(|raised| &raised.constraint)
+    }
+
+    /// Where the constraint at `index` was raised.
+    pub fn origin(&self, index: usize) -> Option<&UniverseConstraintOrigin> {
+        self.raised.get(index).map(|raised| &raised.origin)
     }
 
     /// Snapshot the store's position without opening a scope — what a reader compares to decide whether anything moved.
     pub fn mark(&self) -> StoreMark {
         StoreMark {
-            len: self.constraints.len(),
+            len: self.raised.len(),
             rewrites: self.rewrites.len(),
             epoch: self.epoch.count(),
         }
@@ -116,13 +126,13 @@ impl ConstraintStore {
     }
 
     fn index(&mut self, position: usize) {
-        for head in heads(&self.constraints[position]).collect::<Vec<_>>() {
+        for head in heads(&self.raised[position].constraint).collect::<Vec<_>>() {
             self.occurrences.entry(head).or_default().insert(position);
         }
     }
 
     fn unindex(&mut self, position: usize) {
-        for head in heads(&self.constraints[position]).collect::<Vec<_>>() {
+        for head in heads(&self.raised[position].constraint).collect::<Vec<_>>() {
             if let Some(indices) = self.occurrences.get_mut(&head) {
                 indices.remove(&position);
                 if indices.is_empty() {
@@ -132,21 +142,26 @@ impl ConstraintStore {
         }
     }
 
-    pub fn push(&mut self, constraint: UniverseConstraint) -> usize {
-        let position = self.constraints.len();
-        self.constraints.push(constraint);
+    /// File `constraint`, raised where `origin` says, answering its index.
+    pub fn push(
+        &mut self,
+        constraint: UniverseConstraint,
+        origin: UniverseConstraintOrigin,
+    ) -> usize {
+        let position = self.raised.len();
+        self.raised.push(Raised { constraint, origin });
         self.index(position);
         position
     }
 
     /// Drop the most recently pushed constraint. Only valid when nothing has rewritten it since — which [`ConstraintStore::rollback`], its one caller, guarantees by unwinding the rewrite journal before truncating.
     pub fn pop(&mut self) {
-        if self.constraints.is_empty() {
+        if self.raised.is_empty() {
             return;
         }
-        let position = self.constraints.len() - 1;
+        let position = self.raised.len() - 1;
         self.unindex(position);
-        self.constraints.pop();
+        self.raised.pop();
     }
 
     /// Restore the store to where `scope` began: undo every rewrite recorded since, newest first, then drop the constraints appended since.
@@ -156,16 +171,16 @@ impl ConstraintStore {
         while self.rewrites.len() > scope.mark.rewrites {
             let (position, previous) = self.rewrites.pop().expect("rewrite log is non-empty");
             self.unindex(position);
-            self.constraints[position] = previous;
+            self.raised[position].constraint = previous;
             self.index(position);
         }
-        while self.constraints.len() > scope.mark.len {
+        while self.raised.len() > scope.mark.len {
             self.pop();
         }
     }
 
     pub fn clear(&mut self) {
-        self.constraints.clear();
+        self.raised.clear();
         self.occurrences.clear();
         self.rewrites.clear();
     }
@@ -179,11 +194,11 @@ impl ConstraintStore {
     /// Drop every constraint failing `keep` and rebuild the index.
     ///
     /// Retaining renumbers the survivors, so the rewrite journal — which names positions — cannot outlive it. Callers use this only at a declaration boundary, past any mark that could still be rolled back to.
-    pub fn retain(&mut self, keep: impl FnMut(&UniverseConstraint) -> bool) {
-        self.constraints.retain(keep);
+    pub fn retain(&mut self, mut keep: impl FnMut(&UniverseConstraint) -> bool) {
+        self.raised.retain(|raised| keep(&raised.constraint));
         self.occurrences.clear();
         self.rewrites.clear();
-        for position in 0..self.constraints.len() {
+        for position in 0..self.raised.len() {
             self.index(position);
         }
     }
@@ -210,7 +225,7 @@ impl ConstraintStore {
 
         for position in positions {
             let rebuilt = {
-                let constraint = &self.constraints[position];
+                let constraint = &self.raised[position].constraint;
                 let lower = constraint
                     .lower
                     .substitute(|found| (found == head).then(|| solution.clone()))?;
@@ -227,17 +242,12 @@ impl ConstraintStore {
                     true => UniverseConstraint {
                         lower: Level::zero(),
                         upper: Level::zero(),
-                        origin: constraint.origin.clone(),
                     },
-                    false => UniverseConstraint {
-                        lower,
-                        upper,
-                        origin: constraint.origin.clone(),
-                    },
+                    false => UniverseConstraint { lower, upper },
                 }
             };
 
-            let previous = std::mem::replace(&mut self.constraints[position], rebuilt);
+            let previous = std::mem::replace(&mut self.raised[position].constraint, rebuilt);
             self.epoch.fresh();
             // Only a live scope can ever ask for this pre-image back. Outside one it is garbage the moment it is taken, and taking it at all would cost a declaration's peak footprint.
             if self.speculation > 0 {

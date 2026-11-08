@@ -150,38 +150,6 @@ fn a_shared_chain_is_consed_as_a_chain() {
     );
 }
 
-/// A consed declaration's universe context says nowhere where a constraint was raised, and is the context it was: its constraints, their kinds, and the declaration and binder each names.
-#[test]
-fn a_universe_context_is_consed_without_its_positions() {
-    let raised = UniverseConstraintOrigin {
-        extent: Some(written_at(0)),
-        kind: UniverseConstraintKind::WrittenType,
-        declaration: Some("/lib/wrap".into()),
-        binder: Some("A".into()),
-        instantiated: None,
-    };
-    let context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: Level::zero(),
-            upper: Level::param(UniverseParam(0)),
-            origin: raised.clone(),
-        }],
-    };
-
-    let consed = context.unplaced();
-
-    assert_eq!(consed, context, "the constraints are the ones it had");
-    let [constraint] = consed.constraints.as_slice() else {
-        panic!("one constraint, got {:?}", consed.constraints);
-    };
-    assert_eq!(constraint.origin.extent, None);
-    assert_eq!(constraint.origin.kind, raised.kind);
-    assert_eq!(constraint.origin.declaration, raised.declaration);
-    assert_eq!(constraint.origin.binder, raised.binder);
-}
-
 /// A spine taller than a native stack is consed, and two built apart come out the same node.
 #[test]
 fn a_deep_spine_is_consed_without_native_recursion() {

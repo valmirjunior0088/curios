@@ -10,6 +10,7 @@ use {
     super::UniverseSolver,
     curios_core::{
         Extent, Quality, QualityMetaId, QualityParam, UniverseConstraintOrigin, UniverseError,
+        WrittenSort,
     },
 };
 
@@ -37,17 +38,17 @@ pub struct DecidedSort {
 
 impl UniverseSolver {
     /// Seed the qualities of the `Sort`s a declaration writes, by where each stands: the first metavariables of a fresh solver, as the lowered terms number them.
-    pub fn seed_qualities(&mut self, written: &[Option<UniverseConstraintOrigin>]) {
+    pub fn seed_qualities(&mut self, written: &[Option<WrittenSort>]) {
         assert!(
             self.qualities.is_empty(),
             "qualities may only seed a fresh elaboration context"
         );
         self.qualities = written
             .iter()
-            .map(|origin| QualityMeta {
+            .map(|sort| QualityMeta {
                 solution: None,
                 solved_at: None,
-                origin: origin.clone(),
+                origin: sort.as_ref().map(WrittenSort::origin),
                 written: true,
             })
             .collect();

@@ -9,8 +9,9 @@ impl UniverseSolver {
         self.constraints.len()
     }
 
-    pub fn constraints(&self) -> &[UniverseConstraint] {
-        self.constraints.as_slice()
+    /// Each constraint the store holds, beside where it was raised.
+    pub fn constraints(&self) -> Vec<(&UniverseConstraint, &UniverseConstraintOrigin)> {
+        self.constraints.raised().collect()
     }
 
     pub fn open_scopes(&self) -> usize {

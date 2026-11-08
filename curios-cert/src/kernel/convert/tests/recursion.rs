@@ -5,8 +5,7 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Free, Intrinsic, Level, Term, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseParam,
+        Free, Intrinsic, Level, Term, UniverseConstraint, UniverseContext, UniverseParam,
     },
 };
 
@@ -15,7 +14,6 @@ fn between(lower: usize, upper: usize) -> UniverseConstraint {
     UniverseConstraint {
         lower: Level::param(UniverseParam(lower)),
         upper: Level::param(UniverseParam(upper)),
-        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
     }
 }
 
