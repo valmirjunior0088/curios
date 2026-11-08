@@ -14,11 +14,11 @@ use {
         intrinsic_global,
     },
     crate::{
-        Apply, Argument, BytesPattern, BytesSegment, Field, Func, FuncParam, FuncType,
+        Apply, Argument, BytesPattern, BytesSegment, Dialect, Field, Func, FuncParam, FuncType,
         FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
         ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructLit,
-        StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
+        NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, StrLit,
+        StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -77,12 +77,12 @@ impl<'a> Frame<'a> {
     }
 }
 
-/// How a form of core's one table of intrinsics ([`intrinsic_form`]) has its pieces written: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
-pub(crate) trait Writer<T> {
-    fn operand(&self, operand: T) -> Option<Term>;
+/// How a form of core's one table of intrinsics ([`intrinsic_form`]) has its pieces written, as a tree of the dialect `D`: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
+pub(crate) trait Writer<T, D: Dialect = Program> {
+    fn operand(&self, operand: T) -> Option<Term<D>>;
 
     /// The declaration of `/sys` at `path` ([`intrinsic_global`]), as a name.
-    fn sys(&self, path: &str) -> Option<Term>;
+    fn sys(&self, path: &str) -> Option<Term<D>>;
 }
 
 impl Writer<curios_core::Term> for Frame<'_> {
@@ -176,7 +176,7 @@ fn global(name: &curios_core::Global, frame: Frame) -> Option<Term> {
 }
 
 /// A numeral nobody wrote, at its natural width.
-fn numeral(magnitude: Natural, sign: Sign) -> Term {
+fn numeral<D: Dialect>(magnitude: Natural, sign: Sign) -> Term<D> {
     Subterm::NumLit(NumLit {
         magnitude,
         radix: Radix::Dec(0),
@@ -185,11 +185,11 @@ fn numeral(magnitude: Natural, sign: Sign) -> Term {
     .into()
 }
 
-fn apply(head: Term, arguments: Vec<Argument>) -> Term {
+fn apply<D: Dialect>(head: Term<D>, arguments: Vec<Argument<D>>) -> Term<D> {
     Subterm::Apply(Apply { head, arguments }).into()
 }
 
-fn argument(plicity: Plicity, term: Term) -> Argument {
+fn argument<D: Dialect>(plicity: Plicity, term: Term<D>) -> Argument<D> {
     Argument { term, plicity }
 }
 
@@ -630,16 +630,16 @@ fn written_binds(
         .collect()
 }
 
-fn infix(op: InfixOp, left: Term, right: Term) -> Term {
+fn infix<D: Dialect>(op: InfixOp, left: Term<D>, right: Term<D>) -> Term<D> {
     Subterm::Infix(Infix { op, left, right }).into()
 }
 
 /// The arguments of a call of a `/sys` declaration: the type arguments under their mark, then the written ones.
-fn marked<T>(
+fn marked<T, D: Dialect>(
     implicits: Vec<T>,
     explicits: Vec<T>,
-    writer: &impl Writer<T>,
-) -> Option<Vec<Argument>> {
+    writer: &impl Writer<T, D>,
+) -> Option<Vec<Argument<D>>> {
     implicits
         .into_iter()
         .map(|term| (Plicity::Implicit, term))
@@ -870,10 +870,10 @@ fn written_field(field: &curios_core::Field, frame: Frame) -> Option<Field> {
 }
 
 /// An intrinsic as its one table writes it ([`intrinsic_form`]): a declaration of `/sys` named as `writer` names it, a literal as the grammar spells it.
-pub(crate) fn written_intrinsic<T>(
+pub(crate) fn written_intrinsic<T, D: Dialect>(
     form: IntrinsicForm<T>,
-    writer: &impl Writer<T>,
-) -> Option<Term> {
+    writer: &impl Writer<T, D>,
+) -> Option<Term<D>> {
     use IntrinsicForm as Form;
 
     Some(match form {
@@ -944,7 +944,10 @@ pub(crate) fn written_intrinsic<T>(
 }
 
 /// One entry of a packed literal: a constant atom as the numeral it is written by, a term's atom, or a spread.
-fn written_segment<T>(entry: LiteralEntry<T>, writer: &impl Writer<T>) -> Option<BytesSegment> {
+fn written_segment<T, D: Dialect>(
+    entry: LiteralEntry<T>,
+    writer: &impl Writer<T, D>,
+) -> Option<BytesSegment<D>> {
     Some(match entry {
         LiteralEntry::Byte(byte) => written_byte(byte),
         LiteralEntry::Item(item) => BytesSegment::Atom(writer.operand(item)?),
@@ -953,7 +956,7 @@ fn written_segment<T>(entry: LiteralEntry<T>, writer: &impl Writer<T>) -> Option
 }
 
 /// A constant byte of a packed literal, as the numeral it is written by.
-fn written_byte(byte: u8) -> BytesSegment {
+fn written_byte<D: Dialect>(byte: u8) -> BytesSegment<D> {
     BytesSegment::Atom(
         Subterm::NumLit(NumLit {
             magnitude: Natural::from(byte),
@@ -965,7 +968,7 @@ fn written_byte(byte: u8) -> BytesSegment {
 }
 
 /// A `Flt` as what reads back as it, bit for bit: the literal where one spells it, and any other NaN as the call building it from its bytes.
-fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
+fn written_flt<T, D: Dialect>(value: Floating, writer: &impl Writer<T, D>) -> Option<Term<D>> {
     let spelled =
         value.is_finite() || !value.is_nan() || value.abs().to_bits() == Floating::nan().to_bits();
     if spelled {

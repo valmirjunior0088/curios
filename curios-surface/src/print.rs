@@ -10,14 +10,15 @@ mod list_layout_tests;
 
 use {
     super::{
-        Apply, Argument, BytesPattern, BytesSegment, Choose, ChooseArm, ChooseTest, ConceptField,
-        Doc, Field, FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
-        GroupItem, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry,
-        ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
-        NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StructField, StructLit,
-        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
+        Apply, Argument, BytesPattern, BytesSegment, CasePayloadParam, Choose, ChooseArm,
+        ChooseTest, ConceptField, Dialect, Doc, Field, FieldSugarParam, Func, FuncParam,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, IntrinsicForm, Label,
+        Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField,
+        Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral,
+        Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
+        intrinsic_path,
     },
     crate::{Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -28,6 +29,7 @@ use {
         FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
         named_at, pure, reached, sep_flat, soft_line,
     },
+    std::marker::PhantomData,
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -55,57 +57,6 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
         ])),
         pure(close),
     ]))
-}
-
-/// Simple entries pack together; spreads and structured expressions stand apart in a broken layout. Packed literals always retain their outer group as a break opportunity for enclosing expressions; a plain list of atoms packs directly from its opener.
-fn wrapped_list(open: &'static str, entries: Vec<ListEntry>) -> Printer {
-    if entries.is_empty() {
-        return flat([pure(open), indent(ends()), pure("]")]);
-    }
-    let last = entries.len() - 1;
-    let items = entries
-        .into_iter()
-        .enumerate()
-        .map(|(index, entry)| {
-            let (printer, compact) = match entry {
-                ListEntry::Elem(term) => {
-                    let compact = is_atom(&term)
-                        || match term.as_subterm() {
-                            Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
-                            Subterm::Literal(Literal::Bytes(segments)) => segments.is_empty(),
-                            Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
-                            _ => false,
-                        };
-                    (print_term(term), compact)
-                }
-                ListEntry::Spread(term) => (flat([pure(".."), print_term(term)]), false),
-            };
-            FillItem {
-                printer: if index == last {
-                    printer
-                } else {
-                    flat([printer, pure(",")])
-                },
-                compact,
-            }
-        })
-        .collect::<Vec<_>>();
-    let structured = items.iter().any(|item| !item.compact);
-    let grouped = open != "[" || structured;
-    let body = flat([
-        pure(open),
-        indent(flat([
-            if grouped { soft_line() } else { flat([]) },
-            if open == "[" || structured {
-                flow(items)
-            } else {
-                fill(items.into_iter().map(|item| item.printer))
-            },
-            ends(),
-        ])),
-        pure("]"),
-    ]);
-    if grouped { group(body) } else { body }
 }
 
 /// A bracketed **record**: [`listed`] with its braces padded — `{ a, b }` flat, and broken one field per line with the closer riding the last after a space (`c }`). Struct literals and patterns take this shape.
@@ -172,8 +123,8 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
     ])
 }
 
-/// Whether a term prints as one indivisible piece — a name, a numeral, a character, a one-line string, or a projection off one — so that a run of them has no break of its own.
-fn is_atom(term: &Term) -> bool {
+/// Whether a term prints as one indivisible piece — a name, a numeral, a character, a one-line string, a projection off one, or a form its dialect says is one — so that a run of them has no break of its own.
+fn is_atom<D: Layout>(term: &Term<D>) -> bool {
     match term.as_subterm() {
         Subterm::Name(_)
         | Subterm::NumLit(_)
@@ -181,12 +132,13 @@ fn is_atom(term: &Term) -> bool {
         | Subterm::Literal(Literal::Flt(_)) => true,
         Subterm::ProofLiteral(ProofLiteral::Str(literal)) => !literal.block,
         Subterm::Proj(Proj { head, .. }) => is_atom(head),
+        Subterm::Core(form) => D::form_is_atom(form),
         _ => false,
     }
 }
 
-/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, which break inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`riding_call`].
-fn carries_its_own_break(term: &Term) -> bool {
+/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, which break inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`TreePrinter::riding_call`].
+fn carries_its_own_break<D: Layout>(term: &Term<D>) -> bool {
     match term.as_subterm() {
         Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
         Subterm::Literal(Literal::Bytes(segments)) => !segments.is_empty(),
@@ -196,45 +148,18 @@ fn carries_its_own_break(term: &Term) -> bool {
     }
 }
 
-/// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one — except that a call whose last argument carries a break of its own, with nothing but atoms before it, hands its break to that argument: `Str/flatten([` on the head's line, the elements one level in, and `])` riding the last; `List/map(names, (name) =>` on the head's line and the body one level in below it.
-///
-/// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug would make the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — would strand the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
-///
-/// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
-///
-/// A head under two or more argument lists over an atom is [`curried_call`]'s: the lists are one call's arguments written apart, and decided apart they leave `)(` mid-line with an argument hanging below it.
-fn riding_call(head: Term, arguments: Vec<Argument>, suffix: Printer) -> Printer {
-    if matches!(head.as_subterm(), Subterm::Apply(_)) && is_atom(chain_base(&head)) {
-        return curried_call(head, arguments, suffix);
-    }
-    print_suffix_head(head, flat([argument_list(arguments), suffix]))
-}
-
 /// Whether an argument list hands its break to its last argument: one that carries a break of its own, after nothing but atoms.
-fn hugs(arguments: &[Argument]) -> bool {
+fn hugs<D: Layout>(arguments: &[Argument<D>]) -> bool {
     arguments.split_last().is_some_and(|(last, leading)| {
         carries_its_own_break(&last.term) && leading.iter().all(|argument| is_atom(&argument.term))
     })
 }
 
 /// What a chain of applications is applied to: the head under every argument list.
-fn chain_base(term: &Term) -> &Term {
+fn chain_base<D: Layout>(term: &Term<D>) -> &Term<D> {
     match term.as_subterm() {
         Subterm::Apply(Apply { head, .. }) => chain_base(head),
         _ => term,
-    }
-}
-
-/// One argument list as [`riding_call`] writes it: hugging its last argument where [`hugs`] says so, and otherwise flat when it fits, its arguments one per line with the closer riding the last when it does not.
-fn argument_list(arguments: Vec<Argument>) -> Printer {
-    let hugged = hugs(&arguments);
-    let items = arguments
-        .into_iter()
-        .map(print_argument)
-        .collect::<Vec<_>>();
-    match hugged {
-        true => unbroken(items),
-        false => group(argument_lines(items)),
     }
 }
 
@@ -259,59 +184,6 @@ fn argument_lines(items: Vec<Printer>) -> Printer {
         ])),
         pure(")"),
     ])
-}
-
-/// A curried call, `h(a)(b)(c)` over an atom `h`, laid out as the call its arguments would make written in one list, `)(` standing where a comma would, but for the first list, which hugs the head. Flat when the chain fits; otherwise `h(a)(` stands on the head's line, the first list a group of its own that breaks inside only where it cannot fit there, and each later list's arguments go one level in, one per line, every closer riding its list's last argument and the next opener riding that closer, whatever follows the chain riding the last. The chain hugs its last argument where that call would: where the argument carries a break of its own and every argument before it, in every list, is an atom, all of its lists then written on the head's line. Each inner application leaves its source marks where the nested printing would, its start before the head and its end after its own list, so a comment meets the same token boundaries.
-fn curried_call(head: Term, arguments: Vec<Argument>, suffix: Printer) -> Printer {
-    // Innermost list first once reversed; the outermost list's end is already in `suffix`, which the caller marked.
-    let mut lists = vec![(arguments, None)];
-    let mut starts = Vec::new();
-    let mut current = head;
-    while matches!(current.as_subterm(), Subterm::Apply(_)) {
-        let span = current.span().map(|span| (span.start, span.end));
-        let Subterm::Apply(Apply { head, arguments }) = current.into_subterm() else {
-            unreachable!("matched as an application")
-        };
-        starts.extend(span.map(|(start, _)| start));
-        lists.push((arguments, span.map(|(_, end)| end)));
-        current = head;
-    }
-    lists.reverse();
-    let marked = |end: Option<usize>| end.map_or_else(|| flat([]), reached);
-    let hugged = lists.split_last().is_some_and(|((last, _), earlier)| {
-        hugs(last)
-            && earlier
-                .iter()
-                .all(|(arguments, _)| arguments.iter().all(|argument| is_atom(&argument.term)))
-    });
-    if hugged {
-        let written = lists
-            .into_iter()
-            .map(|(arguments, end)| {
-                let items = arguments.into_iter().map(print_argument).collect();
-                flat([unbroken(items), marked(end)])
-            })
-            .collect::<Vec<_>>();
-        return flat([
-            flat(starts.into_iter().map(reached)),
-            print_suffix_head(current, flat([flat(written), suffix])),
-        ]);
-    }
-    let mut lists = lists.into_iter();
-    let (first, first_end) = lists.next().expect("a chain has a first list");
-    // Ungrouped, so every break of a later list is the chain's own.
-    let later = lists
-        .map(|(arguments, end)| {
-            let items = arguments.into_iter().map(print_argument).collect();
-            flat([argument_lines(items), marked(end)])
-        })
-        .collect::<Vec<_>>();
-    group(flat([
-        flat(starts.into_iter().map(reached)),
-        print_suffix_head(current, flat([argument_list(first), marked(first_end)])),
-        flat(later),
-        suffix,
-    ]))
 }
 
 /// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
@@ -373,30 +245,14 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
     ])
 }
 
-/// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
-fn attached_body(introducer: &'static str, body: Term) -> Printer {
-    group(flat([
-        pure(introducer),
-        indent(flat([line(), print_term(body)])),
-    ]))
-}
-
 /// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
 const MAX_FLAT_ARMS: usize = 3;
 
 /// Whether a term is itself an arm ladder — the arm body that forces its enclosing ladder to break.
 ///
 /// Nested flat, two ladders put both their `end`s on one line and nothing says which closes which: `match b | true => match c | true => false | false => true end | false => c end`. Breaking the outer gives every `end` a column that names what it closes. This is about pairing delimiters by eye, not about density — which is why it applies at any width.
-fn is_ladder(body: &Term) -> bool {
+fn is_ladder<D: Layout>(body: &Term<D>) -> bool {
     matches!(body.as_subterm(), Subterm::Match(_) | Subterm::Choose(_))
-}
-
-/// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
-fn print_motive(motive: Option<Term>) -> Printer {
-    match motive {
-        Some(motive) => flat([pure(": "), print_term(motive)]),
-        None => pure(""),
-    }
 }
 
 /// A `Flt` literal as written: a finite value as its signed decimal, and the values no decimal spells as their literals, `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`. Source spells no other NaN, so the syntax holds none.
@@ -425,65 +281,6 @@ fn print_flt(value: Floating) -> Printer {
     }
 
     pure(string)
-}
-
-/// One argument of an application, under the mark it was written with.
-fn print_argument(argument: Argument) -> Printer {
-    flat([print_plicity(argument.plicity), print_term(argument.term)])
-}
-
-/// One Π-binder, as in a function type: `@?label : type` (the label optional).
-fn print_func_type_param(param: FuncTypeParam) -> Printer {
-    let typed = print_term(param.type_);
-    let body = match param.label {
-        Some(label) => flat([pure(label), pure(": "), typed]),
-        None => typed,
-    };
-    flat([print_plicity(param.plicity), body])
-}
-
-/// One member of a definition telescope (`let`, `satisfy`): its mark, then the binder with its type, or a premise's type alone.
-fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
-    let plicity = param.plicity();
-    let member = match param {
-        FuncSugarParam::Bound { binder, type_, .. } => {
-            flat([print_pattern(binder), pure(": "), print_term(type_)])
-        }
-        FuncSugarParam::Premise(type_) => print_term(type_),
-    };
-    flat([print_plicity(plicity), member])
-}
-
-/// One lambda parameter: the binder name with its optional domain annotation.
-fn print_func_param((plicity, name, annotation): FieldSugarParam) -> Printer {
-    let bound = match annotation {
-        Some(ty) => flat([pure(name), pure(": "), print_term(ty)]),
-        None => pure(name),
-    };
-    flat([print_plicity(plicity), bound])
-}
-
-/// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
-fn print_tuple_field(field: TupleField) -> Printer {
-    match (field.label, field.func_params) {
-        (Some(label), Some(params)) => flat([
-            pure(label),
-            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-            attached_body(" =", field.value),
-        ]),
-        (Some(label), None) => flat([pure(label), attached_body(" =", field.value)]),
-        (None, _) => print_term(field.value),
-    }
-}
-
-/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a field, plain or under `@`.
-fn print_struct_entry(entry: StructLitEntry) -> Printer {
-    match entry {
-        StructLitEntry::Field(field) => print_tuple_field(field),
-        StructLitEntry::Implicit(field) => flat([pure("@"), print_tuple_field(field)]),
-        StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
-        StructLitEntry::Spread(term) => flat([pure(".."), print_term(term)]),
-    }
 }
 
 /// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bytes` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
@@ -614,45 +411,6 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
     }
 }
 
-/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of `print_func_param`, forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` member is `use _`, the wildcard holding its place.
-fn print_func_pattern_param(param: FuncParam) -> Printer {
-    let FuncParam {
-        plicity,
-        pattern,
-        annotation,
-    } = param;
-    let bound = match annotation {
-        Some(ty) => flat([print_pattern(pattern), pure(": "), print_term(ty)]),
-        None => print_pattern(pattern),
-    };
-    flat([print_plicity(plicity), bound])
-}
-
-fn print_labeled((label, ty): (Option<String>, Term)) -> Printer {
-    match label {
-        Some(label) => flat([pure(label), pure(": "), print_term(ty)]),
-        None => print_term(ty),
-    }
-}
-
-/// A Σ-type / struct field: positional, `label : type`, or the signature sugar `label(params) -> type` re-sugared from the retained parameter list.
-fn print_field(param: TupleTypeParam) -> Printer {
-    match (param.label, param.func_params) {
-        (Some(label), Some(params)) => flat([
-            pure(label.to_string()),
-            listed(
-                "(",
-                params.into_iter().map(print_func_type_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(param.type_),
-        ]),
-        (Some(label), None) => flat([pure(label.to_string()), pure(": "), print_term(param.type_)]),
-        (None, _) => print_term(param.type_),
-    }
-}
-
 // Zero-padded to the width the literal was written at. A `digits` of `0` — a numeral the compiler minted — asks for no minimum, which is the natural width.
 fn format_radix(n: &Natural, radix: Radix) -> String {
     match radix {
@@ -662,65 +420,17 @@ fn format_radix(n: &Natural, radix: Radix) -> String {
     }
 }
 
-/// A written literal, as written.
-fn print_literal(literal: Literal) -> Printer {
-    match literal {
-        Literal::Bool(false) => pure("false"),
-        Literal::Bool(true) => pure("true"),
-        Literal::Flt(value) => print_flt(value),
-        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
-        Literal::Bytes(segments) => {
-            let entries = segments
-                .into_iter()
-                .map(|segment| match segment {
-                    BytesSegment::Atom(operand) => ListEntry::Elem(operand),
-                    BytesSegment::Spread(operand) => ListEntry::Spread(operand),
-                })
-                .collect();
-            wrapped_list("x[", entries)
-        }
-        Literal::List(entries) => wrapped_list("[", entries),
-    }
-}
-
 /// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`intrinsic_path`]) — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
 struct Quoted;
 
-impl Writer<Term> for Quoted {
-    fn operand(&self, operand: Term) -> Option<Term> {
+impl<D: Dialect> Writer<Term<D>, D> for Quoted {
+    fn operand(&self, operand: Term<D>) -> Option<Term<D>> {
         Some(operand)
     }
 
-    fn sys(&self, path: &str) -> Option<Term> {
+    fn sys(&self, path: &str) -> Option<Term<D>> {
         Some(Subterm::Name(Name::new(true, intrinsic_path(path))).into())
     }
-}
-
-/// An intrinsic as core's one table writes it ([`intrinsic_form`]), through the translation a report's term is written by. A `/sys` declaration is the only place a text-stage intrinsic node exists, and a handle the host minted is one no source spells, shown by its token.
-fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
-    match intrinsic_form(intrinsic, true) {
-        IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
-        form => {
-            print_term(written_intrinsic(form, &Quoted).expect("a quoted form is written whole"))
-        }
-    }
-}
-
-pub(crate) fn print_term(term: Term) -> Printer {
-    print_term_followed(term, flat([]))
-}
-
-/// A postfix chain stays inside its head's layout decision: a ladder that fits only before its call breaks its arms first. Source marks still end each term before its suffix, so following the original sees the same token boundaries.
-fn print_term_followed(term: Term, suffix: Printer) -> Printer {
-    // The whole of what the printer tells a formatter's renderer: where the term's own text begins and ends in the source. The renderer follows the source by itself and needs neither to place a comment; they are where it picks the text up again past a literal this printer spells another way than it was written — see `Printer::Mark`. Outside a format run both emit nothing.
-    // With room to recurse: a term a report prints is as deep as the reduction that built it, a type a recursion nested once a step among them.
-    recurse(|| match term.span().map(|span| (span.start, span.end)) {
-        Some((start, end)) => flat([
-            reached(start),
-            print_term_inner(term, flat([reached(end), suffix])),
-        ]),
-        None => print_term_inner(term, suffix),
-    })
 }
 
 /// The documentation comment above what `doc` documents: every line printed as written, each on a line of its own.
@@ -736,268 +446,6 @@ fn print_doc(doc: Option<Doc>) -> Printer {
         };
         flat([pure(spelled), hard_line()])
     }))
-}
-
-/// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` or `choose` does not: `end` closes it, so it is an atom and prints bare in every position.
-fn print_operand(term: Term, min_prec: u8) -> Printer {
-    let parenthesized = match term.as_subterm() {
-        Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
-        Subterm::Let(_) | Subterm::FuncType(_) | Subterm::Func(_) => true,
-        _ => false,
-    };
-    match parenthesized {
-        true => flat([pure("("), print_term(term), indent(ends()), pure(")")]),
-        false => print_term(term),
-    }
-}
-
-/// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
-fn print_suffix_head(term: Term, suffix: Printer) -> Printer {
-    match term.as_subterm() {
-        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => flat([
-            pure("("),
-            print_term(term),
-            indent(ends()),
-            pure(")"),
-            suffix,
-        ]),
-        Subterm::Apply(_)
-        | Subterm::Proj(_)
-        | Subterm::Bang(_)
-        | Subterm::Match(_)
-        | Subterm::Choose(_) => print_term_followed(term, suffix),
-        _ => flat([print_operand(term, u8::MAX), suffix]),
-    }
-}
-
-fn print_term_inner(term: Term, suffix: Printer) -> Printer {
-    // Where a name was written, which a page asks the lowering about instead of resolving the text again.
-    let written = term.span().map(|span| span.start..span.end);
-    let body = match term.into_subterm() {
-        Subterm::Type => pure("Type"),
-        Subterm::Prop => pure("Prop"),
-        Subterm::Sort => pure("Sort"),
-        Subterm::Literal(literal) => print_literal(literal),
-        Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        Subterm::Name(name) => match written {
-            Some(written) => named_at(name.join(), written),
-            None => named(name.join()),
-        },
-        // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
-        Subterm::Hole | Subterm::Goal => pure("?"),
-        Subterm::Held => pure("_"),
-        // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
-        Subterm::Derive => pure("derive"),
-        Subterm::ProofLiteral(ProofLiteral::Char(character)) => print_char_literal(character),
-        Subterm::ProofLiteral(ProofLiteral::Str(literal)) if literal.block => {
-            print_block_string(&literal.value)
-        }
-        Subterm::ProofLiteral(ProofLiteral::Str(literal)) => pure(format!(
-            "\"{}\"",
-            literal
-                .value
-                .chars()
-                .map(|character| match character {
-                    '"' => "\\\"".to_string(),
-                    '\\' => "\\\\".to_string(),
-                    '\n' => "\\n".to_string(),
-                    '\t' => "\\t".to_string(),
-                    '\r' => "\\r".to_string(),
-                    hidden if unseen(hidden) => braced_escape(hidden),
-                    _ => character.to_string(),
-                })
-                .collect::<String>()
-        )),
-        Subterm::FuncType(FuncType { params, output }) => flat([
-            listed(
-                "(",
-                params.into_iter().map(print_func_type_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(output),
-        ]),
-        // A lambda's body rides its arrow: inline when it fits, on the next line one level deeper when it does not — the corpus writes `(x, acc) => f(x)` inline.
-        Subterm::Func(Func { params, body }) => flat([
-            listed(
-                "(",
-                params.into_iter().map(print_func_pattern_param).collect(),
-                ")",
-            ),
-            attached_body(" =>", body),
-        ]),
-        Subterm::Apply(Apply { head, arguments }) => return riding_call(head, arguments, suffix),
-        Subterm::TupleType(TupleType { fields }) => {
-            listed("{", fields.into_iter().map(print_field).collect(), "}")
-        }
-        Subterm::Core(form) => match form {},
-        Subterm::Tuple(Tuple { fields }) => {
-            if fields.len() == 1 {
-                let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple needs no trailing comma — the `=` already disambiguates it from a parenthesized term.
-                let comma = if field.label.is_some() { "" } else { "," };
-                flat([
-                    pure("("),
-                    print_tuple_field(field),
-                    pure(comma),
-                    indent(ends()),
-                    pure(")"),
-                ])
-            } else {
-                listed(
-                    "(",
-                    fields.into_iter().map(print_tuple_field).collect(),
-                    ")",
-                )
-            }
-        }
-        Subterm::Proj(Proj { head, field }) => {
-            let field = match field {
-                Field::Index(index) => format!(".{index}"),
-                Field::Label(label) => format!(".{label}"),
-            };
-            return print_suffix_head(head, flat([pure(field), suffix]));
-        }
-        Subterm::StructLit(StructLit {
-            head,
-            params,
-            entries,
-        }) => flat([
-            pure(head.join()),
-            match params {
-                None => pure(""),
-                Some(params) => listed("(", params.into_iter().map(print_argument).collect(), ")"),
-            },
-            pure(" "),
-            listed_block(
-                "{",
-                entries.into_iter().map(print_struct_entry).collect(),
-                "}",
-            ),
-        ]),
-        // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
-        //
-        // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
-        Subterm::Choose(Choose { arms, default }) => {
-            let forced = arms.len() + 1 > MAX_FLAT_ARMS
-                || std::iter::once(&default)
-                    .chain(arms.iter().map(|arm| &arm.body))
-                    .any(is_ladder);
-            let separator = match forced {
-                true => hard_line,
-                false => line,
-            };
-            return group(flat([
-                pure("choose"),
-                flat(
-                    arms.into_iter()
-                        .map(|ChooseArm { test, body }| {
-                            let head = match test {
-                                ChooseTest::Cond(condition) => {
-                                    flat([pure("| "), print_term(condition)])
-                                }
-                                ChooseTest::Bind { pattern, value } => flat([
-                                    pure("| "),
-                                    print_match_pattern(pattern),
-                                    pure(" = "),
-                                    print_term(value),
-                                ]),
-                            };
-                            flat([separator(), head, attached_body(" =>", body)])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                separator(),
-                pure("| _"),
-                attached_body(" =>", default),
-                separator(),
-                pure("end"),
-                suffix,
-            ]));
-        }
-        Subterm::Match(Match { head, motive, arms }) => {
-            let forced =
-                arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
-            let separator = match forced {
-                true => hard_line,
-                false => line,
-            };
-            return group(flat([
-                pure("match "),
-                print_term(head),
-                print_motive(motive),
-                flat(
-                    arms.into_iter()
-                        .map(|arm| {
-                            // Where the pattern ends, for the reason a term is marked — see `print_term`: a literal leaf may be spelled another way than it was written.
-                            let written = match arm.span {
-                                Some(span) => reached(span.end),
-                                None => flat([]),
-                            };
-                            flat([
-                                separator(),
-                                pure("| "),
-                                print_match_pattern(arm.pattern),
-                                written,
-                                attached_body(" =>", arm.body),
-                            ])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                separator(),
-                pure("end"),
-                suffix,
-            ]));
-        }
-        Subterm::Let(Let { groups, tail }) => {
-            let statements = groups
-                .into_iter()
-                .map(|group| {
-                    let mut parts = Vec::new();
-                    for (index, member) in group.members.into_iter().enumerate() {
-                        let keyword = match index {
-                            0 => "let ",
-                            _ => {
-                                parts.push(hard_line());
-                                "and "
-                            }
-                        };
-                        parts.extend([
-                            pure(keyword),
-                            print_pattern(member.binder),
-                            print_let_signature(member.signature, false),
-                        ]);
-                    }
-                    parts.extend([pure(";"), hard_line()]);
-                    flat(parts)
-                })
-                .collect::<Vec<_>>();
-            flat(statements.into_iter().chain([print_term(tail)]))
-        }
-        Subterm::Bang(term) => return print_suffix_head(term, flat([pure("!"), suffix])),
-        // An overflowing operator chain breaks with the operator leading the continuation line.
-        Subterm::Infix(Infix { op, left, right }) => {
-            let precedence = op_precedence(op);
-            group(flat([
-                print_operand(left, precedence),
-                indent(flat([
-                    line(),
-                    pure(format!("{} ", op.symbol())),
-                    print_operand(right, precedence + 1),
-                ])),
-            ]))
-        }
-        Subterm::NumLit(NumLit {
-            magnitude,
-            radix,
-            sign,
-        }) => pure(format!(
-            "{}{}",
-            sign.symbol(),
-            format_radix(&magnitude, radix)
-        )),
-    };
-    flat([body, suffix])
 }
 
 /// A character literal as written: the five escapes by their spellings, any other character no reader sees by its braced escape, anything else verbatim — shared by the expression and match-pattern positions.
@@ -1019,42 +467,6 @@ fn braced_escape(character: char) -> String {
     format!("\\u{{{:X}}}", u32::from(character))
 }
 
-/// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
-fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
-    let bound = |body: Term| {
-        if top {
-            flat([pure(" ="), hard_line(), indent(print_term(body))])
-        } else {
-            attached_body(" =", body)
-        }
-    };
-    match signature {
-        LetSignature::Name { type_, body } => flat([
-            match type_ {
-                Some(type_) => flat([pure(": "), print_term(type_)]),
-                None => pure(""),
-            },
-            bound(body),
-        ]),
-        // The parameter list and the `-> output` share **one** group, so what is measured is the whole signature rather than the parameters alone. Measured apart, parameters that fit on their own stay flat and leave the return type to break — which puts the `{` of a tuple type at the end of a long line and its `}` alone with the `=`. Together, the parameters break first and the return type, now starting a fresh line, fits beside the arrow. Should it still not fit, its own group breaks then, which is the right order of concessions.
-        LetSignature::Func {
-            params,
-            output,
-            body,
-        } => {
-            let items = params
-                .into_iter()
-                .map(print_func_sugar_param)
-                .collect::<Vec<_>>();
-            let signature = match items.is_empty() {
-                true => flat([pure("()"), pure(" -> "), print_term(output)]),
-                false => group(flat([telescope(items), pure(" -> "), print_term(output)])),
-            };
-            flat([signature, bound(body)])
-        }
-    }
-}
-
 fn print_pub(vis_pub: bool) -> Printer {
     if vis_pub { pure("pub ") } else { pure("") }
 }
@@ -1065,65 +477,6 @@ fn print_group_item(item: &GroupItem) -> String {
         GroupItem::Let(s) => format!("let {s}"),
         GroupItem::Both(s) => s.to_string(),
     }
-}
-
-fn print_top_use(item: TopUse) -> Printer {
-    flat([
-        print_pub(item.vis_pub),
-        pure("use "),
-        pure(item.name.join()),
-        match item.group {
-            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
-            UseGroup::Named(items) => {
-                filled("/{", items.iter().map(print_group_item).collect(), "}")
-            }
-            UseGroup::Glob => pure("/*"),
-        },
-        pure(";"),
-    ])
-}
-
-fn print_top_test(test: TopTest) -> Printer {
-    flat([
-        pure("test "),
-        pure(test.label.to_string()),
-        pure(" ="),
-        hard_line(),
-        indent(flat([print_term(test.body), ends()])),
-        pure(";"),
-    ])
-}
-
-fn print_top_let(items: Vec<TopLet>) -> Printer {
-    let mut iter = items.into_iter();
-    let first = iter.next().expect("a `let` item has a member");
-    let rest = iter.collect::<Vec<_>>();
-
-    flat([
-        print_doc(first.doc),
-        print_pub(first.vis_pub),
-        pure("let "),
-        pure(first.label.to_string()),
-        print_let_signature(first.signature, true),
-        flat(
-            rest.into_iter()
-                .map(|item| {
-                    flat([
-                        hard_line(),
-                        print_doc(item.doc),
-                        // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
-                        print_pub(item.vis_pub),
-                        pure("and "),
-                        pure(item.label.to_string()),
-                        print_let_signature(item.signature, true),
-                    ])
-                })
-                .collect::<Vec<_>>(),
-        ),
-        // Only the last body ends the item: a comment written under an earlier one stands above the `and` that follows it.
-        indent(ends()),
-        pure(";"),
-    ])
 }
 
 fn print_wire_type(type_: WireType) -> Printer {
@@ -1169,13 +522,1020 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
     ])
 }
 
-fn print_top_foreign(item: TopForeign) -> Printer {
+/// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a case's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Core text.
+trait Layout: Dialect {
+    /// An operand only this dialect writes, followed by `suffix`, the call chain and the marks after it.
+    fn form(printer: TreePrinter<Self>, form: Self::Form, suffix: Printer) -> Printer;
+
+    /// Whether `form` prints as one indivisible piece, as a name does.
+    fn form_is_atom(form: &Self::Form) -> bool;
+
+    /// What the decorator before a case states, between the case's bar and its label.
+    fn case_fields(printer: TreePrinter<Self>, fields: Self::Fields) -> Printer;
+
+    /// What a declaration's head writes before its declaring word, or before the `and` of a group's later member.
+    fn head_fields(printer: TreePrinter<Self>, head: &Self::Head) -> Printer;
+
+    /// The name a declaration declares, after its declaring word.
+    fn declared(head: Self::Head, label: Label) -> Printer;
+}
+
+impl Layout for Program {
+    fn form(_: TreePrinter<Self>, form: Self::Form, _: Printer) -> Printer {
+        match form {}
+    }
+
+    fn form_is_atom(form: &Self::Form) -> bool {
+        match *form {}
+    }
+
+    fn case_fields(_: TreePrinter<Self>, (): ()) -> Printer {
+        flat([])
+    }
+
+    fn head_fields(_: TreePrinter<Self>, _: &()) -> Printer {
+        flat([])
+    }
+
+    fn declared((): (), label: Label) -> Printer {
+        pure(label.to_string())
+    }
+}
+
+/// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, and Core text's. It learns nothing while printing.
+struct TreePrinter<D: Layout>(PhantomData<D>);
+
+impl<D: Layout> Clone for TreePrinter<D> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<D: Layout> Copy for TreePrinter<D> {}
+
+/// The printer of a program.
+const PROGRAM: TreePrinter<Program> = TreePrinter(PhantomData);
+
+impl<D: Layout> TreePrinter<D> {
+    /// Simple entries pack together; spreads and structured expressions stand apart in a broken layout. Packed literals always retain their outer group as a break opportunity for enclosing expressions; a plain list of atoms packs directly from its opener.
+    fn wrapped_list(self, open: &'static str, entries: Vec<ListEntry<D>>) -> Printer {
+        if entries.is_empty() {
+            return flat([pure(open), indent(ends()), pure("]")]);
+        }
+        let last = entries.len() - 1;
+        let items = entries
+            .into_iter()
+            .enumerate()
+            .map(|(index, entry)| {
+                let (printer, compact) = match entry {
+                    ListEntry::Elem(term) => {
+                        let compact = is_atom(&term)
+                            || match term.as_subterm() {
+                                Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
+                                Subterm::Literal(Literal::Bytes(segments)) => segments.is_empty(),
+                                Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
+                                _ => false,
+                            };
+                        (self.term(term), compact)
+                    }
+                    ListEntry::Spread(term) => (flat([pure(".."), self.term(term)]), false),
+                };
+                FillItem {
+                    printer: if index == last {
+                        printer
+                    } else {
+                        flat([printer, pure(",")])
+                    },
+                    compact,
+                }
+            })
+            .collect::<Vec<_>>();
+        let structured = items.iter().any(|item| !item.compact);
+        let grouped = open != "[" || structured;
+        let body = flat([
+            pure(open),
+            indent(flat([
+                if grouped { soft_line() } else { flat([]) },
+                if open == "[" || structured {
+                    flow(items)
+                } else {
+                    fill(items.into_iter().map(|item| item.printer))
+                },
+                ends(),
+            ])),
+            pure("]"),
+        ]);
+        if grouped { group(body) } else { body }
+    }
+
+    /// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one — except that a call whose last argument carries a break of its own, with nothing but atoms before it, hands its break to that argument: `Str/flatten([` on the head's line, the elements one level in, and `])` riding the last; `List/map(names, (name) =>` on the head's line and the body one level in below it.
+    ///
+    /// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug would make the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — would strand the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
+    ///
+    /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
+    ///
+    /// A head under two or more argument lists over an atom is [`TreePrinter::curried_call`]'s: the lists are one call's arguments written apart, and decided apart they leave `)(` mid-line with an argument hanging below it.
+    fn riding_call(self, head: Term<D>, arguments: Vec<Argument<D>>, suffix: Printer) -> Printer {
+        if matches!(head.as_subterm(), Subterm::Apply(_)) && is_atom(chain_base(&head)) {
+            return self.curried_call(head, arguments, suffix);
+        }
+        self.suffix_head(head, flat([self.argument_list(arguments), suffix]))
+    }
+
+    /// One argument list as [`TreePrinter::riding_call`] writes it: hugging its last argument where [`hugs`] says so, and otherwise flat when it fits, its arguments one per line with the closer riding the last when it does not.
+    fn argument_list(self, arguments: Vec<Argument<D>>) -> Printer {
+        let hugged = hugs(&arguments);
+        let items = arguments
+            .into_iter()
+            .map(|argument| self.argument(argument))
+            .collect::<Vec<_>>();
+        match hugged {
+            true => unbroken(items),
+            false => group(argument_lines(items)),
+        }
+    }
+
+    /// A curried call, `h(a)(b)(c)` over an atom `h`, laid out as the call its arguments would make written in one list, `)(` standing where a comma would, but for the first list, which hugs the head. Flat when the chain fits; otherwise `h(a)(` stands on the head's line, the first list a group of its own that breaks inside only where it cannot fit there, and each later list's arguments go one level in, one per line, every closer riding its list's last argument and the next opener riding that closer, whatever follows the chain riding the last. The chain hugs its last argument where that call would: where the argument carries a break of its own and every argument before it, in every list, is an atom, all of its lists then written on the head's line. Each inner application leaves its source marks where the nested printing would, its start before the head and its end after its own list, so a comment meets the same token boundaries.
+    fn curried_call(self, head: Term<D>, arguments: Vec<Argument<D>>, suffix: Printer) -> Printer {
+        // Innermost list first once reversed; the outermost list's end is already in `suffix`, which the caller marked.
+        let mut lists = vec![(arguments, None)];
+        let mut starts = Vec::new();
+        let mut current = head;
+        while matches!(current.as_subterm(), Subterm::Apply(_)) {
+            let span = current.span().map(|span| (span.start, span.end));
+            let Subterm::Apply(Apply { head, arguments }) = current.into_subterm() else {
+                unreachable!("matched as an application")
+            };
+            starts.extend(span.map(|(start, _)| start));
+            lists.push((arguments, span.map(|(_, end)| end)));
+            current = head;
+        }
+        lists.reverse();
+        let marked = |end: Option<usize>| end.map_or_else(|| flat([]), reached);
+        let hugged = lists.split_last().is_some_and(|((last, _), earlier)| {
+            hugs(last)
+                && earlier
+                    .iter()
+                    .all(|(arguments, _)| arguments.iter().all(|argument| is_atom(&argument.term)))
+        });
+        if hugged {
+            let written = lists
+                .into_iter()
+                .map(|(arguments, end)| {
+                    let items = arguments
+                        .into_iter()
+                        .map(|argument| self.argument(argument))
+                        .collect();
+                    flat([unbroken(items), marked(end)])
+                })
+                .collect::<Vec<_>>();
+            return flat([
+                flat(starts.into_iter().map(reached)),
+                self.suffix_head(current, flat([flat(written), suffix])),
+            ]);
+        }
+        let mut lists = lists.into_iter();
+        let (first, first_end) = lists.next().expect("a chain has a first list");
+        // Ungrouped, so every break of a later list is the chain's own.
+        let later = lists
+            .map(|(arguments, end)| {
+                let items = arguments
+                    .into_iter()
+                    .map(|argument| self.argument(argument))
+                    .collect();
+                flat([argument_lines(items), marked(end)])
+            })
+            .collect::<Vec<_>>();
+        group(flat([
+            flat(starts.into_iter().map(reached)),
+            self.suffix_head(
+                current,
+                flat([self.argument_list(first), marked(first_end)]),
+            ),
+            flat(later),
+            suffix,
+        ]))
+    }
+
+    /// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
+    fn attached_body(self, introducer: &'static str, body: Term<D>) -> Printer {
+        group(flat([
+            pure(introducer),
+            indent(flat([line(), self.term(body)])),
+        ]))
+    }
+
+    /// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
+    fn motive(self, motive: Option<Term<D>>) -> Printer {
+        match motive {
+            Some(motive) => flat([pure(": "), self.term(motive)]),
+            None => pure(""),
+        }
+    }
+
+    /// One argument of an application, under the mark it was written with.
+    fn argument(self, argument: Argument<D>) -> Printer {
+        flat([print_plicity(argument.plicity), self.term(argument.term)])
+    }
+
+    /// One Π-binder, as in a function type: `@?label : type` (the label optional).
+    fn func_type_param(self, param: FuncTypeParam<D>) -> Printer {
+        let typed = self.term(param.type_);
+        let body = match param.label {
+            Some(label) => flat([pure(label), pure(": "), typed]),
+            None => typed,
+        };
+        flat([print_plicity(param.plicity), body])
+    }
+
+    /// One member of a definition telescope (`let`, `satisfy`): its mark, then the binder with its type, or a premise's type alone.
+    fn func_sugar_param(self, param: FuncSugarParam<D>) -> Printer {
+        let plicity = param.plicity();
+        let member = match param {
+            FuncSugarParam::Bound { binder, type_, .. } => {
+                flat([print_pattern(binder), pure(": "), self.term(type_)])
+            }
+            FuncSugarParam::Premise(type_) => self.term(type_),
+        };
+        flat([print_plicity(plicity), member])
+    }
+
+    /// One lambda parameter: the binder name with its optional domain annotation.
+    fn func_param(self, (plicity, name, annotation): FieldSugarParam<D>) -> Printer {
+        let bound = match annotation {
+            Some(ty) => flat([pure(name), pure(": "), self.term(ty)]),
+            None => pure(name),
+        };
+        flat([print_plicity(plicity), bound])
+    }
+
+    /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
+    fn tuple_field(self, field: TupleField<D>) -> Printer {
+        match (field.label, field.func_params) {
+            (Some(label), Some(params)) => flat([
+                pure(label),
+                listed(
+                    "(",
+                    params
+                        .into_iter()
+                        .map(|param| self.func_param(param))
+                        .collect(),
+                    ")",
+                ),
+                self.attached_body(" =", field.value),
+            ]),
+            (Some(label), None) => flat([pure(label), self.attached_body(" =", field.value)]),
+            (None, _) => self.term(field.value),
+        }
+    }
+
+    /// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a field, plain or under `@`.
+    fn struct_entry(self, entry: StructLitEntry<D>) -> Printer {
+        match entry {
+            StructLitEntry::Field(field) => self.tuple_field(field),
+            StructLitEntry::Implicit(field) => flat([pure("@"), self.tuple_field(field)]),
+            StructLitEntry::Use(term) => flat([pure("use "), self.term(term)]),
+            StructLitEntry::Spread(term) => flat([pure(".."), self.term(term)]),
+        }
+    }
+
+    /// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of [`TreePrinter::func_param`], forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` member is `use _`, the wildcard holding its place.
+    fn func_pattern_param(self, param: FuncParam<D>) -> Printer {
+        let FuncParam {
+            plicity,
+            pattern,
+            annotation,
+        } = param;
+        let bound = match annotation {
+            Some(ty) => flat([print_pattern(pattern), pure(": "), self.term(ty)]),
+            None => print_pattern(pattern),
+        };
+        flat([print_plicity(plicity), bound])
+    }
+
+    fn labeled(self, (label, ty): (Option<String>, Term<D>)) -> Printer {
+        match label {
+            Some(label) => flat([pure(label), pure(": "), self.term(ty)]),
+            None => self.term(ty),
+        }
+    }
+
+    /// A Σ-type / struct field: positional, `label : type`, or the signature sugar `label(params) -> type` re-sugared from the retained parameter list.
+    fn field(self, param: TupleTypeParam<D>) -> Printer {
+        match (param.label, param.func_params) {
+            (Some(label), Some(params)) => flat([
+                pure(label.to_string()),
+                listed(
+                    "(",
+                    params
+                        .into_iter()
+                        .map(|param| self.func_type_param(param))
+                        .collect(),
+                    ")",
+                ),
+                pure(" -> "),
+                self.term(param.type_),
+            ]),
+            (Some(label), None) => {
+                flat([pure(label.to_string()), pure(": "), self.term(param.type_)])
+            }
+            (None, _) => self.term(param.type_),
+        }
+    }
+
+    /// A written literal, as written.
+    fn literal(self, literal: Literal<D>) -> Printer {
+        match literal {
+            Literal::Bool(false) => pure("false"),
+            Literal::Bool(true) => pure("true"),
+            Literal::Flt(value) => print_flt(value),
+            // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
+            Literal::Bytes(segments) => {
+                let entries = segments
+                    .into_iter()
+                    .map(|segment| match segment {
+                        BytesSegment::Atom(operand) => ListEntry::Elem(operand),
+                        BytesSegment::Spread(operand) => ListEntry::Spread(operand),
+                    })
+                    .collect();
+                self.wrapped_list("x[", entries)
+            }
+            Literal::List(entries) => self.wrapped_list("[", entries),
+        }
+    }
+
+    /// An intrinsic as core's one table writes it ([`intrinsic_form`]), through the translation a report's term is written by. A `/sys` declaration is the only place a text-stage intrinsic node exists, and a handle the host minted is one no source spells, shown by its token.
+    fn intrinsic(self, intrinsic: Intrinsic<D>) -> Printer {
+        match intrinsic_form(intrinsic, true) {
+            IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
+            form => {
+                self.term(written_intrinsic(form, &Quoted).expect("a quoted form is written whole"))
+            }
+        }
+    }
+
+    fn term(self, term: Term<D>) -> Printer {
+        self.term_followed(term, flat([]))
+    }
+
+    /// A postfix chain stays inside its head's layout decision: a ladder that fits only before its call breaks its arms first. Source marks still end each term before its suffix, so following the original sees the same token boundaries.
+    fn term_followed(self, term: Term<D>, suffix: Printer) -> Printer {
+        // The whole of what the printer tells a formatter's renderer: where the term's own text begins and ends in the source. The renderer follows the source by itself and needs neither to place a comment; they are where it picks the text up again past a literal this printer spells another way than it was written — see `Printer::Mark`. Outside a format run both emit nothing.
+        // With room to recurse: a term a report prints is as deep as the reduction that built it, a type a recursion nested once a step among them.
+        recurse(|| match term.span().map(|span| (span.start, span.end)) {
+            Some((start, end)) => flat([
+                reached(start),
+                self.term_inner(term, flat([reached(end), suffix])),
+            ]),
+            None => self.term_inner(term, suffix),
+        })
+    }
+
+    /// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` or `choose` does not: `end` closes it, so it is an atom and prints bare in every position.
+    fn operand(self, term: Term<D>, min_prec: u8) -> Printer {
+        let parenthesized = match term.as_subterm() {
+            Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
+            Subterm::Let(_) | Subterm::FuncType(_) | Subterm::Func(_) => true,
+            _ => false,
+        };
+        match parenthesized {
+            true => flat([pure("("), self.term(term), indent(ends()), pure(")")]),
+            false => self.term(term),
+        }
+    }
+
+    /// [`TreePrinter::operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
+    fn suffix_head(self, term: Term<D>, suffix: Printer) -> Printer {
+        match term.as_subterm() {
+            Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => flat([
+                pure("("),
+                self.term(term),
+                indent(ends()),
+                pure(")"),
+                suffix,
+            ]),
+            Subterm::Apply(_)
+            | Subterm::Proj(_)
+            | Subterm::Bang(_)
+            | Subterm::Match(_)
+            | Subterm::Choose(_) => self.term_followed(term, suffix),
+            _ => flat([self.operand(term, u8::MAX), suffix]),
+        }
+    }
+
+    fn term_inner(self, term: Term<D>, suffix: Printer) -> Printer {
+        // Where a name was written, which a page asks the lowering about instead of resolving the text again.
+        let written = term.span().map(|span| span.start..span.end);
+        let body = match term.into_subterm() {
+            Subterm::Type => pure("Type"),
+            Subterm::Prop => pure("Prop"),
+            Subterm::Sort => pure("Sort"),
+            Subterm::Literal(literal) => self.literal(literal),
+            Subterm::Intrinsic(intrinsic) => self.intrinsic(intrinsic),
+            Subterm::Name(name) => match written {
+                Some(written) => named_at(name.join(), written),
+                None => named(name.join()),
+            },
+            // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
+            Subterm::Hole | Subterm::Goal => pure("?"),
+            Subterm::Held => pure("_"),
+            // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
+            Subterm::Derive => pure("derive"),
+            Subterm::ProofLiteral(ProofLiteral::Char(character)) => print_char_literal(character),
+            Subterm::ProofLiteral(ProofLiteral::Str(literal)) if literal.block => {
+                print_block_string(&literal.value)
+            }
+            Subterm::ProofLiteral(ProofLiteral::Str(literal)) => pure(format!(
+                "\"{}\"",
+                literal
+                    .value
+                    .chars()
+                    .map(|character| match character {
+                        '"' => "\\\"".to_string(),
+                        '\\' => "\\\\".to_string(),
+                        '\n' => "\\n".to_string(),
+                        '\t' => "\\t".to_string(),
+                        '\r' => "\\r".to_string(),
+                        hidden if unseen(hidden) => braced_escape(hidden),
+                        _ => character.to_string(),
+                    })
+                    .collect::<String>()
+            )),
+            Subterm::FuncType(FuncType { params, output }) => flat([
+                listed(
+                    "(",
+                    params
+                        .into_iter()
+                        .map(|param| self.func_type_param(param))
+                        .collect(),
+                    ")",
+                ),
+                pure(" -> "),
+                self.term(output),
+            ]),
+            // A lambda's body rides its arrow: inline when it fits, on the next line one level deeper when it does not — the corpus writes `(x, acc) => f(x)` inline.
+            Subterm::Func(Func { params, body }) => flat([
+                listed(
+                    "(",
+                    params
+                        .into_iter()
+                        .map(|param| self.func_pattern_param(param))
+                        .collect(),
+                    ")",
+                ),
+                self.attached_body(" =>", body),
+            ]),
+            Subterm::Apply(Apply { head, arguments }) => {
+                return self.riding_call(head, arguments, suffix);
+            }
+            Subterm::TupleType(TupleType { fields }) => listed(
+                "{",
+                fields.into_iter().map(|field| self.field(field)).collect(),
+                "}",
+            ),
+            Subterm::Core(form) => return D::form(self, form, suffix),
+            Subterm::Tuple(Tuple { fields }) => {
+                if fields.len() == 1 {
+                    let field = fields.into_iter().next().unwrap();
+                    // A labeled one-element tuple needs no trailing comma — the `=` already disambiguates it from a parenthesized term.
+                    let comma = if field.label.is_some() { "" } else { "," };
+                    flat([
+                        pure("("),
+                        self.tuple_field(field),
+                        pure(comma),
+                        indent(ends()),
+                        pure(")"),
+                    ])
+                } else {
+                    listed(
+                        "(",
+                        fields
+                            .into_iter()
+                            .map(|field| self.tuple_field(field))
+                            .collect(),
+                        ")",
+                    )
+                }
+            }
+            Subterm::Proj(Proj { head, field }) => {
+                let field = match field {
+                    Field::Index(index) => format!(".{index}"),
+                    Field::Label(label) => format!(".{label}"),
+                };
+                return self.suffix_head(head, flat([pure(field), suffix]));
+            }
+            Subterm::StructLit(StructLit {
+                head,
+                params,
+                entries,
+            }) => flat([
+                pure(head.join()),
+                match params {
+                    None => pure(""),
+                    Some(params) => listed(
+                        "(",
+                        params
+                            .into_iter()
+                            .map(|argument| self.argument(argument))
+                            .collect(),
+                        ")",
+                    ),
+                },
+                pure(" "),
+                listed_block(
+                    "{",
+                    entries
+                        .into_iter()
+                        .map(|entry| self.struct_entry(entry))
+                        .collect(),
+                    "}",
+                ),
+            ]),
+            // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
+            //
+            // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+            Subterm::Choose(Choose { arms, default }) => {
+                let forced = arms.len() + 1 > MAX_FLAT_ARMS
+                    || std::iter::once(&default)
+                        .chain(arms.iter().map(|arm| &arm.body))
+                        .any(is_ladder);
+                let separator = match forced {
+                    true => hard_line,
+                    false => line,
+                };
+                return group(flat([
+                    pure("choose"),
+                    flat(
+                        arms.into_iter()
+                            .map(|ChooseArm { test, body }| {
+                                let head = match test {
+                                    ChooseTest::Cond(condition) => {
+                                        flat([pure("| "), self.term(condition)])
+                                    }
+                                    ChooseTest::Bind { pattern, value } => flat([
+                                        pure("| "),
+                                        print_match_pattern(pattern),
+                                        pure(" = "),
+                                        self.term(value),
+                                    ]),
+                                };
+                                flat([separator(), head, self.attached_body(" =>", body)])
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                    separator(),
+                    pure("| _"),
+                    self.attached_body(" =>", default),
+                    separator(),
+                    pure("end"),
+                    suffix,
+                ]));
+            }
+            Subterm::Match(Match { head, motive, arms }) => {
+                let forced =
+                    arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
+                let separator = match forced {
+                    true => hard_line,
+                    false => line,
+                };
+                return group(flat([
+                    pure("match "),
+                    self.term(head),
+                    self.motive(motive),
+                    flat(
+                        arms.into_iter()
+                            .map(|arm| {
+                                // Where the pattern ends, for the reason a term is marked — see `term_followed`: a literal leaf may be spelled another way than it was written.
+                                let written = match arm.span {
+                                    Some(span) => reached(span.end),
+                                    None => flat([]),
+                                };
+                                flat([
+                                    separator(),
+                                    pure("| "),
+                                    print_match_pattern(arm.pattern),
+                                    written,
+                                    self.attached_body(" =>", arm.body),
+                                ])
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                    separator(),
+                    pure("end"),
+                    suffix,
+                ]));
+            }
+            Subterm::Let(Let { groups, tail }) => {
+                let statements = groups
+                    .into_iter()
+                    .map(|group| {
+                        let mut parts = Vec::new();
+                        for (index, member) in group.members.into_iter().enumerate() {
+                            let keyword = match index {
+                                0 => "let ",
+                                _ => {
+                                    parts.push(hard_line());
+                                    "and "
+                                }
+                            };
+                            parts.extend([
+                                pure(keyword),
+                                print_pattern(member.binder),
+                                self.let_signature(member.signature, false),
+                            ]);
+                        }
+                        parts.extend([pure(";"), hard_line()]);
+                        flat(parts)
+                    })
+                    .collect::<Vec<_>>();
+                flat(statements.into_iter().chain([self.term(tail)]))
+            }
+            Subterm::Bang(term) => return self.suffix_head(term, flat([pure("!"), suffix])),
+            // An overflowing operator chain breaks with the operator leading the continuation line.
+            Subterm::Infix(Infix { op, left, right }) => {
+                let precedence = op_precedence(op);
+                group(flat([
+                    self.operand(left, precedence),
+                    indent(flat([
+                        line(),
+                        pure(format!("{} ", op.symbol())),
+                        self.operand(right, precedence + 1),
+                    ])),
+                ]))
+            }
+            Subterm::NumLit(NumLit {
+                magnitude,
+                radix,
+                sign,
+            }) => pure(format!(
+                "{}{}",
+                sign.symbol(),
+                format_radix(&magnitude, radix)
+            )),
+        };
+        flat([body, suffix])
+    }
+
+    /// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
+    fn let_signature(self, signature: LetSignature<D>, top: bool) -> Printer {
+        let bound = |body: Term<D>| {
+            if top {
+                flat([pure(" ="), hard_line(), indent(self.term(body))])
+            } else {
+                self.attached_body(" =", body)
+            }
+        };
+        match signature {
+            LetSignature::Name { type_, body } => flat([
+                match type_ {
+                    Some(type_) => flat([pure(": "), self.term(type_)]),
+                    None => pure(""),
+                },
+                bound(body),
+            ]),
+            // The parameter list and the `-> output` share **one** group, so what is measured is the whole signature rather than the parameters alone. Measured apart, parameters that fit on their own stay flat and leave the return type to break — which puts the `{` of a tuple type at the end of a long line and its `}` alone with the `=`. Together, the parameters break first and the return type, now starting a fresh line, fits beside the arrow. Should it still not fit, its own group breaks then, which is the right order of concessions.
+            LetSignature::Func {
+                params,
+                output,
+                body,
+            } => {
+                let signature = self.signature(params, output);
+                flat([signature, bound(body)])
+            }
+        }
+    }
+
+    /// A definition's parameters and the `-> output` after them, in the one group [`TreePrinter::let_signature`] measures them in.
+    fn signature(self, params: Vec<FuncSugarParam<D>>, output: Term<D>) -> Printer {
+        let items = params
+            .into_iter()
+            .map(|param| self.func_sugar_param(param))
+            .collect::<Vec<_>>();
+        match items.is_empty() {
+            true => flat([pure("()"), pure(" -> "), self.term(output)]),
+            false => group(flat([telescope(items), pure(" -> "), self.term(output)])),
+        }
+    }
+
+    fn top_test(self, test: TopTest<D>) -> Printer {
+        flat([
+            D::head_fields(self, &test.core),
+            pure("test "),
+            D::declared(test.core, test.label),
+            pure(" ="),
+            hard_line(),
+            indent(flat([self.term(test.body), ends()])),
+            pure(";"),
+        ])
+    }
+
+    fn top_let(self, items: Vec<TopLet<D>>) -> Printer {
+        let mut iter = items.into_iter();
+        let first = iter.next().expect("a `let` item has a member");
+        let rest = iter.collect::<Vec<_>>();
+
+        flat([
+            print_doc(first.doc),
+            D::head_fields(self, &first.core),
+            print_pub(first.vis_pub),
+            pure("let "),
+            D::declared(first.core, first.label),
+            self.let_signature(first.signature, true),
+            flat(
+                rest.into_iter()
+                    .map(|item| {
+                        flat([
+                            hard_line(),
+                            print_doc(item.doc),
+                            D::head_fields(self, &item.core),
+                            // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
+                            print_pub(item.vis_pub),
+                            pure("and "),
+                            D::declared(item.core, item.label),
+                            self.let_signature(item.signature, true),
+                        ])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            // Only the last body ends the item: a comment written under an earlier one stands above the `and` that follows it.
+            indent(ends()),
+            pure(";"),
+        ])
+    }
+
+    fn top_foreign(self, item: TopForeign<D>) -> Printer {
+        flat([
+            print_doc(item.doc),
+            D::head_fields(self, &item.core),
+            print_pub(item.vis_pub),
+            pure("foreign "),
+            D::declared(item.core, item.label),
+            print_wire_signature(&item.signature),
+            pure(";"),
+        ])
+    }
+
+    /// A case's payload binders, each under its mark.
+    fn payload(self, payload: Vec<CasePayloadParam<D>>) -> Printer {
+        let items = payload
+            .into_iter()
+            .map(|param| {
+                // Plicity prefixes the name (`@x` = implicit) — shared with `field`.
+                flat([
+                    print_plicity(param.plicity),
+                    self.field(TupleTypeParam {
+                        label: param.label.map(Label::from),
+                        func_params: None,
+                        type_: param.type_,
+                    }),
+                ])
+            })
+            .collect();
+        listed("(", items, ")")
+    }
+
+    /// A case's target: the indices it pins, after its payload.
+    fn target(self, target: Option<Vec<Term<D>>>) -> Printer {
+        match target {
+            Some(exprs) => flat([
+                pure(": "),
+                listed(
+                    "(",
+                    exprs.into_iter().map(|expr| self.term(expr)).collect(),
+                    ")",
+                ),
+            ]),
+            None => pure(""),
+        }
+    }
+
+    fn top_induct_case(self, case: TopCase<D>) -> Printer {
+        flat([
+            hard_line(),
+            print_doc(case.doc),
+            pure("| "),
+            D::case_fields(self, case.core),
+            pure(case.label.to_string()),
+            self.payload(case.payload),
+            self.target(case.target),
+        ])
+    }
+
+    fn top_induct_params(self, params: Vec<FuncTypeParam<D>>) -> Printer {
+        if params.is_empty() {
+            return pure("");
+        }
+
+        group(telescope(
+            params
+                .into_iter()
+                .map(|param| self.func_type_param(param))
+                .collect(),
+        ))
+    }
+
+    /// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
+    fn top_induct_arity(
+        self,
+        indices: Vec<(Option<String>, Term<D>)>,
+        rep_pub: bool,
+        result_sort: Term<D>,
+    ) -> Printer {
+        if indices.is_empty() {
+            return flat([pure(": "), print_pub(rep_pub), self.term(result_sort)]);
+        }
+
+        flat([
+            pure(": "),
+            listed(
+                "(",
+                indices
+                    .into_iter()
+                    .map(|index| self.labeled(index))
+                    .collect(),
+                ")",
+            ),
+            pure(" -> "),
+            print_pub(rep_pub),
+            self.term(result_sort),
+        ])
+    }
+
+    /// One member of an `induct` group under its keyword: `induct` for the first, `and` for a later one.
+    fn induct_member(self, item: TopInduct<D>, keyword: &'static str) -> Printer {
+        flat([
+            print_doc(item.doc),
+            D::head_fields(self, &item.core),
+            print_pub(item.vis_pub),
+            pure(keyword),
+            D::declared(item.core, item.label),
+            self.top_induct_params(item.params),
+            self.top_induct_arity(item.indices, item.rep_pub, item.result_sort),
+            flat(
+                item.cases
+                    .into_iter()
+                    .map(|case| self.top_induct_case(case))
+                    .collect::<Vec<_>>(),
+            ),
+        ])
+    }
+
+    fn top_induct(self, group: Vec<TopInduct<D>>) -> Printer {
+        let mut iter = group.into_iter();
+        let first = iter.next().expect("an `induct` item has a member");
+        let rest = iter
+            .map(|item| flat([hard_line(), self.induct_member(item, "and ")]))
+            .collect::<Vec<_>>();
+
+        flat([
+            self.induct_member(first, "induct "),
+            flat(rest),
+            hard_line(),
+            pure("end"),
+        ])
+    }
+
+    /// A `struct` item: one structure, or a group joined by `and`.
+    fn top_struct(self, items: Vec<TopStruct<D>>) -> Printer {
+        let mut iter = items.into_iter();
+        let mut first = iter.next().expect("a `struct` item has a member");
+        let rest = iter
+            .map(|mut item| {
+                flat([
+                    hard_line(),
+                    print_doc(item.doc.take()),
+                    self.struct_member(item, "and "),
+                ])
+            })
+            .collect::<Vec<_>>();
+        flat([
+            print_doc(first.doc.take()),
+            self.struct_member(first, "struct "),
+            flat(rest),
+        ])
+    }
+
+    fn struct_member(self, item: TopStruct<D>, keyword: &'static str) -> Printer {
+        flat([
+            D::head_fields(self, &item.core),
+            print_pub(item.vis_pub),
+            pure(keyword),
+            D::declared(item.core, item.label),
+            self.top_induct_params(item.params),
+            pure(": "),
+            print_pub(item.rep_pub),
+            self.term(item.result_sort),
+            pure(" "),
+            listed_hard(
+                "{",
+                item.fields
+                    .into_iter()
+                    .map(|field| self.struct_field(field))
+                    .collect(),
+                "}",
+            ),
+        ])
+    }
+
+    /// A struct field: its documentation comment, then the Σ-type field it is written as.
+    fn struct_field(self, field: StructField<D>) -> Printer {
+        flat([
+            print_doc(field.doc),
+            print_plicity(field.plicity),
+            self.field(field.param),
+        ])
+    }
+
+    /// A concept field as written: a superclass as `use T`, a method by its name and type, sugar included.
+    fn concept_field_written(self, field: ConceptField<D>) -> Printer {
+        // A superclass edge is a `use` member: the mark and its type, no label.
+        let (false, Some(label)) = (field.is_super(), field.label) else {
+            return flat([pure("use "), self.term(field.type_)]);
+        };
+        match field.func_params {
+            Some(params) => flat([
+                pure(label),
+                listed(
+                    "(",
+                    params
+                        .into_iter()
+                        .map(|param| self.func_type_param(param))
+                        .collect(),
+                    ")",
+                ),
+                pure(" -> "),
+                self.term(field.type_),
+            ]),
+            None => flat([pure(label), pure(": "), self.term(field.type_)]),
+        }
+    }
+
+    fn concept_field(self, mut field: ConceptField<D>) -> Printer {
+        flat([
+            print_doc(field.doc.take()),
+            self.concept_field_written(field),
+        ])
+    }
+
+    /// A `concept` item: one concept, or a group joined by `and`, printed as a `struct` group is.
+    fn top_concept(self, items: Vec<TopConcept<D>>) -> Printer {
+        let mut iter = items.into_iter();
+        let mut first = iter.next().expect("a `concept` item has a member");
+        let rest = iter
+            .map(|mut item| {
+                flat([
+                    hard_line(),
+                    print_doc(item.doc.take()),
+                    self.concept_member(item, "and "),
+                ])
+            })
+            .collect::<Vec<_>>();
+        flat([
+            print_doc(first.doc.take()),
+            self.concept_member(first, "concept "),
+            flat(rest),
+        ])
+    }
+
+    fn concept_member(self, item: TopConcept<D>, keyword: &'static str) -> Printer {
+        flat([
+            D::head_fields(self, &item.core),
+            print_pub(item.vis_pub),
+            pure(keyword),
+            D::declared(item.core, item.label),
+            self.top_induct_params(item.params),
+            pure(": "),
+            print_pub(item.rep_pub),
+            self.term(item.result_sort),
+            pure(" "),
+            listed_hard(
+                "{",
+                item.fields
+                    .into_iter()
+                    .map(|field| self.concept_field(field))
+                    .collect(),
+                "}",
+            ),
+        ])
+    }
+}
+
+pub(crate) fn print_term(term: Term) -> Printer {
+    PROGRAM.term(term)
+}
+
+fn print_top_use(item: TopUse) -> Printer {
     flat([
-        print_doc(item.doc),
         print_pub(item.vis_pub),
-        pure("foreign "),
-        pure(item.label.to_string()),
-        print_wire_signature(&item.signature),
+        pure("use "),
+        pure(item.name.join()),
+        match item.group {
+            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
+            UseGroup::Named(items) => {
+                filled("/{", items.iter().map(print_group_item).collect(), "}")
+            }
+            UseGroup::Glob => pure("/*"),
+        },
         pure(";"),
     ])
 }
@@ -1240,223 +1600,6 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
     flat(parts)
 }
 
-fn print_top_induct_case(case: TopCase) -> Printer {
-    let payload = case
-        .payload
-        .into_iter()
-        .map(|param| {
-            // Plicity prefixes the name (`@x` = implicit) — shared with `print_field`.
-            flat([
-                print_plicity(param.plicity),
-                print_field(TupleTypeParam {
-                    label: param.label.map(Label::from),
-                    func_params: None,
-                    type_: param.type_,
-                }),
-            ])
-        })
-        .collect();
-
-    let target = match case.target {
-        Some(exprs) => flat([
-            pure(": "),
-            listed("(", exprs.into_iter().map(print_term).collect(), ")"),
-        ]),
-        None => pure(""),
-    };
-
-    flat([
-        hard_line(),
-        print_doc(case.doc),
-        pure(format!("| {}", case.label)),
-        listed("(", payload, ")"),
-        target,
-    ])
-}
-
-fn print_top_induct_params(params: Vec<FuncTypeParam>) -> Printer {
-    if params.is_empty() {
-        return pure("");
-    }
-
-    group(telescope(
-        params.into_iter().map(print_func_type_param).collect(),
-    ))
-}
-
-/// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
-fn print_top_induct_arity(
-    indices: Vec<(Option<String>, Term)>,
-    rep_pub: bool,
-    result_sort: Term,
-) -> Printer {
-    if indices.is_empty() {
-        return flat([pure(": "), print_pub(rep_pub), print_term(result_sort)]);
-    }
-
-    flat([
-        pure(": "),
-        listed("(", indices.into_iter().map(print_labeled).collect(), ")"),
-        pure(" -> "),
-        print_pub(rep_pub),
-        print_term(result_sort),
-    ])
-}
-
-fn print_top_induct(group: Vec<TopInduct>) -> Printer {
-    let mut iter = group.into_iter();
-    let first = iter.next().unwrap();
-    let rest = iter.collect::<Vec<_>>();
-
-    flat([
-        print_doc(first.doc),
-        print_pub(first.vis_pub),
-        pure("induct "),
-        pure(first.label.to_string()),
-        print_top_induct_params(first.params),
-        print_top_induct_arity(first.indices, first.rep_pub, first.result_sort),
-        flat(
-            first
-                .cases
-                .into_iter()
-                .map(print_top_induct_case)
-                .collect::<Vec<_>>(),
-        ),
-        flat(
-            rest.into_iter()
-                .map(|u| {
-                    flat([
-                        hard_line(),
-                        print_doc(u.doc),
-                        print_pub(u.vis_pub),
-                        pure("and "),
-                        pure(u.label.to_string()),
-                        print_top_induct_params(u.params),
-                        print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
-                        flat(
-                            u.cases
-                                .into_iter()
-                                .map(print_top_induct_case)
-                                .collect::<Vec<_>>(),
-                        ),
-                    ])
-                })
-                .collect::<Vec<_>>(),
-        ),
-        hard_line(),
-        pure("end"),
-    ])
-}
-
-/// A `struct` item: one structure, or a group joined by `and`.
-fn print_top_struct(items: Vec<TopStruct>) -> Printer {
-    let mut iter = items.into_iter();
-    let mut first = iter.next().expect("a `struct` item has a member");
-    let rest = iter
-        .map(|mut item| {
-            flat([
-                hard_line(),
-                print_doc(item.doc.take()),
-                print_struct_member(item, "and "),
-            ])
-        })
-        .collect::<Vec<_>>();
-    flat([
-        print_doc(first.doc.take()),
-        print_struct_member(first, "struct "),
-        flat(rest),
-    ])
-}
-
-fn print_struct_member(item: TopStruct, keyword: &'static str) -> Printer {
-    flat([
-        print_pub(item.vis_pub),
-        pure(keyword),
-        pure(item.label.to_string()),
-        print_top_induct_params(item.params),
-        pure(": "),
-        print_pub(item.rep_pub),
-        print_term(item.result_sort),
-        pure(" "),
-        listed_hard(
-            "{",
-            item.fields.into_iter().map(print_struct_field).collect(),
-            "}",
-        ),
-    ])
-}
-
-/// A struct field: its documentation comment, then the Σ-type field it is written as.
-fn print_struct_field(field: StructField) -> Printer {
-    flat([
-        print_doc(field.doc),
-        print_plicity(field.plicity),
-        print_field(field.param),
-    ])
-}
-
-fn print_concept_field(field: ConceptField) -> Printer {
-    let edge = field.is_super();
-    let doc = print_doc(field.doc);
-
-    // A superclass edge is a `use` member: the mark and its type, no label.
-    let (false, Some(label)) = (edge, field.label) else {
-        return flat([doc, pure("use "), print_term(field.type_)]);
-    };
-    let spelled = match field.func_params {
-        Some(params) => flat([
-            pure(label),
-            listed(
-                "(",
-                params.into_iter().map(print_func_type_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(field.type_),
-        ]),
-        None => flat([pure(label), pure(": "), print_term(field.type_)]),
-    };
-    flat([doc, spelled])
-}
-
-/// A `concept` item: one concept, or a group joined by `and`, printed as a `struct` group is.
-fn print_top_concept(items: Vec<TopConcept>) -> Printer {
-    let mut iter = items.into_iter();
-    let mut first = iter.next().expect("a `concept` item has a member");
-    let rest = iter
-        .map(|mut item| {
-            flat([
-                hard_line(),
-                print_doc(item.doc.take()),
-                print_concept_member(item, "and "),
-            ])
-        })
-        .collect::<Vec<_>>();
-    flat([
-        print_doc(first.doc.take()),
-        print_concept_member(first, "concept "),
-        flat(rest),
-    ])
-}
-
-fn print_concept_member(item: TopConcept, keyword: &'static str) -> Printer {
-    flat([
-        print_pub(item.vis_pub),
-        pure(keyword),
-        pure(item.label.to_string()),
-        print_top_induct_params(item.params),
-        pure(": "),
-        print_pub(item.rep_pub),
-        print_term(item.result_sort),
-        pure(" "),
-        listed_hard(
-            "{",
-            item.fields.into_iter().map(print_concept_field).collect(),
-            "}",
-        ),
-    ])
-}
-
 fn print_top_witness(items: Vec<TopWitness>) -> Printer {
     let mut iter = items.into_iter();
     let mut first = iter.next().expect("a `satisfy` item has a member");
@@ -1485,20 +1628,30 @@ fn witness_signature(params: Vec<Printer>, app: Printer) -> Printer {
     }
 }
 
+/// The concept application a witness concludes: the concept's name, then its argument list where one was written.
+fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
+    match args {
+        None => pure(concept.join()),
+        Some(args) => flat([
+            pure(concept.join()),
+            listed(
+                "(",
+                args.into_iter()
+                    .map(|argument| PROGRAM.argument(argument))
+                    .collect(),
+                ")",
+            ),
+        ]),
+    }
+}
+
 fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     let params = item
         .params
         .into_iter()
-        .map(print_func_sugar_param)
+        .map(|param| PROGRAM.func_sugar_param(param))
         .collect();
-
-    let app = match item.args {
-        None => pure(item.concept.join()),
-        Some(args) => flat([
-            pure(item.concept.join()),
-            listed("(", args.into_iter().map(print_argument).collect(), ")"),
-        ]),
-    };
+    let app = witnessed(&item.concept, item.args);
 
     // A derived witness's block holds `..` alone, on a line of its own as a lone entry is, and with no comma since it is none.
     let body = match item.body {
@@ -1531,10 +1684,17 @@ fn print_witness_entry(field: WitnessField) -> Printer {
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
-            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-            attached_body(" =", field.value),
+            listed(
+                "(",
+                params
+                    .into_iter()
+                    .map(|param| PROGRAM.func_param(param))
+                    .collect(),
+                ")",
+            ),
+            PROGRAM.attached_body(" =", field.value),
         ]),
-        None => flat([pure(field.label), attached_body(" =", field.value)]),
+        None => flat([pure(field.label), PROGRAM.attached_body(" =", field.value)]),
     }
 }
 
@@ -1542,13 +1702,13 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),
-        TopItem::Let(l) => print_top_let(l),
-        TopItem::Induct(group) => print_top_induct(group),
-        TopItem::Struct(s) => print_top_struct(s),
-        TopItem::Concept(c) => print_top_concept(c),
+        TopItem::Let(l) => PROGRAM.top_let(l),
+        TopItem::Induct(group) => PROGRAM.top_induct(group),
+        TopItem::Struct(s) => PROGRAM.top_struct(s),
+        TopItem::Concept(c) => PROGRAM.top_concept(c),
         TopItem::Witness(w) => print_top_witness(w),
-        TopItem::Foreign(f) => print_top_foreign(f),
-        TopItem::Test(t) => print_top_test(t),
+        TopItem::Foreign(f) => PROGRAM.top_foreign(f),
+        TopItem::Test(t) => PROGRAM.top_test(t),
         // Verbatim: there is no tree to print, and the formatter never reaches here, since it refuses a module it could not read whole.
         TopItem::Broken(b) => pure(b.text().to_string()),
     }
@@ -1566,19 +1726,7 @@ pub fn print_let_head(item: &TopLet) -> Printer {
         } => flat([pure(": "), print_term(type_.clone())]),
         LetSignature::Name { type_: None, .. } => pure(""),
         LetSignature::Func { params, output, .. } => {
-            let items = params
-                .iter()
-                .cloned()
-                .map(print_func_sugar_param)
-                .collect::<Vec<_>>();
-            match items.is_empty() {
-                true => flat([pure("()"), pure(" -> "), print_term(output.clone())]),
-                false => group(flat([
-                    telescope(items),
-                    pure(" -> "),
-                    print_term(output.clone()),
-                ])),
-            }
+            PROGRAM.signature(params.clone(), output.clone())
         }
     };
     flat([
@@ -1595,58 +1743,24 @@ pub fn print_induct_head(item: &TopInduct) -> Printer {
         print_pub(item.vis_pub),
         pure("induct "),
         pure(item.label.to_string()),
-        print_top_induct_params(item.params.clone()),
-        print_top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
+        PROGRAM.top_induct_params(item.params.clone()),
+        PROGRAM.top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
     ])
 }
 
 /// One constructor as a page lists it: its label, payload and target, without the bar that introduces it in a declaration.
 pub fn print_case_head(case: &TopCase) -> Printer {
-    let payload = case
-        .payload
-        .iter()
-        .cloned()
-        .map(|param| {
-            flat([
-                print_plicity(param.plicity),
-                print_field(TupleTypeParam {
-                    label: param.label.map(Label::from),
-                    func_params: None,
-                    type_: param.type_,
-                }),
-            ])
-        })
-        .collect();
-    let target = match &case.target {
-        Some(exprs) => flat([
-            pure(": "),
-            listed("(", exprs.iter().cloned().map(print_term).collect(), ")"),
-        ]),
-        None => pure(""),
-    };
-    flat([pure(case.label.clone()), listed("(", payload, ")"), target])
+    flat([
+        pure(case.label.clone()),
+        PROGRAM.payload(case.payload.clone()),
+        PROGRAM.target(case.target.clone()),
+    ])
 }
 
 /// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces, called once per parameter group — `success(A) -> Result(E, A)`, `cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)` for an indexed family, and `refl(@z: A) -> Eq()(z, z)` where every parameter is hidden.
 ///
 /// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away. Of the family's own parameters it writes the explicit ones, as a signature writes the family, a hidden one being optional in the call that owns it.
 pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
-    let payload = case
-        .payload
-        .iter()
-        .cloned()
-        .map(|param| {
-            flat([
-                print_plicity(param.plicity),
-                print_field(TupleTypeParam {
-                    label: param.label.map(Label::from),
-                    func_params: None,
-                    type_: param.type_,
-                }),
-            ])
-        })
-        .collect();
-
     let mut family = named(item.label.to_string());
     if !item.params.is_empty() {
         let explicit = item
@@ -1664,7 +1778,7 @@ pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
 
     flat([
         pure(case.label.clone()),
-        listed("(", payload, ")"),
+        PROGRAM.payload(case.payload.clone()),
         pure(" -> "),
         family,
     ])
@@ -1676,7 +1790,7 @@ pub fn print_struct_head(item: &TopStruct) -> Printer {
         print_pub(item.vis_pub),
         pure("struct "),
         pure(item.label.to_string()),
-        print_top_induct_params(item.params.clone()),
+        PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
         print_term(item.result_sort.clone()),
@@ -1687,7 +1801,7 @@ pub fn print_struct_head(item: &TopStruct) -> Printer {
 pub fn print_struct_field_head(field: &StructField) -> Printer {
     flat([
         print_plicity(field.plicity),
-        print_field(field.param.clone()),
+        PROGRAM.field(field.param.clone()),
     ])
 }
 
@@ -1697,7 +1811,7 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
         print_pub(item.vis_pub),
         pure("concept "),
         pure(item.label.to_string()),
-        print_top_induct_params(item.params.clone()),
+        PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
         print_term(item.result_sort.clone()),
@@ -1706,26 +1820,7 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
 
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
 pub fn print_concept_field_head(field: &ConceptField) -> Printer {
-    let (false, Some(label)) = (field.is_super(), &field.label) else {
-        return flat([pure("use "), print_term(field.type_.clone())]);
-    };
-    match &field.func_params {
-        Some(params) => flat([
-            pure(label.clone()),
-            listed(
-                "(",
-                params.iter().cloned().map(print_func_type_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(field.type_.clone()),
-        ]),
-        None => flat([
-            pure(label.clone()),
-            pure(": "),
-            print_term(field.type_.clone()),
-        ]),
-    }
+    PROGRAM.concept_field_written(field.clone())
 }
 
 /// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.
@@ -1734,15 +1829,9 @@ pub fn print_witness_head(item: &TopWitness) -> Printer {
         .params
         .iter()
         .cloned()
-        .map(print_func_sugar_param)
+        .map(|param| PROGRAM.func_sugar_param(param))
         .collect();
-    let app = match &item.args {
-        None => pure(item.concept.join()),
-        Some(args) => flat([
-            pure(item.concept.join()),
-            listed("(", args.iter().cloned().map(print_argument).collect(), ")"),
-        ]),
-    };
+    let app = witnessed(&item.concept, item.args.clone());
     flat([pure("satisfy "), witness_signature(params, app)])
 }
 
