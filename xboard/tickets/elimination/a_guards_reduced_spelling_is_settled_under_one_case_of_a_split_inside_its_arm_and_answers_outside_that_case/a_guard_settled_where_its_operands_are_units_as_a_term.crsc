@@ -1,42 +1,21 @@
 -- `a_guard_settled_where_its_operands_are_proofs_as_a_term.crsc` with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion holds `h(p)` and `h(q)` one term there as it does at a proposition. The guard names `p` and `q`, whose type names `c`, so the split's arm restates it and settles it there, and the `qed` after the split is refused at `Holds(k(0))`.
-((c: #BoolType, h: (x: match c: (x2) => Type
-        | false =>
-            #NatType
-        | true =>
-            {}
-        end) -> #NatType, k: (n: #NatType) -> #BoolType, p: match c: (x3) => Type
-    | false =>
-        #NatType
-    | true =>
-        {}
-    end, q: match c: (x4) => Type
-    | false =>
-        #NatType
-    | true =>
-        {}
-    end, guard: /sys/Bool/Holds(match #NatEql(h(p), h(q)): (x5) => #BoolType
-        | false =>
-            k(1)
-        | true =>
-            k(0)
-        end)) =>
-    match match #NatEql(h(p), h(q)): (x9) => #BoolType
-    | false =>
-        k(1)
-    | true =>
-        k(0)
-    end: (x6) => /sys/Bool/Holds(k(0))
-    | false =>
-        match guard: (x7) => /sys/Bool/Holds(k(0))
-        end
+((
+    c: #BoolType,
+    h: (x: match c: (x2) => Type | false => #NatType | true => {} end) -> #NatType,
+    k: (n: #NatType) -> #BoolType,
+    p: match c: (x3) => Type | false => #NatType | true => {} end,
+    q: match c: (x4) => Type | false => #NatType | true => {} end,
+    guard: /sys/Bool/Holds(
+        match #NatEql(h(p), h(q)): (x5) => #BoolType | false => k(1) | true => k(0) end)) =>
+    match match #NatEql(h(p), h(q)): (x9) => #BoolType | false => k(1) | true => k(0) end: (x6) =>
+        /sys/Bool/Holds(k(0))
+    | false => match guard: (x7) => /sys/Bool/Holds(k(0)) end
     | true =>
         let w: #{node = InductType} /sys/Bool/True() =
             match c: (x8) => #{node = InductType} /sys/Bool/True()
-            | false =>
-                #{node = Variant} /sys/Bool/True/qed()
+            | false => #{node = Variant} /sys/Bool/True/qed()
             | true =>
-                let u: /sys/Bool/Holds(k(0)) =
-                    #{node = Variant} /sys/Bool/True/qed();
+                let u: /sys/Bool/Holds(k(0)) = #{node = Variant} /sys/Bool/True/qed();
                 #{node = Variant} /sys/Bool/True/qed()
             end;
         #{node = Variant} /sys/Bool/True/qed()
@@ -46,5 +25,4 @@
     (n3: #NatType) => #NatEql(n3, 1),
     0,
     1,
-    #{node = Variant} /sys/Bool/True/qed()
-)
+    #{node = Variant} /sys/Bool/True/qed())

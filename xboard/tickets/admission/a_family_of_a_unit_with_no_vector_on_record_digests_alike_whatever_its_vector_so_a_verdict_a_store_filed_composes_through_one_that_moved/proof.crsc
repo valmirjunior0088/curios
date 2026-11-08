@@ -1,5 +1,5 @@
 -- `/app/X` was taken from the store's record of it, filed while `F` was positive, because `F` digests alike with no vector on record whatever the walk mounting `/lib` computes for it (`recheck::stored`, `baseline::read_digest`); `X` holds a function out of `X`, and `self_app` applies one to itself.
-let /self_app : (x: #{node = InductType} /app/X()) -> #{node = InductType} /sys/Bool/False() =
+let /self_app: (x: #{node = InductType} /app/X()) -> #{node = InductType} /sys/Bool/False() =
     (x: #{node = InductType} /app/X()) =>
         #{result = Ambient(#{node = InductType} /sys/Bool/False())}
         match x
@@ -8,17 +8,14 @@ let /self_app : (x: #{node = InductType} /app/X()) -> #{node = InductType} /sys/
             match m
             | mk(g) =>
                 #{result = Ambient(#{node = InductType} /sys/Bool/False())}
-                match g
-                | gmk(f) =>
-                    f(x)
-                end
+                match g | gmk(f) => f(x) end
             end
         end;
+
 /self_app(
     /app/X/c(
         (#{universes = {levels = [0]}} /lib/F/mk)(
             @#{node = InductType} /app/X(),
-            (#{universes = {levels = [0]}} /base/G/gmk)(@#{node = InductType} /app/X(), /self_app)
-        )
-    )
-)
+            (#{universes = {levels = [0]}} /base/G/gmk)(
+                @#{node = InductType} /app/X(),
+                /self_app))))

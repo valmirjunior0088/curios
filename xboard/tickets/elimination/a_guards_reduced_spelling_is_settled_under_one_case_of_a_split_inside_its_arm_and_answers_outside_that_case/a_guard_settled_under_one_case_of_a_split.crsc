@@ -4,40 +4,27 @@
 induct /Read: (i: #BoolType) -> pub Prop
 | mk(x: #BoolType): (x)
 end
+
 ((
     g: (c: #BoolType) -> #BoolType,
     b: #BoolType,
     p: #{node = InductType} /Read()(b),
     guard: /sys/Bool/Holds(
         #{cases = {stated = #{node = InductType} /Read()(b)}}
-        match p: (x3, x4) => #BoolType
-        | mk(x) =>
-            g(x)
-        end
-    ),
-    chosen: /sys/Bool/Holds(b)
-) =>
+        match p: (x3, x4) => #BoolType | mk(x) => g(x) end),
+    chosen: /sys/Bool/Holds(b)) =>
     match
         #{cases = {stated = #{node = InductType} /Read()(b)}}
-        match p: (x9, x10) => #BoolType
-        | mk(x2) =>
-            g(x2)
-        end: (x5) => /sys/Bool/Holds(g(false))
-    | false =>
-        match guard: (x6) => /sys/Bool/Holds(g(false))
-        end
+        match p: (x9, x10) => #BoolType | mk(x2) => g(x2) end: (x5) => /sys/Bool/Holds(g(false))
+    | false => match guard: (x6) => /sys/Bool/Holds(g(false)) end
     | true =>
         match b: (x7) => /sys/Bool/Holds(g(false))
-        | false =>
-            match chosen: (x8) => /sys/Bool/Holds(g(false))
-            end
-        | true =>
-            #{node = Variant} /sys/Bool/True/qed()
+        | false => match chosen: (x8) => /sys/Bool/Holds(g(false)) end
+        | true => #{node = Variant} /sys/Bool/True/qed()
         end
     end)(
     (c2: #BoolType) => c2,
     true,
     #{node = Variant} /Read/mk(true),
     #{node = Variant} /sys/Bool/True/qed(),
-    #{node = Variant} /sys/Bool/True/qed()
-)
+    #{node = Variant} /sys/Bool/True/qed())

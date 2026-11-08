@@ -6,7 +6,6 @@ Held to [One grammar reads a program and Core text, marked by the dialect](../..
 
 - **Two printers lay out one grammar.** The Core text writer (`curios-surface/src/core_text/`, twelve modules, about 5,800 lines, `intrinsic.rs` alone 1,543) lays a Core term out directly, in two notations: Core text proper, which a module's and a program's dump, `curios-pipeline`'s stages, `wonder --stage`, a kernel's refusal, the board and `curios-prelude`'s `every_unit_of_the_prelude_reads_back_from_its_core_text` print, and a reader's notation for a term [`from_core`](../../curios-surface/src/from_core.rs) declines. The program's printer (`curios-surface/src/print.rs`) is a `TreePrinter` over any dialect, with a hook of its own for each production a dialect's grammar has (`Layout`), and lays out a program and the Core text `curios format` reads from a `.crsc`; the writer builds no tree for it to lay out.
 - **The two layouts differ for forms both write.** The program's printer keeps `match g(x): (m) => False | 0 => h | k + 1; ih => ih end` on one line where the writer gives every arm a line of its own, and the writer spaces a declaration's colon, `let /p : Prop =`, where a program writes `let p: Prop =`; a dump is in the writer's layout and a formatted `.crsc` in the program's. Core text reads either: `let /p: Prop` and a match whose arms share its line both read.
-- **The committed Core text mixes the two layouts.** The board's seventeen `.crsc` and `editors/vscode/tests/sample.crsc` were laid out by hand or printed back, and none is formatted.
 
 ## Goal
 
@@ -25,7 +24,6 @@ The writer builds the tree, `Term<CoreText>` and `CoreFile`, the reader's invers
 
 1. **The writer builds trees.** Each writer module builds the tree its form is, under the same spelling, minting and elision (`Minting`, [A printer states each fact once, where it is bound](../design/tools/a-printer-states-each-fact-once-where-it-is-bound.md)'s bound on a print), and the program's printer lays it out; Core text takes the program's conventions. Check: `every_unit_of_the_prelude_reads_back_from_its_core_text`, each pinned Core printout restated where its layout moved, and a module's dump formatted to itself.
 2. **The reader's notation**, as settled above. Check: the diagnostics that pin a declined term.
-3. **The committed Core text formatted.** Every `.crsc` the tree holds through `curios format`, and a test holding them formatted, as the board's programs are. Check: `cargo xboard report` unchanged.
 
 ## Retirement
 

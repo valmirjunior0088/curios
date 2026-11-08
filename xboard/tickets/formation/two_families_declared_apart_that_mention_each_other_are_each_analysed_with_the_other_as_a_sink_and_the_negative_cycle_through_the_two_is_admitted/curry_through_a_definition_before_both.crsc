@@ -1,26 +1,23 @@
 -- The same cycle with `/A`'s payload a definition, `/G`, placed before both families, so the negative occurrence of `/B` reaches `/A` through a name the analysis reduces.
 induct /E: pub Type
 end
-let /G : Type =
+
+let /G: Type =
     (x: #{node = InductType} /B()) -> #{node = InductType} /E();
+
 induct /A: pub Type
 | a(g: /G)
 end
+
 induct /B: pub Type
 | b(x: #{node = InductType} /A())
 end
+
 ((sa: (x: #{node = InductType} /B()) -> #{node = InductType} /E()) =>
     #{result = Ambient(/sys/Bool/False)}
-    match sa(#{node = Variant} /B/b(#{node = Variant} /A/a(sa)))
-    end)(
-    (x2: #{node = InductType} /B()) =>
-        #{result = Ambient(#{node = InductType} /E())}
-        match x2
-        | b(y) =>
-            #{result = Ambient(#{node = InductType} /E())}
-            match y
-            | a(g) =>
-                g(x2)
-            end
-        end
-)
+    match sa(#{node = Variant} /B/b(#{node = Variant} /A/a(sa))) end)((
+    x2: #{node = InductType} /B()) =>
+    #{result = Ambient(#{node = InductType} /E())}
+    match x2
+    | b(y) => #{result = Ambient(#{node = InductType} /E())} match y | a(g) => g(x2) end
+    end)

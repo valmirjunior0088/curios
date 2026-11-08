@@ -1,8 +1,5 @@
 -- The kernel types the identity arm with `n` substituted by `0` through the arm and the locals it re-types, so `h` stands at `Holds(0 == 2)` and inhabits the motive; the cons arm hands its hypothesis back. Nothing the arm learned holds where reduction takes it: at the tail the fold is over `0` and the arm's `n` is `2`.
 ((n: #NatType, h: /sys/Bool/Holds(#NatEql(n, 2))) =>
-    match n: (x) => /sys/Bool/False
-    | 0 =>
-        h
-    | pred + 1; ih =>
-        ih
-    end)(2, #{node = Variant} /sys/Bool/True/qed())
+    match n: (x) => /sys/Bool/False | 0 => h | pred + 1; ih => ih end)(
+    2,
+    #{node = Variant} /sys/Bool/True/qed())

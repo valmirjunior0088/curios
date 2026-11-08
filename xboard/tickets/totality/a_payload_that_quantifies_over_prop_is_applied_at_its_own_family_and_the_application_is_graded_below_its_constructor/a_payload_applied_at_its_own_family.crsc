@@ -3,11 +3,9 @@
 induct /Bad: pub Prop
 | c(f: (A: Prop) -> (x: A) -> A)
 end
+
 #{node = Rec}
 (let bad: (b: #{node = InductType} /Bad()) -> /sys/Bool/False =
     (b2: #{node = InductType} /Bad()) =>
-        match b2: (x2) => /sys/Bool/False
-        | c(f) =>
-            bad(f(#{node = InductType} /Bad())(b2))
-        end;
+        match b2: (x2) => /sys/Bool/False | c(f) => bad(f(#{node = InductType} /Bad())(b2)) end;
 bad(#{node = Variant} /Bad/c((A: Prop) => (x: A) => x)))

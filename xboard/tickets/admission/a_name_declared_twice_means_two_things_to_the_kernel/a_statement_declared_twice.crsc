@@ -3,10 +3,14 @@
 induct /Holds: pub Prop
 | qed()
 end
-let /p : Prop =
+
+let /p: Prop =
     #{node = InductType} /Holds();
-let /thm : /p =
+
+let /thm: /p =
     #{node = Variant} /Holds/qed();
-let /p : Prop =
+
+let /p: Prop =
     ((x: #{node = InductType} /Holds()) => /sys/Bool/False)(/thm);
+
 /thm

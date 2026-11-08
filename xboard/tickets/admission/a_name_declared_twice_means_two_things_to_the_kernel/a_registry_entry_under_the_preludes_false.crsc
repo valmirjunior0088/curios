@@ -3,4 +3,5 @@
 induct /sys/Bool/False: pub Prop
 | mk()
 end
+
 #{node = Variant} /sys/Bool/False/mk()

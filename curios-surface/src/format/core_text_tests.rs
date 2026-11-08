@@ -4,6 +4,7 @@ use {
     super::{test_support::*, *},
     crate::{CoreFile, to_core},
     curios_common::Source,
+    std::path::{Path, PathBuf},
 };
 
 /// The canonical text of `text` read as a `.crsc`.
@@ -105,4 +106,54 @@ fn core_text_is_read_where_the_path_says_so() {
         .expect_err("a program writes no decorator");
 
     assert!(refusal.contains("obtained '#'"), "{refusal}");
+}
+
+/// Every `.crsc` under `directory`, skipping the directories that hold generated or foreign trees, and `editors/`, whose files are highlighting fixtures for the editor grammars, as [`collect_sources`] skips it.
+fn core_text_files(directory: &Path, files: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(directory).expect("the tree is readable") {
+        let path = entry.expect("a readable entry").path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if path.is_dir() {
+            if !matches!(
+                name,
+                "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
+            ) {
+                core_text_files(&path, files);
+            }
+        } else if path
+            .extension()
+            .is_some_and(|extension| extension == "crsc")
+        {
+            files.push(path);
+        }
+    }
+}
+
+/// **The Core text the tree holds is written as `curios format` writes it**, as its programs are: the board's witnesses.
+#[test]
+fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
+    let mut files = Vec::new();
+    core_text_files(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join(".."),
+        &mut files,
+    );
+    let wrong = files
+        .iter()
+        .filter_map(|path| match Formatted::from_path(path) {
+            Ok(Formatted::Unchanged(_)) => None,
+            Ok(Formatted::Changed(_)) => Some(format!("{}: not canonical", path.display())),
+            Err(refusal) => Some(format!("{}: {refusal}", path.display())),
+        })
+        .collect::<Vec<_>>();
+
+    assert!(!files.is_empty(), "the tree holds Core text");
+    assert!(
+        wrong.is_empty(),
+        "{} of these files are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
+        wrong.len(),
+        wrong.join("\n  ")
+    );
 }

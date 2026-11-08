@@ -9,22 +9,19 @@ end
 and induct /Box: pub Type
 | box(x: #{node = InductType} /Wit())
 end
+
 #{absent = [/Q/c]}
 induct /Q: (i: #{node = InductType} /Box()) -> pub Prop
 | c(n: #{node = InductType} /Box()): (#{node = Variant} /Box/box(#{node = Variant} /Wit/w(n)))
 end
+
 #{node = Rec}
 (let f: (t: #{node = InductType} /Box(), q: #{node = InductType} /Q()(t)) -> /sys/Bool/False =
     (t2: #{node = InductType} /Box(), q2: #{node = InductType} /Q()(t2)) =>
         match q2: (x, x2) => /sys/Bool/False
-        | c(n) =>
-            match n: (x3) => /sys/Bool/False
-            | box(p) =>
-                f(n, q2)
-            end
+        | c(n) => match n: (x3) => /sys/Bool/False | box(p) => f(n, q2) end
         end;
 f(
     #{node = Variant}
     /Box/box(#{node = Variant} /Wit/w(#{node = Variant} /Box/box(#{node = Variant} /Wit/base()))),
-    #{node = Variant} /Q/c(#{node = Variant} /Box/box(#{node = Variant} /Wit/base()))
-))
+    #{node = Variant} /Q/c(#{node = Variant} /Box/box(#{node = Variant} /Wit/base()))))
