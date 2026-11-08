@@ -949,3 +949,55 @@ fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
         "{verdicts:?}"
     );
 }
+
+/// `f` splits `x`, a lambda's binder applied on the spot to `w2`, inside the arm that refined `w2` to `up(u)`: the split refines `w2` again through what `x` stands for, and its `base` case is the dead `base` of a value known to be `up(u)`. `${dead}` is that case's body and `${live}` the `up(j)` case's.
+const A_GROUP_SPLITTING_AN_APPLIED_LAMBDAS_BINDER: &str = r#"
+#{absent = [/W/base, /W/up]}
+induct /W: pub Prop
+| base()
+| up(w: #{node = InductType} /W())
+end
+
+#{node = Rec}
+(let f: (w: #{node = InductType} /W(), b: /std/Bool/Holds(false)) -> /std/Bool/False =
+    (w2: #{node = InductType} /W(), b2: /std/Bool/Holds(false)) =>
+        ((x: #{node = InductType} /W()) =>
+            match w2: (y) => /std/Bool/False
+            | base() => match b2: (z) => /std/Bool/False end
+            | up(u) =>
+                match x: (y2) => /std/Bool/False
+                | base() => ${dead}
+                | up(j) => ${live}
+                end
+            end)(w2);
+f(#{node = Variant} /W/base(), #{node = Variant} /std/Bool/True/qed()))
+"#;
+
+// A dead case of an applied lambda's binder is no descent: what the split makes of `w2` there is a shape of the value the outer arm already knew, so the repeating `f(w2, b2)` is graded at `w2` itself and refused. The control hands the live case's payload on, `f(j, b2)`, and its group stands.
+#[test]
+fn a_dead_case_of_an_applied_lambdas_binder_is_no_descent() {
+    let group = |dead: &str, live: &str| {
+        core_text_verdicts(&fill!(
+            "${PROPOSITIONS}\n${GROUP}",
+            PROPOSITIONS,
+            GROUP = fill!(A_GROUP_SPLITTING_AN_APPLIED_LAMBDAS_BINDER, dead, live)
+        ))
+    };
+
+    let attack = group("f(w2, b2)", "match b2: (z2) => /std/Bool/False end");
+    assert!(
+        attack
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        "{attack:?}"
+    );
+
+    let control = group("match b2: (z3) => /std/Bool/False end", "f(j, b2)");
+    assert!(
+        !control.iter().any(|verdict| matches!(
+            verdict.error,
+            Error::NotDescending { .. } | Error::NotTotal { .. }
+        )),
+        "{control:?}"
+    );
+}

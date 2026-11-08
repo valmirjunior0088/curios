@@ -381,3 +381,37 @@ fn a_guard_restated_in_an_inner_arm_is_settled_nowhere_in_it() {
         ])
         .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// A guard restated in the arm of one split is settled in no arm of a second split nested inside it, and the recorded guard stands aside through both: after the splits `after` reads the guard with `c` open, where it is the stuck match and not `k(0)`. The control states `after` at `Holds(k(0) || true)`, which holds at every value.
+#[test]
+fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+
+        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, d: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end): (b) => (Holds(b)) -> P(k)
+            | true => (_: Holds(true)) =>
+                let split: {} = match c | false => () | true => (match d | true => (let inside: Holds(k(0) || true) = True/qed(); ()) | false => () end) end;
+                let after: Holds(k(0) || true) = True/qed();
+                into(after)
+            | false => (g: Holds(false)) => match g end
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("use /std/Bool/{True, Holds};", "use /std/Bool/{True, False, Holds};"),
+        ("into: (Holds(k(0) || true)) -> P(k)", "into: (Holds(k(0))) -> P(k)"),
+        ("let after: Holds(k(0) || true)", "let after: Holds(k(0))"),
+        (
+            "/std/print(\"ok\")",
+            "let forged: False = f((k: (Nat) -> Bool) => Holds(k(0)), false, true, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, (x: Holds(0 == 1)) => x)(True/qed());\n\n        /std/print(\"ok\")",
+        ),
+    ])
+    .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
+}

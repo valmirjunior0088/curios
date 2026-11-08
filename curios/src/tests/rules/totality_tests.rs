@@ -629,3 +629,82 @@ fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A call whose argument is a variable the arm's index inversion solved is graded as written: `i` is `v` in `mk(v)`'s arm only by a conversion that proof irrelevance satisfies, so reading `h(i)` as `h(v)` is a reading of `s`'s payload and no descent of `i`. What refuses the loop is that `h(base)`, whose case hands `g` `S/mk(w)`, is nothing below `w`. The control's `W` has no base and `g` hands `h` its index directly.
+#[test]
+fn a_call_at_a_variable_an_index_inversion_solved_starts_no_descending_thread() {
+    control(
+        r#"
+        use /std/Bool/{False};
+
+        induct W: pub Prop
+        | up(w: W)
+        end
+
+        induct S: (W) -> pub Prop
+        | mk(v: W): (v)
+        end
+
+        let g(i: W, s: S(i)) -> False =
+            h(i)
+        and h(w: W) -> False =
+            match w
+            | up(u) => g(u, S/mk(u))
+            end;
+
+        let _bad = h;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("| up(w: W)", "| base()\n        | up(w: W)"),
+        (
+            "            h(i)\n",
+            "            match s\n            | mk(v) => h(i)\n            end\n",
+        ),
+        (
+            "| up(u) => g(u, S/mk(u))",
+            "| base() => g(w, S/mk(w))\n            | up(u) => g(u, S/mk(u))",
+        ),
+        ("let _bad = h;", "let _bad: False = h(W/base());"),
+    ])
+    .by_elaborator_in("/g", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/g", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
+}
+
+// An applied lambda's binder stands for the argument, so splitting it splits the argument and its predecessor is below the parameter; handing the successor back, `k + 1`, is the parameter itself and no descent. The control passes the predecessor.
+#[test]
+fn splitting_an_applied_lambdas_binder_grades_the_successor_as_no_descent() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        pub let below(n: Nat) -> True =
+            ((x: Nat) => match x | 0 => True/qed() | k + 1 => below(k) end)(n);
+        /std/print("held")
+        "#,
+        b"held",
+    )
+    .refused(&[("below(k)", "below(k + 1)")])
+    .by_elaborator_in("/below", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
+}
