@@ -4,8 +4,8 @@ use {
     },
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
-        ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, check, check_is_sort,
-        check_rec_totality, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
+        ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns, check,
+        check_is_sort, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
         premise_label, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
         stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
@@ -119,7 +119,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             types_elaborated.push(type_);
         }
 
-        // A group is read two ways while its bodies are checked, as the kernel's `check_group` reads one. A member named in a body stands for nothing: its name is defined as its protected slot, and no unfolding of the name reaches it (`Context::unless_member`). A signature — the type a body is checked at and a member is assumed at — reads the group through the slots, each filled with its member's body read the same way, so a signature unfolds a member as the folded group does, and one reading a later member parks on its unsolved slot.
+        // A group is read through its slots while its bodies are checked, as the kernel's `check_group` reads one: each member's name is defined as its protected slot, the type a body is checked at and a member is assumed at reads the group through the slots, and a slot reads through once its member's turn finds it known to terminate (`Turns`). A reading of a member not yet known parks on its slot, and one of a member withheld waits for good.
         let mut slots = Vec::with_capacity(items.len());
         let mut through = Vec::with_capacity(items.len());
         for (label, type_) in labels.iter().zip(&types_elaborated) {
@@ -135,14 +135,32 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
         for (label, type_) in labels.iter().zip(&read) {
             context.reassume(label, type_);
         }
+        // Named by the hints the program wrote, not by the gensyms elaboration minted for them.
+        let names = rec
+            .tail
+            .hint_iter()
+            .map(|hint| hint.unwrap_or("_").to_string())
+            .collect::<Vec<_>>();
+        let site = |members: &[usize]| {
+            ErasedSite::LocallyRecursive(
+                members
+                    .iter()
+                    .filter_map(|member| names.get(*member).cloned())
+                    .collect(),
+            )
+        };
+        let mut turns = Turns::new(labels.clone(), types_elaborated.clone(), slots.clone());
 
         let mut bodies_elaborated = Vec::with_capacity(items.len());
-        for (((_, body), type_), slot) in items.iter().zip(&read).zip(slots) {
+        for (index, (((_, body), type_), slot)) in items.iter().zip(&read).zip(slots).enumerate() {
             let body = check(context, body, type_.clone())?;
+            turns.take(context, index, &body, &site)?;
             context.fill_rec_slot(slot, body.substitute(&through));
             bodies_elaborated.push(body);
         }
         context.retry_parked()?;
+        // Before the members are defined and the tail elaborated: a local `let Bad: Type = (Bad) -> False;` unfolds without end at its first use, which is in that tail.
+        turns.close(context, &site)?;
 
         // Materialize before the group closes, as `elaborate_module_rec` does for the same reason: `Term::rec` captures the member names, so anything a committed solution still spells as a slot must become that name *here*, while the capture below can still bind it. Substituting afterwards would insert a name whose binder the capture had already consumed and whose frame has popped. Tolerant on purpose — it fixes only what is committed and leaves the rest for the final zonk, so materializing early can lose nothing.
         let types_elaborated = types_elaborated
@@ -169,20 +187,6 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             Subterm::Rec(rec) => rec.group,
             _ => unreachable!("let constructs a recursive block"),
         };
-        // Before the members are defined and the tail elaborated: a local `let Bad: Type = (Bad) -> False;` unfolds without end at its first use, which is in that tail. Named by the hints the program wrote, not by the gensyms elaboration minted for them.
-        let names = rec
-            .tail
-            .hint_iter()
-            .map(|hint| hint.unwrap_or("_").to_string())
-            .collect::<Vec<_>>();
-        check_rec_totality(context, &group, |members| {
-            ErasedSite::LocallyRecursive(
-                members
-                    .iter()
-                    .filter_map(|member| names.get(*member).cloned())
-                    .collect(),
-            )
-        })?;
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
             context.define(label, &Term::rec_proj(group.clone(), index), None);

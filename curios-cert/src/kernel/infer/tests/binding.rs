@@ -426,11 +426,11 @@ fn a_member_stands_for_its_group_in_the_groups_tail() {
     assert_eq!(whnf(&mut kernel, inferred).ok(), Some(nat_type()));
 }
 
-/// And a member stands for nothing in its group's own bodies: there `countdown(3) == 0` is a `Bool` that never arrives, so a type stated over it in the body is stuck where the same type in the tail is the one it reduces to. A value a body reads of its own member is no fact the kernel holds, whoever wrote the term that reads it.
+/// And a member not known to terminate stands for nothing in its group's own bodies: `countdown` calls itself at `3`, nothing below its argument, so its turn withholds it, and there `countdown(3) == 0` is a `Bool` that never arrives, and a type stated over it in the body is stuck where the same type in the tail is the one it reduces to. A value a body reads of a member that need not terminate is no fact the kernel holds, whoever wrote the term that reads it.
 ///
-/// Mutation-checked: with the bodies checked over members bound to their folded selections, as the tail's are, `countdown(3)` computes in the body and its `let` is accepted.
+/// Mutation-checked: with every member read by value whatever its turn finds, `countdown(3)` computes in the body and its `let` is accepted.
 #[test]
-fn a_member_stands_for_nothing_in_its_groups_bodies() {
+fn a_member_not_known_to_terminate_stands_for_nothing_in_its_bodies() {
     let mut kernel = kernel();
     let countdown = binder(0, "countdown");
     let n = binder(1, "n");

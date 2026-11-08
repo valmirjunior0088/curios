@@ -11,11 +11,11 @@ use reach::*;
 mod tests;
 
 use {
-    super::{Context, ErasedSite, Error, ZonkPass, proof_position},
-    curios_analysis::{Erased, group_totality, yields_a_sort},
+    super::{Context, ErasedSite, Error, ZonkPass, proof_position, zonk_solved_term_metas},
+    curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
     curios_core::{
-        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, Rec, RecGroup,
-        RecItem, Sharing, Subterm, Term, Totality,
+        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Rec,
+        Sharing, Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeSet, HashMap, HashSet},
@@ -398,47 +398,131 @@ fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Resu
     }
 }
 
-/// Obligation (T), in the one place it cannot wait for the post-zonk pass.
+/// A recursive group's members as its signatures and bodies read them, a turn at a time, as `curios-cert`'s `check_group` takes them: a member's name is defined as its slot, which reads through once the member's turn finds it known to terminate (`curios_analysis::known_to_terminate`) and stands for nothing until then ([`Context::is_withheld_rec_slot`]). A signature or a body reads a member written after it by waiting on the slot, and no reduction unfolds a member that may not terminate.
 ///
-/// A member of a partial group may not have a sort in an *extractable* position of its type: its codomain after peeling arrows, or any component reachable by projection. Parameter positions are exempt, so an ordinary partial polymorphic program keeping `@A : Type` is untouched.
-///
-/// This exists because `let Bad: Type = (Bad) -> False;` unfolds without end while elaborating its first *use* — reducing `Bad` rebuilds an arrow whose domain is `Bad` — which is long before any whole-module gate runs. Without it the compiler reports a spent budget where it should name the definition. The closure form is what makes the language sound; this is what makes it answer.
-pub fn check_rec_totality(
-    context: &mut Context,
-    group: &RecGroup,
-    site: impl FnOnce(&[usize]) -> ErasedSite,
-) -> Result<(), Error> {
-    // `RecGroup::member_type` rather than the member's scope body: the body carries loose indices where it names the group, and the question is now asked of a term that reduces. It is also the spelling `curios-cert`'s own gate asks about, so the two checkers put the same question to the same term.
-    let mut extractable = Vec::new();
-    for index in 0..group.length() {
-        if yields_a_sort(context, &group.member_type(index))? {
-            extractable.push(index);
+/// Obligation (T) is asked here too, in the one place it cannot wait for the post-zonk pass: a group with a member withheld may not have a sort in an *extractable* position of a member's type, its codomain after peeling arrows or any component reachable by projection. Parameter positions are exempt, so an ordinary partial polymorphic program keeping `@A : Type` is untouched. It exists because `let Bad: Type = (Bad) -> False;` unfolds without end where its first *use* reads it, long before any whole-module gate runs, and without it the compiler reports a spent budget where it should name the definition. The closure form is what makes the language sound; this is what makes it answer.
+pub struct Turns {
+    /// Each member's name, a local group's label or a top-level member's local, defined as its slot.
+    names: Vec<Free>,
+    /// Each member's signature over the names.
+    types: Vec<Term>,
+    slots: Vec<MetavarId>,
+    /// Each body elaborated so far, as its turn materialized it.
+    bodies: Vec<Option<Term>>,
+    known: Vec<bool>,
+}
+
+impl Turns {
+    pub fn new(names: Vec<Free>, types: Vec<Term>, slots: Vec<MetavarId>) -> Self {
+        let members = names.len();
+        Self {
+            names,
+            types,
+            slots,
+            bodies: vec![None; members],
+            known: vec![false; members],
         }
     }
 
-    if extractable.is_empty() || group_totality(context, group)?.is_total() {
-        return Ok(());
+    /// Member `index`'s turn, `body` its body elaborated, before its slot is filled: filling the slot wakes what waits on it, which must find it released where it is. A member not known to terminate is withheld for good, and where a member's type yields a sort as it reads now, the group owes descent and is refused here, named by `site` for the members whose types do. A type that settles nothing yet is asked again once every turn is taken ([`Turns::close`]): a later body may settle a level a signature holds.
+    pub fn take(
+        &mut self,
+        context: &mut Context,
+        index: usize,
+        body: &Term,
+        site: &dyn Fn(&[usize]) -> ErasedSite,
+    ) -> Result<(), Error> {
+        self.bodies[index] = Some(zonk_solved_term_metas(context, body));
+        if self.known_at_turn(context, &self.bodies, &self.known, index)? {
+            self.known[index] = true;
+            context.release_rec_slot(self.slots[index]);
+            return Ok(());
+        }
+
+        self.refuse_where_owed(context, &|_| false, site)
     }
 
-    Err(Error::PartialInErasedPosition {
-        erased: Erased::Type,
-        site: site(&extractable),
-        offender: None,
-    })
-}
+    /// Once every turn is taken and what the bodies parked is retried. Every turn is taken again over the bodies as they stand now: a solution found since a member's turn may have given its body a call, so the members withheld are the ones the kernel withholds over the terms this group closes to. With one withheld, the group owes descent where a member's type yields a sort, or waits on a member withheld, which may be a sort once that member's value is and never will be read.
+    pub fn close(
+        &self,
+        context: &mut Context,
+        site: &dyn Fn(&[usize]) -> ErasedSite,
+    ) -> Result<(), Error> {
+        let bodies = self
+            .bodies
+            .iter()
+            .map(|body| {
+                body.as_ref()
+                    .map(|body| zonk_solved_term_metas(context, body))
+            })
+            .collect::<Vec<_>>();
+        let mut known = vec![false; self.names.len()];
+        for index in 0..self.names.len() {
+            known[index] = self.known_at_turn(context, &bodies, &known, index)?;
+        }
+        let withheld = (0..self.names.len())
+            .filter(|member| !known[*member])
+            .map(|member| (self.names[member], self.slots[member]))
+            .collect::<Vec<_>>();
+        if withheld.is_empty() {
+            return Ok(());
+        }
 
-/// [`check_rec_totality`] for a top-level `rec`, which knows its own names.
-pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(), Error> {
-    let definitions = rec.definitions();
-    check_rec_totality(context, &rec.group, |members| {
-        ErasedSite::Recursive(
-            members
-                .iter()
-                .filter_map(|member| definitions.get(*member))
-                .map(|definition| definition.name)
-                .collect(),
-        )
-    })
+        let names_withheld = |reduced: Option<&Term>| {
+            reduced.is_none_or(|reduced| {
+                blocker(reduced).is_some_and(|leaf| {
+                    withheld.iter().any(|(name, slot)| match &**leaf {
+                        Subterm::Metavar(metavar) => metavar.id == *slot,
+                        _ => leaf.mentions_free(name),
+                    })
+                })
+            })
+        };
+        self.refuse_where_owed(context, &names_withheld, site)
+    }
+
+    /// Whether member `index` is known to terminate at its turn, over `bodies` with `known` the members known before it.
+    fn known_at_turn(
+        &self,
+        context: &mut Context,
+        bodies: &[Option<Term>],
+        known: &[bool],
+        index: usize,
+    ) -> Result<bool, Error> {
+        let entering = (0..self.names.len())
+            .filter(|member| known[*member] || *member == index)
+            .filter_map(|member| {
+                let body = bodies[member].clone()?;
+                Some((self.names[member], self.types[member].clone(), body))
+            })
+            .collect();
+
+        known_to_terminate(context, entering)
+    }
+
+    /// Refuse the group where a member's type yields a sort, `undetermined` saying of a codomain that settles nothing whether it may yet be one.
+    fn refuse_where_owed(
+        &self,
+        context: &mut Context,
+        undetermined: &dyn Fn(Option<&Term>) -> bool,
+        site: &dyn Fn(&[usize]) -> ErasedSite,
+    ) -> Result<(), Error> {
+        let mut extractable = Vec::new();
+        for (index, type_) in self.types.iter().enumerate() {
+            if yields_a_sort_where(context, type_, undetermined)? {
+                extractable.push(index);
+            }
+        }
+
+        match extractable.is_empty() {
+            true => Ok(()),
+            false => Err(Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                site: site(&extractable),
+                offender: None,
+            }),
+        }
+    }
 }
 
 /// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.

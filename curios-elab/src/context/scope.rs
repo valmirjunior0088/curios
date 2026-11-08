@@ -10,8 +10,8 @@ use {
     curios_analysis::{reads_solved, records_case_equation},
     curios_common::Plicity,
     curios_core::{
-        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
-        Universes, project_erased_universes,
+        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Term, Universes,
+        project_erased_universes,
     },
     std::rc::Rc,
 };
@@ -428,7 +428,7 @@ impl<'s> Context<'s> {
             self.absent(&Mention::Local(*name));
         }
 
-        self.unless_member(body)
+        body
     }
 
     /// [`Frames::declaration_body`](super::Frames::declaration_body), and a need where the body is missing because its declaration has not finished ([`Context::absent`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
@@ -443,11 +443,6 @@ impl<'s> Context<'s> {
         body
     }
 
-    /// `body`, unless it is the protected slot of a member of a group being checked: a member named in a body stands for nothing there, as the kernel checks a group's bodies over members that stand for nothing, and a signature reads it through its slot instead (`elaborate_rec`).
-    fn unless_member<'a>(&self, body: Option<&'a Term>) -> Option<&'a Term> {
-        body.filter(|body| !matches!(&***body, Subterm::Metavar(slot) if self.is_rec_slot(slot.id)))
-    }
-
     /// [`Frames::var_reduct`](super::Frames::var_reduct), and a name to unstick as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         let reduct = self.typing.frames.var_reduct(name);
@@ -455,7 +450,7 @@ impl<'s> Context<'s> {
             self.absent(&Mention::Local(*name));
         }
 
-        self.unless_member(reduct)
+        reduct
     }
 
     /// `name` has no definition to unfold to: a need where it is a declaration that has not finished ([`Context::reads_entry`]), and a name a fresh definition can unstick a reduct on ([`Caches::note_absent`](super::Caches::note_absent)).

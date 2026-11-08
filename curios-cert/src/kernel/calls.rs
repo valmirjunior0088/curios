@@ -15,7 +15,10 @@ use {
     curios_analysis::{Call, SizeContext},
     curios_common::Keyed,
     curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
-    std::collections::{HashMap, HashSet},
+    std::{
+        collections::{HashMap, HashSet},
+        mem,
+    },
 };
 
 #[derive(Default)]
@@ -47,6 +50,8 @@ struct Frame {
     /// The member whose body is being checked, and the parameters its leading lambdas have bound so far. `None` before the bodies and after them: a member named in a signature or in the group's tail is not a call from a body.
     caller: Option<(usize, Vec<Free>)>,
     calls: Vec<Call>,
+    /// What reduction unfolds each member's local to while the group's bodies are checked: its selection out of the members known to terminate, for each of those, and nothing for one withheld ([`Calls::member_value`]).
+    values: Vec<Option<Term>>,
 }
 
 /// Where the recorder stood when a scope bracket opened, for [`Calls::retract`] to return to.
@@ -115,7 +120,7 @@ impl Calls {
 
     /// Whether the judgment about to run types a spine head, clearing the flag for the ones after it.
     pub(super) fn take_spine_head(&mut self) -> bool {
-        std::mem::take(&mut self.spine_head)
+        mem::take(&mut self.spine_head)
     }
 
     /// Mark the next judgment as typing the head of an application spine.
@@ -125,12 +130,20 @@ impl Calls {
 
     /// Whether the check about to run opens a member's leading lambdas, clearing the flag for the ones after it.
     pub(super) fn take_parameters(&mut self) -> bool {
-        std::mem::take(&mut self.parameters)
+        mem::take(&mut self.parameters)
     }
 
     /// Mark the next check as still opening a member's leading lambdas — the body of one that was.
     pub(super) fn continue_parameters(&mut self) {
         self.parameters = true;
+    }
+
+    /// What the local `name` unfolds to in reduction: where it names a member known to terminate of a group whose bodies are being checked, its selection out of the members known to terminate ([`Kernel::read_known`]), and nothing otherwise. A member withheld stands for nothing in its group's bodies.
+    pub(super) fn member_value(&self, name: &Free) -> Option<Term> {
+        self.frames.iter().rev().find_map(|frame| {
+            let index = frame.members.iter().position(|member| member == name)?;
+            frame.values.get(index).cloned().flatten()
+        })
     }
 
     /// Whether `term` names a member of a group whose body is being checked. Such a term may hold a call, which is recorded where it is typed and graded against the member whose body states it, so no judgment about it is remembered: [`Kernel::infer_hit`](super::Kernel::infer_hit).
@@ -152,7 +165,7 @@ impl Calls {
 }
 
 impl Kernel<'_> {
-    /// Open `group` for recording, its members assumed under `members`.
+    /// Open `group` for recording, its members assumed under `members`, each standing for nothing until [`Kernel::read_known`] reads it by value.
     pub(super) fn open_group(&mut self, group: &RecGroup, members: &[Free]) {
         let arities = member_arities(self, group);
         self.calls.frames.push(Frame {
@@ -160,7 +173,21 @@ impl Kernel<'_> {
             arities,
             caller: None,
             calls: Vec::new(),
+            values: vec![None; members.len()],
         });
+    }
+
+    /// Read the innermost group's members by value in its bodies, each to what `values` holds for it: the members known to terminate to their selections, and the others to nothing ([`Calls::member_value`]).
+    ///
+    /// What the scope's tables hold of a term naming a member was read while it stood for nothing, so reading it by value discards them, as a local re-typed does; [`Kernel::close_group`] discards them again where the reading ends.
+    pub(super) fn read_known(&mut self, values: Vec<Option<Term>>) {
+        let Some(frame) = self.calls.frames.last_mut() else {
+            return;
+        };
+        if values.iter().any(Option::is_some) {
+            self.memos.begin_equations();
+        }
+        frame.values = values;
     }
 
     /// Begin checking member `index`'s body: its leading lambdas bind its parameters, and the calls inside are its own.
@@ -188,7 +215,12 @@ impl Kernel<'_> {
             return Totality::Partial;
         };
         frame.caller = None;
-        let totality = decide(std::mem::take(&mut frame.calls));
+        let read_by_value = mem::take(&mut frame.values).iter().any(Option::is_some);
+        let totality = decide(mem::take(&mut frame.calls));
+        // Past its bodies a member stands for nothing again until the tail binds it, so what the scope's tables read through its value goes.
+        if read_by_value {
+            self.memos.begin_equations();
+        }
         let group = Keyed::new(group.clone());
         self.calls.verdicts.insert(group.clone(), totality);
         self.calls.members_enclosing.insert(group, enclosing);
@@ -231,7 +263,7 @@ impl Kernel<'_> {
             .collect::<Vec<_>>();
 
         // Taken out for the grading and put back: the grader reads the context while reducing through this kernel, and nothing it reduces opens an arm.
-        let context = std::mem::take(&mut self.calls.context);
+        let context = mem::take(&mut self.calls.context);
         let call = grade(self, &context, caller, &params, callee, arity, &arguments);
         self.calls.context = context;
         self.calls.frames[frame].calls.push(call?);
@@ -257,7 +289,7 @@ impl Kernel<'_> {
         if !self.recording() {
             return Ok(());
         }
-        let mut context = std::mem::take(&mut self.calls.context);
+        let mut context = mem::take(&mut self.calls.context);
         let entered = context.enter(self, refine, nonzero, payloads);
         self.calls.context = context;
         // A group typed inside a term closes under what the arms around it established, so a typing remembered outside this one does not answer inside it. Most arms assume an equation beside what they establish, which clears as much; the default arm of a `switch` assumes none.

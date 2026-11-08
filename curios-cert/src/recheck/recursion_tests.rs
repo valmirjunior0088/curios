@@ -559,7 +559,7 @@ fn a_call_below_its_parameter_only_to_a_judgment_does_not_descend() {
     );
 }
 
-/// `Flip(b)` is `True` at `false` and `False` at `true`, and `claimed`, beside it in a group a definition's body holds, states `Flip(false)` in its own body; `control` states the same proof as `stated`'s type.
+/// `Flip(b)` is `True` at `false` and `False` at `true`, and `claimed`, beside it in a group a definition's body holds, states `Flip(false)` in its own body; `control` states the same proof as `stated`'s type, which its body is checked at.
 const A_SIBLING_READ_IN_A_BODY: &str = r#"
 let /outer : /std/Bool/Holds(true) =
     #{node = Rec}
@@ -602,11 +602,11 @@ let /control : /std/Bool/Holds(true) =
 /std/Bool/False
 "#;
 
-// A group's bodies are checked over members that stand for nothing, so no body reads a value of its group, a sibling's included: `claimed` is refused where it states `Flip(false)`, and the same proof stated as `stated`'s type, where a signature reads its group folded, stands. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+// A member known to terminate is read by value in its group's bodies, as its tail reads it: `Flip` calls nothing, so its turn finds it known, and `claimed` states `Flip(false)` in its own body, which is `True` there as it is where `stated`'s body is checked, and both stand. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
 //
-// Mutation-checked at `check_group`: with each body checked over the members bound to their folded selections, as `infer`'s `Rec` arm binds them in the tail, `/outer` stands.
+// Mutation-checked at `check_group`: with no member read by value, `/outer` and `/control` are refused `Mismatch`.
 #[test]
-fn a_sibling_stands_for_nothing_in_its_groups_bodies() {
+fn a_member_known_to_terminate_is_read_by_value_in_its_groups_bodies() {
     let verdicts = core_text_verdicts(&fill!(
         "${PROPOSITIONS}\n${A_SIBLING_READ_IN_A_BODY}",
         PROPOSITIONS,
@@ -614,16 +614,210 @@ fn a_sibling_stands_for_nothing_in_its_groups_bodies() {
     ));
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(global("outer"))
-                && matches!(verdict.error, Error::Mismatch { .. })),
+        verdicts.iter().all(|verdict| verdict.name.is_none()),
         "{verdicts:?}"
     );
+}
+
+/// `f`'s body restates its binder at `T(0)` from its signature, as the elaborator writes a lambda checked at one, and its signature reads `T(0)` folded: read as standing for nothing in the body, `T` left `T(0)` stuck there, where the signature's reduces to `Nat`.
+const A_LAMBDA_TYPED_AT_A_SIBLING: &str = r#"
+let /outer : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        #{node = Rec}
+        (let T: (m: #NatType) -> Type =
+            (m: #NatType) =>
+                #{result = Ambient(Type)}
+                match m
+                | 0 =>
+                    #NatType
+                | k + 1; x =>
+                    T(k)
+                end
+        and f: (x: T(0)) -> T(0) =
+            (x: T(0)) => x;
+        f(n));
+/std/Bool/False
+"#;
+
+// A body is checked at its signature as the group's bodies read it, so a binder it restates at a sibling is the type its signature reads. `curios`'s `tests::recursion::a_member_typed_at_a_sibling_reads_it_by_value` runs the program both ways it is written.
+//
+// Mutation-checked at `check_group`: with each member assumed, and its body checked, at its signature read through the folded group, and no member read by value, `/outer` is refused `Mismatch`, `T(0)` at the local against `T(0)` at the group.
+#[test]
+fn a_lambda_typed_at_a_sibling_stands() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_LAMBDA_TYPED_AT_A_SIBLING}",
+        PROPOSITIONS,
+        A_LAMBDA_TYPED_AT_A_SIBLING
+    ));
+
+    assert!(
+        verdicts.iter().all(|verdict| verdict.name.is_none()),
+        "{verdicts:?}"
+    );
+}
+
+/// No member of `b` and `c` is a proof or yields a sort, so the group owes no descent, and `c`'s body states `Holds(b)`.
+const A_VALUE_READING_A_SIBLING: &str = r#"
+let /read : #BoolType =
+    #{node = Rec}
+    (let b: #BoolType = true
+    and c: #BoolType =
+        let p: /std/Bool/Holds(b) =
+            #{node = Variant}
+            /std/Bool/True/qed();
+        false;
+    c);
+/std/Bool/False
+"#;
+
+// A group that owes no descent reads a member by value once its turn finds it known too: `b` calls nothing, so `Holds(b)` is the `True` `qed` inhabits. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_group`: with no member read by value, `/read` is refused `Mismatch`.
+#[test]
+fn a_member_of_a_group_that_owes_no_descent_is_read_once_known_to_terminate() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_VALUE_READING_A_SIBLING}",
+        PROPOSITIONS,
+        A_VALUE_READING_A_SIBLING
+    ));
+
+    assert!(
+        verdicts.iter().all(|verdict| verdict.name.is_none()),
+        "{verdicts:?}"
+    );
+}
+
+/// `b(n)` calls itself at `n`, nothing below it, and `c`'s body states `Holds(b(0))`, which `b(0)`, `true`, would make `True`.
+const A_MEMBER_WITHHELD: &str = r#"
+let /withheld : #BoolType =
+    #{node = Rec}
+    (let b: (n: #NatType) -> #BoolType =
+        (n: #NatType) =>
+            #{result = Ambient(#BoolType)}
+            match n
+            | 0 =>
+                true
+            | k + 1; x =>
+                b(n)
+            end
+    and c: #BoolType =
+        let p: /std/Bool/Holds(b(0)) =
+            #{node = Variant}
+            /std/Bool/True/qed();
+        false;
+    c);
+/std/Bool/False
+"#;
+
+// A member not known to terminate stands for nothing in its group's bodies: `b`'s turn withholds it, and an equation of a member that need not terminate is no fact, so `Holds(b(0))` is no `True` for `qed` to inhabit, though `b(0)` is `true`. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `/withheld` stands.
+#[test]
+fn a_member_on_a_cycle_that_does_not_descend_stands_for_nothing_in_its_bodies() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_MEMBER_WITHHELD}",
+        PROPOSITIONS,
+        A_MEMBER_WITHHELD
+    ));
+
     assert!(
         verdicts
             .iter()
-            .all(|verdict| verdict.name != Some(global("control"))),
+            .any(|verdict| verdict.name == Some(global("withheld"))
+                && matches!(verdict.error, Error::Mismatch { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// `b` is a list of itself, and `c` a value of `b`.
+const A_GROUP_LISTING_ITSELF: &str = r#"
+let /listing : #NatType =
+    #{node = Rec}
+    (let b: Type = #ListType(b)
+    and c: b = #List(b, [])
+    and n: #NatType = 0;
+    n);
+/std/Bool/False
+"#;
+
+// A group that owes descent is named where it does not, rather than refused for its budget: `b` calls itself with nothing below, so its turn withholds it and nothing unfolds it, and `c`'s body, which reads `b` by value to check `[]` at it, is refused only after the group's calls have named it. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+//
+// Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `c`'s body unfolds `b` into a list of itself without end and `/listing` is refused for its budget.
+#[test]
+fn a_group_listing_itself_is_refused_for_not_descending() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GROUP_LISTING_ITSELF}",
+        PROPOSITIONS,
+        A_GROUP_LISTING_ITSELF
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("listing"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// `g` and `h` each state `h(0)` in a match's motive, a call at an argument nothing is below, so `h`'s own keeps the group from descending.
+const A_CALL_TWO_MOTIVES_STATE: &str = r#"
+let /Const : (
+    p:
+        #{node = InductType}
+        /std/Bool/True()
+) -> Prop =
+    (
+        p:
+            #{node = InductType}
+            /std/Bool/True()
+    ) =>
+        #{node = InductType}
+        /std/Bool/True();
+#{node = Rec}
+let /g : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        match n: (m) => /Const(/h(0))
+        | 0 =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | _ + 1; x =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        end
+and /h : (n: #NatType) ->
+    #{node = InductType}
+    /std/Bool/True() =
+    (n: #NatType) =>
+        match n: (m) => /Const(/h(0))
+        | 0 =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        | _ + 1; x =>
+            #{node = Variant}
+            /std/Bool/True/qed()
+        end;
+/std/Bool/False
+"#;
+
+// A group whose members are read by value in its bodies still spells every term it types with its members' locals, so a call two bodies state is typed, and recorded, in each: no remembered typing answers for a term naming a member. `h`'s own call withholds it at its turn, and the verdict its typed calls close to names the group.
+//
+// Mutation-checked at `Calls::names_member`: with a remembered typing answering for a term that names a member, `h`'s typing of its motive is answered by the one `g`'s filled, the call is never recorded, and the group stands.
+#[test]
+fn a_call_two_motives_state_is_recorded_in_each_body() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CALL_TWO_MOTIVES_STATE}",
+        PROPOSITIONS,
+        A_CALL_TWO_MOTIVES_STATE
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("g"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
         "{verdicts:?}"
     );
 }

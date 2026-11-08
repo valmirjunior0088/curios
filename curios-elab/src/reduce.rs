@@ -837,6 +837,10 @@ fn reduce_var(context: &Context, var: Var) -> Reduce {
 }
 
 fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
+    // A recursive slot is read once its member is known to terminate (`Turns`), and stands for nothing until then, filled or not: a member's name is defined as its slot, so this is where every reading of a member in its group's signatures and bodies is gated.
+    if context.is_withheld_rec_slot(metavar.id) {
+        return Reduce::Break(Term::from(Subterm::Metavar(metavar)));
+    }
     // Resolution rewrites the (birth-named) solution through the occurrence's spine, so a solution mentioning a sibling binder lands on whatever that binder corresponds to here.
     match context.resolve_metavar(&metavar) {
         Some(solution) => Reduce::Continue(solution),

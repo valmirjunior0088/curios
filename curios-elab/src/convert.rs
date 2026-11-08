@@ -2647,7 +2647,7 @@ impl Convert {
             None => return self.solve_rigid(context, metavar, rigid, standing),
         };
 
-        // A side headed by a filled recursive slot is a signature's reading of a group member, which no spelling in a body can say: a body names the member by its name, which stands for nothing there. Solved with that spelling, the metavariable would carry the member into a body the kernel reads it opaque in, so it is solved with the reduct where the reduct names no slot, and waits where it does.
+        // A side headed by a filled recursive slot is a reading of a group member through its slot, which reads through only once the member is known to terminate (`Turns`). Solved with that spelling, the metavariable could carry the member past where it stands for nothing, so it is solved with the reduct where the reduct names no slot, and waits where it does: a slot left in the reduct is one of a member not yet known, or withheld.
         if let Subterm::Metavar(Metavar { id, .. }) = &**applied_head(rigid_raw)
             && context.is_rec_slot(*id)
         {

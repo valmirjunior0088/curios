@@ -151,6 +151,17 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.is_rec_slot(id)
     }
 
+    /// [`Solutions::release_rec_slot`](super::Solutions::release_rec_slot), stamped.
+    pub(crate) fn release_rec_slot(&mut self, id: MetavarId) {
+        self.typing.caches.note_write();
+        self.underway.attempt.solutions.release_rec_slot(id);
+    }
+
+    /// [`Solutions::is_withheld_rec_slot`](super::Solutions::is_withheld_rec_slot).
+    pub(crate) fn is_withheld_rec_slot(&self, id: MetavarId) -> bool {
+        self.underway.attempt.solutions.is_withheld_rec_slot(id)
+    }
+
     /// [`Solutions::owner_fills`](super::Solutions::owner_fills).
     pub(crate) fn owner_fills(&self, id: MetavarId) -> bool {
         self.underway.attempt.solutions.owner_fills(id)

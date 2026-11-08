@@ -76,7 +76,7 @@ struct Local {
     name: Free,
     /// What it was opened at, by value.
     type_: Term,
-    /// What a `let` bound it to — `None` for a binder that stands for nothing: a parameter, a payload, a member under check. Typing walks a `let`'s tail over such a local; whatever reads a term for more than its type reads this in its place ([`Scope::by_value`]).
+    /// What a `let` bound it to — `None` for a binder that stands for nothing: a parameter, a payload, a member under check, which reduction alone unfolds once it is known to terminate (`Calls::member_value`). Typing walks a `let`'s tail over such a local; whatever reads a term for more than its type reads this in its place ([`Scope::by_value`]).
     value: Option<Value>,
     /// Where the binder of the same name this one shadows sits, for [`Scope::retract`] to put back.
     shadowed: Option<usize>,

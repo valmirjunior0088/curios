@@ -435,7 +435,7 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
     Ok(Subterm::Intrinsic(rebuilt).into())
 }
 
-/// A free variable is the normal form it is: the kernel holds no local by name, a `let` being read by value before reduction meets its binder ([`Kernel::bind`]).
+/// A free variable is the normal form it is: the kernel holds no local by name, a `let` being read by value before reduction meets its binder ([`Kernel::bind`]). The one local that unfolds is a member known to terminate, in its group's bodies ([`Calls::member_value`](super::Calls::member_value)).
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
     // A bound index stops here as a local with no binding does, and the assert is a free local's alone: an index with no binder is no name a scope could have bound, so there is nothing to have read by value, and reduction asserts on no shape a caller hands it. One reaching here is refused where the module entered (`curios_core::open_positions_of`).
     if let Some(free) = var.as_free() {
@@ -443,6 +443,10 @@ fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
             !kernel.binds(free),
             "a `let`-bound local reached reduction by name"
         );
+        // A member known to terminate unfolds in its group's bodies to its selection out of the known members (`check_group`); every other local is a neutral.
+        if let Some(member) = kernel.calls.member_value(free) {
+            return Ok(Step::Continue(member));
+        }
     }
 
     Ok(Step::Stop(Term::var(var)))

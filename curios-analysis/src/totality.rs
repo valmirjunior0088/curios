@@ -580,20 +580,28 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
     }
 }
 
-/// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
+/// Whether a member of a recursive group is known to terminate at its turn: `known` holds the members known to terminate so far and the member itself, each its name, type and body over the group's names, and every call among them descends. A name of the group outside `known` is no member of the group this closes, so a call to it is none and nothing here unfolds it: it stands for a member withheld or not yet reached.
 ///
-/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
-///
-/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
-///
-/// A reduction with no value answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
-pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
+/// Both checkers take each member's turn by this, in the order the members are written, and read a member by value in its group's signatures and bodies once its turn finds it known (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). A member unfolds only where the members it reaches are known too or stand for nothing, so every unfolding either checker makes is of a definition that terminates.
+pub fn known_to_terminate<E: Env>(
+    env: &mut E,
+    known: Vec<(Free, Term, Term)>,
+) -> Result<bool, E::Error> {
+    Ok(group_totality(env, &RecGroup::closing(known))?.is_total())
+}
+
+/// [`yields_a_sort`] where `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort, arrow or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`).
+pub fn yields_a_sort_where<E: Env>(
+    env: &mut E,
+    type_: &Term,
+    undetermined: &dyn Fn(Option<&Term>) -> bool,
+) -> Result<bool, E::Error> {
     // Peeling to a codomain answers the same question about a smaller type, so it iterates here rather than re-entering: an arrow's spine is as long as its type is written, and the answer is the codomain's own.
     let mut type_ = type_.clone();
 
     loop {
         let Some(reduced) = env.force(&type_).probed()? else {
-            return Ok(true);
+            return Ok(undetermined(None));
         };
 
         match &*reduced {
@@ -608,14 +616,39 @@ pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error
             Subterm::TupleType(tuple) => {
                 let mut cursor = tuple.telescope.cursor();
                 while let Some((_, entry)) = cursor.entry() {
-                    if yields_a_sort(env, &entry)? {
+                    if yields_a_sort_where(env, &entry, undetermined)? {
                         return Ok(true);
                     }
                     cursor.advance_fresh(|hint| env.fresh(hint));
                 }
                 return Ok(false);
             }
-            _ => return Ok(false),
+            _ => return Ok(undetermined(Some(&reduced))),
         }
     }
+}
+
+/// What a weak-head normal form waits on: what it applies, eliminates or projects, followed down to a variable, a metavariable or an intrinsic operation, or nothing where it reaches a former, a value or anything else no solution or definition could move. A type stuck on a member not known to terminate waits on that member, which only the head and the scrutinee say: a name an argument or a spine holds is no reason it is stuck.
+pub fn blocker(reduced: &Term) -> Option<&Term> {
+    let mut term = reduced;
+    loop {
+        term = match &**term {
+            Subterm::Apply(apply) => &apply.head,
+            Subterm::Match(matched) => &matched.head,
+            Subterm::Proj(proj) => &proj.head,
+            Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Intrinsic(_) => return Some(term),
+            _ => return None,
+        };
+    }
+}
+
+/// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
+///
+/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
+///
+/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
+///
+/// A reduction with no value answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
+pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
+    yields_a_sort_where(env, type_, &|reduced| reduced.is_none())
 }

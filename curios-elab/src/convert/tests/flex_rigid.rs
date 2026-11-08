@@ -241,7 +241,12 @@ fn conversion_cannot_solve_a_protected_recursive_slot() {
     assert!(context.metavar_solution(id).is_none());
 
     context.fill_rec_slot(id, nat_type.clone());
-    assert_eq!(reduce(&mut context, slot), Ok(nat_type));
+    assert_eq!(reduce(&mut context, slot.clone()), Ok(slot));
+
+    let (known, released) = context.fresh_rec_slot(&member, Term::type_ground());
+    context.release_rec_slot(known);
+    context.fill_rec_slot(known, nat_type.clone());
+    assert_eq!(reduce(&mut context, released), Ok(nat_type));
 }
 
 #[test]

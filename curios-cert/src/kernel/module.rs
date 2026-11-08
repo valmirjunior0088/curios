@@ -21,7 +21,7 @@ mod walk_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::{bears_proof, instantiate_qualities, yields_a_sort},
+    crate::{bears_proof, blocker, instantiate_qualities, known_to_terminate, yields_a_sort_where},
     curios_core::{
         Bound, DefinitionKind, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope,
         StructDecl, Subterm, Telescope, Term, Totality, UniverseContext,
@@ -215,49 +215,109 @@ pub(crate) fn check_group<R>(
     }
 
     kernel.scoped(|kernel| {
-        // Signatures first, then bodies — and the two phases must read a sibling differently.
+        // Signatures first, then bodies, and neither reads a member before its turn has found it known to terminate.
         //
-        // A member's *type* may name the group: in `rec T(n : Nat) -> Type … and val : T(2)`, a sibling computes `val`'s type. [`RecGroup::member_type`] hands that type back opened over the group's own folded spelling, so inferring its sort unfolds `T`, walks back into the group, and re-enters this very check without bound — aborting the process rather than refusing a term. Opened over the assumptions minted here instead, `T` is opaque and `T(2)` is a stuck neutral whose type is `Type`, which is all a sort check needs.
+        // A member's *type* may name the group: in `rec T(n : Nat) -> Type … and val : T(2)`, a sibling computes `val`'s type. [`RecGroup::member_type`] hands that type back opened over the group's own folded spelling, so inferring its sort unfolds `T`, walks back into the group, and re-enters this very check without bound — aborting the process rather than refusing a term. Opened over the assumptions minted here instead, `T` is opaque and `T(2)` is a stuck neutral whose type is `Type`, which is all a sort check needs. Each member is assumed at its type so opened, and its body is checked at it.
         //
-        // The body check needs the opposite spelling. `val = 3` type-checks only because `T(2)` *reduces* to `Nat`, which takes the folded group; holding `T` opaque there refuses a correct program. Only the signature phase changes, so an assumption still carries the type every other judgment reads.
+        // A body needs a sibling's value: `val = 3` type-checks only because `T(2)` *reduces* to `Nat`. So once every signature is checked, each member takes its turn in written order (`known_to_terminate`): it is known to terminate where the calls among the members known so far and its own descend, and from then on its local unfolds in reduction to its selection out of the known members (`Calls::member_value`), whose bodies name a member withheld by its local, standing for nothing. Every turn is taken before any body is typed, so a body reads a sibling written after it, as the elaborator's reading parked on the sibling's slot comes to; a member unfolds before its own body is typed, and the group's acceptance waits on typing it. The locals keep their names, so a call is recorded and kept from the memo as it was, and only a reduct spells the known members.
         //
-        // This is the discipline Agda checks a mutual block under, and the one `curios-elab`'s `elaborate_rec` already follows. Coq forbids the question outright — its `Fix` rule checks each `A_i` in a context without the fixpoint names — which is a language restriction rather than a rule this kernel could adopt while `rec` admits an inductive-recursive group.
+        // Agda type-checks a mutual block reading its siblings' definitions before its termination check runs, and may loop there; the turns are a termination check taken first. Coq forbids the question outright — its `Fix` rule checks each `A_i` in a context without the fixpoint names — which is a language restriction rather than a rule this kernel could adopt while `rec` admits an inductive-recursive group.
         let names = (0..group.length())
             .map(|_| kernel.fresh(None))
             .collect::<Vec<_>>();
 
         let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = members.iter().collect::<Vec<_>>();
+        let types = group
+            .iter()
+            .map(|member| member.type_.open(&refs))
+            .collect::<Vec<_>>();
+        let bodies = group
+            .iter()
+            .map(|member| member.body.open(&refs))
+            .collect::<Vec<_>>();
         // Where the positions the signatures and bodies record begin, each holding a member as the local it is assumed at.
         let since = kernel.positions_recorded();
 
         // Assumed before any signature is checked, because one member's type may name any other. A type not yet known to be a type is assumed only for the span of this scope: an ill-sorted one refuses the group below, and `scoped` retracts every assumption on the way out.
-        for (index, name) in names.iter().enumerate() {
-            kernel.assume(name, &group.member_type(index));
+        for (name, type_) in names.iter().zip(&types) {
+            kernel.assume(name, type_);
         }
 
         // Whether each member's signature or body encloses a group of its own that does not descend — what obligations (T) and (V) read the member by, since a group is typed here with its enclosing binders opened and the member's term holds it closed.
         let mut enclosing = vec![false; group.length()];
 
-        let mut erased_member: Option<Term> = None;
-        for (index, member) in group.iter().enumerate() {
+        let mut proofs = Vec::with_capacity(group.length());
+        for (index, type_) in types.iter().enumerate() {
             let before = kernel.partial_groups();
-            let sort = infer_type(kernel, &member.type_.open(&refs))?;
+            let sort = infer_type(kernel, type_)?;
             enclosing[index] |= kernel.partial_groups() > before;
+            proofs.push(sort.is_prop());
+        }
 
-            // Erasure asks about the member as the rest of the kernel spells it, and `yields_a_sort` decides by reduction rather than inference — so it never re-enters, and reads the folded type.
-            let folded = group.member_type(index);
-            if erased_member.is_none() && (sort.is_prop() || yields_a_sort(kernel, &folded)?) {
-                erased_member = Some(folded);
+        // The bodies are where the group's calls are: each one the walk types is recorded, graded under the arms around it, against the parameters the body's leading lambdas bind (see `kernel::calls`). The turns find calls by the elaborator's walk instead, the one call discovery both checkers take a turn by, so each reads the same members by value; the group's verdict is still the one its typed calls close to.
+        kernel.open_group(group, &names);
+        let mut known = vec![false; group.length()];
+        for index in 0..group.length() {
+            let entering = (0..group.length())
+                .filter(|member| known[*member] || *member == index)
+                .map(|member| (names[member], types[member].clone(), bodies[member].clone()))
+                .collect();
+            known[index] = known_to_terminate(kernel, entering)?;
+        }
+        let known_group = RecGroup::closing(
+            (0..group.length())
+                .filter(|member| known[*member])
+                .map(|member| (names[member], types[member].clone(), bodies[member].clone()))
+                .collect(),
+        );
+        let mut selections = known_group.members().into_iter();
+        kernel.read_known(
+            known
+                .iter()
+                .map(|known| match known {
+                    true => selections.next(),
+                    false => None,
+                })
+                .collect(),
+        );
+
+        // A group owes descent where a member is a proof or its type yields a sort, read as the bodies read it. A type stuck on a member withheld may be a sort once that member's value is, which nothing will read, so it owes descent as well.
+        let withheld = names
+            .iter()
+            .zip(&known)
+            .filter(|(_, known)| !**known)
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        let names_withheld = |reduced: Option<&Term>| {
+            reduced.is_none_or(|reduced| {
+                blocker(reduced)
+                    .is_some_and(|leaf| withheld.iter().any(|name| leaf.mentions_free(name)))
+            })
+        };
+        let mut erased_member: Option<Term> = None;
+        for (index, type_) in types.iter().enumerate() {
+            if proofs[index] || yields_a_sort_where(kernel, type_, &names_withheld)? {
+                // Named as the rest of the kernel spells the member.
+                erased_member = Some(group.member_type(index));
+                break;
             }
         }
 
-        // The bodies are where the group's calls are: each one the walk types is recorded, graded under the arms around it, against the parameters the body's leading lambdas bind (see `kernel::calls`).
-        kernel.open_group(group, &names);
-        for (index, member) in group.iter().enumerate() {
+        // Such a group is accepted only where every member descends, which its typed calls decide. With a member withheld it may not, and a body may be refused for reading around that member, so each body's refusal is held back until the calls have closed to a verdict that names the group where it does not descend; a withheld member unfolds nowhere, so no body runs the budget out on it.
+        let held_back = erased_member.is_some() && !withheld.is_empty();
+        let mut refused = None;
+        for (index, (body, type_)) in bodies.iter().zip(&types).enumerate() {
             let before = kernel.partial_groups();
             kernel.begin_member(index);
-            check(kernel, &member.body.open(&refs), &group.member_type(index))?;
+            match held_back {
+                false => check(kernel, body, type_)?,
+                true => {
+                    if let Err(error) = kernel.tried(|kernel| check(kernel, body, type_)) {
+                        refused.get_or_insert(error);
+                    }
+                }
+            }
             enclosing[index] |= kernel.partial_groups() > before;
         }
         let totality = kernel.close_group(group, enclosing);
@@ -272,6 +332,9 @@ pub(crate) fn check_group<R>(
             return Err(Error::NotDescending {
                 type_: Box::new(type_),
             });
+        }
+        if let Some(error) = refused {
+            return Err(error);
         }
 
         within(kernel, &names)

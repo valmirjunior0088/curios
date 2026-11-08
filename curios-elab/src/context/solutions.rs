@@ -394,6 +394,8 @@ pub struct Solutions {
     ///
     /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` and `elaborate_module_rec` define the member's *local* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. A group closes over its members' **locals** (`Term::rec`, `RecItem::try_new`), so a slot reaching that point is not something the closing can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the local lets both substitution walks spell the member as the bindable thing it is.
     rec_slot_names: BTreeMap<MetavarId, Free>,
+    /// The recursive slots whose members are known to terminate, which reduction reads through: each member's from the turn that found it so (`Turns`). Every other slot stands for nothing, filled or not, so no reduction unfolds a member that may not terminate.
+    released: BTreeSet<MetavarId>,
     /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
     ///
     /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
@@ -426,6 +428,7 @@ impl Solutions {
             held_log: Vec::new(),
             shaped: Vec::new(),
             rec_slot_names: BTreeMap::new(),
+            released: BTreeSet::new(),
             solve_blockers: BTreeMap::new(),
         }
     }
@@ -447,6 +450,22 @@ impl Solutions {
     /// Record that the recursive slot `id` stands for the member `name`.
     pub fn name_rec_slot(&mut self, id: MetavarId, name: Free) {
         self.rec_slot_names.insert(id, name);
+    }
+
+    /// Record that the recursive slot `id`'s member is known to terminate, so reduction reads through the slot from here on.
+    ///
+    /// Only before the slot is filled: a reduct taken while it stood for nothing was then taken of an unsolved metavariable, and the fill moves it as any solution does. Released once filled, a reduct taken of it filled and standing for nothing would stand, nothing having been solved since.
+    pub fn release_rec_slot(&mut self, id: MetavarId) {
+        assert!(
+            self.solution(id).is_none(),
+            "a recursive slot is released before it is filled"
+        );
+        self.released.insert(id);
+    }
+
+    /// Whether `id` is a recursive slot whose member is not known to terminate, which reduction reads as standing for nothing.
+    pub fn is_withheld_rec_slot(&self, id: MetavarId) -> bool {
+        self.is_rec_slot(id) && !self.released.contains(&id)
     }
 
     /// The member name a *filled* recursive slot stands for, which is what substitution must put in its place.

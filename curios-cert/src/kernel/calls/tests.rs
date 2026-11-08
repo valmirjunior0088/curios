@@ -198,17 +198,14 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
     ));
 }
 
-/// A term naming a member is typed wherever it stands, whatever the kernel remembers of it. `rec a : Type = List(b), b : Type = List(b)` states one body twice, and the call it holds is `a`'s to `b` in the first and `b`'s to itself in the second — the cycle the gate refuses. Mutation-checked: with a remembered judgment answering for a term that names a member, the second body's call is never recorded, and the group is accepted.
+/// A term naming a member is typed wherever it stands, whatever the kernel remembers of it. `rec a : Prop = b, b : Prop = b` states one body twice, and the call it holds is `a`'s to `b` in the first and `b`'s to itself in the second — the cycle the gate refuses. The members are propositions, so the group owes descent and its bodies read it by value, and nothing there classifies `b`: a body that is a type former over `b`, as `List(b)` is, would read `b` by value at its sort and run the budget out before the gate. Mutation-checked: with a remembered judgment answering for a term that names a member, the second body's call is never recorded, and the group is accepted.
 #[test]
 fn a_call_is_recorded_in_every_body_that_states_it() {
     let a = binder(0, "a");
     let b = binder(1, "b");
-    let body = || Term::intrinsic(Intrinsic::ListType(Term::free_var(&b)));
+    let body = || Term::free_var(&b);
     let term = Term::rec(
-        [
-            (a, Term::type_ground(), body()),
-            (b, Term::type_ground(), body()),
-        ],
+        [(a, Term::prop(), body()), (b, Term::prop(), body())],
         Term::free_var(&a),
     );
 

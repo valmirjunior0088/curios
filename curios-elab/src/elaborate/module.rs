@@ -14,15 +14,15 @@ use {
     super::{Mode, elaborate, elaborate_func_type_sized},
     crate::{
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
-        Readers, RecordKeyword, ScheduledTest, Traces, Vectors, Zonked, body_levels, check,
-        check_concept_registry, check_is_sort, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, classify_totality, compared_levels,
-        decide_polarities, definition_variances, field_variances, finalize_definition, goal_sites,
-        hold_prop, hold_variances, parameter_field, record_definition_totality,
-        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
-        result_sort_only_metas, sort_family_levels, state_proof_binders, superclass_targets,
-        test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
-        zonk_entry, zonk_published, zonk_solved_term_metas,
+        Readers, RecordKeyword, ScheduledTest, Traces, Turns, Vectors, Zonked, body_levels, check,
+        check_concept_registry, check_is_sort, check_proof_totality, check_type_totality,
+        check_written_type_totality, classify_totality, compared_levels, decide_polarities,
+        definition_variances, field_variances, finalize_definition, goal_sites, hold_prop,
+        hold_variances, parameter_field, record_definition_totality, record_superclasses,
+        record_variances, reduce_with, register_witness, report_goals, result_sort_only_metas,
+        sort_family_levels, state_proof_binders, superclass_targets, test_program_tail,
+        validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
+        zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
@@ -916,8 +916,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         })
         .collect::<Vec<_>>();
     let rec = RecItem::try_new(locals.into_iter().zip(definitions).collect())?;
-    // Before the members are defined into the context, because the shape this rejects makes reducing a *use* of one of them unfold without end.
-    check_rec_item_totality(context, &rec)?;
 
     for (index, definition) in rec.definitions.iter().enumerate() {
         let name = definition.name;
@@ -1086,7 +1084,7 @@ fn elaborate_members(
         param_levels.push(elaborate_induct_indices(context, &def.name)?);
     }
 
-    // A body reads a member by its local alone and a signature through the member's slot, as `elaborate_rec` states.
+    // A member is read through its slot, which reads through once the member's turn finds it known to terminate, as `elaborate_rec` states.
     let mut slots = Vec::with_capacity(defs.len());
     let mut through = Vec::with_capacity(defs.len());
     for ((def, local), type_) in defs.iter().zip(locals).zip(&types) {
@@ -1102,14 +1100,25 @@ fn elaborate_members(
     for (local, type_) in locals.iter().zip(&read) {
         context.reassume(local, type_);
     }
+    let site = |members: &[usize]| {
+        ErasedSite::Recursive(
+            members
+                .iter()
+                .filter_map(|member| defs.get(*member))
+                .map(|def| def.name)
+                .collect(),
+        )
+    };
+    let mut turns = Turns::new(locals.to_vec(), types.clone(), slots.clone());
 
     let mut bodies = Vec::with_capacity(defs.len());
-    for ((def, type_), slot) in defs.iter().zip(&read).zip(slots) {
+    for (index, ((def, type_), slot)) in defs.iter().zip(&read).zip(slots).enumerate() {
         let outer_site = context.set_checked_site(def.name);
         context.enter_declaration(Some(def.name));
         context.enter_value(&def.kind);
         let body = check(context, &def.body, type_.clone())?;
         context.restore_checked_site(outer_site);
+        turns.take(context, index, &body, &site)?;
         context.fill_rec_slot(slot, body.substitute(&through));
         bodies.push(body);
     }
@@ -1124,6 +1133,8 @@ fn elaborate_members(
         elaborate_struct(context, &def.name, levels)?;
     }
     context.drain_parked()?;
+    // Before the members are defined into the context, because the shape this refuses makes reducing a *use* of one of them unfold without end.
+    turns.close(context, &site)?;
 
     // Materialized before the group closes, as `elaborate_rec` materializes a local group: what a solution spells as a member's slot becomes the member's local here, while the group's binder can still close over it.
     let types = types
