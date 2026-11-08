@@ -36,3 +36,35 @@ pub(super) fn collect_sources(directory: &Path, sources: &mut Vec<PathBuf>) {
         }
     }
 }
+
+/// Every form Core text writes beyond a program's, in the layout the program's printer gives it: a decorator beside its operand where the two fit their line and above it otherwise, a declaration under its absolute name, a group of any kinds joined by `and`, items a blank line apart, and the entry's type on the line beneath it.
+pub(super) const EVERY_FORM: &str = "\
+#{absent = [/Box/mk]}
+induct /Box(A: Type): pub Type
+| #{params = [@Prop]} mk(x: A)
+end
+#{node = Rec}
+and struct /Pair(A: Type): pub Type {
+    fst: A,
+    snd: A,
+}
+and /f: (n: #NatType) -> #NatType =
+    (n: #NatType) => #NatAdd(n, 1);
+
+#{module = /, universe_context = {parameter_count = 1, constraints = [u + 1 <= w]}}
+let /p: #{level = u} Type =
+    (#{node = Name} /f)(#{node = NumLit} 2);
+
+test /held =
+    1;
+
+let /m/witness~/std/ops/Add(Nat)#1: (use w: /C()) -> #BoolType =
+    /m/witness~3;
+
+/Wit/w(
+    #NatAdd(n, 1),
+    #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}),
+    (#BoolType)(x),
+    #{a = (x) => x} (y + 1))
+: Prop
+";

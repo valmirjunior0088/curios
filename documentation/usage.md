@@ -307,13 +307,14 @@ Output is what `wonder` prints — each diagnostic, goal and lint rendered as `r
 ```sh
 curios format                   # every file the governing package declares, rewritten in place
 curios format serve util.crs    # an executable's files, and one file
+curios format proof.crsc        # a file of Core text
 curios format --check           # write nothing, exit nonzero if anything would change
 curios format - < draft.crs     # standard input, written canonically to standard output
 ```
 
-Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output. A file nothing declares is formatted only when it is named.
+Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output. A file nothing declares is formatted only when it is named, and a `.crsc` is formatted as the Core text it holds, read and not checked, so a file its reader refuses is formatted all the same.
 
-There is one canonical style and no options to configure it. Formatting is verified before anything is written — the output must reparse to exactly the same program, with every comment preserved — so a formatter defect refuses rather than corrupts.
+There is one canonical style and no options to configure it. Formatting is verified before anything is written — the output must reparse to exactly the same program or Core text, with every comment preserved — so a formatter defect refuses rather than corrupts.
 
 ## `wonder`
 

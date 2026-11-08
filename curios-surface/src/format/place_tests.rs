@@ -123,8 +123,8 @@ fn positions(lines: &[&str]) -> Vec<(usize, bool)> {
     found
 }
 
-/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run agrees.
-fn misplaced(lines: &[&str], (index, rides): (usize, bool)) -> Option<String> {
+/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run agrees. `file` is the path the text is read as held at, which says whether it is a program or Core text.
+fn misplaced(file: &str, lines: &[&str], (index, rides): (usize, bool)) -> Option<String> {
     let line = lines[index];
     let marked = match rides {
         true => format!("{line} {MARKER}"),
@@ -137,7 +137,7 @@ fn misplaced(lines: &[&str], (index, rides): (usize, bool)) -> Option<String> {
     written[index] = &marked;
     let perturbed = &format!("{}\n", written.join("\n"));
 
-    let once = match Formatted::from_source(&Source::inline(perturbed)) {
+    let once = match Formatted::from_source(&Source::held(file, perturbed.as_str())) {
         Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
         Err(refusal) => return Some(format!("refused: {refusal}\n--- written ---\n{perturbed}")),
     };
@@ -157,7 +157,7 @@ fn misplaced(lines: &[&str], (index, rides): (usize, bool)) -> Option<String> {
         ));
     }
 
-    match Formatted::from_source(&Source::inline(&once)) {
+    match Formatted::from_source(&Source::held(file, once.as_str())) {
         Ok(Formatted::Unchanged(_)) => None,
         Ok(Formatted::Changed(twice)) => Some(format!(
             "moved again\n--- once ---\n{once}--- twice ---\n{twice}"
@@ -181,11 +181,28 @@ fn a_comment_keeps_its_place_from_every_position() {
         let lines = lines(source);
 
         for position in positions(&lines) {
-            if let Some(fault) = misplaced(&lines, position) {
+            if let Some(fault) = misplaced("a.crs", &lines, position) {
                 wandering.push(format!("fixture {fixture}: {fault}"));
             }
         }
     }
+
+    assert!(
+        wandering.is_empty(),
+        "{} positions do not keep their comment:\n\n{}",
+        wandering.len(),
+        wandering.join("\n\n")
+    );
+}
+
+/// The same law over Core text, put to every position of a file that writes every form Core text writes beyond a program's.
+#[test]
+fn a_comment_keeps_its_place_in_core_text_from_every_position() {
+    let lines = lines(EVERY_FORM);
+    let wandering = positions(&lines)
+        .into_iter()
+        .filter_map(|position| misplaced("a.crsc", &lines, position))
+        .collect::<Vec<_>>();
 
     assert!(
         wandering.is_empty(),
@@ -271,8 +288,8 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
             let divides = Formatted::from_source(&Source::inline(&alone))
                 == Ok(Formatted::Unchanged(alone.clone()));
             let fault = match divides {
-                true => misplaced(&item, (within, rides)),
-                false => misplaced(&whole, (index, rides)),
+                true => misplaced("a.crs", &item, (within, rides)),
+                false => misplaced("a.crs", &whole, (index, rides)),
             };
 
             fault.map(|fault| format!("{}: {fault}", paths[file].display()))

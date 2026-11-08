@@ -27,7 +27,7 @@ use {
 pub enum Spelling {
     /// `-`: the program on standard input.
     Stdin,
-    /// A path, by its `.crs` suffix or a separator.
+    /// A path, by its `.crs` or `.crsc` suffix or a separator.
     File(PathBuf),
     /// An executable's name.
     Name(String),
@@ -54,7 +54,10 @@ impl Spelling {
 ///
 /// Both separators, not the platform's: an executable's name is an identifier, so neither can appear in one, and a path written with the other spelling is still plainly a path. Named for what it decides rather than `is_file`, which reads as a question about the disk — and this asks nothing of it.
 fn names_a_file(argument: &str) -> bool {
-    argument.ends_with(".crs") || argument.contains('/') || argument.contains('\\')
+    argument.ends_with(".crs")
+        || argument.ends_with(".crsc")
+        || argument.contains('/')
+        || argument.contains('\\')
 }
 
 /// What an argument selects.

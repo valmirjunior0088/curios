@@ -21,6 +21,7 @@ mod top_level;
 pub(crate) use top_level::*;
 
 mod core_text;
+pub(crate) use core_text::{CoreFormatInput, parse_core_for_format};
 
 #[cfg(test)]
 mod test_support;

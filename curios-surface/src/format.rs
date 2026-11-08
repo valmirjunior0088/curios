@@ -9,7 +9,10 @@
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 
 use {
-    super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
+    super::{
+        CoreFormatInput, FormatInput, TopItem, between_items, parse_core_for_format,
+        parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
+    },
     curios_common::{LINE_WIDTH, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
@@ -24,25 +27,13 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source` canonically. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same program with the same comments — in which case nothing should be written.
+    /// Format `source` canonically: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
     pub fn from_source(source: &Arc<Source>) -> Result<Self, String> {
-        let input = parse_for_format(source).map_err(|error| error.format())?;
-        let comments = classify(&source.text, &input.comments);
-        let expected_comments = comments.len();
+        let output = match written_as_core_text(source) {
+            true => core_text_formatted(source)?,
+            false => program_formatted(source)?,
+        };
 
-        // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
-        let output = emit(
-            &input,
-            &Original {
-                text: &source.text,
-                comments,
-                added,
-                dropped,
-                closes,
-            },
-        );
-
-        verify(&input, expected_comments, &output)?;
         Ok(match output == source.text {
             true => Formatted::Unchanged(output),
             false => Formatted::Changed(output),
@@ -59,6 +50,48 @@ impl Formatted {
 
 /// The canonical indent — the corpus's four spaces.
 const INDENT: usize = 4;
+
+/// Whether `source` was read from a file of Core text, `.crsc`, by the extension of the path it was read from.
+fn written_as_core_text(source: &Source) -> bool {
+    source.path.as_ref().is_some_and(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == "crsc")
+    })
+}
+
+/// What the renderer follows: the text `source` was read from, with the comments the parse consumed, each classified.
+fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
+    Original {
+        text: &source.text,
+        comments: classify(&source.text, comments),
+        added,
+        dropped,
+        closes,
+    }
+}
+
+/// A program or a module, formatted and verified.
+fn program_formatted(source: &Arc<Source>) -> Result<String, String> {
+    let input = parse_for_format(source).map_err(|error| error.format())?;
+    // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
+    let original = original(source, &input.comments);
+    let expected_comments = original.comments.len();
+    let output = emit(&input, &original);
+
+    verify(&input, expected_comments, &output)?;
+    Ok(output)
+}
+
+/// A file of Core text, formatted and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
+fn core_text_formatted(source: &Arc<Source>) -> Result<String, String> {
+    let input = parse_core_for_format(source).map_err(|error| error.format())?;
+    let original = original(source, &input.comments);
+    let expected_comments = original.comments.len();
+    let output = emit_core_text(&input, &original);
+
+    verify_core_text(&input, expected_comments, &output)?;
+    Ok(output)
+}
 
 /// The one character the printer writes where the source may hold none: the comma closing a broken list.
 fn added(char: char) -> bool {
@@ -135,6 +168,29 @@ pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
     format!("{}\n", render(flat(parts), original))
 }
 
+/// A file of Core text as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
+fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>) -> String {
+    let mut parts: Vec<Printer> = Vec::new();
+
+    for (item, span) in input.file.items.iter().zip(&input.item_spans) {
+        if !parts.is_empty() {
+            parts.extend([hard_line(), hard_line()]);
+        }
+        parts.push(reached(span.start));
+        parts.push(print_core_item(item.clone()));
+        parts.push(reached(span.end));
+    }
+
+    if let Some(entry) = &input.file.entry {
+        if !parts.is_empty() {
+            parts.extend([hard_line(), hard_line()]);
+        }
+        parts.push(print_core_entry(entry.clone()));
+    }
+
+    format!("{}\n", render(flat(parts), original))
+}
+
 /// Whether a blank line stands between the item that starts at `start` and the code before it, read back over the comment lines between them: a comment is no blank line, and an item sharing its line with the one before is not apart from it. Read from the item's start, since an item's span runs on over the blank lines and comments the parse consumed after it.
 fn written_apart(text: &str, start: usize) -> bool {
     let line_start = text[..start].rfind('\n').map_or(0, |index| index + 1);
@@ -175,8 +231,36 @@ fn verify(input: &FormatInput, expected_comments: usize, output: &str) -> Result
     Ok(())
 }
 
+/// [`verify`] for a file of Core text: the output must reparse to the same file, carrying the same number of comments.
+fn verify_core_text(
+    input: &CoreFormatInput,
+    expected_comments: usize,
+    output: &str,
+) -> Result<(), String> {
+    let reparsed = parse_core_for_format(&Source::inline(output)).map_err(|error| {
+        format!(
+            "formatting produced unparseable output:\n{}",
+            error.format()
+        )
+    })?;
+
+    if reparsed.file != input.file {
+        return Err("formatting changed the parsed file; refusing to write".to_string());
+    }
+    if reparsed.comments.len() != expected_comments {
+        return Err(format!(
+            "formatting lost comments ({} in, {} out); refusing to write",
+            expected_comments,
+            reparsed.comments.len()
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod comment_tests;
+#[cfg(test)]
+mod core_text_tests;
 #[cfg(test)]
 mod layout_tests;
 #[cfg(test)]

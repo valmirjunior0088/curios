@@ -230,7 +230,7 @@ pub(crate) enum Mode {
     },
 
     /// Each subject is admitted alone, and what they name is rewritten once however many of them name it; the reasoning is `documentation/usage.md`'s Formatting.
-    #[command(about = "Format .crs files canonically, in place")]
+    #[command(about = "Format .crs and .crsc files canonically, in place")]
     Format {
         #[arg(value_name = "SUBJECT", help = FORMAT.subject_help())]
         subjects: Vec<String>,

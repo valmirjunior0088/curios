@@ -4,16 +4,17 @@
 
 use {
     super::{
-        Grammar, parse_and_head, parse_atomic_term, parse_concept_member, parse_file_head,
-        parse_foreign_member, parse_held, parse_identifier_raw, parse_keyword, parse_label,
-        parse_let_member, parse_literal, parse_mark, parse_name, parse_sort, parse_struct_member,
-        parse_term, parse_test_member, parse_top_induct_body, with_span,
+        Grammar, clear_comments, parse_and_head, parse_atomic_term, parse_concept_member,
+        parse_file_head, parse_foreign_member, parse_held, parse_identifier_raw, parse_keyword,
+        parse_label, parse_let_member, parse_literal, parse_mark, parse_name, parse_sort,
+        parse_struct_member, parse_term, parse_test_member, parse_top_induct_body, take_comments,
+        trimmed, with_span,
     },
     crate::{
         CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
         CoreValue, Decorated, DecoratorField, Label, Subterm, Term, parse_whitespace,
     },
-    curios_common::{Qualifier, Source, is_identifier_char},
+    curios_common::{Qualifier, Source, Span, is_identifier_char},
     curios_core::{Global, HeadKey, WitnessId},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, many0, mark, not_ahead,
@@ -305,10 +306,11 @@ fn parse_head_key<'a>(state: ParserState<'a>) -> Parsed<'a, HeadKey> {
         .parse(state)
 }
 
-/// The name a declaration of Core text declares, which is absolute: a path, whose last segment is its label, or a witness's identity, which is its own.
+/// The name a declaration of Core text declares, which is absolute: a path, whose last segment is its label, or a witness's identity, which is its own, its label the identity's own text without the blanks a parse runs on over.
 fn parse_declared_name<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label)> {
     spanned(parse_witness_name)
         .map(|(span, id)| {
+            let span = trimmed(span);
             let label = Label::spanned(&span.source.text[span.start..span.end], span.clone());
 
             (Global::Witness(id), label)
@@ -427,20 +429,50 @@ fn parse_group<'a>(first: curios_parse::Boxed<'a, CoreMember>) -> impl Parser<'a
 fn parse_core_file<'a>(state: ParserState<'a>) -> Parsed<'a, CoreFile> {
     parse_file_head
         .and_keep(many0(|| parse_core_item))
-        .and(
-            parse_term
-                .and(
-                    parse_literal(":")
-                        .and_keep(parse_term)
-                        .map(Some)
-                        .or(pure(None)),
-                )
-                .map(|(body, type_)| Some(CoreEntry { body, type_ }))
-                .or(pure(None)),
-        )
+        .and(parse_core_entry)
         .and_drop(take_eof())
         .map(|(items, entry)| CoreFile { items, entry })
         .parse(state)
+}
+
+/// The entry a program closes with and the type it states on the line beneath it, where the file closes with one.
+fn parse_core_entry<'a>(state: ParserState<'a>) -> Parsed<'a, Option<CoreEntry>> {
+    parse_term
+        .and(
+            parse_literal(":")
+                .and_keep(parse_term)
+                .map(Some)
+                .or(pure(None)),
+        )
+        .map(|(body, type_)| Some(CoreEntry { body, type_ }))
+        .or(pure(None))
+        .parse(state)
+}
+
+/// What the formatter reads a `.crsc` as: its file, each item's span parallel to its items, and every comment the parse consumed, ascending.
+pub(crate) struct CoreFormatInput {
+    pub file: CoreFile,
+    pub item_spans: Vec<Span>,
+    pub comments: Vec<Span>,
+}
+
+/// `source` read whole as a file of Core text, for the formatter: each item's span kept beside it, as a module's are ([`parse_for_format`](crate::parse_for_format)), and the comments the parse consumed.
+pub(crate) fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, ParserError> {
+    clear_comments();
+    let (items, entry) = run_parser(
+        parse_file_head
+            .and_keep(many0(|| spanned(parse_core_item)))
+            .and(parse_core_entry)
+            .and_drop(take_eof()),
+        source,
+    )?;
+    let (item_spans, items) = items.into_iter().unzip();
+
+    Ok(CoreFormatInput {
+        file: CoreFile { items, entry },
+        item_spans,
+        comments: take_comments(),
+    })
 }
 
 impl CoreFile {

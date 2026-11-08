@@ -58,7 +58,13 @@ fn prefixes(units: Vec<RootSource>) -> Vec<String> {
 fn a_spelling_is_decided_by_its_text_alone() {
     assert_eq!(Spelling::of(None), Spelling::Nothing);
     assert_eq!(Spelling::of(Some("-")), Spelling::Stdin);
-    for file in ["scratch.crs", "./serve", "sub/dir/x", "sub\\dir\\x"] {
+    for file in [
+        "scratch.crs",
+        "proof.crsc",
+        "./serve",
+        "sub/dir/x",
+        "sub\\dir\\x",
+    ] {
         assert_eq!(
             Spelling::of(Some(file)),
             Spelling::File(PathBuf::from(file)),

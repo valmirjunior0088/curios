@@ -374,6 +374,9 @@ impl Contract {
     pub(crate) fn subject_help(&self) -> String {
         let forms = match (self.accepts, self.own_file_only) {
             (Accepts::Library, _) => "A .crs file a library declares",
+            (Accepts::Files, _) => {
+                "A declared executable's name, a path to a .crs or .crsc file, or `-` for standard input"
+            }
             (_, true) => {
                 "A declared executable's name, a program's own .crs file, or `-` for standard input"
             }
