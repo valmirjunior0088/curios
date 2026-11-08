@@ -660,3 +660,47 @@ fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_mem
         );
     }
 }
+
+/// `h` names the loop `f`, a member of its own group, in a parameter's type; `${parameter}` is that type, and the control's names no member.
+const A_SIGNATURE_NAMING_A_LOOP: &str = r#"
+#{absent = [/E/refl]}
+induct /E(a: #NatType): (#NatType) -> pub Prop
+| refl(): (a)
+end
+
+let /named : #NatType =
+    #{node = Rec}
+    (let f: (m: #NatType) -> #NatType = (m: #NatType) => #NatAdd(f(m), 1)
+    and h: (p: ${parameter}) -> #NatType = (p: ${parameter}) => 0;
+    0);
+/std/Bool/False
+"#;
+
+// A member stands in its group's own signatures as a local that holds no group, so a type position naming one is not seen to enclose a group that does not descend by what it holds: the position is marked as naming it, and `/named`, whose value is no proof, is refused as holding a type that does not terminate. The control, whose signatures name no member, stands. Mutation-checked: with `Positions::enclose_partial_naming` marking nothing, `/named` stands and this fails.
+#[test]
+fn a_signature_naming_a_member_that_does_not_descend_is_a_type_that_does_not_terminate() {
+    let named = |parameter: &str| {
+        core_text_verdicts(&fill!(
+            "${PROPOSITIONS}\n${GROUP}",
+            PROPOSITIONS,
+            GROUP = fill!(A_SIGNATURE_NAMING_A_LOOP, parameter)
+        ))
+    };
+
+    let refused = named("#{node = InductType} /E(f(0))(f(0))");
+    assert!(
+        refused
+            .iter()
+            .any(|verdict| verdict.name == Some(global("named"))
+                && matches!(verdict.error, Error::NotTotal { .. })),
+        "{refused:?}"
+    );
+
+    let control = named("#NatType");
+    assert!(
+        control
+            .iter()
+            .all(|verdict| verdict.name != Some(global("named"))),
+        "{control:?}"
+    );
+}

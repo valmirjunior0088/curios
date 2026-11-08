@@ -1001,3 +1001,65 @@ fn a_dead_case_of_an_applied_lambdas_binder_is_no_descent() {
         "{control:?}"
     );
 }
+
+/// `q` calls itself at `n` from the body of a group inside its own body: an outer member's call made through an inner group.
+const A_CALL_THROUGH_AN_INNER_GROUP: &str = r#"
+let /through_inner : /std/Bool/False =
+    #{node = Rec}
+    (let q: (n: #NatType) -> /std/Bool/False =
+        (n: #NatType) =>
+            #{node = Rec}
+            (let g: (m: #NatType) -> /std/Bool/False =
+                (m: #NatType) =>
+                    #{result = Ambient(/std/Bool/False)} match m | 0 => q(n) | k + 1; x => g(k) end;
+            g(0));
+    q(0));
+/std/Bool/False
+"#;
+
+// A call an outer member's name makes from an inner group's body is recorded against the outer member and graded under its parameters: `q(n)` at `n` does not descend, whatever the inner group does.
+#[test]
+fn a_call_an_inner_group_makes_to_an_outer_member_does_not_descend() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CALL_THROUGH_AN_INNER_GROUP}",
+        PROPOSITIONS,
+        A_CALL_THROUGH_AN_INNER_GROUP
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("through_inner"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// `A` is known at its turn, its call to `B` being no call while `B` has not taken its turn, and `B` is withheld at its own; `omega` reads `A` by value and applies a proof to itself.
+const A_KNOT_ACROSS_TURNS: &str = r#"
+let /knot : /std/Bool/False =
+    #{node = Rec}
+    (let A: Prop = (x: B) -> /std/Bool/False
+    and B: Prop = A
+    and omega: (a: A) -> /std/Bool/False = (a: A) => a(a);
+    omega(omega));
+/std/Bool/False
+"#;
+
+// A member known at its turn only for the members before it is still on a cycle the group does not descend on: the verdict its typed calls close to names the group, and the error held back for a body is returned after it, so the group is refused whichever of the two a body meets first.
+#[test]
+fn a_knot_across_turns_is_refused_for_not_descending() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_KNOT_ACROSS_TURNS}",
+        PROPOSITIONS,
+        A_KNOT_ACROSS_TURNS
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("knot"))
+                && matches!(verdict.error, Error::NotDescending { .. })),
+        "{verdicts:?}"
+    );
+}
