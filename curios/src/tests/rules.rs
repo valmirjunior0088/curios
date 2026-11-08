@@ -4,7 +4,9 @@
 //!
 //! Strict positivity is what makes `induct` and `struct` sound: an inductive declaration claims its functor has an initial algebra, and without the gate `induct Bad | c(f : (Bad) -> False) end` inhabits `False`. The totality obligations are erasure's: it deletes types and `Prop`-sorted proofs, and both must be total, since a divergent type breaks type formation and a divergent proof proves anything, while what erasure keeps may diverge freely — which is why every totality rejection is of a position and never of a definition. Coherence is one witness per key.
 //!
-//! Each refusal is a pattern over the checker's error, by its variant and where it stands ([`test_support::refused`]), as [the soundness board](../../../documentation/design/soundness/the-soundness-board.md) places a held attack: a rule test that accepts any error, or any error whose message holds a fragment, is worse than none, since an invalid fixture passes it while the rule it names goes unchecked, as a probe refused with `unbound variable` passes having never reached the check at all.
+//! Each refusal is derived from its control ([`test_support::Control::refused`]) and is a pattern over the checker's error, by its variant and where it stands, as [the soundness board](../../../documentation/design/soundness/the-soundness-board.md) places a held attack: a rule test that accepts any error, or any error whose message holds a fragment, is worse than none, since an invalid fixture passes it while the rule it names goes unchecked, as a probe refused with `unbound variable` passes having never reached the check at all.
+//!
+//! A program a rule admits is a test of its own only where it states a claim of its own: a control broader than one refusal's, or the twin of a kernel test under its name. One that controls a single refusal is that refusal's control.
 
 mod arm_tests;
 mod chain_tests;

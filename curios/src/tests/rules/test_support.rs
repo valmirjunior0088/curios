@@ -51,8 +51,8 @@ impl Control {
     }
 }
 
-/// Put `source` to both checkers at the program contract: what they refused it with, which must be something.
-pub fn refused(source: &str) -> Refusals {
+/// Put `source` to both checkers at the program contract: what they refused it with, which must be something. Private, so a refusal is put only as derived from its control.
+fn refused(source: &str) -> Refusals {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
     let refusals = match examine_with_prelude(
         DEFAULT_BUDGET,
