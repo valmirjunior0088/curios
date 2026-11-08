@@ -2,7 +2,7 @@
 //!
 //! **`Type` and `Prop` build their sort at level 0, and `Sort` the first sort a declaration leaves to its caller.** A sort at another level is `#{level = u + 1} Type`, one at another quality `#{quality = Param(1)} Sort`, and an unsolved quality `#{quality = Meta(3)} Sort`.
 //!
-//! **A level is a term.** A constant is its numeral, a parameter its letter — `u` to `z`, then `u1` to `z1` — an offset `u + 1`, several `max(u, v + 1)`, and an unsolved level `#{id = 4} ?`. An instance's universes are `{levels = […], qualities = […]}`, each part left out where it holds nothing, and a scheme `{parameter_count = 2, quality_count = 1, constraints = [u <= v + 1]}`, each constraint's origin unwritten.
+//! **A level is a term.** A constant is its numeral, a parameter its letter — `u` to `z`, then `u1` to `z1` — an offset `u + 1`, several `max(u, v + 1)`, and an unsolved level `#{id = 4} ?`. An instance's universes are `{levels = […], qualities = […]}`, each part left out where it holds nothing, and a scheme `{parameter_count = 2, quality_count = 1, constraints = [u <= v + 1]}`, each constraint its inequality.
 
 use {
     super::{
@@ -441,7 +441,7 @@ pub fn universes_read(value: &CoreValue) -> Result<Universes, ReadError> {
     Ok(Universes { levels, qualities })
 }
 
-/// A declaration's scheme as a struct-valued field holds it: `{parameter_count = 2, quality_count = 1, constraints = [u <= v + 1]}`, each part empty where it is left out, and a constraint's origin left empty.
+/// A declaration's scheme as a struct-valued field holds it: `{parameter_count = 2, quality_count = 1, constraints = [u <= v + 1]}`, each part empty where it is left out.
 pub fn universe_context_read(value: &CoreValue) -> Result<UniverseContext, ReadError> {
     let mut fields = value_fields(value)?;
     let count = |value: Option<&CoreValue>| match value {
