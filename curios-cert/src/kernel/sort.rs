@@ -106,8 +106,11 @@ impl Sort {
             return Ok(sort);
         }
 
-        // Depth is bought with stack, as every other walk over data-shaped depth buys it: a Π whose domain reduces to the Π itself is classified by descending into a type whose classification is already in flight, and the memo is written where the computation returns, so nothing closes that cycle short of the budget. Without this the native stack goes first and the process dies, which is no refusal (`documentation/design/soundness/the-soundness-board.md`).
-        let sort = recurse(|| Sort::classify(kernel, type_))?;
+        // Depth is bought with stack, as every other walk over data-shaped depth buys it, and each level is paid for from the budget, as the reducer pays for its own: a Π whose domain reduces to the Π itself is classified by descending into a type whose classification is already in flight, and the memo is written where the computation returns, so nothing closes that cycle short of the budget. Every reduction such a cycle asks after its first can be a memo hit, which spends nothing (`rec b: Type = List(b)`), so the level is the one charge it is sure to meet. Without the stack the native one goes first, and without the level the walk grows into memory until the process is killed; neither is a refusal (`documentation/design/soundness/the-soundness-board.md`).
+        kernel.enter_level()?;
+        let sort = recurse(|| Sort::classify(kernel, type_));
+        kernel.leave_level();
+        let sort = sort?;
         kernel.sort_store(type_.clone(), sort.clone());
 
         Ok(sort)

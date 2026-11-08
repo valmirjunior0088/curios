@@ -6,9 +6,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic, Item,
-        Level, Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term, UniverseContext,
-        UniverseParam, Universes, Variance, test_support::*,
+        Atom, Cost, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic,
+        Item, Level, Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term,
+        UniverseContext, UniverseParam, Universes, Variance, test_support::*,
     },
 };
 
@@ -110,9 +110,9 @@ fn held() -> Global {
     Global::Authored(Qualifier::from(["Held"]))
 }
 
-/// How many iterations a costly `Count` takes to unfold, and a budget that types the module and stops short of them.
+/// How many iterations a costly `Count` takes to unfold, and a budget that types the module and stops short of them: four frames, which buy the levels its types are classified at.
 const COSTLY: usize = 20_000;
-const BETWEEN: u64 = 2_000;
+const BETWEEN: u64 = 4 * Cost::FRAME.get();
 
 /// `induct Held.{u}: (i : Nat) -> Type u | hold() : (Count.{u}(Nat))` over `let Count.{u}(X : Type u) -> Nat = match unfolding | 0 => 0 | _ + 1; ih => ih end`. Typing the target reads `Count`'s type and never its value, and strict positivity reads no target; the variance walk reduces it, to see whether what is left still holds `u`, and that is the fold's every iteration.
 fn held_at_a_counted_index(unfolding: usize) -> Definitions {

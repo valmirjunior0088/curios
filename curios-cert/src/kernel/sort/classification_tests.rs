@@ -3,9 +3,10 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::Erased,
+    curios_analysis::{Erased, test_support::*},
     curios_core::{
-        Free, Intrinsic, Level, Nat, RecGroup, Term, UniverseContext, UniverseParam, Universes, Var,
+        Category, Cost, Free, Intrinsic, Level, Nat, RecGroup, ReduceError, Term, UniverseContext,
+        UniverseParam, Universes, Var,
     },
 };
 
@@ -334,18 +335,19 @@ fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
     );
 }
 
-/// Depth is bought with stack: a tower of negations five thousand deep is classified on the default test-thread stack, where the walk descends into a Π's domain to classify it and the memo is written only where each classification returns.
+/// Depth is bought with stack: a tower of negations five thousand deep is classified on the default test-thread stack, where the walk descends into a Π's domain to classify it and the memo is written only where each classification returns. Each level is a frame the budget pays for, so the kernel is given two frames a level.
 ///
 /// What this guards is the shape `.claude/rules/rust.md` asks of every walk over data-shaped depth. A sort walk that recursed natively would die on the segment it was entered on rather than refuse, and the soundness board requires the implementation to fail closed — a stack overflow is acceptable only where it refuses.
 ///
 /// Mutation-checked: with `Sort::of`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts, which is a death and not a refusal.
 #[test]
 fn a_tower_of_negations_is_classified_on_the_default_stack() {
-    let mut kernel = kernel();
+    const DEPTH: u32 = 5_000;
+    let mut kernel = Kernel::new(2 * u64::from(DEPTH) * Cost::FRAME.get(), SYNTAX);
     let falsehood = declare(&mut kernel, "False", Term::prop());
 
     let mut tower = falsehood.clone();
-    for level in 0..5_000 {
+    for level in 0..DEPTH {
         tower = Term::func_type([(binder(level, "x"), tower)], falsehood.clone());
     }
 
@@ -353,6 +355,28 @@ fn a_tower_of_negations_is_classified_on_the_default_stack() {
         matches!(Sort::of(&mut kernel, &tower), Ok(Sort::Prop(_))),
         "a Π into a proposition is a proposition at every depth",
     );
+}
+
+/// A type that unfolds to a list of itself runs the budget out on the levels its classification descends: a list's sort is its element's, `b`'s reduct is `List(b)` again, and every reduction after the first is a memo hit, which spends nothing. Core text meets such a member where a sibling is checked at it (`rec b: Type = #ListType(b) and c: b = #List(b, [])`), which the elaborator's own budget refuses before the kernel sees it.
+///
+/// Mutation-checked: with `Sort::of` entering no level, the walk grows its stack until the process is killed.
+#[test]
+fn a_type_that_unfolds_to_a_list_of_itself_runs_the_budget_out() {
+    let mut kernel = kernel();
+    let member = binder(0, "b");
+    let group = RecGroup::closing(vec![(
+        member,
+        Term::type_ground(),
+        Term::intrinsic(Intrinsic::ListType(Term::free_var(&member))),
+    )]);
+
+    assert!(matches!(
+        Sort::of(&mut kernel, &Term::rec_proj(group, 0)),
+        Err(Error::Reduce(ReduceError::Exhausted {
+            category: Category::Depth,
+            ..
+        })),
+    ));
 }
 
 /// An index no scope binds names no binder to read a type off, so the lookup a stuck spine's sort is read through answers nothing and the sort is refused, never aborted on.
