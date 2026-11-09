@@ -695,9 +695,9 @@ fn verdicts_within<'s>(
             });
         }
     }
-    // A former's domains, a family's parameters and indices and a record's or a concept's parameters, name no declaration that reaches it back, itself included: positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits. Over a baseline each changed item is asked, an item whose entry another moved under being read by that one's judgment.
+    // A former's domains, a family's parameters and indices and a record's or a concept's parameters, name no declaration that reaches it back, itself included: positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits. Over a baseline every item the walk visits is asked, adopted or judged: whether a former's domains name a declaration that reaches it back turns on what the items around it hold, so a step that makes an unchanged family's index hold it moves the answer and not the family's terms.
     let places = OnceCell::new();
-    for place in walk.iter().copied().filter(own_terms) {
+    for place in walk.iter().copied() {
         for (name, member) in indexed_by_its_cycle(definitions, place, &places) {
             verdicts.push(Verdict {
                 name: Some(name),

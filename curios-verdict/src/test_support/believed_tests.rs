@@ -1107,6 +1107,42 @@ let /lib/Q : Prop =
     assert!(undeclared(&stepped), "{stepped:?}");
 }
 
+/// `/u/A` is indexed by `/u/V`, and a step makes `/u/V` hold an `/u/A`: a walk over every declaration refuses `/u/A` as indexed by a family that holds it, and so does a walk over the baseline, though only `/u/V`'s terms moved, since what `/u/A`'s domains reach back is what the items around it now hold. Mutation-checked: with the cycle asked only of the items whose terms are not the baseline's, the second step builds.
+#[test]
+fn a_family_a_step_makes_its_index_hold_is_refused_over_its_baseline() {
+    let holding = |wrap: &str| {
+        fill!(
+            r"induct /u/A: (v: #{node = InductType} /u/V()) -> pub Prop
+| mk(): (#{node = Variant} /u/V/base())
+end
+induct /u/V: pub Prop
+| base()${wrap}
+end
+",
+            wrap = wrap,
+        )
+    };
+    let wrapping = "\n| wrap(x: #{node = InductType} /u/V(), s: #{node = InductType} /u/A()(x))";
+    let indexed = |stepped: &Result<(), Stopped>| {
+        matches!(
+            stepped,
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+                if verdict.name == Some(named("u/A")) && matches!(verdict.error, Error::IndexedByItsGroup { .. })
+        )
+    };
+
+    let mut whole = History::new();
+    let alone = whole.step("u", Written::CoreText, &holding(wrapping));
+    assert!(indexed(&alone), "{alone:?}");
+
+    let mut history = History::new();
+    history
+        .step("u", Written::CoreText, &holding(""))
+        .expect("the library builds");
+    let stepped = history.step("u", Written::CoreText, &holding(wrapping));
+    assert!(indexed(&stepped), "{stepped:?}");
+}
+
 /// A family whose one edit is the variance vector it carries, now claiming an irrelevance its telescope denies: a walk over every declaration refuses the claim where the family is declared, and so does a walk over the baseline, which held the family carrying another vector. Mutation-checked: with `induct_alike` reading no carried vector, the second step builds.
 #[test]
 fn a_family_stepped_to_a_variance_its_telescope_denies_is_refused_over_its_baseline() {
