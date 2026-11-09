@@ -1,6 +1,6 @@
 # What a compiled program still pays at run time
 
-**Not refined yet.** This specification reserves two costs a compiled program pays that its source does not ask for, each given a specification of its own when it is refined, as [a chain of `Nat` or `Int` steps](203-a-chain-of-nat-or-int-steps-runs-in-a-word.md) and [a combinator's closures](206-a-combinators-closures-cost-what-a-loop-written-in-place-costs.md) are. It is not an implementation plan.
+**Not refined yet.** This specification reserves two costs a compiled program pays that its source does not ask for, each given a specification of its own when it is refined, as [a chain of `Nat` or `Int` steps](201-a-chain-of-nat-or-int-steps-runs-in-a-word.md) and [a combinator's closures](200-a-combinators-closures-cost-what-a-loop-written-in-place-costs.md) are. It is not an implementation plan.
 
 ## What is missing
 
