@@ -1,6 +1,6 @@
 //! Private closed control-flow graph produced after high-CPS optimization.
 //!
-//! Functions have explicit blocks and block parameters. The CPS return continuation never becomes a block: a jump to the current function's bodyless sentinel is translated directly to [`MachineTerminator::Return`].
+//! Functions have explicit blocks and block parameters. The CPS return continuation never becomes a block: a jump to the current function's bodyless sentinel is translated directly to [`MachineTerminator::Return`], and a switch's edge to it lands in a block of its own that returns what the edge hands it.
 
 use {
     curios_abi::ForeignFunction,
@@ -606,7 +606,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     };
                 }
                 terminal => {
-                    let terminator = self.lower_terminator(terminal, &mut instructions);
+                    let terminator = self.lower_terminator(block, terminal, &mut instructions);
                     return MachineBlock {
                         params,
                         instructions,
@@ -643,8 +643,36 @@ impl<'a> MachineFunctionLowerer<'a> {
         }
     }
 
+    /// A switch's edge: a block for a continuation, and for the function's return a block of its own, nested under the switch's `block`, that returns what the edge hands it, since the return has no body for a branch to land in.
+    fn lower_branch(
+        &mut self,
+        block: MachineBlockId,
+        edge: &curios_cps::Edge,
+        instructions: &mut Vec<MachineInstruction>,
+    ) -> MachineEdge {
+        if edge.target != self.function.return_cont {
+            return self.lower_edge(edge, instructions);
+        }
+        let returned = self.block_entropy.fresh();
+        let operands = self.lower_atoms(&edge.args, instructions);
+        self.blocks.insert(
+            returned,
+            MachineBlock {
+                params: vec![],
+                instructions: vec![],
+                terminator: MachineTerminator::Return(operands),
+            },
+        );
+        self.block_scopes.entry(block).or_default().push(returned);
+        MachineEdge {
+            target: returned,
+            args: vec![],
+        }
+    }
+
     fn lower_terminator(
         &mut self,
+        block: MachineBlockId,
         node: &curios_cps::Node,
         instructions: &mut Vec<MachineInstruction>,
     ) -> MachineTerminator {
@@ -668,11 +696,11 @@ impl<'a> MachineFunctionLowerer<'a> {
                 scrutinee: self.lower_atom(scrutinee, instructions),
                 cases: cases
                     .iter()
-                    .map(|(tag, edge)| (*tag, self.lower_edge(edge, instructions)))
+                    .map(|(tag, edge)| (*tag, self.lower_branch(block, edge, instructions)))
                     .collect(),
                 default: default
                     .as_ref()
-                    .map(|edge| self.lower_edge(edge, instructions)),
+                    .map(|edge| self.lower_branch(block, edge, instructions)),
             },
             curios_cps::Node::ApplyFun {
                 callee,

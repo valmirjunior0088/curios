@@ -1,6 +1,6 @@
 //! The Curios WebAssembly emission: [`into_wasm`](into_wasm()) lowers an optimized `curios_cps::Module` to a WebAssembly-GC module, performing delayed closure conversion, verifying a private closed machine CFG, structurizing reducible control into Wasm blocks and loops, and localizing dispatcher fallback to irreducible scopes.
 //!
-//! Machine lowering recognizes a function's bodyless return continuation in the current-function context, so an ordinary return, `ApplyCont(function.return_cont, [value])`, is emitted as `Return` without allocating a block.
+//! Machine lowering recognizes a function's bodyless return continuation in the current-function context, so an ordinary return, `ApplyCont(function.return_cont, [value])`, is emitted as `Return` without allocating a block, and a switch's edge to it as a block of its own that returns.
 //!
 //! Every program value this crate emits lives in a GC reference — a struct, an array, or an `i31` — and never in linear memory, so a module emitted here declares no memory: [WebAssembly-GC is the only back end](../../documentation/design/compilation/webassembly-gc-is-the-only-back-end.md), which this crate enforces.
 //!

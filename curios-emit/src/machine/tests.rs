@@ -44,6 +44,104 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     ));
 }
 
+/// A switch may branch straight to the function's return, which has no body: each such edge lands in a block of its own, nested under the switch's, that returns what the edge hands it.
+#[test]
+fn a_switch_edge_to_the_return_lands_in_a_block_that_returns() {
+    let mut source = curios_cps::Module::new();
+    let main = source.reserve_function();
+    let main_return = source.reserve_continuation();
+    let pick = source.reserve_function();
+    let pick_return = source.reserve_continuation();
+    let x = source.add_value(Some("x".into()));
+    let seven = curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(7u32)));
+    let switch = source.add_node(curios_cps::Node::Switch {
+        scrutinee: curios_cps::Atom::Value(x),
+        cases: BTreeMap::from([(
+            0,
+            curios_cps::Edge {
+                target: pick_return,
+                args: vec![seven],
+            },
+        )]),
+        default: Some(curios_cps::Edge {
+            target: pick_return,
+            args: vec![curios_cps::Atom::Value(x)],
+        }),
+    });
+    source.define_function(
+        pick,
+        curios_cps::Function {
+            debug_name: Some("pick".into()),
+            params: vec![x],
+            return_cont: pick_return,
+            body: switch,
+            droppable: false,
+        },
+    );
+    let picked = source.add_value(Some("picked".into()));
+    let exit = source.add_node(halt(vec![curios_cps::Atom::Value(picked)]));
+    let done = source.add_continuation(curios_cps::Continuation {
+        debug_name: Some("done".into()),
+        params: vec![picked],
+        body: exit,
+    });
+    let call = source.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(pick),
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
+            Natural::from(1u32),
+        ))],
+        return_to: done,
+    });
+    let scope = source.add_node(curios_cps::Node::LetCont {
+        continuations: vec![done],
+        body: call,
+    });
+    let body = source.add_node(curios_cps::Node::LetFun {
+        functions: vec![pick],
+        body: scope,
+    });
+    source.define_function(
+        main,
+        curios_cps::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    source.set_entry(main);
+    source.verify().unwrap();
+
+    let machine = lowered(&source);
+    machine.verify().unwrap();
+    let function = &machine.functions[&pick];
+    let MachineTerminator::Switch { cases, default, .. } =
+        &function.blocks[&function.entry].terminator
+    else {
+        panic!("pick's entry block switches")
+    };
+    let returned = |edge: &MachineEdge| match &function.blocks[&edge.target].terminator {
+        MachineTerminator::Return(operands) => operands.clone(),
+        terminator => {
+            panic!("a branch to the return lands in a block that returns, not {terminator:?}")
+        }
+    };
+    assert!(matches!(
+        returned(&cases[&0]).as_slice(),
+        [MachineOperand::Literal(curios_cps::Literal::Nat(value))] if *value == Natural::from(7u32)
+    ));
+    assert!(matches!(
+        returned(default.as_ref().unwrap()).as_slice(),
+        [MachineOperand::Value(value)] if *value == value_id(x)
+    ));
+    assert_eq!(
+        function.block_scopes[&function.entry],
+        vec![cases[&0].target, default.as_ref().unwrap().target]
+    );
+    into_wasm(&source);
+}
+
 #[test]
 fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     let mut source = curios_cps::Module::new();
