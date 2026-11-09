@@ -144,7 +144,16 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
         match Node/remove(n, k, @grounded(m.rooted))
         | gone(_) => Map { root = Option/none(), @rooted = Rooted/none() }
         | kept(n2, @stands) => Map { root = Option/some(n2), @rooted = rooted(n2, stands.sound) }
-        | absent(_) => m
+        | absent(n2, @back, _) =>
+            Map {
+                root = Option/some(n2),
+                @rooted =
+                    rooted(
+                        n2,
+                        Eq/subst(
+                            (t: Node(K, V)) => Node/Sound(t),
+                            Eq/sym(back),
+                            grounded(m.rooted))) }
         end
     end;
 

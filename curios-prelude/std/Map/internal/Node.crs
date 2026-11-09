@@ -1093,7 +1093,7 @@ pub let zero_left_answers(
 
 --- How a removal under the node `t` of the key whose encoding is `k` ended: the key was not there, and `t` answers nothing at `k`; the node was its leaf, and nothing is left of it; or what is left of the node, which may stand where `t` did and answers nothing at `k` in its place.
 pub induct Removed(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
-| absent(answers: Answers(t, t, k, Option/none()))
+| absent(n: Node(K, V), @back: Eq()(n, t), answers: Answers(t, t, k, Option/none()))
 | gone(empty: Gone(t, k))
 | kept(n: Node(K, V), @stands: Stands(n, t), @answers: Answers(n, t, k, Option/none()))
 end
@@ -1112,14 +1112,20 @@ pub let remove(
         match Hash/hash(k0) == k
         | true =>
             Removed/gone(leaf_gone(k0, v0, k, Bytes/eq_of_eql(Hash/hash(k0), k, Bool/True/qed())))
-        | false => Removed/absent(leaf_absent(k0, v0, k, Eq/refl()))
+        | false => Removed/absent(t, @Eq/refl(), leaf_absent(k0, v0, k, Eq/refl()))
         end
     | fork(c, z, o) =>
         match bit(k, c)
         | false =>
             match remove(z, k, @sound.zero)
-            | absent(answers) =>
-                Removed/absent(zero_answers(c, z, o, z, k, Option/none(), Bool/True/qed(), answers))
+            | absent(z2, @back, answers) =>
+                Removed/absent(
+                    Node/fork(c, z2, o),
+                    @Eq/subst(
+                        (m: Node(K, V)) => Eq()(Node/fork(c, m, o), Node/fork(c, z, o)),
+                        Eq/sym(back),
+                        Eq/refl()),
+                    zero_answers(c, z, o, z, k, Option/none(), Bool/True/qed(), answers))
             | gone(empty) =>
                 Removed/kept(
                     o,
@@ -1133,8 +1139,14 @@ pub let remove(
             end
         | true =>
             match remove(o, k, @sound.one)
-            | absent(answers) =>
-                Removed/absent(one_answers(c, z, o, o, k, Option/none(), Bool/True/qed(), answers))
+            | absent(o2, @back, answers) =>
+                Removed/absent(
+                    Node/fork(c, z, o2),
+                    @Eq/subst(
+                        (m: Node(K, V)) => Eq()(Node/fork(c, z, m), Node/fork(c, z, o)),
+                        Eq/sym(back),
+                        Eq/refl()),
+                    one_answers(c, z, o, o, k, Option/none(), Bool/True/qed(), answers))
             | gone(empty) =>
                 Removed/kept(
                     z,

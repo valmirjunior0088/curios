@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value, which is Perceus's rule and what lets a path copy qualify.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value, which is Perceus's rule and what lets a path copy qualify.
 //!
 //! **Constants by tag.** A constant is one global every use shares, and it reaches every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
 //!
@@ -818,7 +818,7 @@ impl<'s> Facts<'s> {
                         .args
                         .iter()
                         .enumerate()
-                        .filter(|(_, atom)| !matches!(atom, Atom::Value(_)))
+                        .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
                         .map(|(index, _)| index)
                         .collect(),
                     Some(Node::ApplyFun {
@@ -851,7 +851,9 @@ impl<'s> Facts<'s> {
             });
             let shared = |solver: &Solver<Shared, Key>, atom: &Atom| match atom {
                 Atom::Value(value) => solver.fact(&Key::Value(*value)).is_none_or(|fact| fact.0),
-                _ => true,
+                // A filler is null, which nothing shares; a literal or a function may be a constant.
+                Atom::Filler => false,
+                Atom::Literal(_) | Atom::Fun(_) => true,
             };
             for (value, def) in &shape.defs {
                 let value = *value;
@@ -1041,7 +1043,7 @@ fn clear_of_constants(
         && guard(module, shape, value, node).is_some_and(|tag| !possible.contains(&Some(tag)))
 }
 
-/// Whether a call hands its parameter `index` a value dead after it, and no other parameter of the call that same value.
+/// Whether a call hands its parameter `index` a value dead after it, and no other parameter of the call that same value, or a filler, the null no one holds.
 fn handed_dead(module: &Module, shape: &Shape, call: NodeId, index: usize) -> bool {
     let Some(Node::ApplyFun { args, .. }) = module.node(call) else {
         return false;
@@ -1051,11 +1053,12 @@ fn handed_dead(module: &Module, shape: &Shape, call: NodeId, index: usize) -> bo
             args.iter().filter(|other| *other == atom).count() == 1
                 && !shape.live_past(call, *value)
         }
+        Some(Atom::Filler) => true,
         _ => false,
     }
 }
 
-/// Whether an argument a jump or an edge hands `block` is a value dead on entry to it and handed once on the edge.
+/// Whether an argument a jump or an edge hands `block` is a value dead on entry to it and handed once on the edge, or a filler.
 fn arg_dead(shape: &Shape, atom: &Atom, args: &[Atom], block: Block) -> bool {
     match atom {
         Atom::Value(value) => {
@@ -1065,6 +1068,7 @@ fn arg_dead(shape: &Shape, atom: &Atom, args: &[Atom], block: Block) -> bool {
                     .get(&block)
                     .is_some_and(|live| live.contains(value))
         }
+        Atom::Filler => true,
         _ => false,
     }
 }

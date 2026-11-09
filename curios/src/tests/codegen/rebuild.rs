@@ -101,23 +101,26 @@ const SPINES: &str = r#"
         end;
 "#;
 
-/// Every construction `/std/Map/internal/Node/insert` makes keeping a slot of the node it took apart rebuilds that node, at every level of the descent: a construction keeping a slot of it is one that reads a field of it, and none is left.
-#[test]
-fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
-    let (_, module) = modules(&program(
-        SPINES,
-        "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
-    ));
-    let insert = module
+/// A map filled with `n` keys, then drained of every other one and of keys it never held.
+const REMOVALS: &str = r#"
+    let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+        match n | 0 => m | k + 1; _ => fill(k, Map/insert(m, k * 7 % 1009, k)) end;
+    let drain(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+        match n | 0 => m | k + 1; _ => drain(k, Map/remove(m, k * 14 % 1009)) end;
+"#;
+
+/// The constructions keeping a slot of the node the function named `name` takes, which a rebuild in place leaves none of: each reads a field of it.
+fn copies_keeping_a_slot(module: &Module, name: &str) -> usize {
+    let taken = module
         .live_functions()
         .find(|(_, function)| {
             function
                 .debug_name
                 .as_deref()
-                .is_some_and(|name| name.ends_with("/std/Map/internal/Node/insert"))
+                .is_some_and(|debug| debug.ends_with(name))
         })
         .map(|(_, function)| function.params[0])
-        .expect("`Node/insert` is a function of its own");
+        .unwrap_or_else(|| panic!("`{name}` is a function of its own"));
     let fields = module
         .live_nodes()
         .filter_map(|(_, node)| match node {
@@ -126,19 +129,47 @@ fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
                 op: Intrinsic::RowGet(..),
                 args,
                 ..
-            } if args.as_slice() == [Atom::Value(insert)] => Some(*result),
+            } if args.as_slice() == [Atom::Value(taken)] => Some(*result),
             _ => None,
         })
         .collect::<BTreeSet<ValueId>>();
-    let copies = module
+    module
         .live_nodes()
         .filter(|(_, node)| {
             matches!(node, Node::LetValue { value: ValueExpr::Row(_, atoms), .. }
                 if atoms.iter().any(|atom| matches!(atom, Atom::Value(value) if fields.contains(value))))
         })
-        .count();
-    assert_eq!(copies, 0, "{module}");
+        .count()
+}
+
+/// Every construction `/std/Map/internal/Node/insert` makes keeping a slot of the node it took apart rebuilds that node, at every level of the descent.
+#[test]
+fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
+    let (_, module) = modules(&program(
+        SPINES,
+        "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+    ));
+    assert_eq!(
+        copies_keeping_a_slot(&module, "/std/Map/internal/Node/insert"),
+        0,
+        "{module}"
+    );
     assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
+}
+
+/// A map whose keys are removed one by one, each removal's map used once: every fork `/std/Map/internal/Node/remove` makes keeping a slot of the node it took apart rebuilds that node, the key found or absent.
+#[test]
+fn map_remove_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
+    let (_, module) = modules(&program(
+        REMOVALS,
+        "Map/len(drain(n, fill(n, Map/empty())))",
+    ));
+    assert_eq!(
+        copies_keeping_a_slot(&module, "/std/Map/internal/Node/remove"),
+        0,
+        "{module}"
+    );
+    assert!(rebuilds_of(&module, NODE) >= 4, "{module}");
 }
 
 /// What looks fresh and is shared: a map read after its insert, a map whose successor's predecessor is read again, a map a list holds, a map a closure captures, a map an effect description holds, and a map that is constant data. None of them is rebuilt.
@@ -462,7 +493,14 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         SPINES,
         "Map/fold(walk(n, (n + 1) % 65537, Map/empty()), 0, (_, v, acc) => (acc + v) % 1000003)",
     );
-    for (source, n) in corpus.into_iter().chain([(heap, "300"), (spines, "300")]) {
+    let removals = program(
+        REMOVALS,
+        "Map/fold(drain(n, fill(n, Map/empty())), 0, (_, v, acc) => (acc + v) % 1000003)",
+    );
+    for (source, n) in corpus
+        .into_iter()
+        .chain([(heap, "300"), (spines, "300"), (removals, "300")])
+    {
         let (lowered, rebuilt) = modules(&source);
         let mut kept = lowered;
         curios_cps::optimize(&mut kept);

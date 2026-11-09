@@ -1,6 +1,6 @@
 # A construction beside a dying value of its shape is rebuilt in place
 
-[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that a construction beside a dying value of its own shape rebuilds that value in place where the compiler has proved it unshared and dead there, and that `/std` writes what it rebuilds linearly. `curios-cps` rebuilds in place where every known call of a function hands it a unique value (`rebuild_in_place`), but a function some calls hand a shared value has no copy for the others, so a search tree whose first insert is handed the constant empty tree rebuilds nothing; and `/std/Map/remove` hands back the root it gave away where its key is absent. Its next step is the rest of stage 4, restating `remove`.
+[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that a construction beside a dying value of its own shape rebuilds that value in place where the compiler has proved it unshared and dead there, and that `/std` writes what it rebuilds linearly. `curios-cps` rebuilds in place where every known call of a function hands it a unique value (`rebuild_in_place`), but a function some calls hand a shared value has no copy for the others, so a search tree whose first insert is handed the constant empty tree rebuilds nothing. Its next step is stage 5, reuse versions.
 
 ## What it costs
 
@@ -56,7 +56,6 @@ So rebuilding in place is about a third of `spines` natively and a quarter to a 
 
 ## Stages
 
-4. **The rest of `/std/Map` restated linearly:** `Node/remove`'s `absent` carries its node back, `Map/remove` rebuilds its map from it, and `try_get`'s lemmas of `remove` follow through `back`, with a codegen test holding that a loop removing from a map it uses once rebuilds `Node`.
 5. **Reuse versions,** judged with the base ones as **Settled** states and made for the calls that reach them through the specializer's copies and their allowance, with a codegen test holding that a search tree whose first insert is handed the constant empty tree rebuilds its forks in the loop after it.
 6. **Measurement:** `spines` natively and under V8 by the protocol above, a map grown by new keys and shared, the corpus's sizes, the harness's compile and a benchmark reading.
 

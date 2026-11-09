@@ -161,7 +161,11 @@ pub let of_remove(
         match Node/remove(n, Hash/hash(key), @grounded(m.rooted))
         | gone(_) => Eq/refl()
         | kept(_, @_, @answers) => answers(Hash/hash(key))
-        | absent(answers) => answers(Hash/hash(key))
+        | absent(_, @back, answers) =>
+            Eq/subst(
+                (t: Node(K, V)) => Eq()(Node/find(t, Hash/hash(key)), Option/none(@V)),
+                Eq/sym(back),
+                answers(Hash/hash(key)))
         end
     end;
 
@@ -193,7 +197,12 @@ pub let of_remove_other(
                     codes,
                     empty(Hash/hash(other))))
         | kept(n2, @_, @answers) => elsewhere(n, n2, key, Option/none(), other, codes, answers)
-        | absent(_) => Eq/refl()
+        | absent(_, @back, _) =>
+            Eq/subst(
+                (t: Node(K, V)) =>
+                    Eq()(Node/find(t, Hash/hash(other)), Node/find(n, Hash/hash(other))),
+                Eq/sym(back),
+                Eq/refl())
         end
     end;
 
