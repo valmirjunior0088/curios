@@ -289,7 +289,7 @@ fn attempted(
 /// Two of them because neither is universally installed and both are ubiquitous enough that demanding a particular one would be arbitrary — the same reasoning that shells out at all rather than vendoring a client.
 ///
 /// `subject` names what is being fetched, since the two callers describe it differently: `curate` knows the package a row was declared by, and `curios pin` is being handed the row that does not exist yet.
-pub(crate) fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), String> {
+pub fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), String> {
     let curl = Command::new("curl")
         .args([
             "--location",
@@ -385,7 +385,7 @@ fn fetch(store: &Store, acquisition: &Acquisition) -> Result<(), String> {
 /// Ask `git` for `rev` of `url`, into `scratch`.
 ///
 /// Takes the two fields rather than an [`Acquisition`], because `curios pin` delivers a tree it has no pin for yet — computing that pin is the whole of what it is doing.
-pub(crate) fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String> {
+pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String> {
     git(scratch, &["init", "--quiet"])?;
     git(scratch, &["remote", "add", "origin", url])?;
 

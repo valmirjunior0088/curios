@@ -218,7 +218,7 @@ fn nearest_package(directory: &Path) -> Result<(Package, PathBuf), String> {
 }
 
 /// The nearest directory at or above `directory` that holds a manifest — the one walk both an invocation's directory and a file's own are placed by.
-pub(crate) fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
+pub fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
     directory
         .ancestors()
         .find(|at| at.join(MANIFEST).is_file())
@@ -228,7 +228,7 @@ pub(crate) fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
 /// The umbrella above `directory` that enumerates it, and the directory that umbrella's manifest sits in.
 ///
 /// The first umbrella found decides the answer either way. Umbrellas do not nest, so there is no second one above it to ask, and one that does not enumerate this package governs nothing rather than deferring upward.
-pub(crate) fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, String> {
+pub fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, String> {
     for at in directory.ancestors().skip(1) {
         let path = at.join(MANIFEST);
         if !path.is_file() {

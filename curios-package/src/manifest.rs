@@ -885,7 +885,7 @@ fn table(
 /// The canonical name `written` states, refused when it is not one.
 ///
 /// **A name is one word, and that is the whole rule.** It is the prefix the package mounts at, and a prefix is an atom: `myorg` in a hypothetical `myorg/json` would denote nothing on its own, so admitting segments here would make every package silently declare namespaces nobody wrote. A segment of names is a real thing to want, but it belongs to a package's own modules, where somebody declares each one.
-pub(crate) fn canonical(written: &str, what: &str) -> Result<String, String> {
+pub fn canonical(written: &str, what: &str) -> Result<String, String> {
     let refuse = |reason: &str| {
         format!(
             "the {what} {written:?} is no name a path could spell: {reason}. A name is a single Curios identifier — no dashes, no `/`, and no keyword."

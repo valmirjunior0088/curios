@@ -7,40 +7,49 @@
 //! Every refusal here fires before elaboration and names both parties. A manifest declaring two modes, a name no path could spell, a dependency row missing the pin its source requires: each is diagnosed against the file somebody wrote, never surfaced downstream as an unbound name.
 
 mod compatibility;
-pub use compatibility::*;
+pub use compatibility::CompilerVersion;
+use compatibility::*;
 
 mod compiler;
-pub use compiler::*;
+pub use compiler::compiler;
 
 mod curate;
-pub use curate::*;
+use curate::*;
+pub use curate::{Acquisition, Curated, ModuleAcquisition, curate, declared_modules};
 
 mod govern;
-pub use govern::*;
+pub use govern::Governing;
+use govern::*;
 
 mod graph;
-pub use graph::*;
+pub use graph::order;
 
 mod hash;
-pub use hash::*;
+pub use hash::{FileHash, TreeHash};
 
 mod layout;
-pub use layout::*;
+pub use layout::package_at;
+use layout::*;
 
 mod manifest;
-pub use manifest::*;
+use manifest::*;
+pub use manifest::{
+    Delivery, Dependency, Executable, Foreign, Gateway, LIBRARY, MANIFEST, Module, PAGE_FILES,
+    Package, Snapshot, Target, Umbrella,
+};
 
 mod new;
-pub use new::*;
+pub use new::scaffold;
 
 mod pin;
-pub use pin::*;
+pub use pin::{Pinned, Pinning, Probe, Repoint, Subject, pin};
 
 mod selection;
-pub use selection::*;
+pub use selection::{Entire, Entry, Home, Library, Program, Selection, Spelling, Unlinked};
 
 mod served;
-pub use served::*;
+pub use served::Served;
 
 mod store;
-pub use store::*;
+use store::*;
+pub use store::{Runs, Store, entry_slot, payload_slot, unit_slot};

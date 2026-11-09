@@ -57,7 +57,7 @@ impl fmt::Display for CompilerVersion {
 }
 
 /// Membership chooses the one owner of the requirement: an enumerating umbrella, or the standalone package itself.
-pub(crate) fn require_compiler(
+pub fn require_compiler(
     package: &Package,
     directory: &Path,
     umbrella: Option<(&Umbrella, &Path)>,
@@ -67,7 +67,7 @@ pub(crate) fn require_compiler(
 }
 
 /// Resolve the declaration before comparing versions: file placement may discover that a nearby package does not own the file at all.
-pub(crate) fn compiler_requirement<'a>(
+pub fn compiler_requirement<'a>(
     package: &'a Package,
     directory: &Path,
     umbrella: Option<(&'a Umbrella, &Path)>,

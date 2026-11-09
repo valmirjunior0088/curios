@@ -43,7 +43,7 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Str
 /// **Direct dependencies only.** A dependency of a dependency is in the fold — it had to be, for the one in between to compile — and is unspellable here, which is what makes a manifest's rows the whole statement of what a unit reaches. This is law 3: membership organizes and dependency compiles.
 ///
 /// `/std` is implicit because it is the one unit every program is entitled to and no manifest declares: a row for it would be ceremony every package in existence repeats. It is named here rather than derived, which is the one place in this crate that knows the standard library by name; the root beneath it, `/sys`, is named by nothing here at all — it has no path, so no manifest can reach it and `curios-pipeline`'s `standard` module makes the one grant of it.
-pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
+pub fn declared(package: &Package) -> Vec<Qualifier> {
     package
         .dependencies
         .keys()
@@ -55,7 +55,7 @@ pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
 /// The prefixes one of `package`'s executables may name: everything its library may, and the library itself.
 ///
 /// An executable is part of its package, so it reaches the package's own library without declaring it — a program does not depend on itself. Spelled once, here, because every way of selecting a declared program asks it — by name, as the package's default, or through a file a question placed — and an executable that resolves a prefix under one and not another is a disagreement no test crosses.
-pub(crate) fn reachable(package: &Package) -> Vec<Qualifier> {
+pub fn reachable(package: &Package) -> Vec<Qualifier> {
     declared(package)
         .into_iter()
         .chain([Qualifier::from([package.name.as_str()])])
@@ -65,7 +65,7 @@ pub(crate) fn reachable(package: &Package) -> Vec<Qualifier> {
 /// The module `file` would be in `package`'s library at `directory`, by the layout rule and its one exception: `lib.crs` beside the manifest is the root, and every other `.crs` under the directory is the qualifier its path spells, `parse/lexer.crs` being `/json/parse/lexer`. `None` when the spelling is no module's — another extension, or a segment no identifier — since no `mod` could declare it.
 ///
 /// The spelling is what is asked, not the disk: whether a `mod` reaches the module is `RootSource::declares_module`'s question, and this is what to ask it about. Both paths are compared as given, so hand them one spelling.
-pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Option<Qualifier> {
+pub fn module_of(package: &Package, directory: &Path, file: &Path) -> Option<Qualifier> {
     if file == directory.join(LIBRARY) {
         return Some(Qualifier::from([package.name.as_str()]));
     }
@@ -80,7 +80,7 @@ pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Opt
 }
 
 /// The module `file` would be under a root whose namespace directory is `namespace`, by the layout rule every header obeys: `helper/deep.crs` is `/helper/deep` below the root's own mount. `None` when the spelling is no module's.
-pub(crate) fn module_below(namespace: &Path, file: &Path) -> Option<Qualifier> {
+pub fn module_below(namespace: &Path, file: &Path) -> Option<Qualifier> {
     spelled_segments(file.strip_prefix(namespace).ok()?).map(Qualifier::from)
 }
 

@@ -25,9 +25,9 @@ use {
 /// **Located without reading the manifest's rows**, since the row a pin is asked to repair — one missing its `hash`, or its table — is one the manifest cannot be read with yet: a governing package is a manifest read whole, which would refuse the very row the pin writes. What is held to the manifest's rules is what [`pin`] would write.
 pub struct Pinning {
     /// The manifest written.
-    pub manifest: PathBuf,
+    manifest: PathBuf,
     /// Where the manifest sits, which a carried path is relative to.
-    pub directory: PathBuf,
+    directory: PathBuf,
     /// The governing root, where the store sits: the umbrella's directory when one enumerates the package, and the package's otherwise.
     root: PathBuf,
 }
