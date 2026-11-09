@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_cert::{Error, certify_definitions, infer, recheck_definitions_verdicts_uncached},
+    curios_cert::{Error, certify_definitions, infer, test_support::*},
     curios_core::{
         Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Quality, Reducer, Subterm,
         Telescope, Term, Variance, Zonked, instantiate_qualities,
@@ -46,7 +46,7 @@ fn class(error: &Error) -> String {
 
 /// Every item the kernel refuses across the whole fixed prelude, tallied by class.
 ///
-/// Not an assertion — a measurement, run on demand. `recheck_definitions` stops at the first refusal and so says nothing about what lies past it; this walks to the end with each verdict independent of the others (see `recheck_definitions_verdicts`), which is what makes the classes countable rather than discovered one build at a time.
+/// Not an assertion — a measurement, run on demand. A walk that stopped at the first refusal would say nothing about what lies past it; this one walks to the end with each verdict independent of the others (see `curios_cert::certify_definitions`), which is what makes the classes countable rather than discovered one build at a time.
 ///
 /// The restored image is the subject, named directly: a compiled module carries only its own items, so no fixture reaches the standard library by compiling. What asserts the prelude is acceptable is `curios-prelude`'s own build script, which runs this same walk and panics on the first refusal; this is the inventory beside it.
 ///

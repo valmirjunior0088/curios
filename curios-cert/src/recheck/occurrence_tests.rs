@@ -65,7 +65,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 ///
 /// [`an_occurrence_whose_arity_is_not_its_declarations_is_refused`] holds this for the two type formers, where `Sort::of` consults a declaration to answer for an occurrence. It does not reach the value forms: nothing calls `Sort::of` on a `Struct` or a `Variant`, so their carried parameter list needs a check of its own.
 ///
-/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is an `Error`, and `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
+/// Unchecked, the two forms fail differently, and neither fails well. A `Struct` opens the declaration's arity with `Telescope::open`, which **asserts** — so a value at no parameters for a one-parameter structure, or at two, would abort the process. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`), but it is the wrong shape twice over: a malformed value is the *program's* fault, which the house rule says is an `Error`, and `certify_definitions` is documented as walking to the end with each verdict independent of the others — an abort takes every other verdict with it, which is what makes the disagreement count a count.
 ///
 /// A `Variant` instead opens with `open_params`, which is tolerant: too few parameters leaves the declaration's own parameter binders unopened, so they read as *payload* slots and the payload-arity check compares against the wrong number, and only a downstream conversion that happens to reject the short parameter list would refuse it — sound by coincidence rather than by any rule about the value.
 ///
@@ -152,7 +152,7 @@ fn a_nominal_value_types_its_parameters() {
 ///
 /// Reduction runs on a type position before typing has reached it, so the functions that walk it cannot rest on an invariant typing would establish.
 ///
-/// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda would **abort the walk**; it is stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
+/// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda would **abort the walk**; it is stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `certify_definitions` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
 ///
 /// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm opens the head type's telescope at the arguments supplied, and each entry that remains is still under its own mark, so there is no vector beside the telescope to drift and this fixture keeps the lambda case alone.
 ///
@@ -240,7 +240,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
 #[test]
 fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, definitions) in unguarded_opener_cases() {
-        // The demonstrated defect is the *abort*: `recheck_definitions_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
+        // The demonstrated defect is the *abort*: `certify_definitions` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = catch_unwind(AssertUnwindSafe(|| {
             fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX)
         }))

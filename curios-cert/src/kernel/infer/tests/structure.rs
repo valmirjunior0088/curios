@@ -96,7 +96,7 @@ fn elaboration_only_syntax_is_refused() {
 
 /// A nominal occurrence states as many parameters as its declaration declares, and the two rules that open a `struct` arity at an occurrence's parameters must check that before opening it.
 ///
-/// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `recheck_definitions_verdicts`' count a count. `check_instance` decides the *universe* width and says nothing about the parameters, so `infer`'s projection rule and `check`'s record rule reach `open` only through the checked handle, as `Sort::of` and `synth_neutral` do.
+/// `Telescope::open` asserts on a count mismatch, so an unguarded rule does not refuse the item — it **aborts the walk**, losing every other verdict, which is what makes `certify_definitions`' count a count. `check_instance` decides the *universe* width and says nothing about the parameters, so `infer`'s projection rule and `check`'s record rule reach `open` only through the checked handle, as `Sort::of` and `synth_neutral` do.
 ///
 /// Neither is reachable from a surface program — the elaborator does not emit an occurrence at the wrong count — so this is the shape that needs a term built by hand, and it is a fail-open-to-abort rather than an unsoundness. Both rules are reached here at a one-parameter family occurring with none: the projection through a variable assumed at that type, and the record through its literal, which states the parameters it is built at.
 #[test]

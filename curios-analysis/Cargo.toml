@@ -24,6 +24,6 @@ curios-num = { workspace = true }
 [dev-dependencies]
 # The foreign row `tests/driven/walk_tests.rs` forges to put a call in a foreign call's argument, the one child position no `curios-core` constructor reaches without one.
 curios-abi = { workspace = true }
-curios-cert = { workspace = true }
+curios-cert = { workspace = true, features = ["test-support"] }
 # This crate on itself, only to turn `test-support` on for its own tests: `tests/driven/` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
 curios-analysis = { path = ".", features = ["test-support"] }

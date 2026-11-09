@@ -70,7 +70,7 @@ curios-common = { workspace = true }
 [dev-dependencies]
 curios = { workspace = true, features = ["test-support"] }
 curios-abi = { workspace = true }
-curios-cert = { workspace = true }
+curios-cert = { workspace = true, features = ["test-support"] }
 # `curios_core::test_support`'s builders, which the `/sys` roster's suite builds its fixtures with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-core = { workspace = true, features = ["test-support"] }
 curios-elab = { workspace = true }

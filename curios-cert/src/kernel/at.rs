@@ -8,7 +8,7 @@
 //! 2. the parameter count;
 //! 3. for an inductive *type* occurrence, the index count.
 //!
-//! Spread over the call sites, that is three things to remember at each of them, and a site that forgets one reaches [`Telescope::open`] — which **asserts** — so an occurrence at the wrong count aborts the walk rather than refusing the item, losing every other verdict in the same run, which is what makes `recheck_definitions_verdicts`' count a count.
+//! Spread over the call sites, that is three things to remember at each of them, and a site that forgets one reaches [`Telescope::open`] — which **asserts** — so an occurrence at the wrong count aborts the walk rather than refusing the item, losing every other verdict in the same run, which is what makes `certify_definitions`' count a count.
 //!
 //! So the checks live in the constructor and the answers behind it. A rule that holds an [`InductAt`] or a [`StructAt`] holds proof that all three passed, and it cannot open an arity at parameters other than the ones they were checked against, because the handle carries them and never takes them again.
 //!

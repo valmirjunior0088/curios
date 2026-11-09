@@ -52,12 +52,13 @@ let /second : (p: #NatType, q: #NatType, a: #NatType, b: #NatType, m: #NatType) 
 
     for uncached in [false, true] {
         for (asked, definitions) in [("alone", &alone), ("after the inner pair", &after)] {
-            let kernel = match uncached {
+            let mut kernel = match uncached {
                 false => Kernel::new(BUDGET, SYNTAX),
                 true => Kernel::uncached(BUDGET, SYNTAX),
             };
             let verdicts =
-                super::verdicts_from(kernel, definitions, None, &Globals::default()).verdicts;
+                super::verdicts_from(&mut kernel, definitions, None, &Globals::default(), None)
+                    .verdicts;
             assert!(
                 refused(&verdicts),
                 "the outer pair asked {asked}, with the memos off: {uncached}, holds: {verdicts:?}",

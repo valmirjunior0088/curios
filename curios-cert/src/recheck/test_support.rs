@@ -1,6 +1,6 @@
 //! The hand-built adversarial modules the recheck suites forge, and the declarations they forge them from.
 //!
-//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means constructing the finished module here and asking `recheck_definitions_verdicts` directly.
+//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means constructing the finished module here and asking `certify_definitions` directly.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
@@ -22,7 +22,7 @@ use {
     },
 };
 
-/// A top-level definition, as `recheck_definitions_verdicts` binds one.
+/// A top-level definition, as `certify_definitions` binds one.
 pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
     Item::Let(Box::new(Definition {
         name: *name,
@@ -4094,7 +4094,13 @@ pub(super) fn fixture_certified(
 ) -> Rechecked {
     let (definitions, entry) = fixture.parts();
 
-    super::verdicts_from(Kernel::new(budget, syntax), definitions, entry, globals)
+    super::verdicts_from(
+        &mut Kernel::new(budget, syntax),
+        definitions,
+        entry,
+        globals,
+        None,
+    )
 }
 
 pub(super) const BUDGET: u64 = 1_000_000;
@@ -4234,7 +4240,7 @@ pub(super) fn walked_among(
     let (places, now) = (Places::of(baseline), Places::of(definitions));
     let globals = Globals::default();
 
-    super::verdicts_into(
+    super::verdicts_from(
         &mut Kernel::new(BUDGET, SYNTAX),
         definitions,
         None,

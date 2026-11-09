@@ -1,6 +1,6 @@
 //! Running the independent kernel over a whole module.
 //!
-//! This is the seam where the second opinion is actually asked for. Everything upstream — elaboration, unification, zonking, witness resolution — has already decided the module is well-typed; [`recheck_definitions`] decides again from the terms alone, and it lives in this crate so that deciding is something `cargo tree -p curios-cert` can account for.
+//! This is the seam where the second opinion is actually asked for. Everything upstream — elaboration, unification, zonking, witness resolution — has already decided the module is well-typed; [`certify_definitions`] decides again from the terms alone, and it lives in this crate so that deciding is something `cargo tree -p curios-cert` can account for.
 //!
 //! # Reading a disagreement
 //!
@@ -144,27 +144,11 @@ pub struct Rechecked {
     pub entrypoint: Option<Entrypoint>,
 }
 
-/// Re-check `module` with the independent kernel, with `globals` already in scope.
+/// Re-check `definitions` with the independent kernel, with `globals` already in scope: every item it refuses, rather than only the first, with the record the walk leaves of what it concluded — see [`Rechecked`] — and the walk's own kernel, which holds the unit's definitions as the walk defined them, the units in scope it mounted and the vectors it filed: what the unit's erasure reads through ([`Kernel::read`]), and what a measurement asks a finished walk ([`Kernel::heaviest_declaration`]).
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
 ///
 /// The [`Zonked`] input is interface-level evidence, not a delegation: the kernel keeps its own metavariable refusals, so nothing here trusts the wrapper's constructor.
-pub fn recheck_definitions(
-    definitions: &Zonked<Definitions>,
-    budget: u64,
-    globals: &Globals,
-    syntax: SyntaxRegistry,
-) -> Result<(), Error> {
-    match recheck_definitions_verdicts(definitions, budget, globals, syntax)
-        .into_iter()
-        .next()
-    {
-        Some(verdict) => Err(verdict.error),
-        None => Ok(()),
-    }
-}
-
-/// Every item the kernel refuses, rather than only the first.
 ///
 /// # Why this is the intrinsic
 ///
@@ -185,18 +169,6 @@ pub fn recheck_definitions(
 /// What `globals` holds is read where it stands and never judged again, and a module declaring a name it holds is refused before any of it is judged, whatever it declares under the name. On the compile path that environment is the units in scope, and the faith placed in it is in each unit's *construction*, not in any per-compile claim: a unit is certified by construction, and the prelude build runs this same walk over each root, against the roots before it, and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at the cost of walking the whole scope.
 ///
 /// Every judgment is a declaration's own: its item's typing, its classification, its erased positions, and, where it declares registry entries, their sizing, their strict positivity and their variance, each read against what the environment and the declarations judged before it hold. The entrypoint is checked last.
-pub fn recheck_definitions_verdicts(
-    definitions: &Zonked<Definitions>,
-    budget: u64,
-    globals: &Globals,
-    syntax: SyntaxRegistry,
-) -> Vec<Verdict> {
-    certify_definitions(definitions, budget, globals, syntax)
-        .0
-        .verdicts
-}
-
-/// [`recheck_definitions_verdicts`], with the record the walk leaves of what it concluded — see [`Rechecked`] — and the walk's own kernel, which holds the unit's definitions as the walk defined them, the units in scope it mounted and the vectors it filed: what the unit's erasure reads through ([`Kernel::read`]), and what a measurement asks a finished walk ([`Kernel::heaviest_declaration`]).
 pub fn certify_definitions<'s>(
     definitions: &Zonked<Definitions>,
     budget: u64,
@@ -204,7 +176,7 @@ pub fn certify_definitions<'s>(
     syntax: SyntaxRegistry,
 ) -> (Rechecked, Kernel<'s>) {
     let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(
+    let rechecked = verdicts_from(
         &mut kernel,
         definitions.as_definitions(),
         None,
@@ -227,7 +199,7 @@ pub fn certify_definitions_over<'s>(
     syntax: SyntaxRegistry,
 ) -> (Rechecked, Kernel<'s>) {
     let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(
+    let rechecked = verdicts_from(
         &mut kernel,
         definitions.as_definitions(),
         None,
@@ -251,7 +223,7 @@ pub fn certify_program<'s>(
 ) -> (Rechecked, Kernel<'s>) {
     let program = program.as_program();
     let mut kernel = Kernel::new(budget, syntax);
-    let rechecked = verdicts_into(
+    let rechecked = verdicts_from(
         &mut kernel,
         &program.definitions,
         Some(&program.entrypoint),
@@ -260,24 +232,6 @@ pub fn certify_program<'s>(
     );
 
     (rechecked, kernel)
-}
-
-/// [`recheck_definitions_verdicts`] with the kernel's evaluation memos off.
-///
-/// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
-pub fn recheck_definitions_verdicts_uncached(
-    definitions: &Zonked<Definitions>,
-    budget: u64,
-    globals: &Globals,
-    syntax: SyntaxRegistry,
-) -> Vec<Verdict> {
-    verdicts_from(
-        Kernel::uncached(budget, syntax),
-        definitions.as_definitions(),
-        None,
-        globals,
-    )
-    .verdicts
 }
 
 fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
@@ -503,16 +457,7 @@ fn entries_among<'a, D>(
     registry.iter().filter(|(name, _)| among.contains(*name))
 }
 
-fn verdicts_from<'s>(
-    mut kernel: Kernel<'s>,
-    definitions: &Definitions,
-    entry: Option<&Entrypoint>,
-    globals: &'s Globals<'s>,
-) -> Rechecked {
-    verdicts_into(&mut kernel, definitions, entry, globals, None)
-}
-
-fn verdicts_into<'s>(
+pub(crate) fn verdicts_from<'s>(
     kernel: &mut Kernel<'s>,
     definitions: &Definitions,
     entry: Option<&Entrypoint>,

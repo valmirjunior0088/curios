@@ -198,7 +198,7 @@ pub(crate) fn check_group<R>(
     tail: Option<&Scope<Many>>,
     within: impl FnOnce(&mut Kernel, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
-    // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `recheck_definitions_verdicts` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
+    // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `certify_definitions` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
     // Every scope a `rec` states binds one binder per member: a member's two, which `member_type` and `member_body` open over the group, and the tail, which `infer`'s `Rec` arm opens over the locals the members are assumed under. Each count is a fact about a sibling field — the members the group holds — that nothing in the representation relates it to, and no typing rule reads one, so this is the boundary that checks them all and a term a caller built otherwise is refused here rather than asserted on where a scope is opened. A `rec` item passes no tail: its members are the module's own declarations, and what follows them is the rest of the module.
     let members = group.length();
     let stated = group

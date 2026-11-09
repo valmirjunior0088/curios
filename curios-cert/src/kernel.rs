@@ -716,14 +716,6 @@ impl<'s> Kernel<'s> {
         self.globals.adopt(name)
     }
 
-    /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
-    pub fn uncached(budget: u64, syntax: SyntaxRegistry) -> Self {
-        Self {
-            memos: Memos::new(false),
-            ..Self::new(budget, syntax)
-        }
-    }
-
     /// The remembered weak-head reduct of `term`, per entry point, handed back for nothing.
     ///
     /// The one hit that cannot fail, because it spends no steps and mints no identity: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent, in units or in identities, would run a judgment out on work nobody did. [`Spend`]'s module documentation and [`Memos`] state the two halves of why that is safe.
