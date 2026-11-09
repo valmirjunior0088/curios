@@ -1,13 +1,14 @@
 use {
     crate::{
-        Atom, Callee, Continuation, ContinuationId, CopyPlan, Function, FunctionId,
+        Atom, Callee, Continuation, ContinuationId, CopyBudget, CopyPlan, Function, FunctionId,
         MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId,
         analyze_calls, clone_node, prune_unreachable,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
+/// Inline known calls, a callee with several call sites only below [`MULTI_SITE_INLINE_LIMIT`], unless the call hands it a known function its body applies: then the callee is copied into the call up to the single-site allowance, out of `budget`, so the call through the closure becomes a call of the function, which the next sweep can take in turn. A copy for a known function serves the one call it is made at, as a copy for one call site does.
+pub(crate) fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
     let mut changed = false;
     // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
     for _ in 0..10_000 {
@@ -36,10 +37,11 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
             }
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
             let duplicated = sites > 1 || analysis.escaping.contains(&callee);
-            let limit = if duplicated {
-                MULTI_SITE_INLINE_LIMIT
-            } else {
+            let passes_function = args.iter().any(|arg| matches!(arg, Atom::Fun(_)));
+            let limit = if !duplicated || (passes_function && budget.admits(1)) {
                 SCC_CLONE_NODE_LIMIT
+            } else {
+                MULTI_SITE_INLINE_LIMIT
             };
             // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, so it understates the duplication of a body that nests definitions — and a multi-site inline copies those members once per site. Bound the request itself so an oversized callee is not walked in full at every site.
             let Some(plan) =
@@ -48,7 +50,18 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
                 continue;
             };
             let args = args.clone();
+            let charged = duplicated && plan.nodes.len() > MULTI_SITE_INLINE_LIMIT;
+            if charged
+                && !(applies_a_passed_function(module, &plan, callee, &args)
+                    && budget.admits(plan.nodes.len()))
+            {
+                continue;
+            }
+            let copied = plan.nodes.len();
             if inline_call(module, node_id, callee, &args, return_to, plan) {
+                if charged {
+                    budget.charge(copied);
+                }
                 changed = true;
                 inlined_any = true;
             }
@@ -61,6 +74,30 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
     }
     changed
 }
+/// Whether the callee's extent calls, through a closure, a parameter `args` hands a known function: the call a copy at this site turns into a call of that function. A parameter forwarded to a continuation or another callee before it is applied is not seen, and the call is left to the multi-site allowance.
+fn applies_a_passed_function(
+    module: &Module,
+    plan: &CopyPlan,
+    callee: FunctionId,
+    args: &[Atom],
+) -> bool {
+    let passed = module
+        .function(callee)
+        .unwrap()
+        .params
+        .iter()
+        .zip(args)
+        .filter(|(_, arg)| matches!(arg, Atom::Fun(_)))
+        .map(|(param, _)| *param)
+        .collect::<BTreeSet<_>>();
+    plan.nodes.iter().any(|node| {
+        matches!(
+            module.node(*node),
+            Some(Node::ApplyFun { callee: Callee::Closure(value), .. }) if passed.contains(value)
+        )
+    })
+}
+
 /// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps a reader linear instead of rescanning every node for each continuation.
 pub(crate) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
     let mut transfers: BTreeMap<ContinuationId, Vec<NodeId>> = BTreeMap::new();

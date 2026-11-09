@@ -237,7 +237,7 @@ fn walk_mirror_family_isolates_each_obligation() {
 ///
 /// The fold does not call `step`. Since it carries the string's validity, each arm names the state it moves to — `cont(rem, lo, hi)` after a lead byte, `lead` or `cont(rem - 1, 0x80, 0xBF)` after a continuation — and the validity it passes on holds that state to the one `step` computes, so no call and no four-result return remain in the loop: the obligation the `inline_step` rung of [`walk_mirror_attribution_measurements`] bounds at roughly a fifth of the walk. Nothing else on this program's path calls `step` either: `Str/trim` moves by position through `Str/At/next`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
 ///
-/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is deliberately about *every* allocation rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
+/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and no loop that reads a byte carries a `struct.new` of its own: not the accumulator, not the suffix view, not the scan. That assertion is deliberately about *every* allocation but what a step answers rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one; the fold is copied into each call that hands it a known step, so a step's body runs in the walk's loop, and what it builds, as `Nat/of_str`'s `Option`, is the step's.
 #[test]
 fn the_per_character_walk_carries_its_scan_without_allocating() {
     let wat = wat(PARSE_MULTIBYTE);
@@ -265,40 +265,68 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
         "and a step from one position to the next constructs nothing",
     );
 
-    // The fold's per-character shape. The accumulator travels as fields, the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum — and the scan travels as a discriminant and three payload slots through the loop *and* through the call that consumes it.
-    let fold = split
-        .iter()
-        .find(|function| function.name.contains("$/std/Str/fold"))
-        .expect("the fold survives as a function in this module");
-    let in_fold = |needle: &str| count_in(fold.body, needle);
+    // The fold's per-character shape, in every loop that reads a byte: `Str/fold` is copied into each call that hands it a known step, the program's own and `Nat/of_str`'s, so its walk stands in no function of its own and the claims are stated of each such loop. The accumulator travels as fields, the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum — and the scan travels as a discriminant and three payload slots.
+    let walks = reading_loops(&wat);
+    assert!(!walks.is_empty(), "the walk reads a byte in a loop");
+    for walk in &walks {
+        let in_walk = |needle: &str| walk.iter().filter(|line| line.starts_with(needle)).count();
+        // What a step builds is the step's: `Nat/of_str`'s answers an `Option` a digit.
+        assert!(
+            walk.iter()
+                .filter(|line| line.starts_with("struct.new"))
+                .all(|line| line.contains("/sys/Option")),
+            "the walk allocates nothing of its own, neither its state nor its suffix:\n{}",
+            walk.join("\n"),
+        );
+        assert_eq!(
+            in_walk("call $bytes/slice"),
+            0,
+            "the suffix view is a virtual window: no helper call, no view allocation",
+        );
+        // One site, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits the read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. Exactly one arm runs, so this is a static site count; the per-character cost is one read either way.
+        assert_eq!(
+            in_walk("call $bytes/read"),
+            1,
+            "the byte is read once and shared by the arms, not re-read per arm",
+        );
+        assert_eq!(
+            in_walk("call_indirect $clsr/2"),
+            0,
+            "the step a call hands the fold runs in place",
+        );
+    }
+    // Matched on the name, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
-        in_fold("struct.new"),
-        0,
-        "the walk's body allocates nothing at all:\n{}",
-        fold.body,
-    );
-    // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
-    assert_eq!(
-        fold.body.matches("$/std/Str/utf8/step").count(),
+        wat.matches("$/std/Str/utf8/step").count(),
         0,
         "the walk steps its scan by the arm it is in rather than calling `step`",
     );
-    assert_eq!(
-        in_fold("call $bytes/slice"),
-        0,
-        "the suffix view is a virtual window: no helper call, no view allocation",
-    );
-    // One site, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits the read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. Exactly one arm runs, so this is a static site count; the per-character cost is one read either way.
-    assert_eq!(
-        in_fold("call $bytes/read"),
-        1,
-        "the byte is read once and shared by the arms, not re-read per arm",
-    );
-    assert_eq!(
-        in_fold("call_indirect $clsr/2 $clsr/2"),
-        2,
-        "the user's step closure"
-    );
+}
+
+/// The lines each `loop` holds itself, its nested loops' left out, of every loop that reads a byte: the per-character path wherever a copy of a walk stands. Nesting is read off the printer's indentation, which the emitter keeps exact.
+fn reading_loops(wat: &str) -> Vec<Vec<&str>> {
+    let mut open = Vec::<(usize, usize)>::new();
+    let mut loops = Vec::<Vec<&str>>::new();
+    for line in wat.lines() {
+        let indent = line.len() - line.trim_start().len();
+        let line = line.trim();
+        while open
+            .last()
+            .is_some_and(|&(loop_indent, _)| loop_indent >= indent)
+        {
+            open.pop();
+        }
+        if line.starts_with("loop ") {
+            open.push((indent, loops.len()));
+            loops.push(Vec::new());
+        } else if let Some(&(_, current)) = open.last() {
+            loops[current].push(line);
+        }
+    }
+    loops
+        .into_iter()
+        .filter(|body| body.iter().any(|line| line.starts_with("call $bytes/read")))
+        .collect()
 }
 
 /// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement at a small input, and the recorded native timing protocol. Run explicitly:

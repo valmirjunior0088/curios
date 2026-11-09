@@ -69,7 +69,10 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     module.set_entry(entry);
     module.verify().unwrap();
 
-    assert!(inline_known_calls(&mut module));
+    assert!(inline_known_calls(
+        &mut module,
+        &mut known_function_allowance()
+    ));
     assert!(matches!(
         module.node(call),
         Some(Node::LetCont { continuations, .. }) if continuations != &[local_cont]
@@ -81,7 +84,10 @@ fn known_call_inlining_clones_recursive_local_continuations() {
 #[test]
 fn known_call_inlining_admits_a_capture_the_owner_never_mentions() {
     let (mut module, helper, _) = capture_unmentioned_by_owner();
-    assert!(inline_known_calls(&mut module), "the sweep inlines");
+    assert!(
+        inline_known_calls(&mut module, &mut known_function_allowance()),
+        "the sweep inlines"
+    );
     module.verify().unwrap();
     let still_called = module.nodes().iter().flatten().any(|node| {
         matches!(
@@ -98,7 +104,7 @@ fn known_call_inlining_leaves_a_function_kept_out_of_line_called() {
     let (mut module, helper, _) = capture_unmentioned_by_owner();
     module.keep_out_of_line(helper);
 
-    inline_known_calls(&mut module);
+    inline_known_calls(&mut module, &mut known_function_allowance());
     module.verify().unwrap();
     let still_called = module.nodes().iter().flatten().any(|node| {
         matches!(
@@ -162,7 +168,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
         module.values().len(),
     );
     assert!(
-        !inline_known_calls(&mut module),
+        !inline_known_calls(&mut module, &mut known_function_allowance()),
         "the sweep declines the call"
     );
     let after = (
@@ -171,6 +177,177 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
         module.values().len(),
     );
     assert_eq!(before, after, "a declined attempt mints nothing:\n{module}");
+}
+
+fn known_function_allowance() -> CopyBudget {
+    CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT)
+}
+
+/// A callee of `nodes` nodes taking a value and a function, called at `sites` sites, each handing it a function of its own: the callee calls the function on the value where `applies`, and answers the value otherwise.
+fn calls_handing_a_function(
+    nodes: usize,
+    sites: usize,
+    applies: bool,
+) -> (Module, FunctionId, Vec<NodeId>) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let input = module.add_value(None);
+    let callee = module.reserve_function();
+    let callee_return = module.reserve_continuation();
+    let value = module.add_value(None);
+    let step = module.add_value(None);
+    let body = module.add_node(if applies {
+        Node::ApplyFun {
+            callee: Callee::Closure(step),
+            args: vec![Atom::Value(value)],
+            return_to: callee_return,
+        }
+    } else {
+        Node::ApplyCont(Edge {
+            target: callee_return,
+            args: vec![Atom::Value(value)],
+        })
+    });
+    module.define_function(
+        callee,
+        Function {
+            debug_name: Some("callee".into()),
+            params: vec![value, step],
+            return_cont: callee_return,
+            body,
+            droppable: false,
+        },
+    );
+    pad(&mut module, callee, nodes);
+    let steps = (0..sites).map(|index| {
+        let function = module.reserve_function();
+        let function_return = module.reserve_continuation();
+        let param = module.add_value(None);
+        let body = module.add_node(Node::ApplyCont(Edge {
+            target: function_return,
+            args: vec![Atom::Value(param)],
+        }));
+        module.define_function(
+            function,
+            Function {
+                debug_name: Some(format!("step{index}")),
+                params: vec![param],
+                return_cont: function_return,
+                body,
+                droppable: false,
+            },
+        );
+        function
+    });
+    let steps = steps.collect::<Vec<_>>();
+    let mut calls = Vec::new();
+    let mut continuations = Vec::new();
+    let mut cases = BTreeMap::new();
+    for (index, passed) in steps.iter().enumerate() {
+        let continuation = module.reserve_continuation();
+        let call = module.add_node(Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args: vec![Atom::Value(input), Atom::Fun(*passed)],
+            return_to: entry_return,
+        });
+        module.define_continuation(
+            continuation,
+            Continuation {
+                debug_name: None,
+                params: vec![],
+                body: call,
+            },
+        );
+        calls.push(call);
+        continuations.push(continuation);
+        cases.insert(
+            index as u32,
+            Edge {
+                target: continuation,
+                args: vec![],
+            },
+        );
+    }
+    let dispatch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(input),
+        cases,
+        default: None,
+    });
+    let body = module.add_node(Node::LetCont {
+        continuations,
+        body: dispatch,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: [callee].into_iter().chain(steps).collect(),
+        body,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![input],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, callee, calls)
+}
+
+fn calls_callee(module: &Module, call: NodeId, callee: FunctionId) -> bool {
+    matches!(module.node(call), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == callee)
+}
+
+#[test]
+fn a_callee_of_several_sites_is_copied_into_a_call_that_hands_it_a_function_it_applies() {
+    let nodes = MULTI_SITE_INLINE_LIMIT + 8;
+    let (mut module, callee, calls) = calls_handing_a_function(nodes, 2, true);
+    let mut allowance = known_function_allowance();
+
+    assert!(inline_known_calls(&mut module, &mut allowance));
+    for call in calls {
+        assert!(!calls_callee(&module, call, callee));
+    }
+    assert_eq!(
+        allowance,
+        CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT - 2 * nodes),
+        "each copy is charged its extent, a sweep counting the callee's sites as they stood when it began",
+    );
+    module.verify().unwrap();
+}
+
+#[test]
+fn a_callee_that_only_receives_the_function_keeps_the_multi_site_allowance() {
+    let (mut module, callee, calls) =
+        calls_handing_a_function(MULTI_SITE_INLINE_LIMIT + 8, 2, false);
+    let mut allowance = known_function_allowance();
+
+    assert!(!inline_known_calls(&mut module, &mut allowance));
+    for call in calls {
+        assert!(calls_callee(&module, call, callee));
+    }
+    assert_eq!(allowance, known_function_allowance());
+}
+
+#[test]
+fn a_copy_for_a_known_function_past_the_allowance_left_is_declined() {
+    let nodes = MULTI_SITE_INLINE_LIMIT + 8;
+    let (mut module, callee, calls) = calls_handing_a_function(nodes, 3, true);
+    let mut allowance = CopyBudget::new(nodes);
+
+    assert!(inline_known_calls(&mut module, &mut allowance));
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| calls_callee(&module, **call, callee))
+            .count(),
+        2,
+        "the allowance pays for one copy, and the two calls left keep the callee shared",
+    );
+    module.verify().unwrap();
 }
 
 fn arenas(module: &Module) -> [usize; 4] {
@@ -307,7 +484,10 @@ fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
                 let before = arenas(&module);
                 let text = module.to_string();
                 let admitted = nodes <= limit;
-                assert_eq!(inline_known_calls(&mut module), admitted);
+                assert_eq!(
+                    inline_known_calls(&mut module, &mut known_function_allowance()),
+                    admitted
+                );
                 for call in calls {
                     assert_eq!(
                         matches!(module.node(call), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == callee),
@@ -363,7 +543,10 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
     assert!(calls.iter().all(|call| definition.body < *call));
     module.verify().unwrap();
 
-    assert!(inline_known_calls(&mut module));
+    assert!(inline_known_calls(
+        &mut module,
+        &mut known_function_allowance()
+    ));
     assert_eq!(
         CopyPlan::functions(&module, BTreeSet::from([callee]))
             .nodes

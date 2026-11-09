@@ -62,6 +62,8 @@ pub(crate) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 /// How many parameters a continuation may hold after a fields split. The largest admitted aggregate `curios`'s corpus census finds is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
+/// Maximum cumulative copying of callees with several call sites into a call that hands them a known function they apply, each copy within [`SCC_CLONE_NODE_LIMIT`].
+pub(crate) const KNOWN_FUNCTION_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative SCC-specialization copying under the complete-extent ceiling.
 pub(crate) const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative call-pattern copying, including head rebuilds.
@@ -86,6 +88,7 @@ pub fn optimize(module: &mut Module) {
         .expect("invalid high CPS before optimization");
 
     let mut scc_clone_budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+    let mut known_function_budget = CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT);
     let mut branch_clone_budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
     let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
     let mut entry_clone_budget = ENTRY_CLONE_LIMIT;
@@ -127,7 +130,10 @@ pub fn optimize(module: &mut Module) {
                 eliminate_dead_parameters(module)
             )
             | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module));
-        let inlined = pass!("cps::inline_known_calls", inline_known_calls(module));
+        let inlined = pass!(
+            "cps::inline_known_calls",
+            inline_known_calls(module, &mut known_function_budget)
+        );
         // Placement runs between inlining, which hands it the operation an inlined wrapper computed, and contification, which would turn a call it could move into a loop it cannot; and it reads what inlining left once the jumps inlining leaves into each call's resume are put in place, which the next round's shrink would do only after contification.
         let placed = (inlined && pass!("cps::shrink_inlined", shrink(module)))
             | pass!("cps::sink_computations", sink_computations(module));

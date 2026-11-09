@@ -3,7 +3,7 @@
 use {
     crate::test_support::*,
     curios_common::fill,
-    curios_cps::{Callee, Node, ValueExpr},
+    curios_cps::{Node, ValueExpr},
     curios_native::{MockHost, test_support::*},
     std::collections::BTreeSet,
 };
@@ -288,49 +288,63 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         "#,
     );
 
-    // The walk recurs by calling what its step is handed, a value the library names `again`: the program reaches no other walk, and the function that holds the step is the optimizer's to name.
-    let recursions = module
-        .value_ids()
-        .filter(|id| {
-            module
-                .value(*id)
-                .is_some_and(|value| value.debug_name.as_deref() == Some("again"))
+    // The walk recurs by calling what its step is handed, which the library names `again`: a call through that closure while the call handing it is shared, and a known call once that call is copied in place, as `curios-cps` copies a callee into a call that hands it a known function it applies. So every call the span's own step makes is looked at, whatever it calls: the functions the library names after `span`, followed through the continuations they hold.
+    let steps = module
+        .live_functions()
+        .filter(|(_, function)| {
+            function
+                .debug_name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("/std/Str/span"))
         })
-        .collect::<BTreeSet<_>>();
-
+        .map(|(_, function)| function.body)
+        .collect::<Vec<_>>();
+    let mut pending = steps;
+    let mut seen = BTreeSet::new();
     let mut calls = 0;
-    for node in module.nodes().iter().flatten() {
-        let Node::ApplyFun {
-            callee: Callee::Closure(callee),
-            return_to,
-            ..
-        } = node
-        else {
-            continue;
-        };
-        if !recursions.contains(callee) {
+    while let Some(id) = pending.pop() {
+        if !seen.insert(id) {
             continue;
         }
-        calls += 1;
-
-        // The bindings the call returns to, in a line: a return continuation has none.
-        let mut next = module
-            .continuation(*return_to)
-            .map(|continuation| continuation.body);
-        while let Some(id) = next {
-            next = match module.node(id).expect("a continuation's body is live") {
-                Node::LetValue {
-                    value: ValueExpr::Tuple(_) | ValueExpr::Row(..) | ValueExpr::List(_),
-                    ..
-                } => panic!("a step of the span builds a value after its recursion:\n{module}"),
-                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => Some(*next),
-                _ => None,
-            };
+        match module.node(id).expect("a body's node is live") {
+            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => pending.push(*next),
+            Node::LetFun { body, .. } => pending.push(*body),
+            Node::LetCont {
+                continuations,
+                body,
+            } => {
+                pending.push(*body);
+                pending.extend(
+                    continuations
+                        .iter()
+                        .map(|continuation| module.continuation(*continuation).unwrap().body),
+                );
+            }
+            Node::ApplyFun { return_to, .. } => {
+                calls += 1;
+                // The bindings the call returns to, in a line: a return continuation has none.
+                let mut next = module
+                    .continuation(*return_to)
+                    .map(|continuation| continuation.body);
+                while let Some(id) = next {
+                    next = match module.node(id).expect("a continuation's body is live") {
+                        Node::LetValue {
+                            value: ValueExpr::Tuple(_) | ValueExpr::Row(..) | ValueExpr::List(_),
+                            ..
+                        } => panic!("a step of the span builds a value after a call:\n{module}"),
+                        Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
+                            Some(*next)
+                        }
+                        _ => None,
+                    };
+                }
+            }
+            _ => {}
         }
     }
     assert!(
         calls > 0,
-        "the walk recurs through what its step is handed:\n{module}"
+        "the walk recurs through a call its step makes:\n{module}"
     );
 }
 

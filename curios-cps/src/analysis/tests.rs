@@ -106,6 +106,11 @@ enum FeedShape {
 
 /// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`.
 fn a_recursive_member_fed_one_function(shape: FeedShape) -> (Module, ValueId) {
+    a_member_fed_one_function(shape, true)
+}
+
+/// `g(p, n) = let r = p() in g(p, n)` where `recursive`, and `g(p, n) = p()` otherwise, called once from `h() = g(f, 0)`.
+fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, ValueId) {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -134,10 +139,17 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (Module, ValueId) {
     let p = module.add_value(Some("p".into()));
     let n = module.add_value(Some("n".into()));
     let r = module.add_value(Some("r".into()));
-    let again = module.add_node(Node::ApplyFun {
-        callee: Callee::Known(g),
-        args: vec![Atom::Value(p), Atom::Value(n)],
-        return_to: g_return,
+    let again = module.add_node(if recursive {
+        Node::ApplyFun {
+            callee: Callee::Known(g),
+            args: vec![Atom::Value(p), Atom::Value(n)],
+            return_to: g_return,
+        }
+    } else {
+        Node::ApplyCont(Edge {
+            target: g_return,
+            args: vec![Atom::Value(r)],
+        })
     });
     let after_call = module.reserve_continuation();
     module.define_continuation(
@@ -245,6 +257,30 @@ fn a_function_reference_reaches_a_recursive_member_only_within_its_scope() {
     );
 
     let (nested, p) = a_recursive_member_fed_one_function(FeedShape::Nested);
+    assert_eq!(
+        known_values(&nested).get(&p),
+        None,
+        "`f` is nested inside `h`, out of `g`'s scope",
+    );
+}
+
+#[test]
+fn a_function_every_call_hands_reaches_a_function_that_is_not_recursive_within_its_scope() {
+    // The same three shapes as for a recursive member, with `g` calling `p` once and returning: a function its one call hands it is substituted as a literal would be, and only where `g`'s body may name it.
+    let (before, p) = a_member_fed_one_function(FeedShape::SiblingBefore, false);
+    assert!(
+        matches!(known_values(&before).get(&p), Some(Atom::Fun(_))),
+        "`f` is bound before `g`, so `g`'s body may name it",
+    );
+
+    let (after, p) = a_member_fed_one_function(FeedShape::SiblingAfter, false);
+    assert_eq!(
+        known_values(&after).get(&p),
+        None,
+        "`f` is bound after `g`: the call site may name it and `g` may not",
+    );
+
+    let (nested, p) = a_member_fed_one_function(FeedShape::Nested, false);
     assert_eq!(
         known_values(&nested).get(&p),
         None,

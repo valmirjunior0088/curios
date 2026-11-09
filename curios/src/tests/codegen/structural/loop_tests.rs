@@ -596,3 +596,42 @@ fn a_conjunction_with_a_call_answers_as_its_operands_decide() {
         );
     }
 }
+
+/// `programs/walk` as written: `/std/Str/fold` is called at two sites, the walk's own and `Nat/of_str`'s, each handing it a step of its own, and each call is given a copy in which the step is a known call and then inlined, so no function the program holds calls its step through a closure.
+#[test]
+fn a_fold_handed_a_known_step_calls_it_in_place() {
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/walk/walk.crs"
+    ));
+    let wat = wat(source);
+    let functions = functions(&wat);
+
+    assert_eq!(
+        user_functions_with(&functions, "call_indirect $clsr/2"),
+        Vec::<&str>::new(),
+        "no step of two arguments is reached through its closure",
+    );
+}
+
+/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Hash/nat/code`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call.
+#[test]
+fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/spines/spines.crs"
+    ));
+    let wat = wat(source);
+    let functions = functions(&wat);
+    let insert = functions
+        .iter()
+        .find(|function| function.name.contains("$/std/Map/internal/Node/insert"))
+        .expect("the descent survives as a function of its own");
+
+    assert!(!insert.body.contains("call_indirect"), "{}", insert.body);
+    assert!(
+        insert.body.contains("$/std/Hash/nat/from"),
+        "{}",
+        insert.body
+    );
+}

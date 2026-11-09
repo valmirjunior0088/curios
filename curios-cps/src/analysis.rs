@@ -495,6 +495,15 @@ pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         }
         let params = &module.function(function).unwrap().params;
         record_known_literals(params, &inputs, &mut known);
+        // A function every call hands one function is substituted where its body may name it, so its call through the parameter becomes a known call, and a recursive callee it hands the parameter on to receives one function at every entry, which `scc_invariant_knowns` then substitutes.
+        let scope = analysis.lexical_scope.get(&function);
+        for (&param, input) in params.iter().zip(&inputs) {
+            if let Knowledge::Known(Atom::Fun(passed)) = input
+                && scope.is_some_and(|scope| scope.contains(passed))
+            {
+                known.insert(param, Atom::Fun(*passed));
+            }
+        }
     }
 
     // A continuation parameter is known the same way a function's is: every transfer hands it the same literal. Edges carry their arguments; an operation delivering into its `return_to` hands a runtime value, which is the `None` that forces `Conflict`. A join point whose every jump passes one tag — the clone `specialize_jump_patterns` or `split_parameters` leaves once the other tag's jumps are gone — keeps a switch on that parameter and the arm it can never take, and a read in that dead arm of a value minted in the live arm's vocabulary is exactly what `verify_rows` refuses once a later pass substitutes the construction into it.

@@ -202,7 +202,7 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
     }
 }
 
-/// A closure every flow into a position hands of one arity is declared at that arity's environment type, so a loop calling it reads its code with no cast: a cast to the arity's environment, the supertype of every closure's of it and so no final type, is the engine's subtype walk on every call.
+/// A closure every flow into a position hands of one arity is declared at that arity's environment type, so a loop calling it reads its code with no cast: a cast to the arity's environment, the supertype of every closure's of it and so no final type, is the engine's subtype walk on every call. The loop is handed one of two closures the program chooses as it runs, since one it is always handed is a function its body calls directly.
 #[test]
 fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
     const REPEAT: &str = r#"
@@ -211,7 +211,9 @@ fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
             match k | 0 => x | kp + 1 => repeat(kp, f, f(x) % 65537) end;
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
-            /std/print(Nat/to_str(repeat(taint, (y) => y * 3 + taint, 7)));
+            let step: (Nat) -> Nat =
+                match taint % 2 | 0 => (y) => y * 3 + taint | _ => (y) => y * 5 + taint end;
+            /std/print(Nat/to_str(repeat(taint, step, 7)));
         entry()
         "#;
 
