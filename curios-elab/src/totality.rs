@@ -11,7 +11,7 @@ use reach::*;
 mod tests;
 
 use {
-    super::{Context, ErasedSite, Error, ZonkPass, proof_position, zonk_solved_term_metas},
+    super::{Context, ErasedSite, Error, ZonkPass, proof_position, reduce, zonk_solved_term_metas},
     curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
     curios_core::{
         Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Rec,
@@ -240,6 +240,8 @@ fn faults(
 pub struct Zonked {
     done: HashMap<Term, Term>,
     pass: ZonkPass,
+    /// Whether each zonked type reduces to a sort, asked once a type: many recorded terms share one.
+    sorts: HashMap<Term, bool>,
 }
 
 /// `term` zonked, through `cache`: the two types and two terms the two obligations zonk.
@@ -290,7 +292,7 @@ fn checked_type_positions(
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
         let type_ = zonked(context, cache, &type_)?;
         // The term *is* a type exactly when its own type is a sort. An instance head is a variable or a projection, never a sort, so a wrapped type is not one.
-        let sort = matches!(&*type_, Subterm::Sort(_));
+        let sort = reduces_to_a_sort(context, cache, &type_);
         if sort {
             positions.push(Position {
                 term: by_value(&zonked(context, cache, &term)?, &labels),
@@ -308,6 +310,20 @@ fn checked_type_positions(
     curios_profile::sample!("totality::type_sites", sites.len());
     curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
+}
+
+/// Whether `type_` is a sort, as written or once it reduces: a type a definition computes, `U(j + 1)` where `U` matches on its argument, is one the kernel reads as a sort, which reading the written form alone misses. A type that does not reduce within the budget is read as none, and the kernel, which reduces it again, refuses what it then finds.
+fn reduces_to_a_sort(context: &mut Context, cache: &mut Zonked, type_: &Term) -> bool {
+    if matches!(&**type_, Subterm::Sort(_)) {
+        return true;
+    }
+    if let Some(&sort) = cache.sorts.get(type_) {
+        return sort;
+    }
+    let sort =
+        reduce(context, type_.clone()).is_ok_and(|reduced| matches!(&*reduced, Subterm::Sort(_)));
+    cache.sorts.insert(type_.clone(), sort);
+    sort
 }
 
 /// `term` with each local binding it names read as what the binding stands for: what a position reaches is what the kernel reads it by, which a label hides — a member of a local group stands for the group, and a `let`'s binding for whatever its value reaches. The values name no binding, each read by value where its block ended, so one substitution reads them all.

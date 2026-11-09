@@ -39,6 +39,35 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
     });
 }
 
+// A term is a type where its type reduces to a sort, written as one or not: `_T`'s recursive call has type `_U(j + 1)`, which is no sort as written and is `Type` once `_U`'s match on a successor reduces, so the call is a type position, and one that does not descend is refused by the elaborator as the kernel refuses it. The control recurses on `j` under an arm that rules zero out, which descends.
+#[test]
+fn a_term_whose_type_reduces_to_a_sort_is_a_type_position() {
+    control(
+        r#"
+        let _U(k: /std/Nat) -> Type = match k | 0 => Type | _ + 1 => Type end;
+
+        let _T(k: /std/Nat) -> _U(k) =
+            match k: (m) => _U(m)
+            | 0 => /std/Nat
+            | j + 1 => match j | 0 => /std/Nat | _ + 1 => _T(j) end
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("_T(j)", "_T(j + 1)")])
+    .by_elaborator_in("/_T", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
+}
+
 // The control's projection is `Sink({})`, which ties nothing.
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
