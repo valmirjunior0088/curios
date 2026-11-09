@@ -276,12 +276,12 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
 #[test]
 fn list_map_is_not_an_intrinsic_opcode() {
     assert!(Intrinsic::ListAppend.allocates());
-    assert!(!Intrinsic::NatDiv.is_total());
+    assert!(Intrinsic::NatDiv.may_trap());
 }
 
 #[test]
 fn every_guarded_operation_is_classified_as_trapping() {
-    // Each of these emits a guard in `into_wasm`, while a wildcard defaulting to `Total` would answer `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
+    // Each of these emits a guard in `into_wasm`, while a wildcard defaulting to `Total` would answer `Total` for all of them, which is `sink_computations` moving a trap past a call and, for the window guard, `shrink` deleting the one check it stands for.
     for op in [
         Intrinsic::FltOfLeBytes,
         Intrinsic::FltToNat,
@@ -291,7 +291,6 @@ fn every_guarded_operation_is_classified_as_trapping() {
         Intrinsic::WindowExtent,
     ] {
         assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");
-        assert!(!op.is_total(), "{op:?} must not be deletable when dead");
     }
 
     // The controls that keep the rule from being "guard everything": a `Nat` or `Int` is unbounded at run time, so a sum, a product, a left shift or a conversion between the two grows rather than refusing, and monus and a right shift never grow at all.
@@ -305,7 +304,11 @@ fn every_guarded_operation_is_classified_as_trapping() {
         Intrinsic::NatShr,
         Intrinsic::IntShr,
     ] {
-        assert!(op.is_total(), "{op:?} grows rather than refusing");
+        assert_eq!(
+            op.effect(),
+            IntrinsicEffect::Total,
+            "{op:?} grows rather than refusing"
+        );
     }
 }
 

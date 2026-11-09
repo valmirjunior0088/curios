@@ -56,34 +56,43 @@ fn switches(module: &Module) -> usize {
         .count()
 }
 
+/// A binding nothing reads goes where its operation is total and where the proof its typing demands rules its trap out, a division among them, which is the licence an unread call of a droppable function goes under; the window guard stays, its trap being the one thing it is kept for.
 #[test]
-fn a_dead_trap_stays_where_a_dead_total_binding_goes() {
+fn a_dead_guarded_operation_goes_where_a_dead_window_guard_stays() {
     let mut module = Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let return_node = jump(&mut module, return_cont, vec![nat(0)]);
+    let dead_guard = module.add_value(Some("dead guard".into()));
+    let guard_node = module.add_node(Node::LetIntrinsic {
+        result: dead_guard,
+        op: Intrinsic::WindowExtent,
+        args: vec![nat(0), nat(1), nat(0)],
+        next: return_node,
+    });
     let dead_total = module.add_value(Some("dead total".into()));
     let total_node = module.add_node(Node::LetIntrinsic {
         result: dead_total,
         op: Intrinsic::NatEql,
         args: vec![nat(1), nat(2)],
-        next: return_node,
+        next: guard_node,
     });
-    let dead_trap = module.add_value(Some("dead trap".into()));
-    let trap_node = module.add_node(Node::LetIntrinsic {
-        result: dead_trap,
+    let dead_division = module.add_value(Some("dead division".into()));
+    let division_node = module.add_node(Node::LetIntrinsic {
+        result: dead_division,
         op: Intrinsic::NatDiv,
         args: vec![nat(1), nat(0)],
         next: total_node,
     });
-    entry(&mut module, main, vec![], return_cont, trap_node);
+    entry(&mut module, main, vec![], return_cont, division_node);
 
     assert!(shrink(&mut module));
     assert!(module.node(total_node).is_none());
+    assert!(module.node(division_node).is_none());
     assert!(matches!(
-        module.node(trap_node),
+        module.node(guard_node),
         Some(Node::LetIntrinsic {
-            op: Intrinsic::NatDiv,
+            op: Intrinsic::WindowExtent,
             next,
             ..
         }) if *next == return_node

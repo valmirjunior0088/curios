@@ -629,7 +629,7 @@ impl<'m> Shrink<'m> {
                     }
                     Some(Fold::Operand(_)) | None => {}
                 }
-                (op.is_total() && unread(result)).then_some(Rewrite::Unbind(*result))
+                (op.drops_unread() && unread(result)).then_some(Rewrite::Unbind(*result))
             }
             Node::LetFun { functions, .. } if functions.is_empty() => Some(Rewrite::Splice),
             Node::LetCont { continuations, .. } if continuations.is_empty() => {

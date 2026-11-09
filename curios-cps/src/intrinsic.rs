@@ -543,7 +543,7 @@ impl Intrinsic {
     ///
     /// The `MayTrap` set is what is partial in the language — a division, a narrowing of an `Flt` to `Nat` or `Int`, an index and a projection — which `curios-anf`'s `Semantics` says too. `Nat` and `Int` arithmetic is not in it: both are unbounded at run time, so a sum or a product that outgrows the i31 becomes a boxed magnitude rather than a failure, and allocating one is invisible, as an `Flt` box is.
     ///
-    /// Exhaustive on purpose: a wildcard defaulting to `Total` would silently classify every guarded operation it missed as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
+    /// Exhaustive on purpose: a wildcard defaulting to `Total` would silently let every guarded operation it missed move past a call, and the window guard go where nothing reads it — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> IntrinsicEffect {
         match self {
             // Partial in the language: a zero divisor, a non-finite conversion, an index or a projection out of bounds, a decode of the wrong length.
@@ -645,10 +645,6 @@ impl Intrinsic {
         }
     }
 
-    pub fn is_total(self) -> bool {
-        self.effect() == IntrinsicEffect::Total
-    }
-
     /// Whether this operation's result is a reference it reads out of a value — a row's or a tuple's slot, a list's element, an immediate arm's payload — rather than one it computes. Such a result may be any value at all, a row's struct among them; every other result is a number, a word, a float or a sequence, which no row test answers yes for.
     ///
     /// Exhaustive on purpose, for [`Intrinsic::effect`]'s reason: a wildcard answering no would let a new read pass every row test it reaches as the struct it never is.
@@ -748,6 +744,15 @@ impl Intrinsic {
 
     pub fn may_trap(self) -> bool {
         self.effect() == IntrinsicEffect::MayTrap
+    }
+
+    /// Whether a binding of this operation that nothing reads may go. A total one may, and so may one that may trap: what is partial in the language takes, beside its operands, the proof that rules its trap out — a division its nonzero divisor, a read its index below the length, a narrowing of an `Flt` its evidence (`curios-core`'s `Intrinsic::signature`) — so its trap is a compiler's fault and no event a program keeps, the licence an unread call of a droppable function goes under. The window guard stays: its trap is all it contributes, the bounds check of a slice the window split virtualized away, kept where the slice stood. An allocation stays too, for the passes that splice what they build ([`Intrinsic::allocates`]).
+    pub fn drops_unread(self) -> bool {
+        match self.effect() {
+            IntrinsicEffect::Total => true,
+            IntrinsicEffect::MayTrap => !matches!(self, Self::WindowExtent),
+            IntrinsicEffect::Allocates => false,
+        }
     }
 
     pub fn allocates(self) -> bool {
