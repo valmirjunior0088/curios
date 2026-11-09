@@ -5,16 +5,14 @@
 //! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md). Everything in `verdicts` is the mechanism the argument is about. The payload family in `payload` is that same argument one level up, with [Reused payloads](../../documentation/design/soundness/reused-payloads.md) stating what it adds. Both file into one-file slots — framed as `curios-unit` states a stored unit is, and replaced whole by `slot`.
 
 mod slot;
-pub(crate) use slot::*;
+use slot::*;
 
 mod packs;
-pub(crate) use packs::*;
+use packs::*;
 
 mod verdicts;
-pub use verdicts::*;
-
-mod payload;
-pub use payload::*;
+use verdicts::*;
+pub use verdicts::{Program, Session, Verdicts};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_verdict::test_support::History` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

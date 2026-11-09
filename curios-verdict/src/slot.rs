@@ -14,19 +14,19 @@ use {
 };
 
 /// A slot opened as far as its record, the artifact behind it unread until something asks for it.
-pub(crate) struct Opened {
+pub struct Opened {
     file: File,
     record: Vec<u8>,
 }
 
 impl Opened {
     /// The slot's record, as it was framed.
-    pub(crate) fn record(&self) -> &[u8] {
+    pub fn record(&self) -> &[u8] {
         &self.record
     }
 
     /// The artifact behind the record, read now: `None` where it cannot be read.
-    pub(crate) fn artifact(mut self) -> Option<Vec<u8>> {
+    pub fn artifact(mut self) -> Option<Vec<u8>> {
         let mut artifact = Vec::new();
         self.file.read_to_end(&mut artifact).ok()?;
 
@@ -35,7 +35,7 @@ impl Opened {
 }
 
 /// The slot at `slot`, read as far as its record: `None` where there is no file there, or the file opens no slot, or its record runs past its end.
-pub(crate) fn opened(slot: &Path) -> Option<Opened> {
+pub fn opened(slot: &Path) -> Option<Opened> {
     let mut file = File::open(slot).ok()?;
     let size = file.metadata().ok()?.len();
     let mut preamble = [0; PREAMBLE];
@@ -58,7 +58,7 @@ pub(crate) fn opened(slot: &Path) -> Option<Opened> {
 /// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name, and is overwritten by the next write from the same process.
 ///
 /// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
-pub(crate) fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
+pub fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
     // Every failure names the slot it happened at: an error reading `Permission denied` alone leaves a reader guessing which family under `.curios/` refused.
     let at = |error: io::Error| io::Error::other(format!("{}: {error}", slot.display()));
 

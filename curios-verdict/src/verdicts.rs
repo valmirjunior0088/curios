@@ -16,6 +16,9 @@ mod tests;
 #[cfg(any(test, feature = "test-support"))]
 mod test_support;
 
+mod payload;
+pub use payload::*;
+
 use {
     crate::{Packs, opened, replace},
     curios_common::{Candidates, Qualifier, digest},
@@ -87,7 +90,7 @@ struct Kept {
 }
 
 /// One unit a fold has taken, restored or compiled: which unit it is to the units after it, and what it contains where it has a place in the store.
-pub(crate) struct Taken {
+pub struct Taken {
     /// The prefixes the unit claims, as one key: which unit it is to a record that names it.
     key: String,
     /// The prefixes the unit claims: which unit it is to a unit that declares a dependency, and to a baseline offered after it ([`After`]).
@@ -99,7 +102,7 @@ pub(crate) struct Taken {
     /// The unit as the fold holds it. `None` where a chain is verified and nothing decoded ([`Verdicts::chain`]).
     unit: Option<Unit>,
     /// The digest of the bytes the unit's slot holds, where it has a place: what a record of a unit that could have read it vouches for. `None` for a unit the store may not place, and for one a question compiled and did not file.
-    pub(crate) contained: Option<String>,
+    contained: Option<String>,
     /// Whether it is the unit of an entry's own declarations: the last a fold takes, which no unit reads and no payload counts among the units it was made after.
     entry: bool,
 }
@@ -147,17 +150,17 @@ fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, St
 /// One handle for both because they are one store: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
     /// `None` for a handle with no store behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
-    pub(crate) store: Option<Store>,
+    store: Option<Store>,
     /// The identity of the compiler running now, asked for on the first slot that needs it and not before. `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
     ///
     /// Lazy because identifying the compiler writes its memo beside the store, and opening a store is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
     compiler: OnceCell<Option<String>>,
     /// Every unit this fold has taken so far, in fold order: restored by [`Verdicts::hit`], kept by [`Verdicts::keep`] or filed by [`Cache::put`]. Read afterwards by [`Verdicts::payload_put`], which files what the whole fold compiled to.
-    pub(crate) taken: RefCell<Vec<Taken>>,
+    taken: RefCell<Vec<Taken>>,
     /// Why the store could not be written, if it could not.
     ///
     /// The first refusal and not a count: a store nobody can write refuses every unit for one reason, so the reason is the whole of what a reader needs and repeating it per unit would say nothing new. Recorded rather than reported here because this crate has no terminal — see [`Verdicts::refused`].
-    pub(crate) refused: RefCell<Option<String>>,
+    refused: RefCell<Option<String>>,
     /// What the session this handle belongs to has in hand — `None` for a handle nobody attached one to, a one-shot question's or a build's, which keeps nothing and so copies nothing.
     session: Option<Session>,
     /// The executable the entry this handle's fold ends in is, by its package's name and its own — `None` for a handle told of none, which files no entry's unit. See [`Verdicts::executing`].
@@ -743,14 +746,14 @@ fn intact(contained: &str, index: &[u8]) -> bool {
 }
 
 /// Whether `recorded` is what `filed` holds, position by position.
-pub(crate) fn chained(recorded: &[String], filed: &[String]) -> bool {
+pub fn chained(recorded: &[String], filed: &[String]) -> bool {
     recorded == filed
 }
 
 /// Whether every file in `reads` still holds the text it was recorded as — the overlay's text for a file `overlay` holds, since that is what the compilation would read, and the disk's for every other.
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other.
-pub(crate) fn unchanged(reads: &[(String, String)], overlay: Option<&Overlay>) -> bool {
+pub fn unchanged(reads: &[(String, String)], overlay: Option<&Overlay>) -> bool {
     reads.iter().all(|(path, recorded)| {
         let path = Path::new(path);
 

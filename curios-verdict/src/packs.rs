@@ -48,7 +48,7 @@ const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 
 /// The packs of one address.
-pub(crate) struct Packs {
+pub struct Packs {
     directory: PathBuf,
     /// The names of the packs as last listed. `None` before the first listing.
     listed: RefCell<Option<Vec<String>>>,
@@ -62,7 +62,7 @@ pub(crate) struct Packs {
 
 impl Packs {
     /// The packs kept in `directory`, collected at the time `now`.
-    pub(crate) fn at(directory: PathBuf, now: SystemTime) -> Self {
+    pub fn at(directory: PathBuf, now: SystemTime) -> Self {
         Self {
             directory,
             listed: RefCell::new(None),
@@ -73,7 +73,7 @@ impl Packs {
     }
 
     /// The object named `digest`, where a pack of this address holds it.
-    pub(crate) fn find(&self, digest: &Digest) -> Option<Object> {
+    pub fn find(&self, digest: &Digest) -> Option<Object> {
         if self.listed.borrow().is_none() {
             self.list();
         }
@@ -86,7 +86,7 @@ impl Packs {
     }
 
     /// Which of `digests` no pack of this address holds, as the packs' tables say, in their order.
-    pub(crate) fn missing<'d>(&self, digests: impl IntoIterator<Item = &'d Digest>) -> Vec<Digest> {
+    pub fn missing<'d>(&self, digests: impl IntoIterator<Item = &'d Digest>) -> Vec<Digest> {
         let held = self
             .list()
             .iter()
@@ -101,7 +101,7 @@ impl Packs {
     }
 
     /// Collect this address where a day has passed since it was last collected, `named` being what its slot names: an object it does not name is noted with the time a collection first found it so, one named again is forgotten, and one unnamed for [`GRACE`] is dropped from its pack, which is taken away where it holds nothing else and written again holding the rest otherwise. Nothing is collected at an address never collected before, which starts its clock.
-    pub(crate) fn collect(&self, named: &BTreeSet<Digest>) -> io::Result<()> {
+    pub fn collect(&self, named: &BTreeSet<Digest>) -> io::Result<()> {
         let path = self.directory.join(COLLECTION);
         let earlier = fs::read(&path)
             .ok()
@@ -173,7 +173,7 @@ impl Packs {
     }
 
     /// File `objects` as one pack beside what the address holds, then merge the smallest packs where they are no longer geometric. Nothing is written for no objects.
-    pub(crate) fn write(&self, objects: &[Object]) -> io::Result<()> {
+    pub fn write(&self, objects: &[Object]) -> io::Result<()> {
         if objects.is_empty() {
             return Ok(());
         }
