@@ -25,18 +25,17 @@ mod test_support;
 
 use {
     super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
-    crate::{
-        accelerable, answers, answers_classed, atoms_within, instantiate_universes,
-        probe_spellings, read_operands, read_scrutinee, read_scrutinee_classed, reduce_closed,
-        reduce_intrinsic, refold, weak_head_value,
+    curios_analysis::{
+        Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead, answers, answers_classed, atoms_within,
+        read_operands, read_scrutinee, read_scrutinee_classed, refold,
     },
-    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe,
         Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var,
-        Variant, Visit,
+        Variant, Visit, accelerable, instantiate_universes, probe_spellings, reduce_closed,
+        reduce_intrinsic, weak_head_value,
     },
 };
 

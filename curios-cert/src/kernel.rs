@@ -59,17 +59,17 @@ pub(crate) use whnf::*;
 mod test_support;
 
 use {
-    crate::{
-        Baseline, entails, erased_half, holds_no_type, instantiate_qualities, one_up_to_instances,
-        retyped,
+    crate::{Baseline, entails, erased_half},
+    curios_analysis::{
+        Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, holds_no_type,
+        one_up_to_instances, retyped,
     },
-    curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
         Advance, Applications, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global,
         InductDecl, Level, LevelHead, Names, Notation, Polarity, Probe, Quality, Reads,
         ReduceError, Reducer, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
-        Universes, Variance,
+        Universes, Variance, instantiate_qualities,
     },
     std::{
         collections::{BTreeMap, HashMap},

@@ -21,10 +21,11 @@ mod walk_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::{bears_proof, blocker, instantiate_qualities, known_to_terminate, yields_a_sort_where},
+    crate::bears_proof,
+    curios_analysis::{blocker, known_to_terminate, yields_a_sort_where},
     curios_core::{
         Bound, DefinitionKind, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope,
-        StructDecl, Subterm, Telescope, Term, Totality, UniverseContext,
+        StructDecl, Subterm, Telescope, Term, Totality, UniverseContext, instantiate_qualities,
     },
 };
 

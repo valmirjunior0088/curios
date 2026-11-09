@@ -15,6 +15,9 @@ use {
     curios_core::{Consumption, Cost, Free, ReduceError},
 };
 
+#[cfg(feature = "profile")]
+use curios_core::take_looks;
+
 pub(super) struct Spend {
     /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
     budget: u64,
@@ -95,7 +98,7 @@ impl Spend {
     /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
     pub(super) fn restore_budget(&mut self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
-        curios_profile::sample!("term::looks", crate::take_looks());
+        curios_profile::sample!("term::looks", take_looks());
         self.heaviest = self.heaviest.heavier_of(self.consumed());
 
         self.remaining = self.budget;

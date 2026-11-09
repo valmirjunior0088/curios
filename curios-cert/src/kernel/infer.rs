@@ -28,13 +28,13 @@ use {
     super::{
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
-    crate::{foreign_operands, foreign_signature, spine},
+    curios_analysis::spine,
     curios_common::recurse,
     curios_core::{
         Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
         Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec,
         Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
-        TupleType, Variant,
+        TupleType, Variant, foreign_operands, foreign_signature,
     },
     curios_num::{Binary, Natural},
     std::convert::Infallible,

@@ -37,11 +37,8 @@ mod test_support;
 
 use {
     super::check,
-    crate::{
-        Counted, EnteredArm, Error, InductAt, Kernel, Sort, another_case, scrutinee_solution,
-        solve_indices, wholly_pinned,
-    },
-    curios_analysis::Invert,
+    crate::{Counted, EnteredArm, Error, InductAt, Kernel, Sort},
+    curios_analysis::{Invert, another_case, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
         Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Probe, ReduceError,
         Reducer, Subterm, Telescope, Term, Variant,

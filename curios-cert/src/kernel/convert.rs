@@ -30,14 +30,15 @@ mod tests;
 
 use {
     super::{Converted, Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    crate::{case_target_indices, instantiate_universes, pinned_instance, struct_reaches_itself},
-    curios_analysis::{Classes, Within},
+    curios_analysis::{
+        Classes, Within, case_target_indices, pinned_instance, struct_reaches_itself,
+    },
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
         Instance, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality, ReduceError, Reducer,
         Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes,
-        Variant,
+        Variant, instantiate_universes,
     },
 };
 

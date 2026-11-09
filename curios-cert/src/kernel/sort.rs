@@ -24,11 +24,11 @@ mod memo_tests;
 
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},
-    crate::instantiate_universes,
     curios_common::recurse,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
         Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
+        instantiate_universes,
     },
 };
 

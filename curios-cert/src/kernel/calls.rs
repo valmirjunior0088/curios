@@ -11,8 +11,10 @@ mod tests;
 
 use {
     super::{Error, Kernel},
-    crate::{binder_bounds, decide, grade, handed, member_arities, nonzero_by, refined_by_arm},
-    curios_analysis::{Call, SizeContext},
+    curios_analysis::{
+        Call, SizeContext, binder_bounds, decide, grade, handed, member_arities, nonzero_by,
+        refined_by_arm,
+    },
     curios_common::Keyed,
     curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::{
