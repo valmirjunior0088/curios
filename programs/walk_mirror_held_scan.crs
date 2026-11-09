@@ -1,5 +1,5 @@
 -- The scan-argument reconstruction removed from the baseline mirror: the cont arm hands `mstep` the parameter it already holds instead of rebuilding it field by field.
--- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
+-- One of five mirror programs attributing the allocation obligations of a UTF-8 walk that carries a scan state from byte to byte; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
 use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Proc, Fmt};
 

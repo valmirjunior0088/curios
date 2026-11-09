@@ -807,7 +807,7 @@ fn a_sequence_fold_reads_through_its_grain() {
 
 /// A fold whose step ignores its suffix pays nothing for it.
 ///
-/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold`, `List/fold`, and `/std/Str/fold`'s per-character walk, whose `t` survives only in erased `Prop` positions), so emitting it unconditionally would put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
+/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold` and `List/fold`), so emitting it unconditionally would put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
 ///
 /// **No later pass can undo that**, which is why the check belongs at the point of emission: `BytesSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
 #[test]

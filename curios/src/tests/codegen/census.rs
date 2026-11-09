@@ -187,7 +187,6 @@ struct Census<'m> {
     module: &'m Module,
     owner_of_node: BTreeMap<NodeId, FunctionId>,
     owner_of_cont: BTreeMap<ContinuationId, FunctionId>,
-    declared_in: BTreeMap<FunctionId, FunctionId>,
     sentinels: BTreeMap<ContinuationId, FunctionId>,
     result_conts: BTreeSet<ContinuationId>,
     closure_funs: BTreeSet<FunctionId>,
@@ -311,7 +310,6 @@ impl<'m> Census<'m> {
             module,
             owner_of_node: BTreeMap::new(),
             owner_of_cont: BTreeMap::new(),
-            declared_in: BTreeMap::new(),
             sentinels: BTreeMap::new(),
             result_conts: BTreeSet::new(),
             closure_funs: BTreeSet::new(),
@@ -347,10 +345,7 @@ impl<'m> Census<'m> {
                     Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                         stack.push(*next);
                     }
-                    Node::LetFun { functions, body } => {
-                        for declared in functions {
-                            self.declared_in.entry(*declared).or_insert(fun);
-                        }
+                    Node::LetFun { body, .. } => {
                         stack.push(*body);
                     }
                     Node::LetCont {
@@ -619,21 +614,6 @@ impl<'m> Census<'m> {
             }
         }
         shapes
-    }
-
-    /// The live nodes cloning `fun` would copy: its own body's, plus — recursively — those of every function declared inside it, which is the accounting `curios-cps`'s `copied_extent` prices a specialization clone at.
-    fn extent(&self, fun: FunctionId) -> usize {
-        let own = self
-            .owner_of_node
-            .values()
-            .filter(|owner| **owner == fun)
-            .count();
-        own + self
-            .declared_in
-            .iter()
-            .filter(|(_, parent)| **parent == fun)
-            .map(|(child, _)| self.extent(*child))
-            .sum::<usize>()
     }
 
     fn owner_name(&self, fun: FunctionId) -> String {
@@ -1047,41 +1027,6 @@ fn aggregate_flow_census() {
             "    {owner}: {shapes:?}{}",
             if *escapes { " (escapes)" } else { "" }
         );
-    }
-}
-
-/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cps/src/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
-///
-/// ```sh
-/// cargo test --package curios --lib --all-features -- --ignored --nocapture step_specialization_extent
-/// ```
-///
-/// # What it last printed
-///
-/// Taken at `447fbb0a1`, x86-64 Linux. Against a limit of 24: `/std/Str/classify` extent 52, `/std/Str/fold` 41 — both over the budget, so specializing either per tag is declined by it rather than by any rule, and raising the limit to admit them would admit per-tag clones of everything else this size. `/std/Str/step` is not among them: the fold does not call it (see `ladder`'s `the_per_character_walk_carries_its_scan_without_allocating`), so the walkers are all a retake reports.
-#[test]
-#[ignore = "measurement, counted: reports the extents the specializer's budget compares"]
-fn step_specialization_extent() {
-    let source = CORPUS
-        .iter()
-        .find(|(label, _)| *label == "parse_multibyte")
-        .expect("the multi-byte fixture is in the corpus")
-        .1;
-    let module = cps_optm_module(source);
-    let census = Census::of(&module);
-    for (index, slot) in module.functions().iter().enumerate() {
-        let Some(function) = slot else { continue };
-        let Some(name) = &function.debug_name else {
-            continue;
-        };
-        // The walk's own callees, and `/std/Str/utf8/step` is not one: it survives only in the proofs, which erase.
-        if ["/std/Str/utf8/classify", "/std/Str/fold"]
-            .iter()
-            .any(|hint| name.contains(hint))
-        {
-            let fun = FunctionId::from_index(index);
-            println!("{name}: extent {}", census.extent(fun));
-        }
     }
 }
 

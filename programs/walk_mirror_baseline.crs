@@ -1,5 +1,5 @@
--- The faithful baseline of the five walk mirrors: suffix matching, a `{Nat, Nat}` accumulator tuple, a step function returning a fresh scan state, and the cont arm rebuilding the scan argument it already holds — arm for arm the shape of `/std/Str/fold`'s `go`.
--- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
+-- The baseline of the five walk mirrors: a walk reading one byte a turn, with suffix matching, a `{Nat, Nat}` accumulator tuple, a step function returning a fresh scan state, and the cont arm rebuilding the scan argument it already holds.
+-- One of five mirror programs attributing the allocation obligations of a UTF-8 walk that carries a scan state from byte to byte; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
 use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Proc, Fmt};
 

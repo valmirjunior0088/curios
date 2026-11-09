@@ -59,7 +59,7 @@ use super::{Module, known_values};
 /// That argues for nine. The value is sixteen instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
 pub(crate) const MULTI_SITE_INLINE_LIMIT: usize = 16;
 pub(crate) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
-/// How many parameters a continuation may hold after a fields split. The largest admitted aggregate `curios`'s corpus census finds is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
+/// How many parameters a continuation may hold after a fields split. The widest admitted aggregate `curios`'s programs hold is the four-field scan state a walk reading UTF-8 a byte a turn carries beside its loop state (`programs/walk_mirror_baseline.crs`), and its corpus census finds pairs, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
 /// Maximum cumulative copying of callees with several call sites into a call that hands them a known function they apply, each copy within [`SCC_CLONE_NODE_LIMIT`].

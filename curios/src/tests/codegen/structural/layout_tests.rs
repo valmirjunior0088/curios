@@ -375,7 +375,7 @@ fn a_rope_is_entered_through_its_final_shapes() {
     assert_eq!(run(source), b"231084");
 }
 
-/// A byte read in a loop keeps the run it last resolved: the walk `Str/fold` lowers to compares the rope it reads with the one it kept before it splits on the rope's shape, asks the shared `resolve` helper where another rope's run lies flat, a flattened node's cache or a view's base at its offset, bounds the read by the run's length rather than the payload's, which may hold room, and reaches the shared `read` helper at one site, for a node never flattened.
+/// A byte read in a loop keeps the run it last resolved: the walk `Str/fold` lowers to compares the rope it reads with the one it kept before it splits on the rope's shape, asks the shared `resolve` helper where another rope's run lies flat, a flattened node's cache or a view's base at its offset, bounds the read by the run's length rather than the payload's, which may hold room, and reaches the shared `read` helper at one site a byte of a character, its lead and the three that may continue it, for a node never flattened.
 #[test]
 fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
     let wat = wat(r#"
@@ -407,7 +407,7 @@ fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
             "the walk's read names `{needle}`:\n{walk}"
         );
     }
-    assert_eq!(walk.matches("call $bytes/read").count(), 1, "{walk}");
+    assert_eq!(walk.matches("call $bytes/read").count(), 4, "{walk}");
     assert!(!walk.contains("array.len"), "{walk}");
 
     let resolve = functions

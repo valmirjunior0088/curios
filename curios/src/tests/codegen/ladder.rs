@@ -143,7 +143,7 @@ fn string_walk_ladder_measurements() {
 
 // -- the mirror family -------------------------------------------------------
 //
-// `programs/walk_mirror_*.crs` are five user-level mirrors of the fold's walk over the same multi-byte text: a faithful baseline, and one program per removed obligation — the accumulator tuple (`flat_acc`), the scan argument reconstruction (`held_scan`), the returned scan state (`inline_step`), and the suffix view (`indexed`). They exist because the fold's own obligations cannot be removed one at a time at the source, and they are bounds rather than equivalents: each removal necessarily reshapes the arms around it, and the mirrors carry no validity witness.
+// `programs/walk_mirror_*.crs` are five user-level walks over the same multi-byte text that read one byte a turn and carry a scan state between bytes: a baseline, and one program per removed obligation — the accumulator tuple (`flat_acc`), the scan argument reconstruction (`held_scan`), the returned scan state (`inline_step`), and the suffix view (`indexed`). They exist because an obligation is attributed by removing it at the source, a program each, and they are bounds rather than equivalents: each removal necessarily reshapes the arms around it, and the mirrors carry no validity witness.
 
 /// The module-wide counts the family's claims are stated over: arity-4 tuple constructions (the scan shape), arity-2 tuple constructions (the accumulator shape), rope-slice calls, and calls to the mirror's own `mstep`.
 fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
@@ -186,7 +186,7 @@ fn calls_inside_loops(wat: &str, needle: &str) -> usize {
     count
 }
 
-/// What the family guards: the allocation rungs were built to isolate obligations by *removing* them at the source, and continuation scalar replacement erases those obligations from the baseline itself, so `held_scan` compiles to counts identical to the baseline's and `flat_acc` saves no accumulator construction — naming the value costs nothing. Window virtualization reaches the walk in the faithful spelling too, so `indexed` sheds no slice the baseline pays, and the per-loop fact below is the stronger statement. The step rung keeps its spelling-structural fact: inlining the step removes its calls.
+/// What the family guards: the allocation rungs were built to isolate obligations by *removing* them at the source, and continuation scalar replacement erases those obligations from the baseline itself, so `held_scan` compiles to counts identical to the baseline's and `flat_acc` saves no accumulator construction — naming the value costs nothing. Window virtualization reaches the walk in the baseline spelling too, so `indexed` sheds no slice the baseline pays, and the per-loop fact below is the stronger statement. The step rung keeps its spelling-structural fact: inlining the step removes its calls.
 ///
 /// **The slice claim is per loop, because the module-wide count cannot see the event it guards.** The walk is inlined into the entry, so a slice leaving the walk's loop reads as one fewer in `mirror_counts` and nothing more, and a walk slicing a fresh rope per character passes that count. What keeps the walk's own region virtualized is order: `split_windows` takes the widest admissible region, and runs only once the continuations the walk flows into exist, so no one-continuation sub-region below the walk can claim its positions first.
 #[test]
@@ -233,13 +233,13 @@ fn walk_mirror_family_isolates_each_obligation() {
     }
 }
 
-/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives — which is nowhere.
+/// The walk reads a character whole at its lead byte, so no scan state is carried from one turn to the next: the obligations the mirror family attributes to a per-byte walk — the returned scan state, the scan argument rebuilt — have nothing to stand on here.
 ///
-/// The fold does not call `step`. Since it carries the string's validity, each arm names the state it moves to — `cont(rem, lo, hi)` after a lead byte, `lead` or `cont(rem - 1, 0x80, 0xBF)` after a continuation — and the validity it passes on holds that state to the one `step` computes, so no call and no four-result return remain in the loop: the obligation the `inline_step` rung of [`walk_mirror_attribution_measurements`] bounds at roughly a fifth of the walk. Nothing else on this program's path calls `step` either: `Str/trim` moves by position through `Str/At/next`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
+/// The fold does not call `step`. `classify` names how many bytes continue a character and the range of the first, and the fold reads each in a line, its validity stepped through every byte as `step` would step it, so no call and no returned scan remain in the loop. Nothing else on this program's path calls `step` either: `Str/trim` moves by position through `Str/At/next`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
 ///
-/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and no loop that reads a byte carries a `struct.new` of its own: not the accumulator, not the suffix view, not the scan. That assertion is deliberately about *every* allocation but what a step answers rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one; the fold is copied into each call that hands it a known step, so a step's body runs in the walk's loop, and what it builds, as `Nat/of_str`'s `Option`, is the step's.
+/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and no loop that reads a byte carries a `struct.new` of its own: neither the accumulator nor the suffix view. That assertion is deliberately about *every* allocation but what a step answers rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one; the fold is copied into each call that hands it a known step, so a step's body runs in the walk's loop, and what it builds, as `Nat/of_str`'s `Option`, is the step's.
 #[test]
-fn the_per_character_walk_carries_its_scan_without_allocating() {
+fn the_per_character_walk_reads_each_character_whole_without_allocating() {
     let wat = wat(PARSE_MULTIBYTE);
     let split = functions(&wat);
     let count_in = |body: &str, needle: &str| {
@@ -265,7 +265,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
         "and a step from one position to the next constructs nothing",
     );
 
-    // The fold's per-character shape, in every loop that reads a byte: `Str/fold` is copied into each call that hands it a known step, the program's own and `Nat/of_str`'s, so its walk stands in no function of its own and the claims are stated of each such loop. The accumulator travels as fields, the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum — and the scan travels as a discriminant and three payload slots.
+    // The fold's per-character shape, in every loop that reads a byte: `Str/fold` is copied into each call that hands it a known step, the program's own and `Nat/of_str`'s, so its walk stands in no function of its own and the claims are stated of each such loop. The accumulator travels as fields, and the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum.
     let walks = reading_loops(&wat);
     assert!(!walks.is_empty(), "the walk reads a byte in a loop");
     for walk in &walks {
@@ -283,11 +283,11 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
             0,
             "the suffix view is a virtual window: no helper call, no view allocation",
         );
-        // One site, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits the read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. Exactly one arm runs, so this is a static site count; the per-character cost is one read either way.
-        assert_eq!(
-            in_walk("call $bytes/read"),
-            1,
-            "the byte is read once and shared by the arms, not re-read per arm",
+        // One site a byte, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits each read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. A loop over bytes reads at one site, and the fold's walk at four, a character's lead and the three bytes that may continue it; only the arms a byte takes run, so this is a static site count, and the cost is one read a byte either way.
+        assert!(
+            matches!(in_walk("call $bytes/read"), 1 | 4),
+            "each byte is read once and shared by the arms, not re-read per arm:\n{}",
+            walk.join("\n"),
         );
         assert_eq!(
             in_walk("call_indirect $clsr/2"),
@@ -295,11 +295,23 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
             "the step a call hands the fold runs in place",
         );
     }
+    assert_eq!(
+        walks
+            .iter()
+            .filter(|walk| walk
+                .iter()
+                .filter(|line| line.starts_with("call $bytes/read"))
+                .count()
+                == 4)
+            .count(),
+        2,
+        "the fold's two walks, the program's and `Nat/of_str`'s, each read a character whole",
+    );
     // Matched on the name, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
         wat.matches("$/std/Str/utf8/step").count(),
         0,
-        "the walk steps its scan by the arm it is in rather than calling `step`",
+        "the walk reads a character by the arm it is in rather than calling `step`",
     );
 }
 
