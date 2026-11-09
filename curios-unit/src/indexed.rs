@@ -2,7 +2,7 @@
 
 use {
     crate::rerun,
-    curios_archive::{Bytes, parted},
+    curios_archive::Bytes,
     curios_common::{Digest, Facet, Member, Object, Recorded},
     curios_core::{Anchors, Definitions, Global, HeldReads, Imports, ItemRun, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
@@ -270,31 +270,6 @@ pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
         &digests[..],
         &run[..],
     ]))
-}
-
-/// The record of what was read that `bytes` file ([`reads_filed`]): its own part, and each definition's reads a member of the one run, named by its digest. `None` for bytes that are no such thing.
-pub fn reads_restored(bytes: &Bytes) -> Option<(Bytes, Vec<Object>)> {
-    let [table, digests, run]: [Bytes; 3] = parted(bytes)?.try_into().ok()?;
-    let (digests, rest) = digests.as_slice().as_chunks::<32>();
-    if !rest.is_empty() {
-        return None;
-    }
-    let entries = digests
-        .iter()
-        .enumerate()
-        .map(|(index, digest)| {
-            Some(Object {
-                digest: Digest::from_bytes(*digest),
-                bytes: run.clone(),
-                member: Some(Member {
-                    kind: ReadTable::KIND,
-                    index: u32::try_from(index).ok()?,
-                }),
-            })
-        })
-        .collect::<Option<_>>()?;
-
-    Some((table, entries))
 }
 
 /// What a unit stores of the lowering's baseline half `text` holds: its own part and the kind of its entries, what it was restored from where it was and its own otherwise.
