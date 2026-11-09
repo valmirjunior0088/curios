@@ -231,6 +231,21 @@ impl Scope {
             .collect()
     }
 
+    /// How many binders this walk has opened, closed ones included: a binder opened later is a higher opening.
+    pub(super) fn openings(&self) -> u64 {
+        self.openings
+    }
+
+    /// The newest of the binders the locals `term` names stand at, each the innermost of its name, or zero where it names none in scope.
+    pub(super) fn newest_binder_named(&self, term: &Term) -> u64 {
+        term.mentions()
+            .locals()
+            .filter_map(|name| self.local(name))
+            .map(|local| local.opening)
+            .max()
+            .unwrap_or(0)
+    }
+
     /// The binders in scope now, for [`Scope::stands`] to be asked about later.
     pub(super) fn prefix(&self) -> Prefix {
         Prefix {

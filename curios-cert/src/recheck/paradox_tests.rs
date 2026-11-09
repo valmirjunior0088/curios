@@ -688,6 +688,28 @@ end
 /std/Bool/True/qed()
 "#;
 
+/// [`A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX`] with `A` given a parameter `P` its λ answers at, so the λ names a local: the family's parameter, which stands as it stood at every turn of the regress.
+const A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_OVER_ITS_PARAMETER: &str = r#"
+induct /B(T: Prop): (x: T) -> pub Prop
+| c(k: T): (k)
+end
+induct /A(P: Prop): pub Prop
+| mk(b: #{node = InductType} /B((a: #{node = InductType} /A(P)) -> P)(
+    (a: #{node = InductType} /A(P)) =>
+        #{result = Ambient(P)}
+        match a
+        | mk(b2) =>
+            #{result = Ambient(P)}
+            match b2
+            | c(k) =>
+                k(a)
+            end
+        end
+))
+end
+/std/Bool/True/qed()
+"#;
+
 /// [`A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX`] with `B` declared in `A`'s group and indexed by a function of `A`, which the scan before the walk refuses as indexed by its group, and the walk judges all the same.
 const A_GROUP_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX: &str = r#"
 induct /A: pub Prop
@@ -710,12 +732,13 @@ end
 /std/Bool/True/qed()
 "#;
 
-// A local-free term's typing reads the definition store alone, so one that needs itself while it is in progress needs itself again at every turn: a derivation resting on its own conclusion is none, and the walk refuses it by name. Each module here types the λ inside its own typing, and the walk followed the regress a level a turn, its stack grown on the heap, without end.
+// A term's typing reads the definition store and the binders its locals stand at, so one that needs itself while it is in progress, its locals standing as they stood, needs itself again at every turn: a derivation resting on its own conclusion is none, and the walk refuses it by name. Each module here types the λ inside its own typing, the last over the family's parameter, and the walk followed the regress a level a turn, its stack grown on the heap, without end.
 #[test]
 fn a_typing_that_needs_itself_is_refused() {
     for (module, family) in [
         (A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX, "A"),
         (A_GROUP_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX, "A"),
+        (A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_OVER_ITS_PARAMETER, "A"),
     ] {
         let verdicts =
             core_text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));

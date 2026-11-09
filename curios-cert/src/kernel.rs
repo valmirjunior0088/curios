@@ -71,7 +71,7 @@ use {
         StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
     },
     std::{
-        collections::{BTreeMap, HashSet},
+        collections::{BTreeMap, HashMap},
         fmt,
         rc::Rc,
     },
@@ -197,7 +197,7 @@ pub enum Error {
     NotCore(Term),
     /// A family's parameter or index, or a record's or a concept's parameter, that names `member`, declared with the declaration it indexes or reaching it back. Positivity walks no index binder type, which is sound only because nothing a declaration's own cycle declares is in scope there, and a family indexed by a family that holds it is induction-induction, which no decision admits.
     IndexedByItsGroup { member: Global },
-    /// A local-free term whose typing needs its own type while that typing is in progress: a derivation resting on its own conclusion, whose regress a walk would follow a level a turn.
+    /// A term whose typing needs its own type while that typing is in progress, every local it names standing at the binder it stood at where that typing began: a derivation resting on its own conclusion, whose regress a walk would follow a level a turn.
     NeedsItsOwnTyping(Term),
     /// A family that declares one constructor tag more than once. Every lookup resolves a tag by first match, so a repeat hides a constructor rather than adding one — and the coverage rule then answers about the first entry once per entry, reporting a family empty at an index its own later entry constructs at.
     RepeatedTag(Atom),
@@ -651,8 +651,8 @@ pub struct Kernel<'s> {
     machine: bool,
     /// Whether the terms in hand are already by value: set where reduction or conversion is entered from typing, so the entries beneath read what they are handed, and put back where typing binds a `let`. See [`Kernel::by_value`].
     reading: bool,
-    /// The local-free terms [`infer()`] is typing, each from where its typing begins to where it ends: one asked for again in between is refused ([`Error::NeedsItsOwnTyping`]).
-    typing: HashSet<Term>,
+    /// The terms [`infer()`] is typing, each from where its typing begins to where it ends, with how many binders the walk had opened where each of its typings in progress began, innermost last: one asked for again in between, under the binders it named then, is refused ([`Error::NeedsItsOwnTyping`]).
+    typing: HashMap<Term, Vec<u64>>,
 }
 
 impl<'s> Kernel<'s> {
@@ -670,7 +670,7 @@ impl<'s> Kernel<'s> {
             assumed: Vec::new(),
             machine: true,
             reading: false,
-            typing: HashSet::new(),
+            typing: HashMap::new(),
         }
     }
 
@@ -1258,21 +1258,30 @@ impl<'s> Kernel<'s> {
         outcome
     }
 
-    /// Type `term` by `typing`, refusing where `term` names no local and its typing is already in progress: such a term's typing reads the definition store alone, so one that needs itself needs itself again at every turn, and a derivation resting on its own conclusion is none.
+    /// Type `term` by `typing`, refusing where its typing is already in progress and every local it names stands at the binder it stood at where that typing began: such a typing reads the definition store and those binders alone, so one that needs itself needs itself again at every turn, and a derivation resting on its own conclusion is none. An arm that re-typed a local `term` names opened a newer binder for it, and the typing under it is another judgment.
+    ///
+    /// **One count tells it.** A binder standing where a typing began stands until that typing ends, and was opened before it began, so a local whose binder was opened before then stands at the binder it stood at then: the locals stand as they stood exactly where the newest binder they stand at is no newer than where the innermost typing of the term in progress began. A term naming no local stands at none, and is refused at any re-entry.
     pub(crate) fn typing_once<T>(
         &mut self,
         term: &Term,
         typing: impl FnOnce(&mut Self) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        if term.has_local_free() {
-            return typing(self);
-        }
-        if !self.typing.insert(term.clone()) {
+        let innermost = self.typing.get(term).and_then(|began| began.last());
+        if innermost.is_some_and(|&began| self.scope.newest_binder_named(term) <= began) {
             return Err(Error::NeedsItsOwnTyping(term.clone()));
         }
 
+        self.typing
+            .entry(term.clone())
+            .or_default()
+            .push(self.scope.openings());
         let typed = typing(self);
-        self.typing.remove(term);
+        if let Some(began) = self.typing.get_mut(term) {
+            began.pop();
+            if began.is_empty() {
+                self.typing.remove(term);
+            }
+        }
         typed
     }
 
