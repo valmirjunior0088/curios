@@ -9,7 +9,7 @@
 ## The choices
 
 - **A step that stays below `2^30`**, as the lanes and the corpus do. Nothing in arithmetic changes; a generator of this kind is short by today's measure (Wichmann and Hill's 1982 combination of three congruential generators has a period near `7 · 10^12`), and no digest a standard states is one.
-- **`Nat` or `Int` reduced by a mask at each step**, paying what [a chain of `Nat` or `Int` steps runs in a word](../compilation/201-a-chain-of-nat-or-int-steps-runs-in-a-word.md) reserves until that cost is taken back.
+- **`Nat` or `Int` reduced by a mask at each step**, paying a tag test an operand and a box a result where no bound reaches a value, the cost [Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md) accepts.
 - **A carrier of a fixed width beside `/sys/Byte`**, with modular operations whose laws are declared as [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) are. A carrier reaches every constant folder that shares `scalar`, `curios-emit`'s fast paths and the law grid, which is what it costs.
 
 ## Refinement
