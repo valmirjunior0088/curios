@@ -1852,40 +1852,6 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
     Error::batch(errors)
 }
 
-/// Elaborate a whole [`Definitions`] with no cached prefix, then zonk and check it.
-pub fn elaborate_and_zonk_definitions(
-    context: &mut Context,
-    definitions: &Definitions,
-    mounts: &[Mount],
-    minted: &Rc<Minted>,
-) -> Result<Definitions, Error> {
-    curios_profile::profile!("elaborate_and_zonk_definitions");
-    grown(|| {
-        let declarations = Declarations::of(definitions);
-        let suffix = elaborate_definitions_suffix(
-            context,
-            None,
-            None,
-            (definitions, mounts),
-            &declarations,
-            minted,
-            None,
-        )?;
-        let finalized = finalize_and_check(
-            context,
-            suffix.definitions,
-            None,
-            suffix.held,
-            suffix.obligations,
-        );
-        if !suffix.refusals.is_empty() {
-            return Err(refused(suffix.refusals, finalized));
-        }
-
-        raise(finalized?).map(|(definitions, _)| definitions)
-    })
-}
-
 /// Which final term a program's elaboration checks: the entry it closes with, or a test program's tail synthesized over the unit's registered tests once its items are defined. A policy rather than an entry handed in, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
 #[derive(Debug, Clone, Copy)]
 pub enum Tail<'a> {

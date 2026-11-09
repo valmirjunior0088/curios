@@ -732,7 +732,7 @@ pub fn stand(live: Option<&Rc<Frame>>, held: Option<&Rc<Frame>>) -> bool {
     }
 }
 
-/// The frames above the base as they stood where something that waits took them: a parked problem where it parks, and a metavariable where it is born. Held as the innermost of them, which holds the rest, shared with the context and with every other holder and never copied: a frame written to since was copied for its writer, so these are what stood. A judgment made for what holds them stands on them ([`Context::standing_on`](crate::Context::standing_on)).
+/// The frames above the base as they stood where something that waits took them: a parked problem where it parks, and a metavariable where it is born. Held as the innermost of them, which holds the rest, shared with the context and with every other holder and never copied: a frame written to since was copied for its writer, so these are what stood. A judgment made for what holds them stands on them (`Context::standing_on`).
 ///
 /// The base frame is the elaboration's and is never held: what waits with no local frame standing holds none.
 #[derive(Debug, Clone, Default)]

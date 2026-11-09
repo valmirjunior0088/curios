@@ -39,7 +39,7 @@ pub use program::*;
 
 mod traced;
 use traced::*;
-pub use traced::{Answered, Question};
+pub use traced::{Answered, ArchivedAnswered, ArchivedQuestion, Question};
 
 mod solutions;
 use solutions::*;

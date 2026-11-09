@@ -1,6 +1,7 @@
 //! What one run reports when an item is refused: every independent refusal in item order, nothing from an item that reaches a refused one, and a context with nothing of the refused item left in it.
 
 use {
+    super::*,
     crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
@@ -10,6 +11,39 @@ use {
     },
     std::{collections::BTreeSet, rc::Rc},
 };
+
+/// Elaborate a whole [`Definitions`] with no cached prefix, then zonk and check it.
+fn elaborate_and_zonk_definitions(
+    context: &mut Context,
+    definitions: &Definitions,
+    mounts: &[Mount],
+    minted: &Rc<Minted>,
+) -> Result<Definitions, Error> {
+    grown(|| {
+        let declarations = Declarations::of(definitions);
+        let suffix = elaborate_definitions_suffix(
+            context,
+            None,
+            None,
+            (definitions, mounts),
+            &declarations,
+            minted,
+            None,
+        )?;
+        let finalized = finalize_and_check(
+            context,
+            suffix.definitions,
+            None,
+            suffix.held,
+            suffix.obligations,
+        );
+        if !suffix.refusals.is_empty() {
+            return Err(refused(suffix.refusals, finalized));
+        }
+
+        raise(finalized?).map(|(definitions, _)| definitions)
+    })
+}
 
 fn context() -> Context<'static> {
     Context::with_default_budget(SYNTAX)

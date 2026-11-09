@@ -4,7 +4,6 @@
 
 use {
     super::*,
-    crate::*,
     curios_common::Qualifier,
     curios_core::{Cost, Free, Global, Intrinsic, Level, Term},
 };

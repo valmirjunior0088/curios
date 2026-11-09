@@ -1,6 +1,6 @@
 //! The elaborator of the Curios compiler, between `curios-module` (whose `into_core` lowers surface syntax into a `curios_core::Definitions`) and `curios-anf` (which consumes the erased output of `curios_erase::erase_unit`). The kernel that independently re-checks what this crate accepts is `curios-cert`.
 //!
-//! The stage runs module-at-a-time: [`elaborate_and_zonk_definitions`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; erasure, `curios-erase`, strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
+//! The stage runs module-at-a-time: [`elaborate_and_zonk_unit`] walks a unit's lowered definitions item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; erasure, `curios-erase`, strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
 //!
 //! # What this stage starts from
 //!
@@ -21,7 +21,7 @@ pub use universes::{
 };
 
 mod concept;
-use concept::*;
+pub use concept::{ArchivedWitness, Witness};
 
 mod derive;
 use derive::*;
@@ -37,7 +37,10 @@ use reduce::*;
 
 mod context;
 use context::*;
-pub use context::{Answered, Context, DEFAULT_BUDGET, Question};
+pub use context::{
+    Answered, ArchivedAnswered, ArchivedQuestion, AwaitId, Context, DEFAULT_BUDGET, HeldFrames,
+    Question,
+};
 
 mod convert;
 use convert::*;
@@ -46,10 +49,14 @@ mod denoise;
 use denoise::*;
 
 mod error;
-use error::*;
-pub use error::{Error, Reading};
+pub use error::{
+    ArgumentSite, BinderSite, Callee, CycleMember, DeadArm, Declined, EmbeddingDiagnosis,
+    ErasedSite, Error, GoalReport, Joining, Need, ReaderScope, Reading, RecordKeyword, RegionOwner,
+    Runner, ShapeDiagnosis, Underivable, Watched,
+};
 
 mod report;
+pub use report::Pending;
 use report::*;
 
 mod typing;
@@ -66,29 +73,31 @@ use written::*;
 
 mod entailment;
 use entailment::*;
+pub use entailment::{Conclusion, Origin, Refusal};
 
 mod established;
 pub use established::Established;
 
 mod traces;
+use traces::*;
 pub use traces::{
-    Classified, Foreign, HeldTrace, Made, Parts, Read, Readers, TraceRecord, TraceTable,
-    TracedEntry, Traces, Vectors,
+    ArchivedClassified, ArchivedForeign, ArchivedTraceTable, ArchivedTraces, ArchivedVectors,
+    Classified, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts, Readers, TraceRecord,
+    TraceTable, TracedEntry, Traces, Vectors,
 };
 
 mod same;
 use same::*;
-pub use same::{Same, concepts_alike, entries_alike, inducts_alike, part_digest, structs_alike};
 
 mod candidate;
 use candidate::*;
-pub use candidate::{Candidating, bytes_of, declaration_input, found, lowered_digest};
+pub use candidate::{Candidating, declaration_input, lowered_digest};
 
 mod elaborate;
 use elaborate::*;
 pub use elaborate::{
-    FinalizedProgram, Recompile, Recompiled, Tail, elaborate_and_zonk_definitions,
-    elaborate_and_zonk_entry, elaborate_and_zonk_entry_over, elaborate_and_zonk_program,
+    FinalizedProgram, Recompile, Recompiled, Tail, elaborate_and_zonk_entry,
+    elaborate_and_zonk_entry_over, elaborate_and_zonk_program,
     elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, elaborate_and_zonk_unit_over,
 };
 

@@ -262,7 +262,7 @@ pub struct Opened {
 
 impl Opened {
     /// How many binders are open: the mark [`Opened::truncate`] closes back to.
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.binders.len()
     }
 
@@ -273,7 +273,7 @@ impl Opened {
     }
 
     /// Close the innermost binder.
-    pub(crate) fn pop(&mut self) {
+    pub fn pop(&mut self) {
         if let Some((binder, _, shadowed)) = self.binders.pop() {
             match shadowed {
                 Some(position) => self.positions.insert(binder, position),
@@ -283,14 +283,14 @@ impl Opened {
     }
 
     /// Close every binder opened past `mark`.
-    pub(crate) fn truncate(&mut self, mark: usize) {
+    pub fn truncate(&mut self, mark: usize) {
         while self.binders.len() > mark {
             self.pop();
         }
     }
 
     /// The type `name` was opened at, where it is open.
-    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
+    pub fn type_of(&self, name: &Free) -> Option<&Term> {
         let position = *self.positions.get(name)?;
 
         Some(&self.binders[position].1)
