@@ -9,7 +9,7 @@ use {
     curios_common::ArenaId,
     curios_cps::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
-        ValueExpr, ValueId,
+        RowId, ValueExpr, ValueId,
     },
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
@@ -161,6 +161,8 @@ struct TupleSite {
     node: NodeId,
     arity: usize,
     tag: Option<u32>,
+    /// The nominal row it builds, where it is a family's or a product's rather than a structural tuple.
+    row: Option<RowId>,
 }
 
 /// What one return edge hands back.
@@ -191,6 +193,8 @@ struct Census<'m> {
     result_conts: BTreeSet<ContinuationId>,
     closure_funs: BTreeSet<FunctionId>,
     uses: BTreeMap<ValueId, Vec<(NodeId, Consumption)>>,
+    /// The rows each value is read at, by a field read or a tag test.
+    read_rows: BTreeMap<ValueId, BTreeSet<RowId>>,
     tuple_sites: BTreeMap<ValueId, TupleSite>,
     slice_sites: BTreeMap<ValueId, NodeId>,
     home_of_value: BTreeMap<ValueId, Home>,
@@ -314,6 +318,7 @@ impl<'m> Census<'m> {
             result_conts: BTreeSet::new(),
             closure_funs: BTreeSet::new(),
             uses: BTreeMap::new(),
+            read_rows: BTreeMap::new(),
             tuple_sites: BTreeMap::new(),
             slice_sites: BTreeMap::new(),
             home_of_value: BTreeMap::new(),
@@ -423,6 +428,10 @@ impl<'m> Census<'m> {
                                 node: node_id,
                                 arity: atoms.len(),
                                 tag,
+                                row: match value {
+                                    ValueExpr::Row(row, _) => Some(*row),
+                                    _ => None,
+                                },
                             },
                         );
                         self.home_of_value.insert(*result, Home::Node(node_id));
@@ -452,13 +461,22 @@ impl<'m> Census<'m> {
                         self.slice_sites.insert(*result, node_id);
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
+                    if let (
+                        Intrinsic::RowGet(row, _) | Intrinsic::IsRow(row),
+                        Some(Atom::Value(read)),
+                    ) = (op, args.first())
+                    {
+                        self.read_rows.entry(*read).or_default().insert(*row);
+                    }
                     for (position, atom) in args.iter().enumerate() {
                         match atom {
                             Atom::Value(operand) => {
                                 let consumption = match (op, position) {
-                                    (Intrinsic::TupleGet(field), 0) => {
-                                        Consumption::Projection(*field)
-                                    }
+                                    (
+                                        Intrinsic::TupleGet(field) | Intrinsic::RowGet(_, field),
+                                        0,
+                                    ) => Consumption::Projection(*field),
+                                    (Intrinsic::IsRow(_), 0) => Consumption::Scrutinee,
                                     (Intrinsic::BytesLen | Intrinsic::ListLen, 0) => {
                                         Consumption::RopeLen
                                     }
@@ -1075,13 +1093,17 @@ fn surveys_the_fold_accumulator_region() {
 /// The death-birth tally for one program — the churn census instrument, whose verdicts are `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`'s — the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
 #[derive(Debug, Default)]
 struct Rebirth {
-    /// Tuple constructions in the program.
+    /// Structural tuple constructions in the program.
     tuple_sites: usize,
     /// Constructions beside a co-resident dying value whose exact constructed arity matches.
     constructed_pairs: usize,
     /// Constructions beside a co-resident dying value whose projected width matches — the cross-frame shape: `chain`'s dying cell was the caller's construction, so its width arrives through the projections that take it apart.
     projected_pairs: usize,
-    /// The pairs above owned under `/std/Map` — the map-spine substrate.
+    /// Constructions of a nominal row: a family's or a product's.
+    row_sites: usize,
+    /// Row constructions beside a co-resident dying value read at the same row — the shape `/std/Map`'s node rebuilds take, which no width pairs, since a row is padded to one width and two rows of one width are two layouts.
+    row_pairs: usize,
+    /// The pairs above, of either kind, owned under `/std/Map` — the map-spine substrate.
     spine_pairs: usize,
     /// Rope extends: appends, and every operand a concat merges.
     extends: usize,
@@ -1097,6 +1119,8 @@ struct Dying {
     fun: FunctionId,
     constructed: Option<usize>,
     projected: Option<usize>,
+    /// The one row it is read at, where it is a row value.
+    row: Option<RowId>,
 }
 
 fn rebirth(census: &Census) -> Rebirth {
@@ -1133,6 +1157,10 @@ fn rebirth(census: &Census) -> Rebirth {
                     _ => None,
                 })
                 .max(),
+            row: match census.read_rows.get(value) {
+                Some(rows) if rows.len() == 1 => rows.first().copied(),
+                _ => None,
+            },
         });
     }
 
@@ -1140,24 +1168,41 @@ fn rebirth(census: &Census) -> Rebirth {
         let Some(fun) = census.owner_of_node.get(&site.node) else {
             continue;
         };
-        tally.tuple_sites += 1;
-
-        let constructed = dying.iter().any(|death| {
-            death.value != *value && death.fun == *fun && death.constructed == Some(site.arity)
-        });
-        let projected = dying.iter().any(|death| {
-            death.value != *value
-                && death.fun == *fun
-                && death.constructed.is_none()
-                && death.projected == Some(site.arity)
-        });
-        if constructed {
-            tally.constructed_pairs += 1;
-        }
-        if projected {
-            tally.projected_pairs += 1;
-        }
-        if constructed || projected {
+        let beside = |death: &&Dying| death.value != *value && death.fun == *fun;
+        let paired = match site.row {
+            Some(row) => {
+                tally.row_sites += 1;
+                let paired = dying
+                    .iter()
+                    .filter(beside)
+                    .any(|death| death.row == Some(row));
+                if paired {
+                    tally.row_pairs += 1;
+                }
+                paired
+            }
+            None => {
+                tally.tuple_sites += 1;
+                let tuples = || {
+                    dying
+                        .iter()
+                        .filter(beside)
+                        .filter(|death| death.row.is_none())
+                };
+                let constructed = tuples().any(|death| death.constructed == Some(site.arity));
+                let projected = tuples().any(|death| {
+                    death.constructed.is_none() && death.projected == Some(site.arity)
+                });
+                if constructed {
+                    tally.constructed_pairs += 1;
+                }
+                if projected {
+                    tally.projected_pairs += 1;
+                }
+                constructed || projected
+            }
+        };
+        if paired {
             let owner = census.owner_name(*fun);
             if owner.contains("/std/Map") {
                 tally.spine_pairs += 1;
@@ -1248,17 +1293,17 @@ entry()
 ///
 /// # What it last printed
 ///
-/// Over the fourteen-program corpus, the three workloads, and the TOML driver, taken at `7f2ce2cfd`:
+/// Over the fourteen-program corpus, the three workloads, and the TOML driver, taken at `f5bfe7f60`:
 ///
 /// ```text
-/// == death-birth totals: 2418 tuple sites, 0 constructed-width pairs, 802 projected-width pairs, 0 under /std/Map; 200/282 extends linear
+/// == death-birth totals: 843 tuple sites, 0 constructed-width pairs, 359 projected-width pairs; 2130 row sites, 508 same-row pairs; 0 under /std/Map; 331/383 extends linear
 /// ```
 ///
-/// with `chain` at 13 pairs of 86 sites, `spines` at 14 of 106 with none under `/std/Map`, and the TOML driver at 604 of 1075 with 93 of its 137 extends linear.
+/// with `chain` at 13 same-row pairs of 43 row sites, `spines` at 6 of 58 with none under `/std/Map`, and the TOML driver at 405 of 1466 row sites and 313 of 451 tuple sites, with 109 of its 152 extends linear.
 ///
 /// # The reading
 ///
-/// The population is real and pervasive — 802 of 2418 tuple sites stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. None of it stands under `/std/Map`, in `spines` or anywhere else: the TOML driver alone holds 604 of the 802, three quarters of all pairs. And 200 of 282 rope extends are linearly threaded — the base's only use is the extend that consumes it.
+/// The population is real and pervasive — 508 of 2130 row sites stand beside a dying value of their row and 359 of 843 tuple sites beside one of their width, the TOML driver holding most of both. Among tuples it is *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. None of it stands under `/std/Map`: `Node/insert` hands back the node it was given where the new key parts above it, so that node has a use that takes nothing apart and is no death here. And 331 of 383 rope extends are linearly threaded — the base's only use is the extend that consumes it.
 #[test]
 #[ignore = "measurement, counted: surveys the corpus rather than asserting"]
 fn death_birth_census() {
@@ -1275,10 +1320,12 @@ fn death_birth_census() {
         let tally = rebirth(&census);
 
         println!(
-            "  {label}: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs, {spines} under /std/Map; {linear}/{extends} extends linear",
+            "  {label}: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs; {rows} row sites, {row_pairs} same-row pairs; {spines} under /std/Map; {linear}/{extends} extends linear",
             sites = tally.tuple_sites,
             constructed = tally.constructed_pairs,
             projected = tally.projected_pairs,
+            rows = tally.row_sites,
+            row_pairs = tally.row_pairs,
             spines = tally.spine_pairs,
             linear = tally.linear_extends,
             extends = tally.extends,
@@ -1287,6 +1334,8 @@ fn death_birth_census() {
         totals.tuple_sites += tally.tuple_sites;
         totals.constructed_pairs += tally.constructed_pairs;
         totals.projected_pairs += tally.projected_pairs;
+        totals.row_sites += tally.row_sites;
+        totals.row_pairs += tally.row_pairs;
         totals.spine_pairs += tally.spine_pairs;
         totals.extends += tally.extends;
         totals.linear_extends += tally.linear_extends;
@@ -1294,10 +1343,12 @@ fn death_birth_census() {
     }
 
     println!(
-        "== death-birth totals: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs, {spines} under /std/Map; {linear}/{extends} extends linear",
+        "== death-birth totals: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs; {rows} row sites, {row_pairs} same-row pairs; {spines} under /std/Map; {linear}/{extends} extends linear",
         sites = totals.tuple_sites,
         constructed = totals.constructed_pairs,
         projected = totals.projected_pairs,
+        rows = totals.row_sites,
+        row_pairs = totals.row_pairs,
         spines = totals.spine_pairs,
         linear = totals.linear_extends,
         extends = totals.extends,
@@ -1305,7 +1356,7 @@ fn death_birth_census() {
     println!("== pair owners: {owners:?}");
 }
 
-/// The classifier pinned on the canonical pair, so the census above stays a measurement: a cons rebuilt from a predecessor dying in the same function pairs at projected width, and a program whose constructions never see a dying same-layout value reports none.
+/// The classifier pinned on the canonical pair, so the census above stays a measurement: a cons rebuilt from a predecessor dying in the same function pairs at its row, and a program whose constructions never see a dying same-layout value reports none.
 #[test]
 fn death_birth_classifier_pins_the_canonical_pair() {
     let paired = r#"
@@ -1350,7 +1401,7 @@ fn death_birth_classifier_pins_the_canonical_pair() {
     let census = Census::of(&module);
     let tally = rebirth(&census);
     assert!(
-        tally.projected_pairs >= 1,
+        tally.row_pairs >= 1,
         "the rebuilt cons beside its dying predecessor pairs: {tally:?}",
     );
 }
