@@ -108,7 +108,7 @@ impl ErasedUnit {
 }
 
 /// The completed records of the erasure of the item declaring `name` first, made from `input`, as `candidates` holds them, each with the digest it is stored under: what an erasure looks among before it erases the item.
-pub(super) fn found(
+pub fn found(
     candidates: &dyn Candidates,
     input: &Digest,
     name: &curios_core::Global,

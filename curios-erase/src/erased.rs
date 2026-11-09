@@ -846,7 +846,7 @@ impl<'a> Erasures<'a> {
 }
 
 /// The definition `module` declares under `name` by a `let`, where `places` says it holds one: what kind of definition it is and its body, which erasure reads of a constructor and of a concept method's wrapper, each a `let` of its own.
-pub(super) fn declared<'a>(
+pub fn declared<'a>(
     definitions: &'a curios_core::Definitions,
     places: &curios_core::Places,
     name: &curios_core::Global,

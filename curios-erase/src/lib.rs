@@ -12,7 +12,8 @@ mod error;
 pub use error::{ErasedName, Error};
 
 mod sorts;
-pub use sorts::{AtSorts, Sorts};
+use sorts::AtSorts;
+pub use sorts::{ArchivedSorts, Sorts};
 
 mod read;
 use read::*;
@@ -21,20 +22,28 @@ mod classify;
 use classify::*;
 
 mod environment;
-use environment::*;
+pub use environment::{
+    ArchivedBinding, ArchivedConstructorRow, ArchivedEnvironment, ArchivedFamilyRow,
+    ArchivedImportedFamily, ArchivedProductRow, Binding, ConstructorRow, Environment, FamilyRow,
+    ImportedFamily, Origin, ProductRow,
+};
 
 mod eraser;
 use eraser::*;
-pub use eraser::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
+pub use eraser::{ErasedNames, ErasedProgram, erase_program, erase_unit, erase_unit_over};
 
 mod erased;
 use erased::*;
-pub use erased::{ErasedForms, ErasedItem, ErasedUnit, Erasures};
+pub use erased::{
+    ArchivedErasedForms, ArchivedErasedItem, ArchivedErasedUnit, ErasedForms, ErasedItem,
+    ErasedUnit, Erasures,
+};
 
 mod asked;
 use asked::*;
 pub use asked::{
-    Asked, AskedEntry, AskedItems, AskedRecord, AskedTable, HeldAsked, Made, Part, Read,
+    ArchivedAskedItems, ArchivedAskedTable, ArchivedPart, Asked, AskedBy, AskedEntry, AskedItems,
+    AskedRecord, AskedTable, HeldAsked, Made, Part, Parts,
 };
 
 mod over;

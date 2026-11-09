@@ -7,10 +7,10 @@
 //! **Completed where it is filed, and found by the item it erased.** A store's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_common::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the store where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the store beside it.
 
 mod table;
-pub use table::{AskedEntry, AskedTable};
+pub use table::{ArchivedAskedTable, AskedEntry, AskedTable};
 
 mod by;
-pub use by::AskedBy;
+pub use by::{AskedBy, Parts};
 
 use {
     crate::{ErasedUnit, declared},
@@ -262,7 +262,7 @@ impl Records for AskedItems {
 }
 
 /// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, what the definition is declared as and what it was generated from, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
-pub(super) fn declared_digest(
+pub fn declared_digest(
     definitions: &curios_core::Definitions,
     places: &curios_core::Places,
     certification: &curios_core::Certification,
@@ -285,7 +285,7 @@ pub(super) fn declared_digest(
 }
 
 /// The digest of what an item naming `name` reads under `part` of the erased forms `unit` holds at `place`, which declare it: a binding as [`ErasedForms::read_digest`](crate::ErasedForms::read_digest) reads it, and the forms whole as `unit` stores them.
-pub(super) fn erased_digest(
+pub fn erased_digest(
     unit: &ErasedUnit,
     place: usize,
     (name, part): (curios_core::Global, Part),
@@ -298,6 +298,6 @@ pub(super) fn erased_digest(
 }
 
 /// The thirty-two bytes a digest spells.
-pub(super) fn bytes_of(digest: &str) -> Option<[u8; 32]> {
+pub fn bytes_of(digest: &str) -> Option<[u8; 32]> {
     Digest::from_hex(digest).map(|digest| *digest.as_bytes())
 }
