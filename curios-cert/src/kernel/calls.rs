@@ -256,10 +256,10 @@ impl Kernel<'_> {
             return Ok(());
         };
         let arity = self.calls.frames[frame].arities[callee];
-        // A call is graded on what it passes, and a `let`-bound local passes what it stands for.
+        // A call is graded on what it passes, and a `let`-bound local passes what it stands for; a variable an arm's index inversion solved passes itself, since the size order reads nothing an inversion concluded, as the elaborator's discovery walk grades it.
         let arguments = arguments
             .iter()
-            .map(|argument| self.by_value(argument))
+            .map(|argument| self.graded(argument))
             .collect::<Vec<_>>();
 
         // Taken out for the grading and put back: the grader reads the context while reducing through this kernel, and nothing it reduces opens an arm.

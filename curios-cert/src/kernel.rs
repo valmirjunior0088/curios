@@ -1112,10 +1112,29 @@ impl<'s> Kernel<'s> {
     ///
     /// **A `let` is bound for typing and read by value by everything else.** The tail is typed over the binder, so a value named twice is typed once; a variable is typed by the binder's type. Whatever reads a term for more than its type is handed the term with the name unfolded ([`Kernel::by_value`]), which is the term a substituted `let` leaves, so reduction's tables, an arm's equations, the recorded positions and the graded calls are keyed and read as they are where a `let` is substituted. The local stands for one value for as long as its opening does, so what the typing tables remember of a term naming it stays true while its binder stands — the life they have.
     pub(crate) fn bind(&mut self, name: &Free, type_: &Term, value: &Term, encloses_partial: bool) {
+        self.bind_as(name, type_, value, encloses_partial, false);
+    }
+
+    /// [`Kernel::bind`] for a variable an arm's index inversion solved, bound to its solution: typing and reduction read it by its solution, and a graded call as written ([`Kernel::graded`]).
+    pub(crate) fn bind_solved(&mut self, name: &Free, type_: &Term, solution: &Term) {
+        self.bind_as(name, type_, solution, false, true);
+    }
+
+    fn bind_as(
+        &mut self,
+        name: &Free,
+        type_: &Term,
+        value: &Term,
+        encloses_partial: bool,
+        solved: bool,
+    ) {
         self.spend.reserve(name.index());
         let over_nothing = self.scope.assumes(name);
         // A local bound again stands for another value, which is what a term naming it was typed through: the typings go, and nothing else does, since every other table is keyed by value and names no `let`.
-        if self.scope.bind(name, type_, value, encloses_partial) {
+        if self
+            .scope
+            .bind(name, type_, value, encloses_partial, solved)
+        {
             self.memos.begin_sizes();
         }
         if over_nothing {
@@ -1153,11 +1172,12 @@ impl<'s> Kernel<'s> {
             let moved = local.value.mentions_any(&names);
 
             if moved || specialized.is_some() {
-                self.bind(
+                self.bind_as(
                     &local.name,
                     specialized.unwrap_or(&local.type_),
                     &local.written.substitute(bound),
                     local.encloses_partial,
+                    local.solved,
                 );
             }
         }
@@ -1168,6 +1188,14 @@ impl<'s> Kernel<'s> {
         match self.reading {
             true => term.clone(),
             false => self.scope.by_value(term),
+        }
+    }
+
+    /// `term` as a graded call reads it — see the scope's `graded`. A term already by value is handed back as it is.
+    pub(crate) fn graded(&self, term: &Term) -> Term {
+        match self.reading {
+            true => term.clone(),
+            false => self.scope.graded(term),
         }
     }
 

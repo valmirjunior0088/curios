@@ -56,8 +56,12 @@ struct Value {
     written: Term,
     /// The value by value: every `let`-bound local it names unfolded in turn. What [`Scope::by_value`] puts in the local's place.
     term: Term,
+    /// The value as a graded call reads it: every `let`-bound local it names unfolded in turn but one an arm's index inversion solved. What [`Scope::graded`] puts in the local's place.
+    graded: Term,
     /// Whether checking the value, or a `let`-bound local it names, enclosed a group that does not descend.
     encloses_partial: bool,
+    /// Whether an arm's index inversion bound it to its solution, which refines for typing alone: the size order reads nothing an inversion concluded, so a graded call reads the local as written.
+    solved: bool,
 }
 
 /// A `let`-bound local as an arm reads it, to bind again the ones its solution moves.
@@ -69,6 +73,8 @@ pub(crate) struct LetBound {
     /// What it stands for, by value — which names a variable exactly where a solution for that variable moves it.
     pub(crate) value: Term,
     pub(crate) encloses_partial: bool,
+    /// Whether an arm's index inversion bound it, which a binding again keeps.
+    pub(crate) solved: bool,
 }
 
 /// A binder the walk in progress opened.
@@ -117,11 +123,14 @@ impl Scope {
         type_: &Term,
         value: &Term,
         encloses_partial: bool,
+        solved: bool,
     ) -> bool {
         let value = Value {
             encloses_partial: encloses_partial || self.names_partial(value),
             term: self.by_value(value),
+            graded: self.graded(value),
             written: value.clone(),
+            solved,
         };
 
         self.open(name, type_, Some(value))
@@ -164,6 +173,23 @@ impl Scope {
         term.substitute(&values)
     }
 
+    /// `term` as a graded call reads it: [`Scope::by_value`] but for a local an arm's index inversion solved, which stays as written, since the size order reads nothing an inversion concluded. A `let` bound over one reads it as written too, its own graded value having kept it.
+    pub(super) fn graded(&self, term: &Term) -> Term {
+        if self.bound == 0 || !term.has_local_free() {
+            return term.clone();
+        }
+        let values = term
+            .mentions()
+            .locals()
+            .filter_map(|name| {
+                let value = self.local(name)?.value.as_ref()?;
+                (!value.solved).then(|| (*name, value.graded.clone()))
+            })
+            .collect::<Vec<_>>();
+
+        term.substitute(&values)
+    }
+
     /// Whether the innermost local called `name` stands for nothing, so that a `let` binding it binds over a binder.
     pub(super) fn assumes(&self, name: &Free) -> bool {
         self.local(name).is_some_and(|local| local.value.is_none())
@@ -199,6 +225,7 @@ impl Scope {
                     written: value.written.clone(),
                     value: value.term.clone(),
                     encloses_partial: value.encloses_partial,
+                    solved: value.solved,
                 })
             })
             .collect()

@@ -514,6 +514,51 @@ fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
     });
 }
 
+// A call is graded on what it passes as written, and an arm's index inversion concludes nothing the size order reads: in `mk(v)`, `i` is solved to `v` for typing, and `h(i)` hands `h` the `i` `g` was given, which `h` takes apart, so the two descend on it, as the elaborator reads them. Graded at the solution, `h(i)` would hand on `v`, a payload of `s` holding nothing of `i`, and the group would read as not descending. The refusal hands `g` back the `w` `h` was given, which descends on nothing.
+#[test]
+fn a_call_passing_a_variable_an_arm_solved_is_graded_on_the_variable() {
+    control(
+        r#"
+        use /std/Bool/{False};
+
+        induct W: pub Prop
+        | up(w: W)
+        end
+
+        induct S: (W) -> pub Prop
+        | mk(v: W): (v)
+        end
+
+        let g(i: W, s: S(i)) -> False =
+            match s
+            | mk(v) => h(i)
+            end
+        and h(w: W) -> False =
+            match w
+            | up(u) => g(u, S/mk(u))
+            end;
+
+        let _bad = h;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| up(u) => g(u, S/mk(u))", "| up(u) => g(w, S/mk(w))")])
+    .by_elaborator_in("/g", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    })
+    .by_kernel_in("/g", |error| {
+        matches!(error, curios_cert::Error::NotDescending { .. })
+    });
+}
+
 // The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to stand at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name. The control recurses on `n` itself.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {

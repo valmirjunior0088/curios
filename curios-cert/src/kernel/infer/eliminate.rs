@@ -347,7 +347,7 @@ fn specialize(
 pub(super) fn bind_solutions(kernel: &mut Kernel, solutions: &[(Free, Term)]) -> Result<(), Error> {
     for (name, solution) in solutions {
         let type_ = super::infer(kernel, solution)?;
-        kernel.bind(name, &type_, solution, false);
+        kernel.bind_solved(name, &type_, solution);
     }
 
     Ok(())
