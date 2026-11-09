@@ -649,6 +649,8 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::NatDiv => "Nat/div",
         Intrinsic::NatRem => "Nat/rem",
         Intrinsic::NatLe => "Nat/le",
+        Intrinsic::BoolAnd => "Bool/and",
+        Intrinsic::BoolOr => "Bool/or",
         Intrinsic::NatAnd => "Nat/and",
         Intrinsic::NatOr => "Nat/or",
         Intrinsic::NatXor => "Nat/xor",

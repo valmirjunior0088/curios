@@ -982,7 +982,7 @@ enum Fold {
     Literal(Literal),
 }
 
-/// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts by zero.
+/// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts by zero; and a `Bool` conjunction's or disjunction's with either literal.
 ///
 /// Trap discipline: `Nat` and `Int` arithmetic is unbounded and `nat_sub` is monus, so the only trap among these operations is a zero divisor, which a `/ 1` or `% 1` can never be. Every fold here returns either an operand that is already a live value or a literal, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
 fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<Fold> {
@@ -1050,6 +1050,20 @@ fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<Fold> {
         }
         Intrinsic::NatAnd => {
             (nat(right, 0) || nat(left, 0)).then_some(Fold::Literal(Literal::Nat(Natural::zero())))
+        }
+        // On the `0`/`1` word, `1` is the conjunction's identity and `0` the disjunction's, and the other value absorbs.
+        Intrinsic::BoolAnd | Intrinsic::BoolOr => {
+            let identity = u32::from(op == Intrinsic::BoolAnd);
+            let absorbing = 1 - identity;
+            if nat(left, absorbing) || nat(right, absorbing) {
+                Some(Fold::Literal(Literal::Nat(Natural::from(absorbing))))
+            } else if nat(right, identity) {
+                operand(left)
+            } else if nat(left, identity) {
+                operand(right)
+            } else {
+                None
+            }
         }
         Intrinsic::IntAnd => (int(right, 0) || int(left, 0))
             .then_some(Fold::Literal(Literal::Int(Integer::from(0u32)))),

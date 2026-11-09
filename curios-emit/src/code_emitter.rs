@@ -2000,10 +2000,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cps::Intrinsic::NatAnd | curios_cps::Intrinsic::IntAnd => {
+            curios_cps::Intrinsic::BoolAnd
+            | curios_cps::Intrinsic::NatAnd
+            | curios_cps::Intrinsic::IntAnd => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::And)
             }
-            curios_cps::Intrinsic::NatOr | curios_cps::Intrinsic::IntOr => {
+            curios_cps::Intrinsic::BoolOr
+            | curios_cps::Intrinsic::NatOr
+            | curios_cps::Intrinsic::IntOr => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Or)
             }
             curios_cps::Intrinsic::NatXor | curios_cps::Intrinsic::IntXor => {

@@ -10,6 +10,15 @@ fn optimized(
     base: impl FnOnce(&mut Builder) -> Atom,
     leaf: impl FnOnce(&mut Builder, FunctionId, ValueId, ValueId) -> Atom,
 ) -> String {
+    optimized_where(false, base, leaf)
+}
+
+/// [`optimized`], with `f` marked as a definition the certifier found total where `total` says so.
+fn optimized_where(
+    total: bool,
+    base: impl FnOnce(&mut Builder) -> Atom,
+    leaf: impl FnOnce(&mut Builder, FunctionId, ValueId, ValueId) -> Atom,
+) -> String {
     let mut builder = Builder::new();
     let f = builder.reserve_function();
     let n = builder.value(Some("n".into()));
@@ -79,6 +88,9 @@ fn optimized(
     let entry = builder.seal_block(Terminator::Return(Atom::Value(result)));
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
+    if total {
+        module.mark_total(f);
+    }
 
     optimize(&mut module);
     module.to_string()
@@ -183,7 +195,7 @@ fn a_chain_of_combines_folds_into_one_accumulator() {
     assert!(printed.contains("f@w"), "{printed}");
 }
 
-/// `f(n) = (n - 1 < n) && f(n - 1)`, the shape `List/eql` erases to: a conjunction is a monoid the oracle names.
+/// `f(n) = (n - 1 < n) && f(n - 1)`, the shape `List/eql` erases to, with `f` not known to terminate: a conjunction is a monoid the oracle names, and a recursion that may not be dropped is rebased onto it.
 #[test]
 fn a_conjunction_around_its_recursion_gains_a_worker() {
     let printed = optimized(constant(Constant::Bool(true)), |builder, f, n, pred| {
@@ -302,4 +314,34 @@ fn a_recursion_kept_as_an_element_is_declined() {
         sequence(builder, SequenceOp::ListAppend, vec![empty, recursion])
     });
     assert!(!printed.contains("f@w"), "{printed}");
+}
+
+/// The same conjunction with `f` known to terminate: the recursion is left as written, for placement to run only where the comparison holds, as a tail call.
+#[test]
+fn a_conjunction_around_a_droppable_recursion_is_left_to_placement() {
+    let printed = optimized_where(
+        true,
+        constant(Constant::Bool(true)),
+        |builder, f, n, pred| {
+            let below = operation(builder, Operation::NatLt, Atom::Value(pred), Atom::Value(n));
+            let recursion = recur(builder, f, pred);
+            operation(builder, Operation::BoolAnd, below, recursion)
+        },
+    );
+    assert!(!printed.contains("f@w"), "{printed}");
+}
+
+/// `f(n) = f(n - 1) && (n - 1 < n)` with `f` known to terminate: the recursion is the conjunction's first operand, which nothing decides before it, so it is rebased.
+#[test]
+fn a_conjunction_reading_its_recursion_first_gains_a_worker_where_it_may_be_dropped() {
+    let printed = optimized_where(
+        true,
+        constant(Constant::Bool(true)),
+        |builder, f, n, pred| {
+            let below = operation(builder, Operation::NatLt, Atom::Value(pred), Atom::Value(n));
+            let recursion = recur(builder, f, pred);
+            operation(builder, Operation::BoolAnd, recursion, below)
+        },
+    );
+    assert!(printed.contains("f@w"), "{printed}");
 }

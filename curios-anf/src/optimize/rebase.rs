@@ -23,10 +23,10 @@ use {
     crate::{
         Atom, Block, BlockId, Constant, FreeMonoidPart, Function, FunctionId, Module, Operation,
         Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        control_blocks,
+        control_blocks, droppable_functions,
     },
     curios_num::Binary,
-    std::collections::BTreeSet,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// The monoid a recursion's combines share.
@@ -53,6 +53,8 @@ enum Piece {
 struct Context {
     left: Vec<Piece>,
     right: Vec<Piece>,
+    /// Whether every link reads the hole as the second operand of an operation its first can decide ([`Semantics::decided_by_first`]), as `a && □` does: placement below runs the recursion only where that first does not decide, as a tail call.
+    decided: bool,
 }
 
 /// What a right-hand side computes, read through forwarders.
@@ -110,6 +112,7 @@ impl Row {
                         .map(|&k| Piece::Whole(k))
                         .collect(),
                     right: Vec::new(),
+                    decided: at == 1 && Semantics::decided_by_first(operation).is_some(),
                 };
                 Some((
                     Row::Scalar {
@@ -125,10 +128,12 @@ impl Row {
                     (FreeMonoidPart::Product, _, _) => Context {
                         left: wholes(before),
                         right: wholes(after),
+                        decided: false,
                     },
                     (FreeMonoidPart::Append, [], [element]) => Context {
                         left: Vec::new(),
                         right: vec![Piece::Element(*element)],
+                        decided: false,
                     },
                     // An append's element is no place the product takes: a hole there keeps the recursion's answer whole, a constructor's context.
                     (FreeMonoidPart::Append, _, _) => return None,
@@ -352,12 +357,19 @@ pub(super) fn rebase_monoid_recursion(module: &mut Module) {
         })
         .collect();
 
+    // Read where a recursion closed by a deciding first operand is met, and only then.
+    let mut droppable = None;
     for (binding, function) in targets {
-        rebase_one(module, binding, function);
+        rebase_one(module, binding, function, &mut droppable);
     }
 }
 
-fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
+fn rebase_one(
+    module: &mut Module,
+    binding: StatementId,
+    function: FunctionId,
+    droppable: &mut Option<BTreeMap<FunctionId, bool>>,
+) {
     let Some(definition) = module.function(function) else {
         return;
     };
@@ -369,6 +381,21 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     let Some((row, leaves)) = recognize(module, function, body) else {
         return;
     };
+
+    // A recursion every leaf closes under a deciding first operand, `a && f(t)`, is left as written where it may be dropped: placement runs it only where that first does not decide, as a tail call, and the loop that makes ends at the first operand that decides it, where an accumulator would carry the answer to the end.
+    let decided = leaves.iter().all(|leaf| match leaf {
+        Leaf::Combine { context, .. } => context.decided,
+        Leaf::Bare { .. } | Leaf::Base { .. } => true,
+    });
+    if decided
+        && droppable
+            .get_or_insert_with(|| droppable_functions(module))
+            .get(&function)
+            .copied()
+            .unwrap_or(false)
+    {
+        return;
+    }
 
     // The accumulators the worker threads: one for a monoid that commutes, and for one that does not, the left side's where a leaf has a left side and the right side's where one has a right side.
     let sided = |side: fn(&Context) -> &Vec<Piece>| {
@@ -679,7 +706,10 @@ fn ending(module: &Module, function: FunctionId, block: &Block, returned: Atom) 
     let mut hole = Atom::Value(*result);
     let mut computed = vec![hole];
     let mut row: Option<Row> = None;
-    let mut context = Context::default();
+    let mut context = Context {
+        decided: true,
+        ..Context::default()
+    };
     for statement in &block.statements[position + 1..] {
         let Some(Statement::Let { result, rhs }) = module.statement(*statement) else {
             return Ending::Base;
@@ -694,6 +724,7 @@ fn ending(module: &Module, function: FunctionId, block: &Block, returned: Atom) 
         // A later link wraps the earlier: its left side goes before what the chain has gathered, and its right side after.
         context.left.splice(0..0, link.left);
         context.right.extend(link.right);
+        context.decided &= link.decided;
         hole = Atom::Value(*result);
         computed.push(hole);
     }

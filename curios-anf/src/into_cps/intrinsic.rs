@@ -4,11 +4,11 @@
 
 use super::{CellOperation, Operation, SequenceGrain, SequenceOp};
 
-/// The CPS intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier. The `Byte` conversions are handled before this table.
+/// The CPS intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit), the conjunction and the disjunction under operations of their own, which a first operand can decide (`curios_cps::Intrinsic::decided_by_first`), and `Byte` comparisons on the `Nat` carrier. The `Byte` conversions are handled before this table.
 pub(super) fn operation_intrinsic(operation: Operation) -> curios_cps::Intrinsic {
     match operation {
-        Operation::BoolAnd => curios_cps::Intrinsic::NatAnd,
-        Operation::BoolOr => curios_cps::Intrinsic::NatOr,
+        Operation::BoolAnd => curios_cps::Intrinsic::BoolAnd,
+        Operation::BoolOr => curios_cps::Intrinsic::BoolOr,
         Operation::BoolXor => curios_cps::Intrinsic::NatXor,
         Operation::BoolEql => curios_cps::Intrinsic::NatEql,
         Operation::BoolNeq => curios_cps::Intrinsic::NatXor,

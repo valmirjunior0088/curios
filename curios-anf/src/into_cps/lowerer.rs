@@ -10,7 +10,7 @@ use {
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm, cell_op,
         operation_intrinsic, sequence_census, sequence_intrinsic, sequence_len_op,
     },
-    crate::{Allocation, CellOperation, ChannelOperation, Intrinsic, Summary, SuspensionOperation},
+    crate::{CellOperation, ChannelOperation, Intrinsic, SuspensionOperation, droppable_functions},
     curios_abi::ForeignFunction,
     curios_common::recurse,
     curios_num::Natural,
@@ -2122,34 +2122,4 @@ fn resume_role(node: &curios_cps::Node) -> &'static str {
         curios_cps::Node::Foreign { .. } => "foreign/resume",
         _ => "resume",
     }
-}
-
-/// Which source functions a dead call of may simply not happen: the carried termination verdict met with this stage's effect summary.
-///
-/// **Both halves are needed and neither is this stage's to invent.** Termination is decided once, above Core, by the certifier's walk, and arrives on [`Function::total`](super::super::Function::total). Freedom from effects is the interprocedural [`Summary`], which is ANF's and dissolves at this boundary — item granularity and per-function behavior become the entry's initialization code. So the conjunction is computed here, at the last place both are in hand, and only it crosses.
-///
-/// A mutable allocation is excluded because a program can tell one from another of equal contents; an immutable one is not, which is the case this exists for — a list built and never read is a list that need not be built.
-fn droppable_functions(source: &Module) -> BTreeMap<FunctionId, bool> {
-    let summary = Summary::analyze(source, &Analysis::analyze(source));
-    source
-        .function_ids()
-        .map(|id| {
-            let behavior = summary.rhs_behavior(
-                source,
-                &Rhs::Apply {
-                    callee: Atom::Function(id),
-                    arguments: Vec::new(),
-                },
-            );
-            let observable = behavior.observable;
-            let droppable = source.function(id).is_some_and(|function| function.total)
-                && !observable.host_effect
-                && !observable.state_read
-                && !observable.state_write
-                && !observable.may_exit
-                && !observable.may_diverge
-                && behavior.operational.allocation != Allocation::Mutable;
-            (id, droppable)
-        })
-        .collect()
 }

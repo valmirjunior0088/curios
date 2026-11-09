@@ -643,6 +643,15 @@ impl Semantics {
 }
 
 impl Semantics {
+    /// The value of the first operand on which a scalar operation answers that value without reading its second, where it has one: `false` for `BoolAnd` and `true` for `BoolOr`, as both checkers reduce `false && b` and `true || b`. Every other operation reads both operands.
+    pub fn decided_by_first(operation: Operation) -> Option<Constant> {
+        match operation {
+            Operation::BoolAnd => Some(Constant::Bool(false)),
+            Operation::BoolOr => Some(Constant::Bool(true)),
+            _ => None,
+        }
+    }
+
     /// The identity of the monoid a scalar operation forms over its carrier, where it forms one: an associative operation closed over one carrier, with a value that leaves every other unchanged on either side. Every one commutes, which is what lets the rebase fold the addends on both sides of a recursion into one accumulator.
     ///
     /// `NatAnd`, `NatMin`, `IntMin` and `IntMax` are associative and have no identity on an unbounded carrier, and no float operation is associative under rounding. `IntAnd`'s identity is `-1`, since `Int`'s bitwise operations act on the infinite two's complement `curios-num` computes.

@@ -415,3 +415,184 @@ fn mutual_recursion_stays_reducible() {
         "mutual recursion must structure reducibly, without a localized dispatcher",
     );
 }
+
+/// Every node of `continuation`'s body and of the continuations it binds, and none of a function's.
+fn region(
+    module: &curios_cps::Module,
+    continuation: curios_cps::ContinuationId,
+) -> Vec<curios_cps::NodeId> {
+    let mut found = Vec::new();
+    let mut work = vec![
+        module
+            .continuation(continuation)
+            .expect("a region's continuation is live")
+            .body,
+    ];
+    while let Some(id) = work.pop() {
+        found.push(id);
+        match module.node(id) {
+            Some(
+                curios_cps::Node::LetValue { next, .. }
+                | curios_cps::Node::LetIntrinsic { next, .. }
+                | curios_cps::Node::LetFun { body: next, .. },
+            ) => work.push(*next),
+            Some(curios_cps::Node::LetCont {
+                continuations,
+                body,
+            }) => {
+                work.push(*body);
+                work.extend(
+                    continuations
+                        .iter()
+                        .filter_map(|member| module.continuation(*member))
+                        .map(|member| member.body),
+                );
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// The intrinsic that computes `value`, where one does.
+fn computed_by(
+    module: &curios_cps::Module,
+    value: curios_cps::ValueId,
+) -> Option<(curios_cps::Intrinsic, Vec<curios_cps::Atom>)> {
+    module.nodes().iter().flatten().find_map(|node| match node {
+        curios_cps::Node::LetIntrinsic {
+            result, op, args, ..
+        } if *result == value => Some((*op, args.clone())),
+        _ => None,
+    })
+}
+
+fn is_nat(atom: &curios_cps::Atom, value: u32) -> bool {
+    matches!(atom, curios_cps::Atom::Literal(curios_cps::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
+}
+
+/// The second operand of `taint == 4 && spin(taint, 1) == 20608` is a call of a function that terminates and does nothing else, so it runs only on the arm the comparison leaves where it holds: `spin`'s kernel, found by the `65537` it reduces by, stands inside that arm and nowhere outside it.
+#[test]
+fn a_conjunctions_second_call_runs_only_on_the_arm_its_first_operand_holds_on() {
+    let module = cps_optm_module(CONJUNCTION_CALL);
+    let kernels = module
+        .live_nodes()
+        .filter(|(_, node)| {
+            matches!(node, curios_cps::Node::LetIntrinsic { op: curios_cps::Intrinsic::NatRem, args, .. } if args.iter().any(|arg| is_nat(arg, 65537)))
+        })
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    assert!(
+        !kernels.is_empty(),
+        "the premise: `spin`'s kernel survives:\n{module}"
+    );
+    let arm = module
+        .live_nodes()
+        .find_map(|(_, node)| match node {
+            curios_cps::Node::Switch {
+                scrutinee: curios_cps::Atom::Value(decision),
+                cases,
+                ..
+            } => computed_by(&module, *decision)
+                .filter(|(op, args)| {
+                    *op == curios_cps::Intrinsic::NatEql && args.iter().any(|arg| is_nat(arg, 4))
+                })
+                .and_then(|_| cases.get(&1))
+                .map(|edge| edge.target),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a branch on `taint == 4`:\n{module}"));
+    let inside = region(&module, arm);
+    assert!(
+        kernels.iter().all(|kernel| inside.contains(kernel)),
+        "the kernel runs only where the comparison holds:\n{module}",
+    );
+}
+
+/// A recursion closed by `x == y && same(xs, ys)` that may be dropped is left to placement by the rebase, which makes the recursive call a tail call on the arm the comparison holds on, so the loop it becomes branches on that comparison and carries no conjunction: it leaves at the first pair that differs rather than carrying a decided answer to the end.
+#[test]
+fn a_list_equality_a_conjunction_closes_is_a_loop_that_leaves_at_its_first_difference() {
+    let module = cps_optm_module(LIST_EQUALITY);
+    let read_from_a_list = |atom: &curios_cps::Atom| match atom {
+        curios_cps::Atom::Value(value) => {
+            computed_by(&module, *value).is_some_and(|(op, _)| op == curios_cps::Intrinsic::ListGet)
+        }
+        _ => false,
+    };
+    // The comparison of two elements read from the lists, which only the equality makes.
+    let comparisons = module
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            curios_cps::Node::LetIntrinsic {
+                result,
+                op: curios_cps::Intrinsic::NatEql,
+                args,
+                ..
+            } if args.iter().all(read_from_a_list) => Some((id, *result)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !comparisons.is_empty(),
+        "the premise: the elements are compared:\n{module}"
+    );
+    let enters =
+        |id: &curios_cps::NodeId, target: curios_cps::ContinuationId| match module.node(*id) {
+            Some(curios_cps::Node::ApplyCont(edge)) => edge.target == target,
+            Some(curios_cps::Node::Switch { cases, default, .. }) => cases
+                .values()
+                .chain(default.iter())
+                .any(|edge| edge.target == target),
+            _ => false,
+        };
+    let loops = module
+        .live_continuations()
+        .map(|(id, _)| (id, region(&module, id)))
+        .filter(|(id, inside)| {
+            inside.iter().any(|node| enters(node, *id))
+                && comparisons.iter().any(|(node, _)| inside.contains(node))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !loops.is_empty(),
+        "the premise: the equality is a loop:\n{module}"
+    );
+    for (_, inside) in loops {
+        assert!(
+            !inside.iter().any(|node| matches!(
+                module.node(*node),
+                Some(curios_cps::Node::LetIntrinsic {
+                    op: curios_cps::Intrinsic::BoolAnd,
+                    ..
+                })
+            )),
+            "the loop carries no conjunction:\n{module}",
+        );
+        assert!(
+            inside.iter().any(|node| matches!(
+                module.node(*node),
+                Some(curios_cps::Node::Switch {
+                    scrutinee: curios_cps::Atom::Value(decision),
+                    ..
+                }) if comparisons.iter().any(|(_, result)| result == decision)
+            )),
+            "the loop branches on the elements' comparison:\n{module}",
+        );
+    }
+}
+
+/// The conjunction answers what its two operands decide on either arm, raw and through Binaryen alike.
+#[test]
+fn a_conjunction_with_a_call_answers_as_its_operands_decide() {
+    for (args, answer) in [
+        (&["prog", "a", "b", "c"][..], &b"true"[..]),
+        (&["prog", "a", "b"][..], &b"false"[..]),
+    ] {
+        assert_eq!(run_raw(CONJUNCTION_CALL, args), answer, "raw, {args:?}");
+        assert_eq!(
+            run_binaryen(CONJUNCTION_CALL, args),
+            answer,
+            "through Binaryen, {args:?}"
+        );
+    }
+}

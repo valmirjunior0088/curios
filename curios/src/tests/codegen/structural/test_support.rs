@@ -238,6 +238,32 @@ pub(super) const LOOPED_PICK: &str = r#"
 ///
 /// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction, so it cannot catch a filler at a raw carrier. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f64` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
 ///
+/// A conjunction whose second operand is a call of a total function: `spin`'s kernel reduces by `65537`, the needle that finds it, and the comparison before the `&&` reads the taint against `4`. Four arguments, the program's name among them, make it `true`, and `spin(4, 1)` is `20608`.
+pub(super) const CONJUNCTION_CALL: &str = r#"
+    use /std/{Nat, Bool, List, Proc};
+    let spin(n: Nat, acc: Nat) -> Nat =
+        match n | 0 => acc | k + 1 => spin(k, (acc * 75 + 1) % 65537) end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Proc/args()!);
+        let held = taint == 4 && spin(taint, 1) == 20608;
+        /std/print(Bool/to_str(held));
+    entry()
+    "#;
+
+/// Two lists that differ at their first element, compared by a recursion a conjunction closes, `x == y && same(xs, ys)`, over `Nat`, whose `==` resolves to a known function: the recursion terminates and does nothing else, so it may be dropped.
+pub(super) const LIST_EQUALITY: &str = r#"
+    use /std/{Nat, Bool, List, Proc};
+    let same(a: List(Nat), b: List(Nat)) -> Bool =
+        match a
+        | [] => match b | [] => true | _ => false end
+        | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && same(xs, ys) end
+        end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Proc/args()!);
+        /std/print(Bool/to_str(same([taint, 1, 2], [1, taint, 2])));
+    entry()
+    "#;
+
 /// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
 ///
 /// **The demand is `spin`'s own `* +2.0`.** The program's tail follows a host call, so it is reached both where the answer arrives and through the suspension's continuation: `spin` is called from the two, stays a function and returns its result boxed, and a use past that return would leave the slot a reference.

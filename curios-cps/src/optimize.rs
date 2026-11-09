@@ -41,6 +41,9 @@ pub(crate) use shrink::*;
 mod simplify;
 pub(crate) use simplify::*;
 
+mod sink;
+pub(crate) use sink::*;
+
 mod specialize;
 pub(crate) use specialize::*;
 
@@ -123,8 +126,14 @@ pub fn optimize(module: &mut Module) {
                 "cps::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
-            | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module))
-            | pass!("cps::inline_known_calls", inline_known_calls(module))
+            | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module));
+        let inlined = pass!("cps::inline_known_calls", inline_known_calls(module));
+        // Placement runs between inlining, which hands it the operation an inlined wrapper computed, and contification, which would turn a call it could move into a loop it cannot; and it reads what inlining left once the jumps inlining leaves into each call's resume are put in place, which the next round's shrink would do only after contification.
+        let placed = (inlined && pass!("cps::shrink_inlined", shrink(module)))
+            | pass!("cps::sink_computations", sink_computations(module));
+        let changed = changed
+            | inlined
+            | placed
             | pass!("cps::contify_calls", contify_calls(module))
             | pass!(
                 "cps::specialize_scc_calls",

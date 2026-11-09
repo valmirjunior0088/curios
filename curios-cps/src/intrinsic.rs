@@ -8,6 +8,10 @@ use {
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Intrinsic {
+    /// `Bool`'s conjunction, on the `0`/`1` word. Computed as [`Intrinsic::NatAnd`] is, and distinct from it for what [`Intrinsic::decided_by_first`] states: a first operand of `0` decides it, which is where placement reads the second operand as used only where the first is `1`.
+    BoolAnd,
+    /// `Bool`'s disjunction, as [`Intrinsic::BoolAnd`] is: computed as [`Intrinsic::NatOr`] is, and decided by a first operand of `1`.
+    BoolOr,
     NatEql,
     NatNeq,
     NatAdd,
@@ -183,6 +187,8 @@ impl Intrinsic {
                 | Self::NatDiv
                 | Self::NatRem
                 | Self::NatLe
+                | Self::BoolAnd
+                | Self::BoolOr
                 | Self::NatAnd
                 | Self::NatOr
                 | Self::NatXor
@@ -255,6 +261,8 @@ impl Intrinsic {
                 | Intrinsic::NatMul
                 | Intrinsic::NatDiv
                 | Intrinsic::NatRem
+                | Intrinsic::BoolAnd
+                | Intrinsic::BoolOr
                 | Intrinsic::NatAnd
                 | Intrinsic::NatOr
                 | Intrinsic::NatXor
@@ -290,8 +298,10 @@ impl Intrinsic {
             Self::NatMul => operand(0).times(operand(1)),
             // A remainder lies below its divisor, which for a literal is tighter than the bound the literal itself lies below where it is a power of two.
             Self::NatRem => operand(0).narrower(literal(1).map_or(operand(1), Bound::under)),
-            Self::NatAnd | Self::NatMin => operand(0).narrower(operand(1)),
-            Self::NatOr | Self::NatXor | Self::NatMax => operand(0).wider(operand(1)),
+            Self::BoolAnd | Self::NatAnd | Self::NatMin => operand(0).narrower(operand(1)),
+            Self::BoolOr | Self::NatOr | Self::NatXor | Self::NatMax => {
+                operand(0).wider(operand(1))
+            }
             Self::NatSub => operand(0),
             // A divisor of at least `2^m` takes `m` bits off; a zero one traps where it is met.
             Self::NatDiv => {
@@ -349,6 +359,8 @@ impl Intrinsic {
             | Self::NatMul
             | Self::NatDiv
             | Self::NatRem
+            | Self::BoolAnd
+            | Self::BoolOr
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -470,6 +482,8 @@ impl Intrinsic {
             | Self::NatDiv
             | Self::NatRem
             | Self::NatLe
+            | Self::BoolAnd
+            | Self::BoolOr
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -583,6 +597,8 @@ impl Intrinsic {
             | Self::IntToNat
             | Self::NatLt
             | Self::NatLe
+            | Self::BoolAnd
+            | Self::BoolOr
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -648,6 +664,8 @@ impl Intrinsic {
             | Self::NatDiv
             | Self::NatRem
             | Self::NatLe
+            | Self::BoolAnd
+            | Self::BoolOr
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -743,6 +761,8 @@ impl Intrinsic {
                 | Self::NatNeq
                 | Self::NatAdd
                 | Self::NatMul
+                | Self::BoolAnd
+                | Self::BoolOr
                 | Self::NatAnd
                 | Self::NatOr
                 | Self::NatXor
@@ -758,6 +778,15 @@ impl Intrinsic {
                 | Self::IntMin
                 | Self::IntMax
         )
+    }
+
+    /// The value of the first operand on which this operation answers that same value without reading its second: `0` for [`Intrinsic::BoolAnd`] and `1` for [`Intrinsic::BoolOr`], as both checkers reduce `false && b` and `true || b`. Placement reads the second operand of such an operation as used only on the first's other value.
+    pub fn decided_by_first(self) -> Option<u32> {
+        match self {
+            Self::BoolAnd => Some(0),
+            Self::BoolOr => Some(1),
+            _ => None,
+        }
     }
 
     /// Whether a dominated duplicate of this op may reuse the dominating result. Every non-allocating op qualifies, `MayTrap` included: the ops are deterministic, and the dominating occurrence has already produced the identical value or already trapped, so the duplicate can neither observe a different result nor trap differently. Allocating ops are excluded to keep each construction's identity, even though nothing observes it.
