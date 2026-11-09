@@ -10,7 +10,7 @@ use {
 
 /// Where a ticket stands once its witnesses have been put.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Standing {
+pub enum Standing {
     /// Fixed, and every witness is refused as it expects.
     Holds,
     /// Fixed, and a witness is not refused as it expects: the flaw is back, or what held it shut is gone.
@@ -25,7 +25,7 @@ pub(crate) enum Standing {
 
 impl Standing {
     /// Whether a run fails on this standing.
-    pub(crate) fn fails(&self) -> bool {
+    pub fn fails(&self) -> bool {
         matches!(
             self,
             Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_)
@@ -44,7 +44,7 @@ impl Standing {
 }
 
 /// Where a ticket stands for what its witnesses answered.
-pub(crate) fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> Standing {
+pub fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> Standing {
     // Each witness not refused as it expects, with whether it was admitted.
     let unmet = witnesses
         .iter()
@@ -74,7 +74,7 @@ pub(crate) fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]
 
 /// One line of a report: a ticket, with what its witnesses answered and where it stands.
 #[derive(Debug)]
-pub(crate) struct Row<'b> {
+pub struct Row<'b> {
     /// The name of the part it is filed under.
     part: &'b str,
     ticket: &'b Ticket,
@@ -84,7 +84,7 @@ pub(crate) struct Row<'b> {
 
 impl<'b> Row<'b> {
     /// Put every witness of `ticket`, filed under the part named `part`, to the checkers.
-    pub(crate) fn put(part: &'b str, ticket: &'b Ticket) -> Row<'b> {
+    pub fn put(part: &'b str, ticket: &'b Ticket) -> Row<'b> {
         let answers = ticket
             .witnesses
             .iter()
@@ -101,12 +101,12 @@ impl<'b> Row<'b> {
     }
 
     /// Whether the kernel judged any witness of the ticket. A program the elaborator refuses while it is still building the module never reaches it, so a ticket holding only such programs says nothing of the trusted base.
-    pub(crate) fn reaches_kernel(&self) -> bool {
+    pub fn reaches_kernel(&self) -> bool {
         self.answers.iter().any(Answer::kernel_asked)
     }
 
     /// Whether any witness of the ticket was admitted at `False`.
-    pub(crate) fn admitted(&self) -> bool {
+    pub fn admitted(&self) -> bool {
         self.answers.iter().any(Answer::admitted)
     }
 }
@@ -137,14 +137,14 @@ impl fmt::Display for Row<'_> {
 
 /// Every ticket of a board with where it stands.
 #[derive(Debug)]
-pub(crate) struct Report<'b> {
+pub struct Report<'b> {
     board: &'b [Part],
     rows: Vec<Row<'b>>,
 }
 
 impl<'b> Report<'b> {
     /// Put every witness of every ticket on `board` to the checkers.
-    pub(crate) fn run(board: &'b [Part]) -> Report<'b> {
+    pub fn run(board: &'b [Part]) -> Report<'b> {
         let rows = board
             .iter()
             .flat_map(|part| {
@@ -158,7 +158,7 @@ impl<'b> Report<'b> {
     }
 
     /// Whether any ticket regressed, was closed without saying so, or stands open on a witness refused by an error it does not expect.
-    pub(crate) fn fails(&self) -> bool {
+    pub fn fails(&self) -> bool {
         self.rows.iter().any(|row| row.standing.fails())
     }
 
@@ -168,7 +168,7 @@ impl<'b> Report<'b> {
 }
 
 /// Who refused a witness and by which error, as a report notes it beside the witness.
-pub(crate) fn refusers(answer: &Answer) -> String {
+pub fn refusers(answer: &Answer) -> String {
     match answer.admitted() {
         true => "admitted".to_string(),
         false => {

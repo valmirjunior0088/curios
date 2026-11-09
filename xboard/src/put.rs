@@ -20,19 +20,19 @@ use {
 };
 
 /// The name the compiler's own registry holds `/std/Bool/False` under: its type former's, and the key its registry entry stands at.
-pub(crate) fn false_name() -> Global {
+pub fn false_name() -> Global {
     Global::Authored(SYNTAX.proof.false_type.qualifier())
 }
 
 /// `/std/Bool/False` as an elaborated program mentions it, by [`false_name`]: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
-pub(crate) fn false_type() -> Term {
+pub fn false_type() -> Term {
     Term::instance(false_name(), Universes::default())
 }
 
 /// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place. A record names one by the word it is displayed as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum Checker {
+pub enum Checker {
     /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the kernel either way.
     Elaborator,
     /// `curios-surface`'s reader, which builds the module Core text writes. Text that does not parse is counted here, as a program the grammar refuses is the elaborator's.
@@ -43,7 +43,7 @@ pub(crate) enum Checker {
 
 impl Checker {
     /// Every error the checker raises, by the name its crate states for it once, in a match no variant is missing from.
-    pub(crate) fn errors(self) -> &'static [&'static str] {
+    pub fn errors(self) -> &'static [&'static str] {
         match self {
             Checker::Elaborator => <curios_elab::Error as Variants>::NAMES,
             Checker::Reader => <curios_surface::Refusal as Variants>::NAMES,
@@ -64,7 +64,7 @@ impl fmt::Display for Checker {
 
 /// One refusal a witness met, as the checker that made it raised it.
 #[derive(Debug)]
-pub(crate) enum Refusal {
+pub enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
     /// Core text that does not parse, or closes otherwise than with a term stating no type: a text that has rotted, which no expectation meets. Held as the reader reports it.
@@ -85,7 +85,7 @@ pub(crate) enum Refusal {
 }
 
 /// Where a refusal stands, as a report says it: in the declaration it names by its path, or at the closing term.
-pub(crate) fn standing_at(name: Option<&Global>) -> String {
+pub fn standing_at(name: Option<&Global>) -> String {
     match name {
         None => "at the closing term".to_string(),
         Some(Global::Authored(path)) => {
@@ -97,7 +97,7 @@ pub(crate) fn standing_at(name: Option<&Global>) -> String {
 
 impl Refusal {
     /// The checker that made it, where the refusal names one.
-    pub(crate) fn by(&self) -> Option<Checker> {
+    pub fn by(&self) -> Option<Checker> {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
             Refusal::Unread(_) | Refusal::Read { .. } => Some(Checker::Reader),
@@ -107,7 +107,7 @@ impl Refusal {
     }
 
     /// The checker and the errors it raised, by variant and by where each stands: what a report notes beside a witness, and what an expectation that names an error is written from.
-    pub(crate) fn named(&self) -> String {
+    pub fn named(&self) -> String {
         match self {
             Refusal::Text(_) => "text".to_string(),
             Refusal::Unread(_) => "reader".to_string(),
@@ -161,7 +161,7 @@ impl fmt::Display for Refusal {
 
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
-pub(crate) enum Answer {
+pub enum Answer {
     /// Refused before a module existed for the kernel to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text; or a history stopped by what names no checker, which says nothing of whether the kernel was asked.
     Unbuilt(Refusal),
     /// Judged by the kernel, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
@@ -170,7 +170,7 @@ pub(crate) enum Answer {
 
 impl Answer {
     /// Every refusal the witness met.
-    pub(crate) fn refusals(&self) -> &[Refusal] {
+    pub fn refusals(&self) -> &[Refusal] {
         match self {
             Answer::Unbuilt(refusal) => std::slice::from_ref(refusal),
             Answer::Judged(refusals) => refusals,
@@ -178,12 +178,12 @@ impl Answer {
     }
 
     /// Whether every checker accepted the term at `False`: a forgery.
-    pub(crate) fn admitted(&self) -> bool {
+    pub fn admitted(&self) -> bool {
         self.refusals().is_empty()
     }
 
     /// Whether the kernel judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
-    pub(crate) fn kernel_asked(&self) -> bool {
+    pub fn kernel_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
     }
 }
@@ -292,7 +292,7 @@ fn located(error: &ReadError) -> String {
 }
 
 /// Walk `steps` over a store of their own, then put `proof` to the checkers at `False` over the prelude and every unit they compiled: the history a witness is. With no step, the proof is put over the prelude alone, and nothing is written anywhere.
-pub(crate) fn put(steps: &[Step], proof: &Proof) -> Answer {
+pub fn put(steps: &[Step], proof: &Proof) -> Answer {
     let mut history = History::new();
     for step in steps {
         let walked = match step {
@@ -342,14 +342,14 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
 
 impl Proof {
     /// Put the proof to the checkers at `False` over the prelude alone.
-    pub(crate) fn answer(&self) -> Answer {
+    pub fn answer(&self) -> Answer {
         put(&[], self)
     }
 }
 
 impl Witness {
     /// Put the witness to the checkers at `False`: its history walked, then its proof.
-    pub(crate) fn answer(&self) -> Answer {
+    pub fn answer(&self) -> Answer {
         put(&self.steps, &self.proof)
     }
 }

@@ -10,7 +10,7 @@ use {
 
 /// What the checkers said of a proof put to them at `False` and filed nowhere: the question a hunt asks before there is a ticket to write. The proof is put exactly as the board puts a witness of its form, so what a probe shows admitted is what a ticket filed from it shows admitted.
 #[derive(Debug)]
-pub(crate) struct Probe {
+pub struct Probe {
     answer: Answer,
     /// What the proof's form put it to.
     asked: [Checker; 2],
@@ -18,7 +18,7 @@ pub(crate) struct Probe {
 
 impl Probe {
     /// Put `proof` to what its form puts it to, its term as a proof of `False`.
-    pub(crate) fn put(proof: &Proof) -> Probe {
+    pub fn put(proof: &Proof) -> Probe {
         Probe {
             answer: proof.answer(),
             asked: proof.asked(),
@@ -26,7 +26,7 @@ impl Probe {
     }
 
     /// Whether both checkers admitted the term at `False`: a flaw, and a ticket to file.
-    pub(crate) fn admitted(&self) -> bool {
+    pub fn admitted(&self) -> bool {
         self.answer.admitted()
     }
 

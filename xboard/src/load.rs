@@ -16,7 +16,7 @@ use {
 };
 
 /// What every record of the board is named.
-pub(crate) const METADATA: &str = "metadata.toml";
+pub const METADATA: &str = "metadata.toml";
 
 /// A part's record.
 #[derive(Deserialize)]
@@ -67,7 +67,7 @@ struct RefusedRecord {
 }
 
 /// Every part the files of a board hold, each by its path below the board's directory, in the order of their directories' names.
-pub(crate) fn load_board<'f>(
+pub fn load_board<'f>(
     files: impl IntoIterator<Item = (&'f str, &'f str)>,
 ) -> Result<Vec<Part>, String> {
     let mut parts = BTreeMap::<&str, (Option<&str>, BTreeMap<&str, BTreeMap<&str, &str>>)>::new();
@@ -115,7 +115,7 @@ pub(crate) fn load_board<'f>(
 }
 
 /// The ticket filed in the directory named `directory`, read from the files it holds, each by its name.
-pub(crate) fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Ticket, String> {
+pub fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Ticket, String> {
     let in_record = |why: String| format!("{directory}/{METADATA}: {why}");
     let record = files
         .get(METADATA)

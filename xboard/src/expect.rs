@@ -9,16 +9,16 @@ use {
 
 /// One checker's refusal, as a witness expects it: by the checker, by the error it raises where one is named, and where it stands where that is named.
 #[derive(Debug, Clone)]
-pub(crate) struct Expected {
-    pub(crate) by: Checker,
+pub struct Expected {
+    pub by: Checker,
     /// The error, by the name its checker's crate states for it ([`Checker::errors`]); none where any error of the checker meets it, which is how an open ticket expects a refusal no error names yet.
-    pub(crate) error: Option<&'static str>,
-    pub(crate) within: Option<Within>,
+    pub error: Option<&'static str>,
+    pub within: Option<Within>,
 }
 
 /// Where an expected refusal stands: the declaration it is raised in, by its absolute path, or the term a program closes with. A mismatch is every conversion's refusal, so one named where the flaw's construction stands is not met by one raised anywhere else.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Within {
+pub enum Within {
     Declaration(String),
     Entry,
 }
@@ -85,7 +85,7 @@ fn said(refusal: &Refusal) -> String {
 
 impl Witness {
     /// What keeps `answer` from being the refusal the witness expects, or nothing.
-    pub(crate) fn unmet(&self, answer: &Answer) -> Option<String> {
+    pub fn unmet(&self, answer: &Answer) -> Option<String> {
         let refusals = answer.refusals();
         let [first, ..] = refusals else {
             return Some("admitted".to_string());
