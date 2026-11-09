@@ -8,12 +8,12 @@ mod tests;
 /// The one value the script cannot know for itself.
 #[derive(Template)]
 #[template(path = "install.sh", escape = "none")]
-pub(crate) struct Installer<'a> {
-    pub(crate) version: &'a str,
+pub struct Installer<'a> {
+    pub version: &'a str,
 }
 
 /// Render the installer for `version` under `xtask/.artifacts/install.sh`.
-pub(crate) fn installer(version: &str) -> Result<(), String> {
+pub fn installer(version: &str) -> Result<(), String> {
     let script = Installer {
         version: validated(version)?,
     }
@@ -34,7 +34,7 @@ pub(crate) fn installer(version: &str) -> Result<(), String> {
 }
 
 /// The version as the release names it, or why the argument is not one. The tag is `release/<version>` and the workflow hands over the part after the slash, so a slash is the sign the whole tag arrived; a space or a quote would break the assignment the script bakes it into, and a brace would trip the guard that recognizes the unrendered template.
-pub(crate) fn validated(version: &str) -> Result<&str, String> {
+pub fn validated(version: &str) -> Result<&str, String> {
     let admitted = |char: char| char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '+');
     match !version.is_empty() && version.chars().all(admitted) {
         true => Ok(version),

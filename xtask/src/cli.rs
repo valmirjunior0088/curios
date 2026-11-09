@@ -13,7 +13,7 @@ mod tests;
 
 /// What the command line asked for.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Asked {
+pub enum Asked {
     /// A step or a group, by its path, with the variables the command line gave.
     Task {
         name: Name,
@@ -28,7 +28,7 @@ pub(crate) enum Asked {
 }
 
 /// The command line the tree reads as.
-pub(crate) fn command(tree: &Tree) -> Command {
+pub fn command(tree: &Tree) -> Command {
     let top = &tree.groups[&Vec::new()];
     let mut command = Command::new("cargo xtask")
         .bin_name("cargo xtask")
@@ -135,7 +135,7 @@ fn argument(tree: &Tree, name: &Name) -> Arg {
 }
 
 /// What `matches` asked for.
-pub(crate) fn asked(matches: &ArgMatches) -> Asked {
+pub fn asked(matches: &ArgMatches) -> Asked {
     match matches.subcommand() {
         Some(("release", release)) => {
             return Asked::Release {

@@ -13,7 +13,7 @@ use {
 mod tests;
 
 /// The steps a run of `asked` performs under `given`, by their place in [`Tree::steps`], in the order it performs them.
-pub(crate) fn schedule(tree: &Tree, asked: &Name, given: &Given) -> Vec<usize> {
+pub fn schedule(tree: &Tree, asked: &Name, given: &Given) -> Vec<usize> {
     let given = given.keys().cloned().collect::<BTreeSet<_>>();
     let asked = tree
         .steps_of(asked)

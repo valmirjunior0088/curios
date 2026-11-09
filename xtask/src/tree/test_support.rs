@@ -2,10 +2,10 @@
 
 use super::*;
 
-pub(super) const TOP: &str = "description = \"The top\"\n";
+pub const TOP: &str = "description = \"The top\"\n";
 
 /// The tree the files `(name, text)` of [`DIRECTORY`] make, under a top holding nothing of its own.
-pub(super) fn tree(files: &[(&str, &str)]) -> Result<Tree, Refusal> {
+pub fn tree(files: &[(&str, &str)]) -> Result<Tree, Refusal> {
     let paths = files
         .iter()
         .map(|(name, _)| format!("{DIRECTORY}/{name}.toml"))
@@ -22,10 +22,10 @@ pub(super) fn tree(files: &[(&str, &str)]) -> Result<Tree, Refusal> {
 }
 
 /// The message the reader refuses the files with.
-pub(super) fn refused(files: &[(&str, &str)]) -> String {
+pub fn refused(files: &[(&str, &str)]) -> String {
     tree(files).unwrap_err().message
 }
 
-pub(super) fn name(text: &str) -> Name {
+pub fn name(text: &str) -> Name {
     text.split('.').map(str::to_string).collect()
 }

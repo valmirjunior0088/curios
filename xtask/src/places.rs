@@ -8,14 +8,14 @@ use std::{
 };
 
 /// The workspace root: this crate's manifest directory is one level below it.
-pub(crate) fn root() -> &'static Path {
+pub fn root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("xtask sits one level below the workspace root")
 }
 
 /// Where cargo puts what it builds, honoring the same override cargo itself honors: the task files' `{target}`.
-pub(crate) fn target_directory() -> PathBuf {
+pub fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {
         Some(directory) => root().join(directory),
         None => root().join("target"),
@@ -23,4 +23,4 @@ pub(crate) fn target_directory() -> PathBuf {
 }
 
 /// The triple this tool was built for, which is the host: the task files' `{host}`.
-pub(crate) const HOST_TRIPLE: &str = env!("CURIOS_HOST_TRIPLE");
+pub const HOST_TRIPLE: &str = env!("CURIOS_HOST_TRIPLE");

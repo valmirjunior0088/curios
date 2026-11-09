@@ -13,11 +13,11 @@ use {
 mod tests;
 
 /// What a command's words launch.
-pub(crate) struct Launch {
+pub struct Launch {
     /// The program as a refusal names it.
-    pub(crate) program: String,
-    pub(crate) command: Command,
-    pub(crate) arguments: Vec<String>,
+    pub program: String,
+    pub command: Command,
+    pub arguments: Vec<String>,
 }
 
 /// Whether `word` sets the environment, as a leading `NAME=value` word does.
@@ -31,7 +31,7 @@ fn is_assignment(word: &str) -> bool {
 }
 
 /// What `words` launch: the environment their leading assignments set, and the program the first other word names, with the rest its arguments.
-pub(crate) fn launch(words: &[String]) -> Result<Launch, String> {
+pub fn launch(words: &[String]) -> Result<Launch, String> {
     let assignments = words.iter().take_while(|word| is_assignment(word)).count();
     let (environment, words) = words.split_at(assignments);
     let (program, arguments) = words
@@ -72,7 +72,7 @@ fn command_of(program: &str) -> Command {
 }
 
 /// The first version a program's `--version` prints, as its numbers: `Version: 2.6.2` and `v22.12.0` alike.
-pub(crate) fn version_in(printed: &str) -> Option<Vec<u64>> {
+pub fn version_in(printed: &str) -> Option<Vec<u64>> {
     let start = printed.find(|character: char| character.is_ascii_digit())?;
     let written = printed[start..]
         .split(|character: char| !character.is_ascii_digit() && character != '.')
@@ -83,7 +83,7 @@ pub(crate) fn version_in(printed: &str) -> Option<Vec<u64>> {
 }
 
 /// Whether `installed` meets `pin`: the same numbers for an exact pin, the same or later for a minimum, a missing number read as zero.
-pub(crate) fn meets(installed: &[u64], pin: &Pin) -> bool {
+pub fn meets(installed: &[u64], pin: &Pin) -> bool {
     let Some(wanted) = version_in(pin.version()) else {
         return false;
     };
@@ -101,7 +101,7 @@ pub(crate) fn meets(installed: &[u64], pin: &Pin) -> bool {
 }
 
 /// Refuse `program` where `declared` pins it and the version it prints does not meet the pin.
-pub(crate) fn check_version(program: &str, declared: &Program) -> Result<(), String> {
+pub fn check_version(program: &str, declared: &Program) -> Result<(), String> {
     let Some(pin) = &declared.pin else {
         return Ok(());
     };
@@ -134,7 +134,7 @@ pub(crate) fn check_version(program: &str, declared: &Program) -> Result<(), Str
 }
 
 /// That a step cannot run without `program`, and, where the task files say what installs it, that command — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
-pub(crate) fn missing(program: &str, install: Option<&str>) -> String {
+pub fn missing(program: &str, install: Option<&str>) -> String {
     match install {
         Some(install) => {
             format!(

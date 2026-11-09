@@ -248,7 +248,7 @@ fn preflight(tag: &str) -> Result<(), String> {
 }
 
 /// Cut the release `bump` names.
-pub(crate) fn release(bump: Option<&str>) -> Result<(), String> {
+pub fn release(bump: Option<&str>) -> Result<(), String> {
     let manifest = root().join("Cargo.toml");
 
     let mut document = fs::read_to_string(&manifest)

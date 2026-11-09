@@ -33,7 +33,7 @@ const ROOT_FILE: &str = "xtask/tasks.toml";
 const DIRECTORY: &str = "xtask/tasks";
 
 /// The words `cargo xtask` keeps for its commands outside the tree, which no task may take.
-pub(crate) const COMMANDS: [&str; 2] = ["release", "installer"];
+pub const COMMANDS: [&str; 2] = ["release", "installer"];
 
 /// The values the runner fills without a declaration.
 const BUILT_INS: [&str; 2] = ["host", "target"];
@@ -49,60 +49,60 @@ const STEP_KEYS: [&str; 6] = [
 ];
 
 /// What names a task, a variable or a produced file: its words from the top, as the command line spells a task.
-pub(crate) type Name = Vec<String>;
+pub type Name = Vec<String>;
 
 /// A name as a reader writes it, with dots.
-pub(crate) fn dotted(name: &[String]) -> String {
+pub fn dotted(name: &[String]) -> String {
     name.join(".")
 }
 
 /// A name as the command line spells it, with spaces.
-pub(crate) fn spelled(name: &[String]) -> String {
+pub fn spelled(name: &[String]) -> String {
     name.join(" ")
 }
 
 /// The task files, read and resolved.
 #[derive(Debug)]
-pub(crate) struct Tree {
+pub struct Tree {
     /// Every step, in the order the tree writes them: the root file's own, then each file of [`DIRECTORY`] by name, each in its own order.
-    pub(crate) steps: Vec<Step>,
+    pub steps: Vec<Step>,
     /// Every group by its name, the top's included under the empty name: the steps it holds, at any depth, in order.
-    pub(crate) groups: BTreeMap<Name, Group>,
-    pub(crate) variables: BTreeMap<Name, Variable>,
-    pub(crate) produced: BTreeMap<Name, Produced>,
+    pub groups: BTreeMap<Name, Group>,
+    pub variables: BTreeMap<Name, Variable>,
+    pub produced: BTreeMap<Name, Produced>,
     /// What the steps' commands launch, by the program's name, where the files say what version a run needs or what installs it.
-    pub(crate) programs: BTreeMap<String, Program>,
+    pub programs: BTreeMap<String, Program>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Group {
+pub struct Group {
     /// A file's description; a group inside a file has none, and is described by its steps.
-    pub(crate) description: Option<String>,
+    pub description: Option<String>,
     /// The groups and steps directly inside it, in order.
-    pub(crate) children: Vec<Name>,
+    pub children: Vec<Name>,
     /// The steps it holds, at any depth, in order, by their place in [`Tree::steps`].
-    pub(crate) steps: Vec<usize>,
+    pub steps: Vec<usize>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Step {
-    pub(crate) name: Name,
-    pub(crate) description: String,
+pub struct Step {
+    pub name: Name,
+    pub description: String,
     /// The steps and groups that always run first, resolved.
-    pub(crate) requires: Vec<Name>,
+    pub requires: Vec<Name>,
     /// The files other steps produce that this one reads, resolved.
-    pub(crate) consumes: Vec<Name>,
+    pub consumes: Vec<Name>,
     /// The files this step makes, by their names.
-    pub(crate) produces: Vec<Name>,
+    pub produces: Vec<Name>,
     /// What it runs, in order.
-    pub(crate) run: Vec<Instruction>,
+    pub run: Vec<Instruction>,
     /// Where the commands run, from the repository's root.
-    pub(crate) dir: Option<String>,
+    pub dir: Option<String>,
 }
 
 /// One thing a step runs.
 #[derive(Debug)]
-pub(crate) enum Instruction {
+pub enum Instruction {
     /// A command: the words a person would type, the program first.
     Command(Vec<Word>),
     /// A file written whole: where, from where the step runs, and what it holds.
@@ -111,7 +111,7 @@ pub(crate) enum Instruction {
 
 impl Instruction {
     /// Every word the instruction holds.
-    pub(crate) fn words(&self) -> impl Iterator<Item = &Word> {
+    pub fn words(&self) -> impl Iterator<Item = &Word> {
         match self {
             Instruction::Command(words) => words.iter().collect::<Vec<_>>(),
             Instruction::Write { path, contents } => vec![path, contents],
@@ -125,22 +125,22 @@ const WRITE_KEYS: [&str; 2] = ["write", "contents"];
 
 /// A file a step makes: where it is, and which step makes it.
 #[derive(Debug)]
-pub(crate) struct Produced {
-    pub(crate) path: Word,
-    pub(crate) producer: usize,
+pub struct Produced {
+    pub path: Word,
+    pub producer: usize,
 }
 
 /// A program the steps launch, as the files declare it.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Program {
-    pub(crate) pin: Option<Pin>,
+pub struct Program {
+    pub pin: Option<Pin>,
     /// What installs it, at its pin where it has one.
-    pub(crate) install: Option<String>,
+    pub install: Option<String>,
 }
 
 /// The version of a program a run needs.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Pin {
+pub enum Pin {
     /// This version and no other: `version = "2.6.2"`.
     Exact(String),
     /// This version or a later one: `version = ">= 22"`.
@@ -148,7 +148,7 @@ pub(crate) enum Pin {
 }
 
 impl Pin {
-    pub(crate) fn version(&self) -> &str {
+    pub fn version(&self) -> &str {
         match self {
             Pin::Exact(version) | Pin::Minimum(version) => version,
         }
@@ -157,7 +157,7 @@ impl Pin {
 
 /// A named value of a file, the same for the whole run.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Variable {
+pub enum Variable {
     /// Words as written: a string is one, a list each of its items.
     Words(Vec<String>),
     /// What a command prints, a word to a line, asked once a run and only where a step that uses it runs.
@@ -185,17 +185,17 @@ impl Variable {
 
 /// One word of a command: text, and the values its braces stand for.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Word(pub(crate) Vec<Piece>);
+pub struct Word(pub Vec<Piece>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Piece {
+pub enum Piece {
     Text(String),
     Value(Fill),
 }
 
 /// What a pair of braces stands for.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Fill {
+pub enum Fill {
     /// The triple `xtask` was built for.
     Host,
     /// Cargo's target directory.
@@ -207,7 +207,7 @@ pub(crate) enum Fill {
 
 impl Word {
     /// The values the word's braces stand for.
-    pub(crate) fn fills(&self) -> impl Iterator<Item = &Fill> {
+    pub fn fills(&self) -> impl Iterator<Item = &Fill> {
         self.0.iter().filter_map(|piece| match piece {
             Piece::Value(fill) => Some(fill),
             Piece::Text(_) => None,
@@ -215,7 +215,7 @@ impl Word {
     }
 
     /// The one value the word is, where it is nothing but a pair of braces.
-    pub(crate) fn alone(&self) -> Option<&Fill> {
+    pub fn alone(&self) -> Option<&Fill> {
         match self.0.as_slice() {
             [Piece::Value(fill)] => Some(fill),
             _ => None,
@@ -225,11 +225,11 @@ impl Word {
 
 /// Why the task files cannot be run, and where.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Refusal {
+pub struct Refusal {
     file: String,
     /// The line, the column, the line's text and how many characters to mark, where the refusal has a place.
     at: Option<(usize, usize, String, usize)>,
-    pub(crate) message: String,
+    message: String,
 }
 
 impl Refusal {
@@ -322,7 +322,7 @@ enum Kind {
 
 impl Tree {
     /// The task files of the checkout, read and resolved.
-    pub(crate) fn read() -> Result<Self, Refusal> {
+    pub fn read() -> Result<Self, Refusal> {
         let read = |path: &str| {
             fs::read_to_string(root().join(path))
                 .map_err(|error| Refusal::in_file(path, format!("cannot be read: {error}")))
@@ -362,7 +362,7 @@ impl Tree {
     }
 
     /// The tree the files `(path, text)` make: the root file, then the files of [`DIRECTORY`], each a group named after it.
-    pub(crate) fn parse(files: &[(&str, &str)]) -> Result<Self, Refusal> {
+    pub fn parse(files: &[(&str, &str)]) -> Result<Self, Refusal> {
         let files = files
             .iter()
             .map(|(path, text)| File {
@@ -672,7 +672,7 @@ impl Tree {
     }
 
     /// The steps `name` stands for: itself where it is a step, every step it holds where it is a group.
-    pub(crate) fn steps_of(&self, name: &[String]) -> Vec<usize> {
+    pub fn steps_of(&self, name: &[String]) -> Vec<usize> {
         match self.groups.get(name) {
             Some(group) => group.steps.clone(),
             None => self
@@ -685,7 +685,7 @@ impl Tree {
     }
 
     /// The steps `step` runs after: every step its requirements stand for, and the producer of each file it consumes.
-    pub(crate) fn prerequisites(&self, step: usize) -> Vec<usize> {
+    pub fn prerequisites(&self, step: usize) -> Vec<usize> {
         let step = &self.steps[step];
         let mut after = Vec::new();
         for required in &step.requires {
@@ -706,7 +706,7 @@ impl Tree {
     }
 
     /// The command-line variables a step's instructions use.
-    pub(crate) fn given_to(&self, step: usize) -> BTreeSet<Name> {
+    pub fn given_to(&self, step: usize) -> BTreeSet<Name> {
         self.steps[step]
             .run
             .iter()

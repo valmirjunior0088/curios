@@ -90,7 +90,7 @@ fn execute(
 }
 
 /// The toolchain's cargo at the workspace root, for a command outside the task files.
-pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
+pub fn cargo(arguments: &[&str]) -> Result<(), String> {
     let mut words = vec!["cargo".to_string()];
     words.extend(arguments.iter().map(|argument| argument.to_string()));
 
@@ -98,23 +98,19 @@ pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
 }
 
 /// Run one command from the workspace root, echoing it first as a step's would be, and fail with its status.
-pub(crate) fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
+pub fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
     run_in(root(), command, arguments)
 }
 
 /// [`run`] from `directory` instead of the workspace root.
-pub(crate) fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<(), String> {
+pub fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<(), String> {
     execute(directory, command, arguments, Output::Streamed)
         .map(drop)
         .map_err(Failure::message)
 }
 
 /// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with `install`, what the task files say installs it.
-pub(crate) fn launch_in(
-    directory: &Path,
-    launched: Launch,
-    install: Option<&str>,
-) -> Result<(), String> {
+pub fn launch_in(directory: &Path, launched: Launch, install: Option<&str>) -> Result<(), String> {
     let Launch {
         program,
         command,
@@ -133,6 +129,6 @@ pub(crate) fn launch_in(
 /// What a command printed, for a caller that is asking rather than doing.
 ///
 /// A question's answer is the program's to read, so nothing is echoed and nothing reaches the terminal unless the command writes to stderr — which a failing one does, in its own words. The step verbs above are the other half: their output is the user's, and streaming it live is the whole point of them.
-pub(crate) fn ask(command: Command, arguments: &[&str]) -> Result<String, String> {
+pub fn ask(command: Command, arguments: &[&str]) -> Result<String, String> {
     execute(root(), command, arguments, Output::Captured).map_err(Failure::message)
 }

@@ -16,7 +16,7 @@ use {
 mod tests;
 
 /// Run `asked` and what it runs after, as `given` narrows it, and say of each step how it ended and in how long.
-pub(crate) fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
+pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
     let values = Values::new(tree, given);
     let mut checked = BTreeSet::new();
     let mut failed = Vec::new();

@@ -13,17 +13,17 @@ use {
 mod tests;
 
 /// What the command line gave, by the name of the variable it fills.
-pub(crate) type Given = BTreeMap<Name, String>;
+pub type Given = BTreeMap<Name, String>;
 
 /// The values one run fills braces with.
-pub(crate) struct Values<'a> {
+pub struct Values<'a> {
     tree: &'a Tree,
     given: &'a Given,
     printed: RefCell<BTreeMap<Name, Vec<String>>>,
 }
 
 impl<'a> Values<'a> {
-    pub(crate) fn new(tree: &'a Tree, given: &'a Given) -> Self {
+    pub fn new(tree: &'a Tree, given: &'a Given) -> Self {
         Values {
             tree,
             given,
@@ -32,7 +32,7 @@ impl<'a> Values<'a> {
     }
 
     /// The words a command is, or `None` where a command's output it reads came back empty, so the command has nothing to run on.
-    pub(crate) fn command(&self, words: &[Word]) -> Result<Option<Vec<String>>, String> {
+    pub fn command(&self, words: &[Word]) -> Result<Option<Vec<String>>, String> {
         let mut command = Vec::new();
         for word in words {
             match self.word(word)? {
@@ -45,7 +45,7 @@ impl<'a> Values<'a> {
     }
 
     /// Where the produced file `name` is.
-    pub(crate) fn path(&self, name: &Name) -> Result<PathBuf, String> {
+    pub fn path(&self, name: &Name) -> Result<PathBuf, String> {
         let path = self.text(&self.tree.produced[name].path)?;
 
         Ok(root().join(path))
@@ -81,7 +81,7 @@ impl<'a> Values<'a> {
     }
 
     /// The one string `word` stands for: its text, and each value it holds as the one word that value is.
-    pub(crate) fn text(&self, word: &Word) -> Result<String, String> {
+    pub fn text(&self, word: &Word) -> Result<String, String> {
         let mut text = String::new();
         for piece in &word.0 {
             match piece {
