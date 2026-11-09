@@ -27,15 +27,15 @@ foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
 
 --- The next connection on `l`, waiting until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
 let accepted(l: Listener) -> Try(Io, Io/Error, Handle) =
-    let reply = socket_accept(l.0)!;
-    match Status/of_code(reply.status)
-    | blocked() =>
-        let _ = Handle/wait(l.0, Handle/Interest/readable)!;
-        accepted(l)
-    | _ =>
-        let _ = Status/succeeded(reply.status)!;
-        Try/pure(reply.handle)
-    end;
+    let (reply, settled) =
+        Handle/retried(
+            l.0,
+            Handle/Interest/readable,
+            socket_accept(l.0),
+            (r) => r.status,
+            (reply, settled) => Io/pure((reply, settled)))!;
+    let _ = Status/answer(settled)!;
+    Try/pure(reply.handle);
 
 --- The next connection, waiting until a peer arrives, opened into `s` as `Socket/connect` opens one.
 pub let accept(s: Io/Scope, l: Listener) -> Try(Io, Io/Error, Socket) =
@@ -79,7 +79,10 @@ foreign tls_start_server(Handle, Handle) -> Nat;
 
 let serve_tls_conn(s: Io/Scope, h: Handle, cfg: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let status = tls_start_server(h, cfg)!;
-    match Status/of_code(status) | ok() => serve_conn(s, h, handler) | _ => Io/close(h) end;
+    match Status/of_code(status)
+    | settled(ok()) => serve_conn(s, h, handler)
+    | _ => Io/close(h)
+    end;
 
 --- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
 foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};

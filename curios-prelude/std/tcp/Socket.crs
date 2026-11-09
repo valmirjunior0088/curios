@@ -42,8 +42,14 @@ foreign socket_finish_connect(Handle) -> Nat;
 --- The connect under way on `h` ended, once a watch of it for writing is ready, and waited on again while it is still under way.
 let settle(h: Handle) -> Try(Io, Io/Error, {}) =
     let _ = Handle/wait(h, Handle/Interest/writable)!;
-    let status = socket_finish_connect(h)!;
-    match Status/of_code(status) | blocked() => settle(h) | _ => Status/succeeded(status) end;
+    let (_, settled) =
+        Handle/retried(
+            h,
+            Handle/Interest/writable,
+            socket_finish_connect(h),
+            (s) => s,
+            (reply, settled) => Io/pure((reply, settled)))!;
+    Status/answer(settled);
 
 --- `h` connected to `addr`: at once, or once the connect the host started has settled.
 let connected(h: Handle, addr: Bytes) -> Try(Io, Io/Error, {}) =

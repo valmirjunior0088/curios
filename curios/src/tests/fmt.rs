@@ -204,7 +204,7 @@ fn constant_args_leave_no_formatter_in_cps() {
     );
 }
 
-/// The library's write is a loop that waits and resends, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/internal/Handle`'s write that crosses the cap fails here by the cap's name.
+/// The library's write is a loop that resends what the host left and waits through `/std/internal/Handle/retried` where it would block, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/internal/Handle`'s write or to `retried` that crosses the cap fails here by the cap's name.
 #[test]
 fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
     let entrypoint = r#"/std/print("hello world")"#.parse::<Entrypoint>().expect("fixture parses");

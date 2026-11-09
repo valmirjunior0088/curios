@@ -2,12 +2,18 @@ use /std/{Nat, List, Io, Try, Bool};
 
 --- What a host operation answers beside its payload, read off the wire's code: what a reading of a reply decides by before it reads anything else.
 pub induct Status: pub Type
+--- The operation could not progress without waiting: what asked it waits on a watch of the handle and asks again, so it never reaches a program.
+| blocked()
+--- The operation did not wait, and ended as `Settled` says.
+| settled(Settled)
+end
+
+--- How a host operation that did not wait ended: what a reading answers by, which no wait reaches.
+pub induct Settled: pub Type
 --- The operation did what it was asked.
 | ok()
 --- A read found the end of its stream. Nothing but a read answers it.
 | ended()
---- The operation could not progress without waiting: what asked it waits on a watch of the handle and asks again, so it never reaches a program.
-| blocked()
 --- The failure it names.
 | failed(Io/Error)
 end
@@ -25,14 +31,20 @@ let errors: List({Nat, Io/Error}) =
         (/sys/status/reset, Io/Error/connection_reset()),
         (/sys/status/broken_pipe, Io/Error/broken_pipe())];
 
---- The status `code` names: one of the named statuses, or `other` with the errno the host passed through.
+--- The status `code` names: one of the named statuses, or a failure `other` with the errno the host passed through.
 pub let of_code(code: Nat) -> Status =
     choose
-    | code == /sys/status/ok => Status/ok()
-    | code == /sys/status/eof => Status/ended()
     | code == /sys/status/would_block => Status/blocked()
+    | _ => Status/settled(settled_of(code))
+    end;
+
+--- How an operation that did not wait ended, by its `code`.
+let settled_of(code: Nat) -> Settled =
+    choose
+    | code == /sys/status/ok => Settled/ok()
+    | code == /sys/status/eof => Settled/ended()
     | _ =>
-        Status/failed(
+        Settled/failed(
             List/fold(
                 errors,
                 Io/Error/other(code - /sys/status/other_base),
@@ -42,13 +54,20 @@ pub let of_code(code: Nat) -> Status =
 --- Nothing where `code` is `ok`, and the failure it names otherwise: what a reading asks of a reply before it reads its payload. A read's end or a wait, which a reply read so cannot answer, is a reply its row rules out.
 pub let succeeded(code: Nat) -> Try(Io, Io/Error, {}) =
     match of_code(code)
+    | settled(s) => answer(s)
+    | blocked() => Try/raise(Io/Error/invalid_reply())
+    end;
+
+--- Nothing where the operation did what it was asked, and the failure it names otherwise: what a reading answers once its operation settled. A read's end, which a reply read so cannot answer, is a reply its row rules out.
+pub let answer(s: Settled) -> Try(Io, Io/Error, {}) =
+    match s
     | ok() => Try/pure(())
     | failed(e) => Try/raise(e)
-    | _ => Try/raise(Io/Error/invalid_reply())
+    | ended() => Try/raise(Io/Error/invalid_reply())
     end;
 
 -- Every failure the wire names decodes to a case of its own: a status the wire's list gains is refused until `errors` names it.
 let _every_failure_the_wire_names_decodes_to_a_case_of_its_own: Bool/Holds(
     List/all(/sys/status/failures, (code: Nat) =>
-        match of_code(code) | failed(other(_)) => false | _ => true end)) =
+        match of_code(code) | settled(failed(other(_))) => false | _ => true end)) =
     Bool/True/qed();

@@ -121,17 +121,21 @@ pub let kill(c: Child) -> Io({}) =
 foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
 --- How the child of `h` ended, once its handle is readable: asked again where the host still answers that it runs, since readiness is advisory.
-let exit_reply(h: Handle) -> Io({status: Nat, code: Nat, signal: Nat}) =
+let exit_reply(h: Handle) -> Io({{status: Nat, code: Nat, signal: Nat}, Status/Settled}) =
     let _ = Handle/wait(h, Handle/Interest/readable)!;
-    let reply = proc_wait(h)!;
-    match Status/of_code(reply.status) | blocked() => exit_reply(h) | _ => Io/pure(reply) end;
+    Handle/retried(
+        h,
+        Handle/Interest/readable,
+        proc_wait(h),
+        (r) => r.status,
+        (reply, settled) => Io/pure((reply, settled)));
 
 --- How the child ended, waiting until it does. A piped input is finished first, so a child reading to the end of its input is not left waiting on the parent that waits on it; the outputs are closed with the child, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Io, Io/Error, Proc/Exit) =
     let _ = close_input(c.stdin)!;
-    let reply = exit_reply(c.handle)!;
+    let (reply, settled) = exit_reply(c.handle)!;
     let _ = close_pipes(c)!;
-    let _ = Status/succeeded(reply.status)!;
+    let _ = Status/answer(settled)!;
     Try/pure(
         match reply.signal == 0
         | true => Proc/Exit/exited(reply.code)
