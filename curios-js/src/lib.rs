@@ -10,8 +10,8 @@ use {
     wasm_bindgen::prelude::*,
 };
 
-/// `run`, exported by the crate that owns running a program in the browser, and named here so the bundle links it.
-pub use curios_browser::run;
+// `run` is exported by the crate that owns running a program in the browser; naming that crate is what links it into the bundle.
+use curios_browser as _;
 
 /// The same budget the native compiler uses, so a program that compiles in the playground compiles at the command line and the reverse. A wall-clock bound could not promise that: the tab and the terminal are different machines.
 const BUDGET: u64 = DEFAULT_BUDGET;
