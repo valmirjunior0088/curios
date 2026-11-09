@@ -16,6 +16,7 @@ mod dead_parameters;
 mod entry;
 mod fields;
 mod ladder;
+mod rebuild;
 mod reconstruction;
 mod specialize;
 mod sweeps;

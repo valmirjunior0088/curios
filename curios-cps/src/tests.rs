@@ -545,7 +545,7 @@ fn verifier_rejects_a_rebuild_of_a_value_another_row_reaches() {
         .unwrap_err()
         .0;
     assert!(
-        error.contains("which a flow reaching it may not build"),
+        error.contains("which no flow reaching it builds"),
         "{error}"
     );
 }

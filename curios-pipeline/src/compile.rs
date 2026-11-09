@@ -1315,7 +1315,7 @@ pub fn examine_entrypoint(
     })
 }
 
-/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization, and wasm emission, observing every stage in order.
+/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, observing every stage in order.
 fn lower_from_anf<O>(
     mut anf_module: curios_anf::Module,
     observe: &mut O,
@@ -1337,6 +1337,7 @@ where
 
     let mut cps_optm_module = cps_module;
     curios_cps::optimize(&mut cps_optm_module);
+    curios_cps::rebuild_in_place(&mut cps_optm_module);
 
     observe(Stage::CpsOptm(&cps_optm_module));
 

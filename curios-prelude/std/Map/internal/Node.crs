@@ -806,7 +806,15 @@ pub let insert(
                             Bool/True/qed(),
                             sound.clear,
                             Bool/True/qed());
-                    Inserted/parted(t, c, @Eq/refl(), @here, @under)
+                    Inserted/parted(
+                        Node/fork(tc, z2, o),
+                        c,
+                        @Eq/subst(
+                            (m: Node(K, V)) => Eq()(Node/fork(tc, m, o), Node/fork(tc, z, o)),
+                            Eq/sym(back),
+                            Eq/refl()),
+                        @here,
+                        @under)
                 end
             end
         | true =>
@@ -888,7 +896,15 @@ pub let insert(
                             apart,
                             turned(first(z), first(o), tc, sound.apart),
                             under);
-                    Inserted/parted(t, c, @Eq/refl(), @here, @under)
+                    Inserted/parted(
+                        Node/fork(tc, z, o2),
+                        c,
+                        @Eq/subst(
+                            (m: Node(K, V)) => Eq()(Node/fork(tc, z, m), Node/fork(tc, z, o)),
+                            Eq/sym(back),
+                            Eq/refl()),
+                        @here,
+                        @under)
                 end
             end
         end

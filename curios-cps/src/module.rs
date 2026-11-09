@@ -5,7 +5,7 @@
 use {
     super::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueId, atoms, nodes_from,
+        Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueExpr, ValueId, atoms, nodes_from,
         visit_atoms_mut,
     },
     curios_common::{Arena, ArenaId},
@@ -30,7 +30,7 @@ pub struct Module {
     functions: Arena<FunctionId, Function>,
     continuations: Arena<ContinuationId, Continuation>,
     field_groups: BTreeMap<ContinuationId, Vec<FieldGroup>>,
-    /// The nominal rows this module's [`ValueExpr::Row`](super::ValueExpr::Row)s belong to, appended by the ANF door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
+    /// The nominal rows this module's [`ValueExpr::Row`]s belong to, appended by the ANF door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
     rows: Vec<Option<Row>>,
     /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. This identity survives optimization independently of whether the entry can return a suspension; `entry_suspension` answers that from the current graph.
     suspension: Option<RowId>,
@@ -39,7 +39,7 @@ pub struct Module {
     entry: Option<FunctionId>,
 }
 
-/// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`ValueExpr::Row`](super::ValueExpr::Row) naming it is padded to.
+/// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`ValueExpr::Row`] naming it is padded to.
 #[derive(Debug, Clone)]
 pub struct Row {
     pub debug_name: Option<String>,
@@ -140,7 +140,7 @@ impl Module {
         &self.field_groups
     }
 
-    /// Register a nominal row and hand back its identity. The ANF door is the only caller; see [`ValueExpr::Row`](super::ValueExpr::Row).
+    /// Register a nominal row and hand back its identity. The ANF door is the only caller; see [`ValueExpr::Row`].
     pub fn add_row(&mut self, row: Row) -> RowId {
         let id = self.reserve_row();
         self.define_row(id, row);
@@ -312,6 +312,37 @@ impl Module {
 
     pub fn continuation_ids(&self) -> impl Iterator<Item = ContinuationId> {
         self.continuations.live_ids()
+    }
+
+    /// The values that may be constant data: a literal, and a construction every slot of which is a literal, a filler, a function or such a value. Every binding `curios-emit` hoists into a global is one, interned structurally so equal constants share it, and a value named by many uses whatever reads it; a closure some construction holds counts whatever it captures, which only widens the set.
+    pub fn constant_data(&self) -> BTreeSet<ValueId> {
+        let mut constant = BTreeSet::new();
+        // Constructions are visited until nothing joins, since one may name a constant bound later in identity order.
+        loop {
+            let before = constant.len();
+            for (_, node) in self.nodes.iter_live() {
+                let Node::LetValue { result, value, .. } = node else {
+                    continue;
+                };
+                let holds = |atom: &Atom| match atom {
+                    Atom::Literal(_) | Atom::Filler | Atom::Fun(_) => true,
+                    Atom::Value(value) => constant.contains(value),
+                };
+                let is = match value {
+                    ValueExpr::Literal(_) => true,
+                    ValueExpr::List(atoms) | ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms) => {
+                        atoms.iter().all(holds)
+                    }
+                    ValueExpr::Rebuilt { .. } => false,
+                };
+                if is {
+                    constant.insert(*result);
+                }
+            }
+            if constant.len() == before {
+                return constant;
+            }
+        }
     }
 
     /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetIntrinsic` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.

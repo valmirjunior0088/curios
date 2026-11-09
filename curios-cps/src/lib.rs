@@ -34,7 +34,13 @@ pub(crate) use origin::*;
 mod row_flow;
 pub(crate) use row_flow::*;
 
+mod sharing;
+pub(crate) use sharing::*;
+
 mod print;
+
+mod rebuild;
+pub use rebuild::*;
 
 mod represent;
 pub use represent::*;

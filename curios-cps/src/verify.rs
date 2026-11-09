@@ -3,7 +3,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, RowId, Rows, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
+        Node, NodeId, RowId, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
     },
     curios_common::Sorted,
     std::{
@@ -388,7 +388,7 @@ impl Module {
         Ok(())
     }
 
-    /// A rebuild writes into a value nothing else reads: `of` names a value every flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. That nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
+    /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. A value read out of a slot may be any row as far as row flow sees, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
     fn verify_rebuilds(&self) -> Result<(), VerifyError> {
         let mut rows = None;
         for (function, _) in self.live_functions() {
@@ -423,9 +423,9 @@ impl Module {
                     )));
                 }
                 let rows = rows.get_or_insert_with(|| rows_reaching(self));
-                if rows.get(of) != Some(&Rows::Of(BTreeSet::from([*row]))) {
+                if !rows.get(of).is_some_and(|rows| rows.may_be(*row)) {
                     return Err(VerifyError(format!(
-                        "{function} node {node_id} rebuilds {of} as {row}, which a flow reaching it may not build"
+                        "{function} node {node_id} rebuilds {of} as {row}, which no flow reaching it builds"
                     )));
                 }
                 if self.read_after(*of, *next) {
