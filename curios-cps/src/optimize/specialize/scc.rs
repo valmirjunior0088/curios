@@ -64,12 +64,14 @@ struct Component {
     groups: Vec<Group>,
     intro: NodeId,
     extent: BTreeSet<NodeId>,
+    /// The functions every remaining call hands the component.
     baseline: BTreeMap<ValueId, Atom>,
     disabled: bool,
 }
 
 impl Component {
-    fn knowns(
+    /// The functions `constraints` hand the component at every entry, each where its parameter's owner may name it: what a copy is made for. A literal is no reason for one. Where every entry agrees `scc_invariant_knowns` substitutes it with no copy, and what one context's literal buys a copy is at most a branch or a fold, a weight against the copy's size that no allowance here measures, where a function turns a call through a closure into a known call wherever the copy reaches it.
+    fn functions(
         &self,
         constraints: &[(FunctionId, Vec<Atom>)],
         seeds: &BTreeMap<ValueId, Atom>,
@@ -82,7 +84,7 @@ impl Component {
                     .lexical_scope
                     .get(&self.owners[param])
                     .is_some_and(|scope| scope.contains(function)),
-                _ => true,
+                Atom::Literal(_) | Atom::Value(_) | Atom::Filler => false,
             })
             .collect()
     }
@@ -192,7 +194,8 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
                 let Node::ApplyFun { args, .. } = module.node(id).unwrap() else {
                     unreachable!()
                 };
-                if members.contains(&analysis.node_owners[&id]) {
+                // A call the copy reproduces is the component's own: a member's, and one a function nested in a member makes back into the component. Read as a caller from outside, a call through a closure a member defines would stand as a context of its own and never constrain the others, so a context naming what that call changes would look known, and its copy, the original pruned behind it, would be the same component again at the next round.
+                if copy.nodes.contains(&id) {
                     internal.push((member, args.clone()));
                 } else {
                     external.push(id);
@@ -225,11 +228,11 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
             baseline: BTreeMap::new(),
             disabled: false,
         };
-        component.baseline = component.knowns(&component.remaining(module), &seeds, &analysis);
+        component.baseline = component.functions(&component.remaining(module), &seeds, &analysis);
         for (index, group) in component.groups.iter().enumerate() {
             let mut constraints = component.internal.clone();
             constraints.push((group.context.entry, group.context.args.clone()));
-            let context = component.knowns(&constraints, &seeds, &analysis);
+            let context = component.functions(&constraints, &seeds, &analysis);
             let intro = component
                 .relocation(&constraints, &seeds, &analysis, &intros)
                 .unwrap_or(component.intro);
@@ -310,7 +313,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
         budget.charge(candidate.priority.nodes);
         changed = true;
         component.disabled = !component.extent.is_disjoint(&touched)
-            || component.knowns(&component.remaining(module), &seeds, &analysis)
+            || component.functions(&component.remaining(module), &seeds, &analysis)
                 != component.baseline;
     }
     changed

@@ -13,7 +13,7 @@ pub(crate) struct CallAnalysis {
     pub(crate) call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
     pub(crate) node_owners: BTreeMap<NodeId, FunctionId>,
     pub(crate) escaping: BTreeSet<FunctionId>,
-    /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question: see `analyze_calls`.
+    /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question, and the specializer's of a component no member calls directly (`eligible_sccs`): see `analyze_calls`.
     pub(crate) recursive: BTreeSet<FunctionId>,
     pub(crate) sccs: SccAnalysis,
     /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.

@@ -321,3 +321,279 @@ fn insufficient_allowance_mints_nothing_and_the_exact_extent_is_charged_once() {
         module.verify().unwrap();
     }
 }
+
+/// `main() = g(add, 3); g(mul, 4)`, where `g(op, n) = op(again, n)` hands `op` a function it defines, `again(m) = g(op, m)`: `g` calls itself only through `again`, which forwards `op` and replaces `n`.
+fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, NodeId) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+
+    let step = |module: &mut Module, name: &str| {
+        let function = module.reserve_function();
+        let function_return = module.reserve_continuation();
+        let next = module.add_value(Some(format!("{name} next")));
+        let x = module.add_value(Some(format!("{name} x")));
+        let body = module.add_node(Node::ApplyCont(Edge {
+            target: function_return,
+            args: vec![Atom::Value(x)],
+        }));
+        module.define_function(
+            function,
+            Function {
+                debug_name: Some(name.into()),
+                params: vec![next, x],
+                return_cont: function_return,
+                body,
+                droppable: false,
+            },
+        );
+        function
+    };
+    let add = step(&mut module, "add");
+    let mul = step(&mut module, "mul");
+
+    let g = module.reserve_function();
+    let g_return = module.reserve_continuation();
+    let op = module.add_value(Some("op".into()));
+    let n = module.add_value(Some("n".into()));
+    let again = module.reserve_function();
+    let again_return = module.reserve_continuation();
+    let m = module.add_value(Some("m".into()));
+    let again_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
+        args: vec![Atom::Value(op), Atom::Value(m)],
+        return_to: again_return,
+    });
+    module.define_function(
+        again,
+        Function {
+            debug_name: Some("again".into()),
+            params: vec![m],
+            return_cont: again_return,
+            body: again_body,
+            droppable: false,
+        },
+    );
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(op),
+        args: vec![Atom::Fun(again), Atom::Value(n)],
+        return_to: g_return,
+    });
+    let g_body = module.add_node(Node::LetFun {
+        functions: vec![again],
+        body: apply,
+    });
+    module.define_function(
+        g,
+        Function {
+            debug_name: Some("g".into()),
+            params: vec![op, n],
+            return_cont: g_return,
+            body: g_body,
+            droppable: false,
+        },
+    );
+
+    let x1 = module.add_value(Some("x1".into()));
+    let call2 = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
+        args: vec![
+            Atom::Fun(mul),
+            Atom::Literal(Literal::Nat(Natural::from(4u32))),
+        ],
+        return_to: entry_return,
+    });
+    let k1 = module.reserve_continuation();
+    module.define_continuation(
+        k1,
+        Continuation {
+            debug_name: Some("k1".into()),
+            params: vec![x1],
+            body: call2,
+        },
+    );
+    let call1 = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
+        args: vec![
+            Atom::Fun(add),
+            Atom::Literal(Literal::Nat(Natural::from(3u32))),
+        ],
+        return_to: k1,
+    });
+    let outer = module.add_node(Node::LetCont {
+        continuations: vec![k1],
+        body: call1,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![g, add, mul],
+        body: outer,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, call1, call2)
+}
+
+/// A call a function nested in a member makes back into the component is one the copy reproduces, so it constrains every context: `n` is replaced at each turn and never known, and the copy for `add` leaves the original to `mul`, each a context its group already agrees on, so a second sweep finds nothing to copy. The function each call hands is then substituted into its own copy.
+#[test]
+fn a_component_recursive_through_a_function_it_defines_is_copied_once_a_context() {
+    let (mut module, call1, call2) = a_component_recursive_through_a_function_it_defines();
+    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+
+    assert!(specialize_scc_calls(&mut module, &mut budget));
+    module.verify().unwrap();
+    assert!(
+        !specialize_scc_calls(&mut module, &mut budget),
+        "each copy's context is the one its group agrees on:\n{module}"
+    );
+
+    let first = known_callee(&module, call1);
+    let second = known_callee(&module, call2);
+    assert_ne!(first, second, "each context runs a version of its own");
+    let known = known_values(&module);
+    for (callee, handed) in [(first, "add"), (second, "mul")] {
+        let op = module.function(callee).unwrap().params[0];
+        let Some(Atom::Fun(function)) = known.get(&op) else {
+            panic!("`op` is known in the version handed `{handed}`:\n{module}");
+        };
+        assert_eq!(
+            module.function(*function).unwrap().debug_name.as_deref(),
+            Some(handed)
+        );
+    }
+}
+
+/// `walk(k, n) = match n | 0 => k | _ => walk(k, n + 1)`, called as `walk(1, 3)` and `walk(2, 4)`: `k` is passed on at every turn, and the two calls disagree on it.
+fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, NodeId, NodeId) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+
+    let walk = module.reserve_function();
+    let walk_return = module.reserve_continuation();
+    let k = module.add_value(Some("k".into()));
+    let n = module.add_value(Some("n".into()));
+    let next = module.add_value(Some("next".into()));
+    let again = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(walk),
+        args: vec![Atom::Value(k), Atom::Value(next)],
+        return_to: walk_return,
+    });
+    let step = module.add_node(Node::LetIntrinsic {
+        result: next,
+        op: Intrinsic::NatAdd,
+        args: vec![
+            Atom::Value(n),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+        ],
+        next: again,
+    });
+    let turn = module.reserve_continuation();
+    module.define_continuation(
+        turn,
+        Continuation {
+            debug_name: Some("turn".into()),
+            params: vec![],
+            body: step,
+        },
+    );
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(n),
+        cases: BTreeMap::from([(
+            0,
+            Edge {
+                target: walk_return,
+                args: vec![Atom::Value(k)],
+            },
+        )]),
+        default: Some(Edge {
+            target: turn,
+            args: vec![],
+        }),
+    });
+    let walk_body = module.add_node(Node::LetCont {
+        continuations: vec![turn],
+        body: switch,
+    });
+    module.define_function(
+        walk,
+        Function {
+            debug_name: Some("walk".into()),
+            params: vec![k, n],
+            return_cont: walk_return,
+            body: walk_body,
+            droppable: false,
+        },
+    );
+
+    let first_result = module.add_value(Some("first".into()));
+    let call2 = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(walk),
+        args: vec![
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(4u32))),
+        ],
+        return_to: entry_return,
+    });
+    let k1 = module.reserve_continuation();
+    module.define_continuation(
+        k1,
+        Continuation {
+            debug_name: Some("k1".into()),
+            params: vec![first_result],
+            body: call2,
+        },
+    );
+    let call1 = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(walk),
+        args: vec![
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(3u32))),
+        ],
+        return_to: k1,
+    });
+    let outer = module.add_node(Node::LetCont {
+        continuations: vec![k1],
+        body: call1,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![walk],
+        body: outer,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, walk, call1, call2)
+}
+
+/// A literal is substituted where every entry agrees on it and is no reason to copy a component where calls disagree: what one context's literal would buy a copy is a branch or a fold at most, and here not even that, so nothing is copied and nothing is charged.
+#[test]
+fn a_literal_a_call_hands_is_no_context_for_a_copy() {
+    let (mut module, walk, call1, call2) = a_loop_passing_on_the_literal_each_call_hands_it();
+    let original = module.to_string();
+    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+
+    assert!(!specialize_scc_calls(&mut module, &mut budget));
+    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT));
+    assert_eq!(known_callee(&module, call1), walk);
+    assert_eq!(known_callee(&module, call2), walk);
+    assert_eq!(module.to_string(), original);
+}

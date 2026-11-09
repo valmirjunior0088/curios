@@ -110,19 +110,21 @@ pub(crate) fn scc_invariant_knowns(
         })
         .collect()
 }
-/// The members of every SCC eligible for known-argument analysis: recursive, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
+/// The members of every SCC eligible for known-argument analysis: recursive, directly or through a function a member defines, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
 pub(crate) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec<FunctionId>> {
     analysis
         .sccs
         .members
         .iter()
         .filter(|members| {
+            // Recursion through a function a member defines counts, as the inliner reads it: a function that calls itself back through a closure it defines, as a combinator handing its own retry to the effect machinery does, is no callee the inliner takes, so it is this pass's or no one's.
             let recursive = members.len() > 1
                 || members.iter().any(|function| {
-                    analysis
-                        .call_graph
-                        .get(function)
-                        .is_some_and(|edges| edges.contains(function))
+                    analysis.recursive.contains(function)
+                        || analysis
+                            .call_graph
+                            .get(function)
+                            .is_some_and(|edges| edges.contains(function))
                 });
             let observable = members.iter().all(|function| {
                 !analysis.escaping.contains(function) && Some(*function) != module.entry()
