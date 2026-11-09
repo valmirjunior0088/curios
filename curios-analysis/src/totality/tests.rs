@@ -5,7 +5,8 @@
 use {
     super::*,
     curios_core::{
-        Atom, Free, Global, InductDecl, Intrinsic, Polarity, Rec, StructDecl, Subterm, Term,
+        Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Rec, Size, StructDecl,
+        Subterm, Term,
     },
     curios_num::Binary,
 };
@@ -67,7 +68,7 @@ impl Env for Probe {
 }
 
 /// One graded call, from member `caller` to member `callee`.
-fn call(caller: usize, callee: usize, matrix: Matrix) -> Call {
+fn call(caller: usize, callee: usize, matrix: CallMatrix) -> Call {
     Call {
         caller,
         callee,
@@ -76,9 +77,9 @@ fn call(caller: usize, callee: usize, matrix: Matrix) -> Call {
 }
 
 /// Build a matrix from a row-major grid of size grades.
-fn matrix(rows: &[&[Size]]) -> Matrix {
+fn matrix(rows: &[&[Size]]) -> CallMatrix {
     let columns = rows.first().map_or(0, |row| row.len());
-    let mut matrix = Matrix::unknown(rows.len(), columns);
+    let mut matrix = CallMatrix::unknown(rows.len(), columns);
     for (row, grades) in rows.iter().enumerate() {
         for (column, grade) in grades.iter().enumerate() {
             matrix.set(row, column, *grade);
@@ -289,7 +290,7 @@ fn a_descent_on_either_argument_is_accepted_only_because_arms_refine_the_scrutin
 #[test]
 fn a_nullary_self_call_cannot_descend() {
     // `rec inf : F = F/more(inf)` and `rec Bad : Type = Sink(Bad)` both have an empty parameter vector, so their self-call is a 0x0 matrix: idempotent, with no diagonal to decrease on.
-    let empty = Matrix::unknown(0, 0);
+    let empty = CallMatrix::unknown(0, 0);
     assert!(empty.is_idempotent());
     assert!(!empty.descends());
 }
@@ -317,8 +318,8 @@ fn ring(members: usize) -> Vec<Call> {
 }
 
 /// A member's eight parameters handed on permuted, the `row`th graded strictly below by the argument at `to[row]`.
-fn permuted(to: [usize; 8]) -> Matrix {
-    let mut permuted = Matrix::unknown(8, 8);
+fn permuted(to: [usize; 8]) -> CallMatrix {
+    let mut permuted = CallMatrix::unknown(8, 8);
     for (row, column) in to.into_iter().enumerate() {
         permuted.set(row, column, LESS);
     }

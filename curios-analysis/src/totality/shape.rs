@@ -8,8 +8,7 @@
 mod tests;
 
 use {
-    super::Size,
-    curios_core::{Atom, Free, Global},
+    curios_core::{Atom, Free, Global, Size},
     curios_num::Natural,
     std::rc::Rc,
 };

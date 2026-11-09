@@ -3,10 +3,11 @@
 //! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the kernel's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
-    super::{Call, Carriers, Guard, Matrix, Shape, Tag, spine},
+    super::{Call, Carriers, Guard, Shape, Tag, spine},
     crate::{Env, forceable},
     curios_core::{
-        Free, FreeMonoid, Intrinsic, Layer, Nat, Probe, Struct, Subterm, Term, Tuple, Variant,
+        CallMatrix, Free, FreeMonoid, Intrinsic, Layer, Nat, Probe, Struct, Subterm, Term, Tuple,
+        Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet, HashMap},
@@ -185,7 +186,7 @@ pub fn grade<E: Env>(
 ) -> Result<Call, E::Error> {
     curios_profile::profile!("grade");
     let mut grader = Grader::new(env, context);
-    let mut matrix = Matrix::unknown(params.len(), callee_arity);
+    let mut matrix = CallMatrix::unknown(params.len(), callee_arity);
 
     let expanded = params
         .iter()
