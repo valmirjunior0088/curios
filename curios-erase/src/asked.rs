@@ -50,9 +50,6 @@ impl Part {
     ];
 }
 
-/// A part of the declaration of a name: what a record notes a read as.
-pub type NamedPart = (curios_core::Global, Part);
-
 /// What erasing an item's forms read: each part of each declaration around it, once, in the order of the names and then of the parts, which is the order a completed record digests them in.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Asked {

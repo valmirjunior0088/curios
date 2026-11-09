@@ -34,7 +34,7 @@ pub use erased::{ErasedForms, ErasedItem, ErasedUnit, Erasures};
 mod asked;
 use asked::*;
 pub use asked::{
-    Asked, AskedEntry, AskedItems, AskedRecord, AskedTable, HeldAsked, Made, NamedPart, Part, Read,
+    Asked, AskedEntry, AskedItems, AskedRecord, AskedTable, HeldAsked, Made, Part, Read,
 };
 
 mod over;
