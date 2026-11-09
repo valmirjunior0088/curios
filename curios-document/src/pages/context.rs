@@ -242,22 +242,27 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
 }
 
 fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
-    let mut badges = Vec::new();
-    if matches!(
-        declaration.kind,
-        Kind::Inductive | Kind::Structure | Kind::Concept
-    ) {
-        badges.push(match declaration.opaque {
-            true => Badge {
-                label: "opaque",
-                tone: "dashed",
-            },
-            false => Badge {
-                label: "transparent",
-                tone: "plain",
-            },
-        });
-    }
+    // A concept's private representation is the language's sealing, so its badge says so.
+    let badge = match (declaration.kind, declaration.opaque) {
+        (Kind::Inductive | Kind::Structure, true) => Some(Badge {
+            label: "opaque",
+            tone: "dashed",
+        }),
+        (Kind::Inductive | Kind::Structure, false) => Some(Badge {
+            label: "transparent",
+            tone: "plain",
+        }),
+        (Kind::Concept, true) => Some(Badge {
+            label: "sealed",
+            tone: "dashed",
+        }),
+        (Kind::Concept, false) => Some(Badge {
+            label: "unsealed",
+            tone: "plain",
+        }),
+        (Kind::Definition | Kind::Witness | Kind::Foreign, _) => None,
+    };
+    let badges = badge.into_iter().collect();
     let members = declaration
         .members
         .iter()
