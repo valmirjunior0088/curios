@@ -645,6 +645,46 @@ entry ~f0$main() =
     );
 }
 
+/// A rebuild reads as the value it writes into and the slots it writes, each at the index a read of it names.
+#[test]
+fn a_rebuild_prints_as_its_value_with_the_slots_it_writes() {
+    let module = module_with(|module, _| {
+        let row = module.add_row(Row {
+            debug_name: Some("Pair".into()),
+            slots: vec![Slot::Nat, Slot::Opaque],
+        });
+        let built = module.add_value(None);
+        let rebuilt = module.add_value(None);
+        let exit = module.add_node(halt(vec![Atom::Value(rebuilt)]));
+        let rebuild = module.add_node(Node::LetValue {
+            result: rebuilt,
+            value: ValueExpr::Rebuilt {
+                of: Atom::Value(built),
+                row,
+                slots: vec![(1, nat(2))],
+            },
+            next: exit,
+        });
+        module.add_node(Node::LetValue {
+            result: built,
+            value: ValueExpr::Row(row, vec![nat(1), Atom::Filler]),
+            next: rebuild,
+        })
+    });
+
+    assert_eq!(
+        module.to_string(),
+        "\
+row ~r0$Pair(nat, opaque)
+
+entry ~f0$main() =
+    let ~v0 = ~r0$Pair(1, pad);
+    let ~v1 = ~v0 with ~r0$Pair(/1 = 2);
+    halt ffi//exit(~v1);
+"
+    );
+}
+
 /// A group binds its members together, and the chain says so: one keyword, `and` between, one `;` closing the lot.
 #[test]
 fn a_function_group_prints_as_one_and_chain() {

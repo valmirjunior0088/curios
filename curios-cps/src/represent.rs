@@ -251,7 +251,10 @@ fn offers(
             Node::LetValue { result, value, .. } => {
                 let offer = match value {
                     ValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
-                    ValueExpr::List(_) | ValueExpr::Tuple(_) | ValueExpr::Row(..) => Offer::Never,
+                    ValueExpr::List(_)
+                    | ValueExpr::Tuple(_)
+                    | ValueExpr::Row(..)
+                    | ValueExpr::Rebuilt { .. } => Offer::Never,
                 };
                 offers.insert(Site::Value(*result), offer);
             }
@@ -661,12 +664,28 @@ pub fn representation(module: &Module) -> Representation {
                     }
                 }
 
+                // A rebuild stores into the same slots a construction of its row would.
+                Node::LetValue {
+                    value: ValueExpr::Rebuilt { row, slots, .. },
+                    ..
+                } => {
+                    for (index, atom) in slots {
+                        demand(
+                            atom,
+                            raw_carrier(&module.slot_repr(*row, *index)),
+                            offers,
+                            solver,
+                        );
+                    }
+                }
+
                 // Everything else stores or passes a reference, or hands its arguments to a join the flows below state: a list's elements and a tuple's fields are held uninterpreted, a closure's arguments cross its arity's uniform signature, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
                 Node::LetValue { value, .. } => match value {
                     ValueExpr::Literal(_)
                     | ValueExpr::List(_)
                     | ValueExpr::Tuple(_)
-                    | ValueExpr::Row(..) => {}
+                    | ValueExpr::Row(..)
+                    | ValueExpr::Rebuilt { .. } => {}
                 },
                 Node::ApplyCont(_)
                 | Node::ApplyFun { .. }

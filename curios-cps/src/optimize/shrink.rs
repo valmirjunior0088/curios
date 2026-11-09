@@ -706,7 +706,7 @@ impl<'m> Shrink<'m> {
         let built = match value {
             ValueExpr::Tuple(fields) => (None, fields),
             ValueExpr::Row(row, fields) => (Some(*row), fields),
-            ValueExpr::Literal(_) | ValueExpr::List(_) => return None,
+            ValueExpr::Literal(_) | ValueExpr::List(_) | ValueExpr::Rebuilt { .. } => return None,
         };
         match op {
             Intrinsic::TupleGet(field) if built.0.is_none() => {

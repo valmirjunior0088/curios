@@ -24,7 +24,7 @@ pub(crate) enum EmissionData {
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
-/// One pure intrinsic computation over already-bound values: every variant produces exactly one value and has no effects, anything stateful being an [`EmissionTail`].
+/// One computation over already-bound values: every variant produces exactly one value and has no effect a reader can see, anything stateful being an [`EmissionTail`]. A rebuild writes, into memory nothing but it reads from there on, so it is ordered where it stands like every binding and never interned.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
     /// One [`curios_cps::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bytes*`/`List*` rows are rope operations codegen services through shared helper functions.
@@ -32,6 +32,13 @@ pub(crate) enum EmissionCode {
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
     /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`curios_cps::Intrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `curios_cps::IntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
     ListMap(EmissionValueName, EmissionValueName),
+    /// `of`, a value of `row`, with each of `slots` written with the value beside it: [`curios_cps::ValueExpr::Rebuilt`].
+    Rebuild {
+        row: curios_cps::RowId,
+        of: EmissionValueName,
+        slots: Vec<usize>,
+        values: Vec<EmissionArg>,
+    },
 }
 
 /// The right-hand side of one binding in the emission body.
@@ -284,6 +291,8 @@ pub(crate) struct EmissionModule {
     rows: Vec<(curios_cps::RowId, curios_cps::Row)>,
     /// The suspension row only when the residual entry may return it: what selects turn exports and their dispatch requirements.
     entry_suspension: Option<curios_cps::RowId>,
+    /// The slots of each row some rebuild writes.
+    rebuilt: BTreeMap<curios_cps::RowId, BTreeSet<usize>>,
     /// The values structurization minted that a register holds, at their carriers: a resume block it adds in front of one that captures takes a call's results as parameters of its own, each held as the callee hands that result back.
     minted_registers: Vec<(EmissionValueName, curios_cps::Repr)>,
 }
@@ -308,6 +317,14 @@ impl EmissionModule {
 
     pub(crate) fn set_entry_suspension(&mut self, entry_suspension: Option<curios_cps::RowId>) {
         self.entry_suspension = entry_suspension;
+    }
+
+    pub(crate) fn rebuilt(&self) -> &BTreeMap<curios_cps::RowId, BTreeSet<usize>> {
+        &self.rebuilt
+    }
+
+    pub(crate) fn set_rebuilt(&mut self, rebuilt: BTreeMap<curios_cps::RowId, BTreeSet<usize>>) {
+        self.rebuilt = rebuilt;
     }
 
     pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {

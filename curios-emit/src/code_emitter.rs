@@ -1,8 +1,9 @@
 use {
     super::{
-        BigHelper, Bitwise, Chunk, Context, EmissionCode, EmissionValueName, FltHelper,
-        ImmediateLayout, LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, concrete_val,
-        either, get, i32_const, i32_type, null, rounding_code, set, tee, wasm, when,
+        BigHelper, Bitwise, Chunk, Context, EmissionArg, EmissionCode, EmissionValueName, Envelope,
+        FltHelper, ImmediateLayout, LoadAs, RopeData, Table, block, box_instrs, br, br_if, call,
+        concrete_val, either, get, i32_const, i32_type, null, rounding_code, set, slot_zero_instrs,
+        tee, wasm, when,
     },
     curios_num::Rounding,
 };
@@ -1880,7 +1881,74 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: dest.local,
                 });
             }
+            EmissionCode::Rebuild {
+                row,
+                of,
+                slots,
+                values,
+            } => self.emit_rebuild(&dest, *row, of, slots, values),
         }
+    }
+
+    /// Write each listed slot of `of`, cast to its row's final type, at the carrier the row declares, and hand the same reference on: what a construction of the row stores, into memory nothing reads after it. A row past the engine's field limit, which `spill` builds whole and never writes, is built afresh instead, its unlisted slots read from `of`.
+    fn emit_rebuild(
+        &mut self,
+        dest: &Dest<'_>,
+        row: curios_cps::RowId,
+        of: &EmissionValueName,
+        slots: &[usize],
+        values: &[EmissionArg],
+    ) {
+        let row_type = self.context.table().find_row_type(row);
+        let carriers = self.context.table().row_slots(row).to_vec();
+        let object = self
+            .context
+            .load_value_instrs(of, LoadAs::Concrete(row_type.clone()));
+        let stored = |emitter: &Self, slot: usize, value: &EmissionArg| match value {
+            EmissionArg::Value(name) => emitter
+                .context
+                .load_value_instrs(name, emitter.context.table().slot_load_as(carriers[slot])),
+            EmissionArg::Filler => slot_zero_instrs(carriers[slot]),
+        };
+        if carriers.len() >= Envelope::ENGINE.fields {
+            for (slot, carrier) in carriers.iter().enumerate() {
+                let instrs = match slots.iter().position(|written| *written == slot) {
+                    Some(index) => stored(self, slot, &values[index]),
+                    None => object
+                        .iter()
+                        .cloned()
+                        .chain([match carrier {
+                            curios_cps::Slot::Tag => curios_wasm::Instr::StructGetU {
+                                type_name: row_type.clone(),
+                                field_name: Table::tuple_field(slot),
+                            },
+                            _ => curios_wasm::Instr::StructGet {
+                                type_name: row_type.clone(),
+                                field_name: Table::tuple_field(slot),
+                            },
+                        }])
+                        .collect(),
+                };
+                self.emit_instrs(instrs);
+            }
+            self.emit_instr(curios_wasm::Instr::StructNew {
+                type_name: row_type,
+            });
+        } else {
+            for (slot, value) in slots.iter().zip(values) {
+                self.emit_instrs(object.iter().cloned());
+                let instrs = stored(self, *slot, value);
+                self.emit_instrs(instrs);
+                self.emit_instr(curios_wasm::Instr::StructSet {
+                    type_name: row_type.clone(),
+                    field_name: Table::tuple_field(*slot),
+                });
+            }
+            self.emit_instrs(object);
+        }
+        self.emit_instr(curios_wasm::Instr::LocalSet {
+            local_name: dest.local.clone(),
+        });
     }
 
     /// Read field `index` through the object's *exact* tuple type, trying `arities` in order and casting on the last.

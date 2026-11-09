@@ -52,6 +52,14 @@ pub(crate) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
                 ValueExpr::Row(row, atoms) => {
                     ValueExpr::Row(*row, atoms.iter().map(map.atom).collect())
                 }
+                ValueExpr::Rebuilt { of, row, slots } => ValueExpr::Rebuilt {
+                    of: (map.atom)(of),
+                    row: *row,
+                    slots: slots
+                        .iter()
+                        .map(|(slot, atom)| (*slot, (map.atom)(atom)))
+                        .collect(),
+                },
             },
             next: (map.node)(*next),
         },

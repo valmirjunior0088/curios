@@ -64,7 +64,7 @@ impl Reach {
         for (_, node) in module.live_nodes() {
             match node {
                 Node::LetValue { value, .. } => match value {
-                    ValueExpr::Row(row, _) => work.push(*row),
+                    ValueExpr::Row(row, _) | ValueExpr::Rebuilt { row, .. } => work.push(*row),
                     ValueExpr::Literal(_) | ValueExpr::List(_) | ValueExpr::Tuple(_) => {}
                 },
                 Node::LetIntrinsic { op, .. } => {
@@ -567,6 +567,17 @@ impl Printer<'_, '_, '_, '_> {
             ValueExpr::Row(row, atoms) => {
                 format!("{}({})", self.row(*row), self.operands(atoms))
             }
+            // A rebuild reads as the value it writes into and the slots it writes, each at the index a read of it names.
+            ValueExpr::Rebuilt { of, row, slots } => format!(
+                "{} with {}({})",
+                self.atom(of),
+                self.row(*row),
+                slots
+                    .iter()
+                    .map(|(slot, atom)| format!("/{slot} = {}", self.atom(atom)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 

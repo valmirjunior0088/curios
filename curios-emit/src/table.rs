@@ -2,8 +2,8 @@ use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const, refuse_func_name,
-        tee, when,
+        EmissionValueName, Envelope, FltHelper, LoadAs, call, concrete_val, get, i64_const,
+        refuse_func_name, tee, when,
     },
     curios_abi::{Carrier, ForeignFunction, Namespace, WireLeaf, WireType},
     std::{
@@ -445,6 +445,8 @@ pub(crate) struct Table<'a> {
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the CPS module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
     row_types: BTreeMap<curios_cps::RowId, (curios_wasm::TypeName, Vec<curios_cps::Slot>)>,
+    /// The slots of each row some rebuild writes, declared mutable.
+    rebuilt: &'a BTreeMap<curios_cps::RowId, BTreeSet<usize>>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by what a wasm function type actually is — what each parameter and each result is held at — rather than by parameter count alone, so two functions of the same arity delivering different result shapes, or holding a position in different carriers, cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -538,6 +540,7 @@ impl<'a> Table<'a> {
             bytes_replicate: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
+            rebuilt: module.rebuilt(),
             row_types: module
                 .rows()
                 .iter()
@@ -1335,6 +1338,14 @@ impl<'a> Table<'a> {
             curios_cps::Slot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
             curios_cps::Slot::Opaque => LoadAs::Null,
         }
+    }
+
+    /// Whether some rebuild writes `row`'s slot `index`, which its struct then declares mutable: every other slot stays immutable, so an engine reads it as the constant its construction stored.
+    pub(crate) fn slot_written(&self, row: curios_cps::RowId, index: usize) -> bool {
+        self.rebuilt
+            .get(&row)
+            .is_some_and(|slots| slots.contains(&index))
+            && self.row_slots(row).len() < Envelope::ENGINE.fields
     }
 
     /// The carriers of `row`'s slots.

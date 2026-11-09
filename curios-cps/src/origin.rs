@@ -139,7 +139,9 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
                     let origin = match value {
                         ValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
                         ValueExpr::Row(row, atoms) => Origin::Row(*row, atoms.len()),
-                        ValueExpr::List(_) | ValueExpr::Literal(_) => Origin::Opaque,
+                        ValueExpr::List(_) | ValueExpr::Literal(_) | ValueExpr::Rebuilt { .. } => {
+                            Origin::Opaque
+                        }
                     };
                     solver.join(*result, origin);
                 }

@@ -22,6 +22,7 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
     output.set_rows(machine.rows().to_vec());
     output.set_entry_suspension(machine.entry_suspension());
+    output.set_rebuilt(rebuilt_slots(machine));
     for (function, wrapper) in &machine.wrappers {
         output.add_clsr(
             wrapper_name(machine, *function),
@@ -55,6 +56,21 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     }
     output.set_entry(function_name(machine, machine.entry));
     output
+}
+
+/// The slots of each row some rebuild writes: the ones its struct declares mutable.
+fn rebuilt_slots(machine: &MachineModule) -> BTreeMap<curios_cps::RowId, BTreeSet<usize>> {
+    let mut rebuilt = BTreeMap::<_, BTreeSet<_>>::new();
+    for function in machine.functions.values() {
+        for block in function.blocks.values() {
+            for instruction in &block.instructions {
+                if let MachineInstruction::Rebuild { row, slots, .. } = instruction {
+                    rebuilt.entry(*row).or_default().extend(slots);
+                }
+            }
+        }
+    }
+    rebuilt
 }
 
 fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> EmissionClosure {
@@ -158,6 +174,26 @@ impl<'a> MachineFunctionBridge<'a> {
                     values.push((
                         value_name(*result),
                         EmissionValue::Eval(EmissionCode::Intrinsic(*op, args)),
+                    ));
+                }
+                // A rebuild's slots defer their fillers as a construction's do, the carrier being the row's to declare.
+                MachineInstruction::Rebuild {
+                    result,
+                    row,
+                    of,
+                    slots,
+                    values: written,
+                } => {
+                    let of = self.operand(of, &mut values);
+                    let written = self.jump_args(written, &mut values);
+                    values.push((
+                        value_name(*result),
+                        EmissionValue::Eval(EmissionCode::Rebuild {
+                            row: *row,
+                            of,
+                            slots: slots.clone(),
+                            values: written,
+                        }),
                     ));
                 }
                 MachineInstruction::MakeClosure {
@@ -552,6 +588,7 @@ fn block_captures(function: &MachineFunction) -> BTreeMap<MachineBlockId, Vec<Ma
                 match instruction {
                     MachineInstruction::Construct { result, .. }
                     | MachineInstruction::Intrinsic { result, .. }
+                    | MachineInstruction::Rebuild { result, .. }
                     | MachineInstruction::MakeClosure { result, .. } => {
                         bound.insert(*result);
                     }
@@ -596,6 +633,10 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
             MachineInstruction::Intrinsic { args, .. }
             | MachineInstruction::MakeClosure { captures: args, .. } => {
                 args.iter().for_each(&mut insert);
+            }
+            MachineInstruction::Rebuild { of, values, .. } => {
+                insert(of);
+                values.iter().for_each(&mut insert);
             }
         }
     }

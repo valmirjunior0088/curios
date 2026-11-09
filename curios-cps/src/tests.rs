@@ -477,3 +477,101 @@ fn a_node_reached_from_two_places_is_refused() {
         "{error}"
     );
 }
+
+/// A module holding one rebuild ahead of the minimal body: `built`, a `Pair`, rebuilt at `slots` into `rebuilt` as a `Pair` where `as_row` and as another row of its width otherwise, then a read of `built` where `read_after` and of `rebuilt` otherwise, each at the row it was made as.
+fn module_rebuilding(as_row: bool, slots: Vec<(usize, Atom)>, read_after: bool) -> Module {
+    let mut module = minimal_module();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Opaque, Slot::Opaque],
+    });
+    let other = module.add_row(Row {
+        debug_name: Some("Other".into()),
+        slots: vec![Slot::Opaque, Slot::Opaque],
+    });
+    let built = module.add_value(Some("built".into()));
+    let rebuilt = module.add_value(Some("rebuilt".into()));
+    let field = module.add_value(Some("field".into()));
+    let rebuilt_as = match as_row {
+        true => pair,
+        false => other,
+    };
+    let next = module.function(FunctionId(0)).unwrap().body;
+    let (read_row, read_value) = match read_after {
+        true => (pair, built),
+        false => (rebuilt_as, rebuilt),
+    };
+    let read = module.add_node(Node::LetIntrinsic {
+        result: field,
+        op: Intrinsic::RowGet(read_row, 0),
+        args: vec![Atom::Value(read_value)],
+        next,
+    });
+    let rebuild = module.add_node(Node::LetValue {
+        result: rebuilt,
+        value: ValueExpr::Rebuilt {
+            of: Atom::Value(built),
+            row: rebuilt_as,
+            slots,
+        },
+        next: read,
+    });
+    let construction = module.add_node(Node::LetValue {
+        result: built,
+        value: ValueExpr::Row(pair, vec![Atom::Filler, Atom::Filler]),
+        next: rebuild,
+    });
+    module.function_mut(FunctionId(0)).unwrap().body = construction;
+    module
+}
+
+fn one() -> Atom {
+    Atom::Literal(Literal::Nat(Natural::from(1u32)))
+}
+
+/// A rebuild of a value only its own row reaches, named by nothing after it, is the form the verifier admits.
+#[test]
+fn verifier_admits_a_rebuild_of_a_value_of_its_row_read_nowhere_after() {
+    module_rebuilding(true, vec![(0, one()), (1, one())], false)
+        .verify()
+        .unwrap();
+}
+
+/// A rebuild writes a struct of its own row into memory a construction of another row holds: the cast it emits would trap.
+#[test]
+fn verifier_rejects_a_rebuild_of_a_value_another_row_reaches() {
+    let error = module_rebuilding(false, vec![(1, one())], false)
+        .verify()
+        .unwrap_err()
+        .0;
+    assert!(
+        error.contains("which a flow reaching it may not build"),
+        "{error}"
+    );
+}
+
+/// A read of the value a rebuild wrote into, after it, would see the new slots where the program asked for the old.
+#[test]
+fn verifier_rejects_a_rebuild_of_a_value_read_after_it() {
+    let error = module_rebuilding(true, vec![(1, one())], true)
+        .verify()
+        .unwrap_err()
+        .0;
+    assert!(error.contains("which a run reads after it"), "{error}");
+}
+
+/// Each slot is written once, in order, inside the row.
+#[test]
+fn verifier_rejects_rebuilt_slots_out_of_order_or_past_the_row() {
+    for slots in [
+        vec![(1, one()), (0, one())],
+        vec![(0, one()), (0, one())],
+        vec![(2, one())],
+    ] {
+        let error = module_rebuilding(true, slots, false)
+            .verify()
+            .unwrap_err()
+            .0;
+        assert!(error.contains("out of order or past its width"), "{error}");
+    }
+}

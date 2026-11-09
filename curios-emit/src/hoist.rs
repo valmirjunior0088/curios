@@ -270,6 +270,10 @@ fn rename_value(
                 rename_name(list, renames);
                 rename_name(mapper, renames);
             }
+            EmissionCode::Rebuild { of, values, .. } => {
+                rename_name(of, renames);
+                rename_jump_args(values, renames);
+            }
         },
     }
 }

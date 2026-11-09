@@ -69,6 +69,12 @@ pub enum ValueExpr {
     Tuple(Vec<Atom>),
     /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`Atom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The ANF door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
     Row(RowId, Vec<Atom>),
+    /// A [`ValueExpr::Row`] built in the memory of `of`, a value of that row proved unshared and dead here: each listed slot, an index into the row's full width, is written, every other keeps what `of` holds, and the result is `of` itself. It is minted after the optimizer, so no pass that copies, moves or merges a computation meets it; the verifier holds `of` to a value of the row and to no use after the rebuild. `of` is an operand like the slots', so whatever reads a node's operands reads it.
+    Rebuilt {
+        of: Atom,
+        row: RowId,
+        slots: Vec<(usize, Atom)>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -317,6 +323,10 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
             ValueExpr::List(values) | ValueExpr::Tuple(values) | ValueExpr::Row(_, values) => {
                 output.extend(values)
             }
+            ValueExpr::Rebuilt { of, slots, .. } => {
+                output.push(of);
+                output.extend(slots.iter().map(|(_, atom)| atom));
+            }
         },
         Node::LetIntrinsic { args, .. }
         | Node::ApplyFun { args, .. }
@@ -350,6 +360,10 @@ pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Ato
             ValueExpr::Literal(_) => {}
             ValueExpr::List(values) | ValueExpr::Tuple(values) | ValueExpr::Row(_, values) => {
                 values.iter_mut().for_each(visitor)
+            }
+            ValueExpr::Rebuilt { of, slots, .. } => {
+                visitor(of);
+                slots.iter_mut().for_each(|(_, atom)| visitor(atom));
             }
         },
         Node::LetIntrinsic { args, .. }

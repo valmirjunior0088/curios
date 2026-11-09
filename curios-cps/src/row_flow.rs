@@ -155,7 +155,9 @@ fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
             rules.add(move |solver| match node {
                 Node::LetValue { result, value, .. } => {
                     let rows = match value {
-                        ValueExpr::Row(row, _) => Rows::Of(BTreeSet::from([*row])),
+                        ValueExpr::Row(row, _) | ValueExpr::Rebuilt { row, .. } => {
+                            Rows::Of(BTreeSet::from([*row]))
+                        }
                         ValueExpr::Tuple(_) | ValueExpr::List(_) | ValueExpr::Literal(_) => {
                             Rows::none()
                         }

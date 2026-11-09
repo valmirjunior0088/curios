@@ -151,6 +151,8 @@ enum Consumption {
     ExitValue,
     Scrutinee,
     OpaqueIntrinsic,
+    /// The value a rebuild writes into: already reused, so no death this census pairs.
+    Rebuilt,
 }
 
 /// One tuple construction, as the survey needs to read it.
@@ -439,8 +441,14 @@ impl<'m> Census<'m> {
                     let atoms = match value {
                         ValueExpr::Tuple(atoms)
                         | ValueExpr::List(atoms)
-                        | ValueExpr::Row(_, atoms) => atoms.as_slice(),
-                        ValueExpr::Literal(_) => &[],
+                        | ValueExpr::Row(_, atoms) => atoms.iter().collect(),
+                        ValueExpr::Rebuilt { of, slots, .. } => {
+                            if let Atom::Value(of) = of {
+                                self.record(*of, node_id, Consumption::Rebuilt);
+                            }
+                            slots.iter().map(|(_, atom)| atom).collect()
+                        }
+                        ValueExpr::Literal(_) => Vec::new(),
                     };
                     for atom in atoms {
                         match atom {
@@ -773,6 +781,7 @@ impl<'m> Census<'m> {
                         Consumption::ExitValue => "exit",
                         Consumption::Scrutinee => "scrutinee",
                         Consumption::OpaqueIntrinsic => "opaque-intrinsic",
+                        Consumption::Rebuilt => "rebuilt",
                     };
                     region.classes.insert(class);
                     if matches!(

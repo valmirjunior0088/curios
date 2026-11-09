@@ -3,7 +3,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, RowId, ValueExpr, ValueId, atoms,
+        Node, NodeId, RowId, Rows, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
     },
     curios_common::Sorted,
     std::{
@@ -236,6 +236,7 @@ impl Module {
         self.verify_lexical_scopes(entry)?;
         if rows {
             self.verify_rows()?;
+            self.verify_rebuilds()?;
         }
 
         let live_nodes = self.node_ids().collect::<BTreeSet<_>>();
@@ -300,7 +301,7 @@ impl Module {
         for (_, node) in self.live_nodes() {
             if let Node::LetValue { result, value, .. } = node {
                 match value {
-                    ValueExpr::Row(row, _) => {
+                    ValueExpr::Row(row, _) | ValueExpr::Rebuilt { row, .. } => {
                         built.insert(*result, Some(*row));
                     }
                     ValueExpr::Tuple(_) => {
@@ -385,6 +386,117 @@ impl Module {
             }
         }
         Ok(())
+    }
+
+    /// A rebuild writes into a value nothing else reads: `of` names a value every flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. That nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
+    fn verify_rebuilds(&self) -> Result<(), VerifyError> {
+        let mut rows = None;
+        for (function, _) in self.live_functions() {
+            for node_id in function_nodes(self, function) {
+                let Some(Node::LetValue {
+                    value: ValueExpr::Rebuilt { of, row, slots },
+                    next,
+                    ..
+                }) = self.node(node_id)
+                else {
+                    continue;
+                };
+                let Atom::Value(of) = of else {
+                    return Err(VerifyError(format!(
+                        "{function} node {node_id} rebuilds an operand that is no value"
+                    )));
+                };
+                let Some(definition) = self.defined_row(*row) else {
+                    return Err(VerifyError(format!(
+                        "{function} node {node_id} rebuilds as {row}, which was not minted by this module"
+                    )));
+                };
+                let ordered = slots.windows(2).all(|pair| pair[0].0 < pair[1].0);
+                if !ordered
+                    || slots
+                        .last()
+                        .is_some_and(|(slot, _)| *slot >= definition.width())
+                {
+                    return Err(VerifyError(format!(
+                        "{function} node {node_id} rebuilds slots of {row} out of order or past its width of {}",
+                        definition.width(),
+                    )));
+                }
+                let rows = rows.get_or_insert_with(|| rows_reaching(self));
+                if rows.get(of) != Some(&Rows::Of(BTreeSet::from([*row]))) {
+                    return Err(VerifyError(format!(
+                        "{function} node {node_id} rebuilds {of} as {row}, which a flow reaching it may not build"
+                    )));
+                }
+                if self.read_after(*of, *next) {
+                    return Err(VerifyError(format!(
+                        "{function} node {node_id} rebuilds {of}, which a run reads after it"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether a run can read `value` at `from` or past it before binding it again, inside a function defined on the way among it.
+    fn read_after(&self, value: ValueId, from: NodeId) -> bool {
+        let mut seen = BTreeSet::new();
+        let mut work = vec![from];
+        let enter = |target: ContinuationId, work: &mut Vec<NodeId>| {
+            if let Some(continuation) = self.continuation(target)
+                && !continuation.params.contains(&value)
+            {
+                work.push(continuation.body);
+            }
+        };
+        while let Some(node_id) = work.pop() {
+            if !seen.insert(node_id) {
+                continue;
+            }
+            let node = self.node(node_id).unwrap();
+            if names(node, value) {
+                return true;
+            }
+            match node {
+                Node::LetValue { result, next, .. } | Node::LetIntrinsic { result, next, .. } => {
+                    if *result != value {
+                        work.push(*next);
+                    }
+                }
+                Node::LetFun { functions, body } => {
+                    if functions
+                        .iter()
+                        .any(|function| self.function_names(*function, value))
+                    {
+                        return true;
+                    }
+                    work.push(*body);
+                }
+                Node::LetCont { body, .. } => work.push(*body),
+                Node::ApplyFun { return_to, .. }
+                | Node::Foreign { return_to, .. }
+                | Node::Cell { return_to, .. }
+                | Node::Channel { return_to, .. }
+                | Node::Intrinsic { return_to, .. } => enter(*return_to, &mut work),
+                Node::ApplyCont(edge) => enter(edge.target, &mut work),
+                Node::Switch { cases, default, .. } => {
+                    for edge in cases.values().chain(default.as_ref()) {
+                        enter(edge.target, &mut work);
+                    }
+                }
+                Node::Halt { .. } | Node::Panic(_) | Node::Unreachable => {}
+            }
+        }
+        false
+    }
+
+    /// Whether `function`'s body, or a function defined anywhere within it, reads `value`.
+    fn function_names(&self, function: FunctionId, value: ValueId) -> bool {
+        function_nodes(self, function).into_iter().any(|node_id| {
+            let node = self.node(node_id).unwrap();
+            names(node, value)
+                || matches!(node, Node::LetFun { functions, .. } if functions.iter().any(|member| self.function_names(*member, value)))
+        })
     }
 
     fn verify_lexical_scopes(&self, entry: FunctionId) -> Result<(), VerifyError> {
@@ -1068,4 +1180,10 @@ impl Module {
             .map(|_| ())
             .ok_or_else(|| VerifyError(format!("{what} references missing {id}")))
     }
+}
+
+/// Whether `node` reads `value`, as an operand or as the closure it calls.
+fn names(node: &Node, value: ValueId) -> bool {
+    atoms(node).contains(&&Atom::Value(value))
+        || matches!(node, Node::ApplyFun { callee: Callee::Closure(closure), .. } if *closure == value)
 }

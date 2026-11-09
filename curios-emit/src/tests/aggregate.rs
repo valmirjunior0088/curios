@@ -373,3 +373,82 @@ fn a_short_variant_construction_is_refused() {
 
     let _ = wat(&module);
 }
+
+/// A rebuild writes the slots it lists into the value it is handed, and its row declares exactly those slots mutable: the tag and every slot no rebuild writes stay immutable, so an engine still reads them as the constants their construction stored.
+#[test]
+fn a_rebuild_writes_its_slots_and_declares_only_them_mutable() {
+    let mut module = curios_cps::Module::new();
+    let row = module.add_row(curios_cps::Row {
+        debug_name: Some("Shape".into()),
+        slots: vec![
+            curios_cps::Slot::Tag,
+            curios_cps::Slot::Opaque,
+            curios_cps::Slot::Opaque,
+        ],
+    });
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let seven = module.add_value(Some("seven".into()));
+    let built = module.add_value(Some("built".into()));
+    let rebuilt = module.add_value(Some("rebuilt".into()));
+    let read = module.add_value(Some("read".into()));
+    let exit = module.add_node(halt(vec![curios_cps::Atom::Value(read)]));
+    let project = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: read,
+        op: curios_cps::Intrinsic::RowGet(row, 2),
+        args: vec![curios_cps::Atom::Value(rebuilt)],
+        next: exit,
+    });
+    let rebuild = module.add_node(curios_cps::Node::LetValue {
+        result: rebuilt,
+        value: curios_cps::ValueExpr::Rebuilt {
+            of: curios_cps::Atom::Value(built),
+            row,
+            slots: vec![(2, curios_cps::Atom::Value(seven))],
+        },
+        next: project,
+    });
+    // Built from a computed slot, so the construction is no constant hoisting interns.
+    let build = module.add_node(curios_cps::Node::LetValue {
+        result: built,
+        value: curios_cps::ValueExpr::Row(
+            row,
+            vec![
+                nat(0),
+                curios_cps::Atom::Value(seven),
+                curios_cps::Atom::Filler,
+            ],
+        ),
+        next: rebuild,
+    });
+    let add = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: seven,
+        op: curios_cps::Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: build,
+    });
+    module.define_function(
+        main,
+        curios_cps::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: add,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+
+    let wat = wat(&module);
+    assert_contains(&wat, "struct.set $row/0$Shape $2");
+    assert_eq!(count(&wat, "struct.set $row/"), 1, "{wat}");
+    let declaration = wat
+        .lines()
+        .find(|line| line.contains("(type $row/0$Shape"))
+        .expect("the row is declared");
+    assert!(declaration.contains("(field $2 (mut "), "{declaration}");
+    assert!(
+        !declaration.contains("(field $0 (mut") && !declaration.contains("(field $1 (mut"),
+        "{declaration}"
+    );
+}

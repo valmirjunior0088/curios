@@ -46,6 +46,14 @@ pub(crate) enum MachineInstruction {
         op: curios_cps::Intrinsic,
         args: Vec<MachineOperand>,
     },
+    /// A row built in the memory of `of`: each listed slot written, the result `of` itself. Never a [`MachineInstruction::Construct`], so nothing interns it as a constant or moves it past the reads of `of` before it.
+    Rebuild {
+        result: MachineValueId,
+        row: curios_cps::RowId,
+        of: MachineOperand,
+        slots: Vec<usize>,
+        values: Vec<MachineOperand>,
+    },
     /// Retained-ABI closure wrapper around direct code. The wrapper unpacks these captures and tail-calls `function`.
     MakeClosure {
         result: MachineValueId,
@@ -562,6 +570,22 @@ impl<'a> MachineFunctionLowerer<'a> {
                                 .map(|atom| self.lower_atom(atom, &mut instructions))
                                 .collect(),
                         ),
+                        curios_cps::ValueExpr::Rebuilt { of, row, slots } => {
+                            let of = self.lower_atom(of, &mut instructions);
+                            let values = slots
+                                .iter()
+                                .map(|(_, atom)| self.lower_atom(atom, &mut instructions))
+                                .collect();
+                            instructions.push(MachineInstruction::Rebuild {
+                                result: value_id(*result),
+                                row: *row,
+                                of,
+                                slots: slots.iter().map(|(slot, _)| *slot).collect(),
+                                values,
+                            });
+                            node_id = *next;
+                            continue;
+                        }
                     };
                     instructions.push(MachineInstruction::Construct {
                         result: value_id(*result),
