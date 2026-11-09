@@ -42,7 +42,6 @@ fn a_rung_reached_before_the_failure_is_still_answered() {
     for name in ["text", "core"] {
         let (handed, rendering) = rung(name, REFUSED_LATER)
             .unwrap_or_else(|_| panic!("{name} was observed before the refusal"));
-        assert_eq!(rendering.name, name);
         assert!(!handed.is_empty(), "{name} rendered nothing");
         assert!(
             !rendering.diagnostics.is_empty(),
@@ -92,8 +91,7 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
     };
 
     for name in ["text", "core", "core-elab"] {
-        let (handed, rendering) = rung(name).unwrap_or_else(|_| panic!("{name} is a unit's rung"));
-        assert_eq!(rendering.name, name);
+        let (handed, _) = rung(name).unwrap_or_else(|_| panic!("{name} is a unit's rung"));
         assert!(handed.contains("answer"), "{name} reprinted {handed:?}");
     }
     assert!(matches!(rung("anf"), Err(crate::Refusal::Unit)));

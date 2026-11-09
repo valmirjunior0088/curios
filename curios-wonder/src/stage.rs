@@ -15,7 +15,6 @@ use {
 /// One rung, reprinted and handed on where the driver emitted it.
 #[derive(Debug)]
 pub struct Rendering {
-    pub name: &'static str,
     /// What stopped the compilation *after* this rung was reached, if anything. A rung the driver already emitted is an answer, and a later failure does not unmake it — the transport prints these beside the rendering rather than in place of it.
     pub diagnostics: Vec<Diagnosis>,
 }
@@ -84,11 +83,9 @@ pub fn stage(
     // A rung the driver emitted has been answered, whatever happens downstream of it. Asking for `core` on a program that fails to elaborate is asking what the lowering produced — which is most of why one asks — and discarding it because a later stage refused answers a question nobody put. What the transport's contract refuses is a program that stopped *before* the rung, which is exactly the case where nothing was observed.
     match (reached, compiled) {
         (true, Ok(_)) => Ok(Reached::Rendered(Rendering {
-            name,
             diagnostics: Vec::new(),
         })),
         (true, Err(error)) => Ok(Reached::Rendered(Rendering {
-            name,
             diagnostics: of_error(error),
         })),
         (false, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
@@ -152,7 +149,6 @@ pub fn unit_stage(
             shown(&rendering);
 
             Ok(Rendering {
-                name,
                 diagnostics: Vec::new(),
             })
         }
