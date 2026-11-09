@@ -6,9 +6,10 @@ use {
     curios_cert::Verdict,
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_num::Binary,
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     std::hash::{DefaultHasher, Hash, Hasher},
 };

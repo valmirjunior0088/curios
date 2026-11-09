@@ -7,8 +7,9 @@
 use {
     super::test_support::*,
     curios_common::fill,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, test_support::*},
+    curios_pipeline::{compile_with_prelude, test_support::*},
     curios_surface::Entrypoint,
     std::{fmt::Write, iter},
 };

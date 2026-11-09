@@ -4,9 +4,10 @@ use {
     crate::test_support::*,
     crate::tests::test_support::*,
     curios_common::fill,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, MockHostBuilder},
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
 };
 

@@ -3,6 +3,7 @@
 use {
     crate::test_support::*,
     curios_abi::ForeignStore,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::compile_with_prelude,
@@ -503,13 +504,8 @@ pub const STRING_WALK: &str = r#"
 pub fn compile_raw_program(source: &str) -> (Module, ForeignStore) {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
-    compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("fixture compiles")
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .expect("fixture compiles")
 }
 
 /// [`compile_raw_program`]'s module alone, for a test that reads it and runs nothing.

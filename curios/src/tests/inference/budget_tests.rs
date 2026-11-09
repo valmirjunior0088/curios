@@ -2,7 +2,7 @@
 //!
 //! A budget is a refusal about cost rather than about meaning, so each row is a pair in spirit: a computation the default budget affords, and one no budget should. A regression here shows up as a program that used to compile and now cannot, or as one that spends unboundedly before saying so.
 
-use {crate::tests::test_support::*, curios_pipeline::DEFAULT_BUDGET};
+use {crate::tests::test_support::*, curios_elab::DEFAULT_BUDGET};
 
 // A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in type position — same infinite-spin behavior as a top-level `rec` — so a step budget stops it with an error rather than hanging.
 #[test]

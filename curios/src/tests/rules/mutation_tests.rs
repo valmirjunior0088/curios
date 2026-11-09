@@ -4,6 +4,7 @@
 
 use {
     curios_core::{Definitions, Item, Program, Term, Zonked},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
@@ -80,22 +81,18 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let curios_pipeline::Typechecked {
+        let Typechecked {
             program,
             obligations,
             ..
-        } = typecheck_with_prelude(
-            curios_pipeline::DEFAULT_BUDGET,
-            &entrypoint,
-            &RootSource::none(),
-        )
-        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+        } = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+            .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
         assert!(
             obligations.is_empty(),
             "{description}: the subject carries an erasure obligation, so it is the wrong control",
         );
         assert!(
-            recheck(&program, curios_pipeline::DEFAULT_BUDGET).is_empty(),
+            recheck(&program, curios_elab::DEFAULT_BUDGET).is_empty(),
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
@@ -111,7 +108,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             target.body = foreign_body();
 
             assert!(
-                !recheck(&mutant, curios_pipeline::DEFAULT_BUDGET).is_empty(),
+                !recheck(&mutant, curios_elab::DEFAULT_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
                 definition.name.faithful(),
                 definition.type_.faithful(),
@@ -139,13 +136,9 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let program = typecheck_with_prelude(
-            curios_pipeline::DEFAULT_BUDGET,
-            &entrypoint,
-            &RootSource::none(),
-        )
-        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
-        .program;
+        let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+            .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
+            .program;
 
         let declared = lets(&program.definitions)
             .into_iter()
@@ -171,7 +164,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 target.type_ = replacement.clone();
 
                 assert!(
-                    !recheck(&mutant, curios_pipeline::DEFAULT_BUDGET).is_empty(),
+                    !recheck(&mutant, curios_elab::DEFAULT_BUDGET).is_empty(),
                     "{description}: the kernel accepted `{}` redeclared at `{replacement:?}`",
                     definition.name.faithful(),
                 );
@@ -223,13 +216,9 @@ fn elaborated(description: &str, source: &str) -> Program {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    typecheck_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-    )
-    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
-    .program
+    typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
+        .program
 }
 
 /// A body grafted from a program that differs only in an index must be refused by the host.
@@ -254,7 +243,7 @@ fn a_body_grafted_across_an_index_is_refused() {
             .unwrap_or_else(|| panic!("{description}: the donor declares `subject`"));
 
         assert!(
-            recheck(&host, curios_pipeline::DEFAULT_BUDGET).is_empty(),
+            recheck(&host, curios_elab::DEFAULT_BUDGET).is_empty(),
             "{description}: the host must be accepted before anything is grafted into it",
         );
 
@@ -275,7 +264,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         target.body = donated;
 
         assert!(
-            !recheck(&grafted, curios_pipeline::DEFAULT_BUDGET).is_empty(),
+            !recheck(&grafted, curios_elab::DEFAULT_BUDGET).is_empty(),
             "{description}: the kernel accepted a body whose index disagrees with its declaration",
         );
     }

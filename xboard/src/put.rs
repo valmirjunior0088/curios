@@ -8,10 +8,9 @@ use {
     curios_cert::Verdict,
     curios_common::{Report, test_support::Variants},
     curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{
-        DEFAULT_BUDGET, EntryTail, Examined, examine_entrypoint, recheck, test_support::*,
-    },
+    curios_pipeline::{EntryTail, Examined, examine_entrypoint, recheck, test_support::*},
     curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, Spelling, to_core},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,

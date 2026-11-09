@@ -1,8 +1,8 @@
 //! The programs this tree ships lint clean and are written as `curios format` writes them: every instrument under `programs/`, loose as `curios lint` places a file no unit declares. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
+    curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_pipeline::DEFAULT_BUDGET,
     curios_surface::Formatted,
     curios_wonder::{Origin, Severity, Subject, diagnostics},
     std::{

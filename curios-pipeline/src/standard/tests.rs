@@ -10,7 +10,7 @@ use {
         Sharing, Term, Zonked,
     },
     curios_elab::{
-        Context, Error, Established, Reading, Recompile, Recompiled, Traces,
+        Context, DEFAULT_BUDGET, Error, Established, Reading, Recompile, Recompiled, Traces,
         elaborate_and_zonk_unit_over, test_support::*,
     },
     curios_erase::{ErasedUnit, test_support::*},
@@ -172,9 +172,12 @@ fn std_recompile_census() {
                 predecessors,
                 &SYNTAX,
                 &unit,
-                std,
-                &[false],
-                None,
+                Over {
+                    baseline: std,
+                    moved: &[false],
+                    candidates: None,
+                },
+                &|_| {},
             )
             .expect("the edited library recompiles");
             let recompiled_in = start.elapsed();
@@ -215,7 +218,7 @@ fn std_unit_reproduction() {
             let source = std_from_its_tree();
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-            compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit)
+            compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit, &|_| {})
                 .expect("the library compiles")
         };
         let (first, second) = (compiled(), compiled());
@@ -353,16 +356,19 @@ fn std_recompile_reproduction() {
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-            let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit)
+            let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit, &|_| {})
                 .expect("the edited library compiles");
             let over = compile_unit_over(
                 DEFAULT_BUDGET,
                 predecessors,
                 &SYNTAX,
                 &unit,
-                std,
-                &[false],
-                None,
+                Over {
+                    baseline: std,
+                    moved: &[false],
+                    candidates: None,
+                },
+                &|_| {},
             )
             .expect("the edited library recompiles");
 
@@ -390,7 +396,7 @@ fn std_undo_reproduction() {
         let predecessors = Predecessors::over(&roots);
         let source = std_from_its_tree();
         let first = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-        let original = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &first)
+        let original = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &first, &|_| {})
             .expect("the library compiles");
 
         println!("\n=== /std with an edit undone over the store ===");
@@ -406,9 +412,12 @@ fn std_undo_reproduction() {
                 predecessors,
                 &SYNTAX,
                 &unit,
-                &original,
-                &[false],
-                None,
+                Over {
+                    baseline: &original,
+                    moved: &[false],
+                    candidates: None,
+                },
+                &|_| {},
             )
             .expect("the edited library recompiles");
             store.file(&edited);
@@ -418,9 +427,12 @@ fn std_undo_reproduction() {
                 predecessors,
                 &SYNTAX,
                 &first,
-                &edited,
-                &[false],
-                Some(&store),
+                Over {
+                    baseline: &edited,
+                    moved: &[false],
+                    candidates: Some(&store),
+                },
+                &|_| {},
             )
             .expect("the library recompiles over the edit");
 
@@ -431,7 +443,7 @@ fn std_undo_reproduction() {
                 .map(|(name, _)| *name)
                 .collect::<Vec<_>>();
             println!("{label}");
-            println!("  objects read {:>9}", store.read.borrow().len());
+            println!("  objects read {:>9}", store.read().len());
             println!("  judged       {:>9}", judged.len());
             assert_eq!(judged, Vec::new(), "{label}: judged again");
             assert_stored_alike(&original, &undone);
@@ -450,8 +462,14 @@ fn std_part_digest_census() {
         let roots = [*sys];
         let source = std_from_its_tree();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-        let held = compile_unit(DEFAULT_BUDGET, Predecessors::over(&roots), &SYNTAX, &unit)
-            .expect("the library compiles");
+        let held = compile_unit(
+            DEFAULT_BUDGET,
+            Predecessors::over(&roots),
+            &SYNTAX,
+            &unit,
+            &|_| {},
+        )
+        .expect("the library compiles");
         let stored = restored(&held);
         let digests = |unit: &Unit| {
             part_digests(
@@ -785,15 +803,18 @@ fn std_vocabulary_reach_reproduction() {
         let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-        let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit);
+        let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit, &|_| {});
         let over = compile_unit_over(
             DEFAULT_BUDGET,
             predecessors,
             &SYNTAX,
             &unit,
-            std,
-            &[false],
-            None,
+            Over {
+                baseline: std,
+                moved: &[false],
+                candidates: None,
+            },
+            &|_| {},
         );
 
         println!("\n=== /std with a lemma of the vocabulary reading /std/Str/At/skip ===");

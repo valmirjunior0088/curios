@@ -7,10 +7,12 @@ use {
         Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
         TtySize, for_each_host_op,
     },
+    curios_anf::test_support::*,
     curios_common::Qualifier,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
+    curios_pipeline::{Fold, Stage, TestProgram, compile_with_prelude},
     curios_surface::Entrypoint,
     std::{any::Any, sync::Mutex},
 };
@@ -168,12 +170,7 @@ pub fn anf_optm(source: &str) -> curios_anf::Module {
 
 /// Whether the census settles `family`'s `constructor` field named `field` in `source` — the named assertion surface over the door's verdict, so a fixture pins the settling by name instead of grepping a dump for the op the settling later becomes.
 pub fn census_settles(source: &str, family: &str, constructor: &str, field: &str) -> bool {
-    curios_anf::test_support::census_settles_constructor_field(
-        &anf_optm(source),
-        family,
-        constructor,
-        field,
-    )
+    census_settles_constructor_field(&anf_optm(source), family, constructor, field)
 }
 
 /// The lowered Core printout of `source` — observed when the rung is reached, whether or not a later stage refuses the program, which is what lets a pin read a transient that elaboration goes on to consume or refuse.

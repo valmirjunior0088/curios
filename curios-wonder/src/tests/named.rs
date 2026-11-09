@@ -3,8 +3,8 @@
 use {
     crate::*,
     curios_core::Declared,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
-    curios_pipeline::DEFAULT_BUDGET,
     std::path::Path,
 };
 

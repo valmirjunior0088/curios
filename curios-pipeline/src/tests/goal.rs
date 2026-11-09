@@ -1,5 +1,6 @@
 //! What a goal reports — its solution, its pin, its scope and its batch. The candidates suggested to fill one are `suggestion`'s.
 
+use curios_elab::DEFAULT_BUDGET;
 use {super::test_support::*, crate::*, curios_module::RootSource};
 
 #[test]

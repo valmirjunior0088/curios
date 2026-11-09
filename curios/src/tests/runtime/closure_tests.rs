@@ -2,6 +2,7 @@
 
 use {
     crate::tests::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::MockHost,
     curios_pipeline::{Stage, compile_with_prelude},
@@ -137,16 +138,11 @@ fn folds_constant_arg_through_let_function() {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
 
     let mut optimized = None;
-    compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::CpsOptm(module) = stage {
-                optimized = Some(module.clone());
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::CpsOptm(module) = stage {
+            optimized = Some(module.clone());
+        }
+    })
     .expect("compile succeeded");
 
     let optimized = optimized.expect("Stage::CpsOptm observed");

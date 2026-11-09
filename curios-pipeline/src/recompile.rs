@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        Closing, CompileError, compile_unit_told, erasure_refusal, globals_after, kernel_refusal,
+        Closing, CompileError, compile_unit, erasure_refusal, globals_after, kernel_refusal,
         lowering_refusal, with_broken,
     },
     curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_definitions_over},
@@ -22,38 +22,14 @@ use {
     std::collections::BTreeSet,
 };
 
-/// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
+/// Compile one unit against `predecessors` over `over`'s baseline: lower whole, then elaborate, judge and erase what does not stand, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
 ///
-/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
+/// The result is a unit like [`compile_unit`]'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 ///
-/// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
+/// **`over.moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
 ///
-/// **`candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_definitions_over`).
+/// **`over.candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_definitions_over`).
 pub fn compile_unit_over(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    source: &UnitSource<'_>,
-    baseline: &Unit,
-    moved: &[bool],
-    candidates: Option<&dyn Candidates>,
-) -> Result<Unit, CompileError> {
-    compile_unit_over_told(
-        budget,
-        predecessors,
-        syntax,
-        source,
-        Over {
-            baseline,
-            moved,
-            candidates,
-        },
-        &|_| {},
-    )
-}
-
-/// [`compile_unit_over`], `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
-pub(crate) fn compile_unit_over_told(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -64,7 +40,7 @@ pub(crate) fn compile_unit_over_told(
     curios_profile::profile!("compile_unit_over");
     // A unit read from Core text holds no lowering to lower over, so a program over one is compiled whole.
     let Some(written) = over.baseline.text() else {
-        return compile_unit_told(budget, predecessors, syntax, source, told);
+        return compile_unit(budget, predecessors, syntax, source, told);
     };
     let lowered = into_core_unit_over(
         source,
@@ -81,14 +57,14 @@ pub(crate) fn compile_unit_over_told(
 
 /// What a unit is compiled over: its baseline, which predecessors the baseline was not compiled after, and what a store holds of declarations elaborated before ([`compile_unit_over`]).
 #[derive(Clone, Copy)]
-pub(crate) struct Over<'a> {
-    pub(crate) baseline: &'a Unit,
-    pub(crate) moved: &'a [bool],
-    pub(crate) candidates: Option<&'a dyn Candidates>,
+pub struct Over<'a> {
+    pub baseline: &'a Unit,
+    pub moved: &'a [bool],
+    pub candidates: Option<&'a dyn Candidates>,
 }
 
 /// [`compile_unit_over`] from the unit's lowering on, which was made over `baseline`'s: elaborate, judge and erase what does not stand. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
-pub(crate) fn compile_lowered_over(
+pub fn compile_lowered_over(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -285,7 +261,7 @@ pub(crate) fn compile_lowered_over(
 /// [`recheck`](crate::recheck) for a unit compiled over `baseline`, with the walk's own kernel: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
-pub(crate) fn recheck_over<'s>(
+pub fn recheck_over<'s>(
     definitions: &Zonked<Definitions>,
     places: &'s Places,
     budget: u64,

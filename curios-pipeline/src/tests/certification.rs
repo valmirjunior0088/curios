@@ -5,6 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{Enter, Global, Instance, Reads, Subterm, Term, Totality},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_prelude::with_prelude,
     curios_unit::Unit,

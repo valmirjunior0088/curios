@@ -37,3 +37,5 @@ serde_json = { workspace = true }
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
+# The budget the suites compile with: the elaborator's default.
+curios-elab = { workspace = true }

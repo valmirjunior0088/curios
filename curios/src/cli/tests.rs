@@ -1,6 +1,6 @@
 //! The boundary between compiler options, the optional subject and opaque program arguments.
 
-use {super::*, curios_pipeline::DEFAULT_BUDGET, std::iter};
+use {super::*, curios_elab::DEFAULT_BUDGET, std::iter};
 
 fn run(words: &[&str]) -> (Option<String>, Vec<OsString>, Elaboration) {
     let cli = Cli::try_parse_from(iter::once("curios").chain(words.iter().copied())).unwrap();

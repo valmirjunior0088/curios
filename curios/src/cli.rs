@@ -15,6 +15,7 @@ use {
         error::ErrorKind,
         value_parser,
     },
+    curios_elab::DEFAULT_BUDGET,
     curios_package::Target,
     curios_pipeline::Stage,
     curios_wonder::Place,
@@ -58,7 +59,7 @@ pub struct ManifestFlag {
 pub struct Elaboration {
     #[arg(
         long,
-        default_value_t = curios_pipeline::DEFAULT_BUDGET,
+        default_value_t = DEFAULT_BUDGET,
         value_name = "UNITS",
         help = "Units of reduction work each declaration may spend while type checking"
     )]

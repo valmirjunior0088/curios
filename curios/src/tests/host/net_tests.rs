@@ -4,6 +4,7 @@ use {
     crate::test_support::*,
     crate::tests::test_support::*,
     curios_common::{fill, test_support::*},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_pipeline::compile_with_prelude,
@@ -308,13 +309,9 @@ fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/abort", Termination);
@@ -340,13 +337,9 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/double", |x: u64| x * 2);
@@ -373,13 +366,9 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/flip", |byte: u8| 255 - byte);
@@ -409,13 +398,9 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/halve", |x: f64| x / 2.0);
@@ -443,13 +428,9 @@ fn a_foreign_flt_may_stand_before_another_result() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/probe", |n: u64| (n as f64 * 2.0, n + 4));
@@ -482,13 +463,9 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/split", |bytes: Vec<u8>| {
@@ -524,13 +501,9 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/nats", |xs: Vec<u64>| {
@@ -574,13 +547,9 @@ fn an_option_crosses_both_ways() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/succ", |n: Option<u64>| n.map(|n| n + 1));
@@ -609,13 +578,9 @@ fn a_list_element_past_the_wire_is_refused() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &source, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::empty();
     bindings.define("/nats", |xs: Vec<u64>| xs);

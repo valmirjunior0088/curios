@@ -2,11 +2,12 @@
 
 use {
     super::test_support::*,
-    crate::{After, DEFAULT_BUDGET, Earlier, recheck, test_support::*},
+    crate::{After, Earlier, recheck, test_support::*},
     curios_abi::ForeignStore,
     curios_cert::{Error, Verdict},
     curios_common::{Mount, Qualifier, RootKind},
     curios_core::{Definitions, Entrypoint, Global, Program, Term, Universes, Zonked},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
     curios_prelude::with_prelude,
     curios_surface::{CoreFile, FormScope, to_core},

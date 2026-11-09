@@ -7,8 +7,9 @@
 use {
     super::*,
     curios_common::{RootKind, fill, test_support::*},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{open_entrypoint, read_module},
-    curios_pipeline::{Cache, DEFAULT_BUDGET, Fold},
+    curios_pipeline::{Cache, Fold},
     curios_wasm::to_bytes,
     std::path::PathBuf,
 };

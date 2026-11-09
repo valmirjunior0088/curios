@@ -796,6 +796,7 @@ name = "curios-js"
 version = "0.16.20"
 dependencies = [
  "curios-browser",
+ "curios-elab",
  "curios-module",
  "curios-pipeline",
  "curios-surface",
@@ -977,6 +978,7 @@ dependencies = [
  "curios-cert",
  "curios-common",
  "curios-core",
+ "curios-elab",
  "curios-module",
  "curios-package",
  "curios-pipeline",
@@ -1004,6 +1006,7 @@ dependencies = [
  "curios-core",
  "curios-cps",
  "curios-document",
+ "curios-elab",
  "curios-module",
  "curios-package",
  "curios-pipeline",

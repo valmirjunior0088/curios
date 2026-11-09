@@ -3,6 +3,7 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_unit::{Predecessors, Unit},
@@ -87,6 +88,7 @@ fn folded_offered(
                     Progress::Entry => "entry".to_string(),
                 });
             },
+            None,
         )
     })
     .expect("the units compile");
@@ -202,8 +204,13 @@ fn program_through(source: &str, cache: &dyn Cache) -> String {
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),
             Some(cache),
-            |_| {},
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+            },
         )
+        .map(TestProgram::built)
     })
     .map(|(module, _foreigns)| module.to_string())
     .expect("the program compiles")
@@ -282,8 +289,13 @@ fn compiled_through(source: &str, cache: &dyn Cache) -> Result<(), String> {
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),
             Some(cache),
-            |_| {},
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+            },
         )
+        .map(TestProgram::built)
     })
     .map(|_| ())
     .map_err(|error| error.to_string())
@@ -334,8 +346,13 @@ let wrong: Nat = \"a\";
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),
             Some(&cache),
-            |_| {},
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+            },
         )
+        .map(TestProgram::built)
     })
     .map(|_| ())
     .expect_err("neither the declaration nor the final term checks");

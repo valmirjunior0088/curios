@@ -2,8 +2,8 @@ use {
     super::*,
     crate::*,
     curios_cps::{Fate, Outcome},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_pipeline::DEFAULT_BUDGET,
 };
 
 /// Every declaration's fate, asked for the way the one-shot transport asks.

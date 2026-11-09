@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*, crate::*, curios_common::Qualifier, curios_core::Global,
-    std::fmt::Write,
+    curios_elab::DEFAULT_BUDGET, std::fmt::Write,
 };
 
 #[test]

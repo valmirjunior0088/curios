@@ -3,9 +3,10 @@
 use {
     crate::test_support::*,
     curios_cps::{FieldGroup, Intrinsic, Node, ValueExpr},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
 };
 

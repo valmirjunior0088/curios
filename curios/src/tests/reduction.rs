@@ -13,8 +13,9 @@ use {
     super::*,
     curios_common::fill,
     curios_core::{Consumption, Cost},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     std::time::{Duration, Instant},
 };

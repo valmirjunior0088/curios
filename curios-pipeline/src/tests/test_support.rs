@@ -1,6 +1,4 @@
 //! Compiling a program end to end and reading the answer back: the harness every case in these suites asserts through.
-//!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
     crate::{compile::test_support::*, *},
@@ -19,19 +17,24 @@ use {
 
 /// What a store holds of the units filed into it, by name, and the name of every object a compile read out of it: a store's candidates, held in memory.
 #[derive(Default)]
-pub(crate) struct Store {
+pub struct Store {
     objects: BTreeMap<Digest, Object>,
-    pub(crate) read: RefCell<Vec<Digest>>,
+    read: RefCell<Vec<Digest>>,
 }
 
 impl Store {
     /// File `unit`: every object it names, each once, its records completed as a store's filing completes them.
-    pub(crate) fn file(&mut self, unit: &Unit) {
+    pub fn file(&mut self, unit: &Unit) {
         complete_records(unit);
         let stored = unit.stored().expect("a unit serializes");
         for object in stored.objects(|_| true).expect("a unit's objects are made") {
             self.objects.entry(object.digest).or_insert(object);
         }
+    }
+
+    /// The name of every object a compile read out of the store, in the order it was read.
+    pub fn read(&self) -> Vec<Digest> {
+        self.read.borrow().clone()
     }
 }
 
@@ -52,11 +55,11 @@ impl Candidates for Store {
 }
 
 /// A fixture's entrypoint. Every fixture is a program, so its final term describes doing something and yielding nothing: one whose subject is a term binds it in a `let` at the type under test and closes with `Io/pure(())`.
-pub(super) fn entrypoint_of(source: &str) -> Entrypoint {
+pub fn entrypoint_of(source: &str) -> Entrypoint {
     source.parse::<Entrypoint>().unwrap()
 }
 
-pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
+pub fn compile(source: &str) -> Result<curios_wasm::Module, String> {
     let entrypoint = entrypoint_of(source);
 
     compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
@@ -64,7 +67,7 @@ pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
         .map_err(String::from)
 }
 
-pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
+pub fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let entrypoint = entrypoint_of(source);
     let mut anf = String::new();
     let mut cps = String::new();
@@ -84,7 +87,7 @@ pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), S
 }
 
 /// Whether a report spells a metavariable by its id — `?2659` — which no report should.
-pub(super) fn mentions_metavar_id(report: &str) -> bool {
+pub fn mentions_metavar_id(report: &str) -> bool {
     report
         .chars()
         .zip(report.chars().skip(1))
@@ -93,7 +96,7 @@ pub(super) fn mentions_metavar_id(report: &str) -> bool {
 
 // --- A: typecheck-only (stop after zonk, no lowering) ---------------------
 
-pub(super) fn typecheck(source: &str) -> Result<(), String> {
+pub fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = entrypoint_of(source);
     with_prelude(|prelude| {
         elaborate_and_zonk(
@@ -113,7 +116,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
 /// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the program's own items erased over the archived prelude's erased forms and linked with what they reach — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
 /// Over the archive rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. It is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
-pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
+pub fn erase_to_anf(source: &str) -> curios_anf::Module {
     let entrypoint = entrypoint_of(source);
     let program = with_prelude(|prelude| {
         elaborate_and_zonk(
@@ -153,7 +156,7 @@ pub(super) fn erase_to_anf(source: &str) -> curios_anf::Module {
 // These tests come in a pair. A unit boundary is not packaging: it is where coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the second because the rule never ran.
 
 /// Compile `sources` as units in order, then `entrypoint` as the entry against all of them.
-pub(crate) fn compile_with_units(
+pub fn compile_with_units(
     sources: &[(&str, &str)],
     entrypoint: &str,
 ) -> Result<curios_wasm::Module, String> {
@@ -185,6 +188,7 @@ pub(crate) fn compile_with_units(
             &sources,
             None,
             |_| {},
+            None,
         )?;
         let predecessors = prelude
             .iter()
@@ -198,8 +202,13 @@ pub(crate) fn compile_with_units(
             &SYNTAX,
             &UnitSource::entry(&entry, &RootSource::none()),
             None,
-            |_| {},
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+            },
         )
+        .map(TestProgram::built)
         .map(|(module, _foreigns)| module)
     })
     .map_err(String::from)
@@ -208,7 +217,7 @@ pub(crate) fn compile_with_units(
 // --- A unit over a baseline ------------------------------------------------
 
 /// `source` as the modules of a unit mounted at `prefix`, supplied already parsed.
-pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
+pub fn mounted(prefix: &str, source: &str) -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root(
         prefix,
@@ -224,7 +233,7 @@ pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
 /// `source` written to a file and mounted at `prefix`, so it is read the way the compiler reads any module — the parser resynchronizing past an item it cannot read.
 ///
 /// [`mounted`] is the strict `FromStr` spelling, which refuses such a text whole: right for a fixture written to compile, where a typo should fail at the fixture rather than as a diagnostic about a program nobody wrote, and wrong for one written *not* to. The guard comes back with the source because the file has to outlive every read of it.
-pub(super) fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
+pub fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
     let directory = Temporary::new("pipeline", prefix);
     fs::create_dir_all(&*directory).expect("a fixture directory");
     fs::write(directory.join("lib.crs"), source).expect("a fixture is written");
@@ -235,7 +244,7 @@ pub(super) fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
 }
 
 /// `files` written under a directory of their own, named for the fixture, and mounted as `/lib` with `lib.crs` its header: a unit of several files, each read as the compiler reads any.
-pub(super) fn written_files(name: &str, files: &[(&str, &str)]) -> (Temporary, RootSource) {
+pub fn written_files(name: &str, files: &[(&str, &str)]) -> (Temporary, RootSource) {
     let directory = Temporary::new("pipeline", name);
     fs::create_dir_all(&*directory).expect("a fixture directory");
     for (file, source) in files {
@@ -248,7 +257,7 @@ pub(super) fn written_files(name: &str, files: &[(&str, &str)]) -> (Temporary, R
 }
 
 /// The unit mounted at `prefix` as the files under `directory` hold it now: what a fixture reads again once it has rewritten one.
-pub(super) fn read_from(prefix: &str, directory: &Temporary) -> RootSource {
+pub fn read_from(prefix: &str, directory: &Temporary) -> RootSource {
     RootSource::mounted(
         prefix,
         RootKind::Ordinary,
@@ -258,12 +267,12 @@ pub(super) fn read_from(prefix: &str, directory: &Temporary) -> RootSource {
 }
 
 /// `source` compiled whole as the unit `/lib`, against the prelude.
-pub(super) fn unit_of(source: &str) -> Unit {
+pub fn unit_of(source: &str) -> Unit {
     compile_modules(&mounted("lib", source)).expect("the unit compiles")
 }
 
 /// `source` lowered once over `predecessors` and elaborated with each declaration's binders counted from `floor` above what its lowering minted: the elaborated module, which no floor may move, since an order the elaborator puts atoms in reads an identity by its age and never by its value. Each declaration's elaboration counts its binders from above its lowering's count, so a count raised starts every binder elaboration opens that much higher, the order among them kept.
-pub(crate) fn elaborated_above(
+pub fn elaborated_above(
     source: &UnitSource<'_>,
     predecessors: Predecessors<'_>,
     floor: u64,
@@ -272,7 +281,7 @@ pub(crate) fn elaborated_above(
 }
 
 /// `source` lowered once over `predecessors` and elaborated in a context whose caches clear every table at every boundary ([`curios_elab::Context::wholesale`]): the module keeping an answer for as long as what it read stands must not move.
-pub(crate) fn elaborated_wholesale(
+pub fn elaborated_wholesale(
     source: &UnitSource<'_>,
     predecessors: Predecessors<'_>,
 ) -> Definitions {
@@ -322,7 +331,7 @@ fn elaborated(
 }
 
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
-pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
+pub fn unused_binders(unit: &Unit) -> Vec<String> {
     unit.text()
         .expect("a program's unit holds its lowering")
         .lints()
@@ -333,12 +342,12 @@ pub(super) fn unused_binders(unit: &Unit) -> Vec<String> {
 }
 
 /// `source` compiled as the unit `/lib` over `baseline`, against the prelude.
-pub(super) fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, String> {
+pub fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, String> {
     recompile_modules(&mounted("lib", source), baseline)
 }
 
 /// `source` compiled whole as the unit at `prefix`, against the prelude and then `units`, each of which it may name.
-pub(super) fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
+pub fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
     let modules = mounted(prefix, source);
 
     with_prelude(|prelude| {
@@ -349,6 +358,7 @@ pub(super) fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
             Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::mounted(&modules),
+            &|_| {},
         )
     })
     .map_err(String::from)
@@ -356,7 +366,7 @@ pub(super) fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
 }
 
 /// `source` compiled as the unit at `prefix` over `baseline`, against the prelude and then `units`, where `moved` says of each of `units` whether it is other than the one `baseline` was compiled after. The prelude's units are the compiler's own, which no baseline is compiled after another of.
-pub(super) fn recompile_after(
+pub fn recompile_after(
     prefix: &str,
     source: &str,
     baseline: &Unit,
@@ -378,9 +388,12 @@ pub(super) fn recompile_after(
             Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::mounted(&modules),
-            baseline,
-            &moved,
-            None,
+            Over {
+                baseline,
+                moved: &moved,
+                candidates: None,
+            },
+            &|_| {},
         )
     })
     .map_err(String::from)
@@ -388,7 +401,7 @@ pub(super) fn recompile_after(
 }
 
 /// A whole compile of modules already supplied, handing back what it said rather than expecting it to compile — which is what a fixture written *not* to compile needs, and what lets its answer be held against the recompile's.
-pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
+pub fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_BUDGET,
@@ -397,6 +410,7 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
             &[(UnitSource::mounted(modules), None)],
             None,
             |_| {},
+            None,
         )
     })
     .map_err(String::from)
@@ -404,12 +418,12 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
 }
 
 /// Every unit `sources` holds, compiled in order against the prelude, each after the ones before it.
-pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
+pub fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
     compile_each(sources).expect("the units compile")
 }
 
 /// [`compile_in_order`], handing back what the first unit that does not compile said: no program is compiled over the units, so a refusal is a unit's own.
-pub(super) fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String> {
+pub fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_BUDGET,
@@ -421,29 +435,33 @@ pub(super) fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String>
                 .collect::<Vec<_>>(),
             None,
             |_| {},
-        )
-    })
-    .map_err(String::from)
-}
-
-/// [`recompile_over`] over modules already supplied; the recompiling half of [`compile_modules`]'s differential.
-pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, String> {
-    with_prelude(|prelude| {
-        compile_unit_over(
-            DEFAULT_BUDGET,
-            Predecessors::over(prelude),
-            &SYNTAX,
-            &UnitSource::mounted(modules),
-            baseline,
-            &vec![false; prelude.len()],
             None,
         )
     })
     .map_err(String::from)
 }
 
+/// [`recompile_over`] over modules already supplied; the recompiling half of [`compile_modules`]'s differential.
+pub fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, String> {
+    with_prelude(|prelude| {
+        compile_unit_over(
+            DEFAULT_BUDGET,
+            Predecessors::over(prelude),
+            &SYNTAX,
+            &UnitSource::mounted(modules),
+            Over {
+                baseline,
+                moved: &vec![false; prelude.len()],
+                candidates: None,
+            },
+            &|_| {},
+        )
+    })
+    .map_err(String::from)
+}
+
 /// The differential predicate: the two elaborated modules agree item by item in order, and on every registry entry.
-pub(super) fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) {
+pub fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) {
     assert_eq!(
         whole.items.len(),
         incremental.items.len(),
@@ -463,7 +481,7 @@ pub(super) fn assert_definitions_agree(whole: &Definitions, incremental: &Defini
 }
 
 /// What a unit stores of the lowering's baseline half `text` holds: its own part, then each record and scan, each stored alone.
-pub(crate) fn lowering_stored(text: &PreparedText) -> Vec<u8> {
+pub fn lowering_stored(text: &PreparedText) -> Vec<u8> {
     let mut bytes = text.baseline_table().expect("a baseline half serializes");
     for object in text
         .baseline_objects(&|_| true)
@@ -476,7 +494,7 @@ pub(crate) fn lowering_stored(text: &PreparedText) -> Vec<u8> {
 }
 
 /// What a unit stores of `traces`: the rest of them, then each declaration's trace, all in one run.
-pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
+pub fn traces_stored(traces: &Traces) -> Vec<u8> {
     let mut bytes = curios_archive::to_bytes(traces)
         .expect("a unit's traces serialize")
         .to_vec();
@@ -493,7 +511,7 @@ pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
 }
 
 /// What a unit stores of `asked`, what erasing its items read: the rest of it, then each item's record, all in one run.
-pub(crate) fn asked_stored(asked: &AskedItems) -> Vec<u8> {
+pub fn asked_stored(asked: &AskedItems) -> Vec<u8> {
     let mut bytes = curios_archive::to_bytes(asked)
         .expect("what erasing a unit read serializes")
         .to_vec();
@@ -510,7 +528,7 @@ pub(crate) fn asked_stored(asked: &AskedItems) -> Vec<u8> {
 }
 
 /// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
-pub(crate) fn restored(unit: &Unit) -> Unit {
+pub fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
     let objects = stored
         .objects(|_| true)
@@ -524,7 +542,7 @@ pub(crate) fn restored(unit: &Unit) -> Unit {
 /// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each object by its digest, and where they are not, which parts.
 ///
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
-pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
+pub fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     complete_records(whole);
     complete_records(incremental);
     let stored = |unit: &Unit| unit.stored().expect("a unit serializes").index;
@@ -604,7 +622,7 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
 }
 
 /// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.
-pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
+pub fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
     let body = |unit: &Unit| {
         unit.core()
             .items
@@ -629,7 +647,7 @@ pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
 }
 
 /// Whether `unit` holds the very allocation `baseline` holds for the lowered body of the `let` named `name`: its lowering was the baseline's, kept, since every lowering builds its own terms.
-pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
+pub fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
     let body = |unit: &Unit| {
         let declared = unit
             .core()
@@ -659,7 +677,7 @@ pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
 }
 
 /// The variance vector `unit` carries for the inductive family named `family`.
-pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
+pub fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
     unit.core()
         .induct_decls()
         .iter()
@@ -669,7 +687,7 @@ pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
 }
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
-pub(super) const BASE: &str = "use /std/{Nat};
+pub const BASE: &str = "use /std/{Nat};
 
 pub let double(n: Nat) -> Nat = n + n;
 
@@ -679,7 +697,7 @@ pub let unrelated: Nat = 7;
 ";
 
 /// Where the terms of the definition `unit` calls `name` were written, as `unit`'s own text places them: each position's line with the text it covers, in order and once each.
-pub(super) fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
+pub fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
     let definition = unit
         .core()
         .items
@@ -732,7 +750,7 @@ pub(super) fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
 }
 
 /// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the kernel does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
-pub(super) const UNTAKEN: &str = "use /std/{Nat};
+pub const UNTAKEN: &str = "use /std/{Nat};
 
 pub let spin(n: Nat) -> Nat = spin(n);
 
@@ -746,7 +764,7 @@ pub let unrelated: Nat = 7;
 ";
 
 /// Compile `source`, whose every `?` a goal report determines, write each goal's reported solution over the goal's own span, and compile the result. An error names the program as rewritten, so a failure shows the spelling that did not read back.
-pub(super) fn reads_back(source: &str) -> Result<(), String> {
+pub fn reads_back(source: &str) -> Result<(), String> {
     let rewritten = pasted(source)?;
     compile(&rewritten)
         .map(|_| ())
@@ -754,7 +772,7 @@ pub(super) fn reads_back(source: &str) -> Result<(), String> {
 }
 
 /// `source` with each goal's reported solution written over the goal's own span.
-pub(super) fn pasted(source: &str) -> Result<String, String> {
+pub fn pasted(source: &str) -> Result<String, String> {
     let reports = match compile_with_prelude(
         DEFAULT_BUDGET,
         &entrypoint_of(source),
@@ -790,7 +808,7 @@ pub(super) fn pasted(source: &str) -> Result<String, String> {
 }
 
 /// Whether every goal `source` writes is reported with a term shown as the compiler holds it: a report declines a term no program writes where its reader stands, and says so.
-pub(super) fn declined(source: &str) -> bool {
+pub fn declined(source: &str) -> bool {
     let Err(CompileError::Incomplete(reports)) = compile_with_prelude(
         DEFAULT_BUDGET,
         &entrypoint_of(source),
@@ -806,7 +824,7 @@ pub(super) fn declined(source: &str) -> bool {
 }
 
 /// The `? = …` line of a goal report, with the lines a long solution breaks onto: those are indented past the two spaces every other line of the report takes.
-pub(super) fn solution(message: &str) -> Option<String> {
+pub fn solution(message: &str) -> Option<String> {
     let mut lines = message.lines();
     let first = lines
         .by_ref()

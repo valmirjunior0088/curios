@@ -1,8 +1,8 @@
 use {
     super::*,
     crate::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_pipeline::DEFAULT_BUDGET,
     lsp_types::{DocumentSymbol, Position, SymbolKind},
     std::{
         collections::BTreeMap,

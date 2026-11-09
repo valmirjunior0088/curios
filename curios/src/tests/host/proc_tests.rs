@@ -5,6 +5,7 @@ use {
     crate::tests::test_support::*,
     curios_abi::ChildExit,
     curios_common::fill,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::compile_with_prelude,
@@ -78,13 +79,9 @@ fn exit_halts_with_code() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
     let code =
@@ -121,13 +118,9 @@ fn exit_in_local_binding_halts() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
     let code =
@@ -156,13 +149,9 @@ fn an_exit_ends_a_region_of_any_type() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
     let code =
@@ -181,13 +170,9 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
     let code =

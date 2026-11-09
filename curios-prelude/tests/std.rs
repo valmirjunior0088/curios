@@ -5,10 +5,11 @@
 use {
     curios::{TestSubject, test_subjects, test_support::*},
     curios_common::{Qualifier, fill},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_package::{Selection, Spelling, Target},
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_prelude::std_module::*,
     curios_surface::{Entrypoint, Formatted},
     curios_unicode::{

@@ -1,8 +1,9 @@
 //! The Curios compiler in the browser, for a browser build (`cargo xtask bundle build`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline, [`compile`]. Running what it compiles is `curios-browser`'s, whose `run` the same bundle exports, and the rows `compile` hands back are rendered by it, so the playground's two calls agree on one description of a program.
 
 use {
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     curios_wasm::to_bytes,
     js_sys::{JSON, Object, Reflect, Uint8Array},

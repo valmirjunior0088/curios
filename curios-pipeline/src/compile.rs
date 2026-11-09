@@ -4,14 +4,14 @@
 pub mod test_support;
 
 use {
-    super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over_told},
+    super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
-    curios_cert::{Globals, Kernel, Verdict, certify_definitions, certify_program},
+    curios_cert::{Globals, Verdict, certify_definitions, certify_program},
     curios_common::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     curios_core::{
-        Anchors, Consumption, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec,
-        Row, Subterm, Term, Transient, Zonked,
+        Anchors, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row, Subterm,
+        Term, Transient, Zonked,
     },
     curios_elab::{
         Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
@@ -176,7 +176,7 @@ impl From<CompileError> for String {
 }
 
 /// What a unit holding items the parser could not read compiles to: a refusal listing every broken item, ahead of whatever elaboration said of the rest — a broken item is refused as a refused item is, and the reader fixing it is owed the goals and refusals beside it in the same run. Nothing past elaboration is reached, so no unit is judged, erased or filed with a hole in it.
-pub(crate) fn with_broken<T>(
+pub fn with_broken<T>(
     broken: &[BrokenItem],
     result: Result<T, CompileError>,
 ) -> Result<T, CompileError> {
@@ -205,22 +205,6 @@ pub fn recheck(
         .verdicts
 }
 
-/// [`recheck`], handing the walk's own kernel to `read` for a measurement to take what it wants of it rather than only its verdicts. See `curios_cert::certify_program`.
-///
-/// A reader rather than the kernel handed back: the kernel reads its scope where the units hold it, so it lives no longer than the environment assembled here.
-pub fn recheck_measured<T>(
-    program: &curios_core::Zonked<Program>,
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    read: impl FnOnce(&Kernel<'_>) -> T,
-) -> (Vec<Verdict>, T) {
-    let globals = globals(predecessors);
-    let (rechecked, kernel) = certify_program(program, budget, &globals, *syntax);
-
-    (rechecked.verdicts, read(&kernel))
-}
-
 /// Where a report about the unit lowered as `text` is placed: the unit's own declarations first, then those of the units in its scope.
 fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec<&'a Anchors> {
     std::iter::once(text.anchors())
@@ -229,7 +213,7 @@ fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec
 }
 
 /// What elaboration or erasure refused `module` with, as a compilation reports it: every member read against one set of tables, so a name is spelled and a declaration placed alike whichever stage refused. `text` is the lowering the refused terms came from and `predecessors` the units it was lowered against, whose tables say how a name is written and where a declaration lies; `lexicons` are those of every unit `module` was read over, which is the lowering's own unit too where `module` is a term elaborated over it.
-pub(crate) fn elaborator_refusal(
+pub fn elaborator_refusal(
     error: &curios_elab::Error,
     definitions: &curios_core::Definitions,
     lexicons: &[&curios_core::Lexicon],
@@ -249,7 +233,7 @@ pub(crate) fn elaborator_refusal(
 }
 
 /// [`elaborator_refusal`] of the module the lowering `text` made, read where its unit keeps what a report spells the unit's own names by and places its reader in ([`PreparedText::lexicon`], [`PreparedText::places`]): over a baseline, those of the baseline revised, so a refusal reads the declarations the edit reached.
-pub(crate) fn lowering_refusal(
+pub fn lowering_refusal(
     error: &curios_elab::Error,
     lexicons: &[&curios_core::Lexicon],
     text: &PreparedText,
@@ -290,7 +274,7 @@ fn refusal_read(
 }
 
 /// What erasure refused `module` with, as the one report each of its refusals is: in erasure's words, the program having been certified.
-pub(crate) fn erasure_refusal(
+pub fn erasure_refusal(
     error: &curios_erase::Error,
     definitions: &curios_core::Definitions,
     lexicons: &[&curios_core::Lexicon],
@@ -333,12 +317,12 @@ fn read_for_report(
 }
 
 /// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
-pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
+pub fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
     globals_after(predecessors, &vec![false; predecessors.units().len()])
 }
 
 /// [`globals`] for a walk over a baseline: `moved` says of each predecessor whether it is other than the unit the baseline's walk read.
-pub(crate) fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Globals<'a> {
+pub fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Globals<'a> {
     let mut globals = Globals::default();
     for unit in predecessors.units() {
         globals.mount(unit.core(), unit.places(), unit.certification());
@@ -349,7 +333,7 @@ pub(crate) fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) 
 }
 
 /// The compile error a kernel verdict is reported as: the refusal, named for the item it is about where there is one.
-pub(crate) fn kernel_refusal(
+pub fn kernel_refusal(
     verdict: &Verdict,
     definitions: &curios_core::Definitions,
     scope: &[&curios_core::Lexicon],
@@ -385,54 +369,6 @@ impl fmt::Display for Refused {
 pub struct Obligation {
     pub error: curios_elab::Error,
     pub reported: Vec<Report>,
-}
-
-/// A program type-checked and not yet put to the kernel.
-#[derive(Debug)]
-pub struct Typechecked {
-    pub program: Program,
-    /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised. Empty when it carries none.
-    pub obligations: Vec<Obligation>,
-    /// What the heaviest declaration consumed: the units and peak depth `DEFAULT_BUDGET` is set against, and the only figures that say whether a program's cost is depth or work. A measurement's, which nothing in the compiler reads.
-    pub consumption: Consumption,
-}
-
-/// Lower and type-check `entrypoint` as a compilation does, stopping short of the kernel, with the erasure obligations reported rather than raised.
-///
-/// The elaborated program comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one program be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the kernel to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. What the program's tail is checked against is the compile path's, the entry's `Io({})` contract, which both read off `stated`; what differs is that the program is elaborated whole here, its declarations and its final term as one module, where a compilation takes the declarations as the unit they are.
-///
-/// Each refusal carries the elaborator's error as it raised it beside the diagnostic a compilation prints, since rendering is where a consumer that matches the error's variant would lose it. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
-pub fn typecheck_entrypoint(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-) -> Result<Typechecked, Refused> {
-    let lowered =
-        lower_entry(predecessors, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
-            Refused {
-                error: None,
-                reported,
-            }
-        })?;
-
-    let established = Established::placed(&predecessors.placed());
-    let mut context = Context::new(budget, *syntax);
-    let (program, obligations) = elaborate_entry(
-        &mut context,
-        &established,
-        predecessors,
-        lowered,
-        EntryTail::Program,
-        &mut |_| {},
-    )?;
-
-    Ok(Typechecked {
-        program,
-        obligations,
-        consumption: context.heaviest_declaration(),
-    })
 }
 
 /// Put `entry` to what `tail` judges an authored entry at: the program contract, with what closes the program executed ([`executed`]), or the empty proposition where it is put as a proof. A test program's entry is left as it stands: its tail is the elaborator's to synthesize and to state the type of.
@@ -711,7 +647,7 @@ fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<Tes
 }
 
 /// The lowering half of the prologue: the surface tree to a core module, observed as the `text` rung.
-fn lower_entry<O>(
+pub fn lower_entry<O>(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
@@ -757,10 +693,10 @@ where
     (findings, verdict)
 }
 
-/// The elaboration of a program put whole, its declarations and the term that closes it as one module, in `context`, which the caller reads its credits and its consumption from however this ends. Beside the program come the erasure obligations elaboration decided over it, reported and never raised: what puts a program whole is an instrument that hands the same program to the kernel ([`typecheck_entrypoint`], [`examine_entrypoint`]), where a compilation takes a program's declarations as the unit they are (`enter`). What the entry is judged at is stated once for both (`state`).
+/// The elaboration of a program put whole, its declarations and the term that closes it as one module, in `context`, which the caller reads its credits and its consumption from however this ends. Beside the program come the erasure obligations elaboration decided over it, reported and never raised: what puts a program whole is an instrument that hands the same program to the kernel (`typecheck_entrypoint`, [`examine_entrypoint`]), where a compilation takes a program's declarations as the unit they are (`enter`). What the entry is judged at is stated once for both (`state`).
 ///
 /// `predecessors` are the units in scope, read where a report is made: where each one's declarations lie, which a report placed in one of them is resolved against, after the entry's own, the paths each gives its names, and the lexicon each keeps, which a report spells a name by.
-fn elaborate_entry<'s, O>(
+pub fn elaborate_entry<'s, O>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     predecessors: Predecessors<'_>,
@@ -868,20 +804,8 @@ where
 ///
 /// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
 ///
-/// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
+/// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module. `read`, where there is one, is told the program's lowering as soon as it is made ([`ReadLowering`]).
 pub fn check_entrypoint(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    source: &UnitSource<'_>,
-    cache: Option<&dyn Cache>,
-    tail: EntryTail,
-) -> Result<Checked, CompileError> {
-    check_entrypoint_reading(budget, predecessors, syntax, source, cache, tail, None)
-}
-
-/// [`check_entrypoint`], with `read` told the program's lowering as soon as it is made ([`ReadLowering`]).
-pub(crate) fn check_entrypoint_reading(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -920,12 +844,12 @@ fn nothing() -> curios_core::Definitions {
 }
 
 /// What compiling a unit as a program's declarations adds to compiling it as any unit: the term that closes the program, elaborated in the unit's walk, and what is told of the unit on the way.
-pub(crate) struct Closing<'a> {
-    pub(crate) tail: Tail<'a>,
+pub struct Closing<'a> {
+    pub tail: Tail<'a>,
     /// Told the unit's module and the entry as they elaborated, before anything judges them.
-    pub(crate) elaborated: &'a mut dyn FnMut(&curios_core::Definitions, &curios_core::Entrypoint),
+    pub elaborated: &'a mut dyn FnMut(&curios_core::Definitions, &curios_core::Entrypoint),
     /// Told the unit's lowering, credited by its elaboration, where the unit is refused: what a question reads the program's findings off whatever the verdict.
-    pub(crate) refused: &'a mut dyn FnMut(&PreparedText),
+    pub refused: &'a mut dyn FnMut(&PreparedText),
 }
 
 /// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
@@ -1278,7 +1202,7 @@ pub struct Examined {
 
 /// Put `entrypoint` to both checkers at what `tail` judges it at — the program contract, as a suite guarding a rule puts a program, or `False`, as the soundness board puts a witness — and hand back what each said rather than stopping at the first refusal: lowering, elaboration, the kernel.
 ///
-/// The program is put whole, its declarations and the term that closes it elaborated as one module and judged as one, with one difference from the compile path: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what [`check_entrypoint`] cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
+/// The program is put whole, its declarations and the term that closes it elaborated as one module and judged as one, with one difference from the compile path: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what `check_entrypoint` cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
 pub fn examine_entrypoint(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -1348,20 +1272,10 @@ where
     (wasm_module, imported)
 }
 
-/// Compile one unit against `predecessors`: lower, elaborate, judge, erase.
+/// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
 ///
 /// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the kernel refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the kernel.
 pub fn compile_unit(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    source: &UnitSource<'_>,
-) -> Result<Unit, CompileError> {
-    compile_unit_told(budget, predecessors, syntax, source, &|_| {})
-}
-
-/// [`compile_unit`], `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
-pub(crate) fn compile_unit_told(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -1377,7 +1291,7 @@ pub(crate) fn compile_unit_told(
 }
 
 /// [`compile_unit`] from the unit's lowering on: elaborate, judge, erase. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
-pub(crate) fn compile_lowered(
+pub fn compile_lowered(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -1513,13 +1427,13 @@ pub trait Cache {
 pub struct Earlier {
     pub unit: Unit,
     pub after: After,
-    /// What a declaration's elaboration, an item's erasure and its verdict may be taken from ([`compile_unit_over`](crate::compile_unit_over)): `None` for a cache that keeps nothing of the kind.
+    /// What a declaration's elaboration, an item's erasure and its verdict may be taken from (`compile_unit_over`): `None` for a cache that keeps nothing of the kind.
     pub candidates: Option<Rc<dyn Candidates>>,
 }
 
 /// Which units in scope a baseline was compiled after, as whoever offers it can say.
 ///
-/// What a baseline read of a unit it was compiled after stands, and what it read of any other is asked again, by each stage of its own record ([`compile_unit_over`](crate::compile_unit_over)). So the answer decides how much is asked and nothing of what is concluded: an offer that names fewer units than it could asks more.
+/// What a baseline read of a unit it was compiled after stands, and what it read of any other is asked again, by each stage of its own record (`compile_unit_over`). So the answer decides how much is asked and nothing of what is concluded: an offer that names fewer units than it could asks more.
 pub enum After {
     /// Every unit in scope: the baseline is an image of the unit as it stands among them.
     Scope,
@@ -1552,22 +1466,9 @@ impl After {
 /// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
 ///
 /// Each source arrives beside the baseline its assembler offers for it — `None` for every unit but one taking a prelude root's place, which is decided where the sources are built rather than recognized here. The offer goes to `cache` on a miss, which decides what becomes of it, and with no cache nothing is taken.
+///
+/// `read`, where there is one, is told the last unit's lowering as soon as it is made or restored (`ReadLowering`).
 pub fn compile_units<'a, P>(
-    budget: u64,
-    base: Predecessors<'a>,
-    syntax: &SyntaxRegistry,
-    sources: &[(UnitSource<'_>, Option<&Unit>)],
-    cache: Option<&dyn Cache>,
-    progress: P,
-) -> Result<Vec<Unit>, CompileError>
-where
-    P: FnMut(Progress<'_>),
-{
-    compile_units_reading(budget, base, syntax, sources, cache, progress, None)
-}
-
-/// [`compile_units`], with `read` told the last unit's lowering as soon as it is made or restored ([`ReadLowering`]).
-pub(crate) fn compile_units_reading<'a, P>(
     budget: u64,
     base: Predecessors<'a>,
     syntax: &SyntaxRegistry,
@@ -1620,7 +1521,7 @@ where
                 unit: baseline,
                 after,
                 candidates,
-            }) => compile_unit_over_told(
+            }) => compile_unit_over(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
@@ -1635,7 +1536,7 @@ where
                 },
                 &told,
             )?,
-            None => compile_unit_told(
+            None => compile_unit(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
@@ -1693,7 +1594,7 @@ fn lower_program(
 /// `source` lowered over `predecessors` and no further, handed to `then`: the unit's text stage, and beside it the term a program closes with, as the lowering wrote it, where `source` is one. A mounted unit `cache` holds is read as it stands; any other source is lowered over what `cache` holds or offers for it, a declaration whose text and resolutions stand being the earlier unit's.
 ///
 /// **What a question about what is written reads.** A written name is resolved where it is lowered, so nothing here elaborates, judges or erases, nothing is handed to `cache`, and a subject that would be refused answers as one that checks: the outer refusal is a subject that did not lower.
-pub(crate) fn lower_subject<T>(
+pub fn lower_subject<T>(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
@@ -1796,43 +1697,10 @@ pub enum Progress<'a> {
     Compiled,
 }
 
-/// Compile the program `source` is through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor — an embedder that will run the module builds its `ffi`-tier bindings (`curios-native`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
-///
-/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the ANF optimizer shrinks and rebases the module, and the lowering into CPS makes every encoding decision once (see `curios_anf::lower_to_cps`).
-///
-/// **`source` is borrowed, so the caller still owns the loader it was made over when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold.
-pub fn compile_entrypoint<O>(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    source: &UnitSource<'_>,
-    cache: Option<&dyn Cache>,
-    observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
-where
-    O: FnMut(Stage<'_>),
-{
-    let mut observe = observe;
-
-    compile_with_tail(
-        budget,
-        predecessors,
-        syntax,
-        source,
-        cache,
-        EntryTail::Program,
-        Told {
-            observe: &mut observe,
-            read: None,
-        },
-    )
-    .map(TestProgram::built)
-}
-
 /// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).
-pub(crate) struct Told<'a, O> {
-    pub(crate) observe: &'a mut O,
-    pub(crate) read: Option<ReadLowering<'a>>,
+pub struct Told<'a, O> {
+    pub observe: &'a mut O,
+    pub read: Option<ReadLowering<'a>>,
 }
 
 /// A program compiled under its tail, with what a test program's tail read: what [`Fold::tests`](crate::Fold::tests) hands back, and, its modules empty, what a program's compile is.
@@ -1856,8 +1724,14 @@ impl TestProgram {
     }
 }
 
-/// The program `source` is, compiled through the full pipeline under `tail`, telling the caller what `told` asks for: beside it, for a test tail, the tests it schedules and every test in scope. A test tail scheduling no test is judged and built no further.
-pub(crate) fn compile_with_tail<O>(
+/// Compile the program `source` is through the full pipeline under `tail` to a wasm module, telling the caller what `told` asks for: every [`Stage`] in order, and the program's lowering where it reads one. Beside the program, a test tail answers the tests it schedules and every test in scope; one scheduling no test is judged and built no further.
+///
+/// The program comes with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor ([`TestProgram::built`]) — an embedder that will run the module builds its `ffi`-tier bindings (`curios-native`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+///
+/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the ANF optimizer shrinks and rebases the module, and the lowering into CPS makes every encoding decision once (see `curios_anf::lower_to_cps`).
+///
+/// **`source` is borrowed, so the caller still owns the loader it was made over when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold.
+pub fn compile_entrypoint<O>(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,

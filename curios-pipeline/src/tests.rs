@@ -2,7 +2,7 @@
 //!
 //! Every case here compiles a program end to end and reads the answer off the fold's own report, which is what [`test_support`] wraps.
 
-pub(crate) mod test_support;
+pub mod test_support;
 
 mod baseline;
 mod budget;

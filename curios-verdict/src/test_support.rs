@@ -12,8 +12,9 @@ use {
     curios_abi::ForeignStore,
     curios_common::{Source, test_support::Temporary},
     curios_core::{Certification, Definitions, Global},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
-    curios_pipeline::{Cache, CompileError, DEFAULT_BUDGET, compile_units, test_support::*},
+    curios_pipeline::{Cache, CompileError, compile_units, test_support::*},
     curios_prelude::with_prelude,
     curios_surface::{CoreFile, FormScope, ReadError, to_core},
     curios_unit::{Predecessors, Unit},
@@ -195,6 +196,7 @@ impl History {
                         &[(UnitSource::mounted(&root), None)],
                         Some(verdicts),
                         |_| {},
+                        None,
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),

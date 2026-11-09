@@ -27,6 +27,8 @@ curios-module = { workspace = true }
 curios-surface = { workspace = true }
 curios-common = { workspace = true }
 curios-pipeline = { workspace = true }
+# The budget `--budget` defaults to: the elaborator's.
+curios-elab = { workspace = true }
 curios-package = { workspace = true }
 curios-verdict = { workspace = true }
 curios-wonder = { workspace = true }

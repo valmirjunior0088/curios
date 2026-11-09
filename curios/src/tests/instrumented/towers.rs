@@ -3,8 +3,9 @@
 use {
     crate::tests::{Shape, Stands, tower},
     curios_core::{Zonked, take_looks},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
 };
 

@@ -8,8 +8,8 @@ use {
     super::*,
     curios_common::{Qualifier, recurse},
     curios_core::{Bound, Carrier, Cases, Global, Item, Match, Subterm, Term, Universes, Visit},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::DEFAULT_BUDGET,
     curios_surface::Entrypoint,
 };
 

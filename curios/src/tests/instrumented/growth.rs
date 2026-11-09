@@ -6,8 +6,9 @@ use {
         *,
     },
     curios_core::take_looks,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count},
     curios_surface::Entrypoint,
 };

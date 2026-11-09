@@ -5,6 +5,7 @@
 use {
     super::test_support::*,
     crate::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
@@ -43,17 +44,13 @@ fn print_partial_evaluation_reduces_residual() {
 
     let mut cps_optm = None;
 
-    let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
+    let (wasm_module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
             if let Stage::CpsOptm(module) = stage {
                 cps_optm = Some(format!("{module}"));
             }
-        },
-    )
-    .expect("compile succeeded");
+        })
+        .expect("compile succeeded");
 
     let cps = cps_optm.expect("Stage::CpsOptm observed");
     assert!(
@@ -94,17 +91,13 @@ fn print_runtime_args_specializes_spine() {
 
     let mut anf_optm = None;
 
-    let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
+    let (wasm_module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
             if let Stage::AnfOptm(module) = stage {
                 anf_optm = Some(format!("{module}"));
             }
-        },
-    )
-    .expect("compile succeeded");
+        })
+        .expect("compile succeeded");
 
     let anf = anf_optm.expect("Stage::AnfOptm observed");
     assert!(
@@ -155,7 +148,7 @@ fn print_constant_args_collapses_at_anf() {
     let mut cps_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
@@ -211,16 +204,11 @@ fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
     let entrypoint = r#"/std/print("hello world")"#.parse::<Entrypoint>().expect("fixture parses");
 
     let mut linked = None;
-    compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::Anf(module) = stage {
-                linked = Some(module.clone());
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::Anf(module) = stage {
+            linked = Some(module.clone());
+        }
+    })
     .expect("fixture compiles");
     let copy =
         curios_anf::test_support::heaviest_description_copy(&linked.expect("Stage::ANF observed"))

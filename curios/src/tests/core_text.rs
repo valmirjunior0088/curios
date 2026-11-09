@@ -2,8 +2,9 @@
 
 use {
     super::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_prelude::with_prelude,
     curios_surface::{Entrypoint, FormScope, Spellable, Spelling},
     std::rc::Rc,

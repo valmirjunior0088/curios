@@ -20,6 +20,8 @@ curios-browser = { workspace = true }
 curios-module = { workspace = true }
 curios-surface = { workspace = true }
 curios-pipeline = { workspace = true }
+# The budget a page's compile is given: the elaborator's default.
+curios-elab = { workspace = true }
 curios-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }

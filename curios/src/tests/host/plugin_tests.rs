@@ -4,6 +4,7 @@
 
 use {
     crate::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{DeclaredModule, MockHost, plugin_bindings},
     curios_pipeline::compile_with_prelude,
@@ -197,13 +198,9 @@ fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> 
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let bindings = plugin_bindings(&foreigns, modules)?;
     let (system, _io) = MockHost::builder().build();

@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::{Candidates, Digest, Facet, Qualifier},
     curios_core::{Global, ItemRun},
-    curios_elab::{declaration_input, lowered_digest},
+    curios_elab::{DEFAULT_BUDGET, declaration_input, lowered_digest},
     curios_module::{SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_unit::{Predecessors, Unit},
@@ -21,9 +21,12 @@ fn recompile_from(source: &str, baseline: &Unit, store: &Store) -> Unit {
             Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::mounted(&modules),
-            baseline,
-            &vec![false; prelude.len()],
-            Some(store),
+            Over {
+                baseline,
+                moved: &vec![false; prelude.len()],
+                candidates: Some(store),
+            },
+            &|_| {},
         )
     })
     .map_err(String::from)
@@ -111,7 +114,7 @@ fn an_edit_undone_takes_what_it_made_from_the_store() {
     );
     assert_stored_alike(&first, &undone);
     assert_eq!(
-        *store.read.borrow(),
+        store.read(),
         vec![
             identity(&first, "base"),
             form(&first, "base"),
@@ -148,5 +151,5 @@ fn a_candidate_that_read_a_part_since_moved_is_passed_over() {
         "the store holds what the first text's declaration was made into"
     );
     assert_stored_alike(&unit_of(RETYPED), &retyped);
-    assert!(store.read.borrow().is_empty());
+    assert!(store.read().is_empty());
 }

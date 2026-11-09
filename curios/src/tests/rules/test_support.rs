@@ -5,8 +5,9 @@ use {
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
     curios_core::{Global, Term, WitnessKey},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, EntryTail, Examined, Refused, test_support::*},
+    curios_pipeline::{EntryTail, Examined, Refused, test_support::*},
     curios_surface::{Entrypoint, Spellable, Spelling},
     std::{fmt, rc::Rc},
 };

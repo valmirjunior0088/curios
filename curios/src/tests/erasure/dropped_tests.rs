@@ -2,6 +2,7 @@
 
 use {
     crate::tests::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
@@ -77,16 +78,11 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
     let mut anf = None;
 
-    compile_with_prelude(
-        curios_pipeline::DEFAULT_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::Anf(module) = stage {
-                anf = Some(format!("{module}"));
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::Anf(module) = stage {
+            anf = Some(format!("{module}"));
+        }
+    })
     .expect("source compiles");
 
     let anf = anf.expect("anf stage observed");

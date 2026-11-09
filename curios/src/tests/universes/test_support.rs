@@ -2,9 +2,9 @@
 
 use {
     curios_core::{Item, Program, Variance},
-    curios_elab::{Context, Established, Tail, elaborate_and_zonk_entry},
+    curios_elab::{Context, DEFAULT_BUDGET, Established, Tail, elaborate_and_zonk_entry},
     curios_module::{RootSource, SYNTAX, UnitSource, into_core_entry},
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_prelude::with_prelude,
     curios_surface::{Entrypoint, Spellable},
     std::collections::BTreeMap,

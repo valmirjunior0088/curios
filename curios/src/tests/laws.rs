@@ -16,8 +16,9 @@ use {
     super::test_support::*,
     curios_common::Qualifier,
     curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, test_support::*},
+    curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     std::fmt,
 };

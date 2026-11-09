@@ -4,9 +4,10 @@ use {
     super::test_support::*,
     crate::test_support::*,
     curios_common::{Qualifier, RootKind},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, supply_entrypoint},
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_BUDGET, Fold, TestProgram},
+    curios_pipeline::{Fold, TestProgram},
     curios_surface::Entrypoint,
 };
 

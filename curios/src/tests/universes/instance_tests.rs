@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_common::fill,
-    curios_pipeline::DEFAULT_BUDGET,
+    curios_elab::DEFAULT_BUDGET,
 };
 
 /// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart.

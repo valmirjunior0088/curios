@@ -102,6 +102,7 @@ fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
         &UnitSource::entry(&entrypoint, &RootSource::none()),
         None,
         EntryTail::Program,
+        None,
     )
     .is_ok()
 }
@@ -113,7 +114,7 @@ fn erases(source: &str, budget: u64) -> bool {
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         let program = elaborate_and_zonk(
-            crate::DEFAULT_BUDGET,
+            curios_elab::DEFAULT_BUDGET,
             predecessors,
             &SYNTAX,
             &entrypoint,
@@ -168,12 +169,13 @@ fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
     with_prelude(|prelude| {
         let modules = mounted("lib", &library);
         let library = compile_units(
-            crate::DEFAULT_BUDGET,
+            curios_elab::DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &[(UnitSource::mounted(&modules), None)],
             None,
             |_| {},
+            None,
         )
         .map_err(String::from)
         .expect("the library compiles")

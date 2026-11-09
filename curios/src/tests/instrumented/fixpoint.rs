@@ -4,8 +4,9 @@
 
 use {
     crate::tests::TOML_DRIVER,
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_profile::{Destination, fold, trace},
     curios_surface::Entrypoint,
 };

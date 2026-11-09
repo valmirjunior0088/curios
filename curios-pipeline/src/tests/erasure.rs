@@ -4,6 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_anf::{Analysis, Rhs, Statement, test_support::*},
+    curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_wasm::to_bytes,
 };

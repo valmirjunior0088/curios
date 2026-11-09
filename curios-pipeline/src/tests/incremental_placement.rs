@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*,
+    crate::*,
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
@@ -172,14 +173,19 @@ fn a_unit_whose_items_are_placed_apart_again_keeps_every_erased_form() {
     let compiled = with_prelude(|prelude| {
         let scope = prelude.iter().copied().chain([&unit]).collect::<Vec<_>>();
 
-        crate::compile_entrypoint(
+        compile_entrypoint(
             DEFAULT_BUDGET,
             Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::entry(&program, &RootSource::none()),
             None,
-            |_| {},
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+            },
         )
+        .map(TestProgram::built)
         .map(|_| ())
         .map_err(String::from)
     });
