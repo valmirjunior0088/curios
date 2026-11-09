@@ -1,6 +1,6 @@
 //! What may be matched on: tuples, structs, opaque families, and an effectful scrutinee.
 
-use {crate::test_support::*, curios_native::MockHost};
+use {crate::tests::test_support::*, curios_native::MockHost};
 
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {

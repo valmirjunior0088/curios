@@ -1,13 +1,10 @@
-//! Optimize, precompile and run — the native back end, and the reason this crate exists.
+//! Optimize and precompile — the native back end, and the reason this crate exists.
 //!
 //! `curios` is the only product that links Cranelift (through `curios-cranelift`) and the only one that links Binaryen (via `curios-binaryen`); `curios-native` links neither, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
 //!
 //! No wasmtime operation below is spelled here. `curios_native::validate`, `curios_cranelift::precompile` and `curios_cranelift::compile` are, because they belong with the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all.
 
-use {
-    curios_abi::ForeignStore, curios_common::Fingerprint, curios_native::Compiled,
-    std::sync::LazyLock,
-};
+use {curios_common::Fingerprint, std::sync::LazyLock};
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdict`'s payload family beside every program it files.
 ///
@@ -50,37 +47,14 @@ where
 }
 
 /// `module` optimized with Binaryen, as the bytes Cranelift is handed.
-fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
+pub fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
     // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-native` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
     optimize(module, cfg!(feature = "profile"), |_| {})
 }
 
-/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`]. Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
+/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     let bytes = optimized(module);
 
     curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes))
-}
-
-/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-native`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
-pub fn to_compiled(
-    module: &curios_wasm::Module,
-    foreigns: ForeignStore,
-) -> Result<Compiled, String> {
-    let bytes = optimized(module);
-
-    let code = curios_profile::profile!("precompile" => curios_cranelift::compile(&bytes))
-        .map_err(|error| format!("failed to compile module: {error}"))?;
-
-    Ok(Compiled::of(code, foreigns))
-}
-
-/// Compile a module and run it in-process on the shared runtime engine. `foreigns` is the rows the compilation handed back beside it, and `bindings` answers rows ahead of the host, the program's own `foreign` declarations among them (pass [`curios_native::ForeignBindings::empty`] where the host answers every row). Returns the process exit code.
-pub fn run_wasm<H: curios_native::HostOps + Send + Sync + 'static>(
-    module: &curios_wasm::Module,
-    foreigns: ForeignStore,
-    host: H,
-    bindings: curios_native::ForeignBindings,
-) -> Result<u8, String> {
-    to_compiled(module, foreigns)?.run(host, bindings)
 }

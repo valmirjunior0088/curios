@@ -2,7 +2,8 @@
 
 use {
     super::{run, *},
-    crate::{test_support::*, *},
+    crate::tests::test_support::*,
+    crate::*,
     curios_anf::{FieldShape, Module},
     curios_module::RootSource,
     curios_native::Compiled,

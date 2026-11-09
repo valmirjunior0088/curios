@@ -5,7 +5,7 @@
 //! A shape that compiles at sixty lines is a fixture here; `tower_measurements`, among the instrumented tests, counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_common::fill,
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
@@ -15,7 +15,7 @@ use {
 
 /// Where a tower of values stands.
 #[derive(Clone, Copy)]
-pub(super) enum Stands {
+pub enum Stands {
     /// In the body of a function that does not recurse.
     Function,
     /// In the successor arm of a function that calls itself, where each call is recorded where it is typed.
@@ -24,7 +24,7 @@ pub(super) enum Stands {
 
 /// What each line of a tower is, in the line before it, `x`. A tower of values says where it stands; an alias and a claim stand at the top level.
 #[derive(Clone, Copy)]
-pub(super) enum Shape {
+pub enum Shape {
     /// `g(x)`, naming the line before it once: no tower, and what every tower is read against.
     Chain(Stands),
     /// `g(x, x)` over a function the tower is handed, so every line's type is `Nat` and the term alone is a graph.
@@ -72,7 +72,7 @@ struct Body {
 }
 
 /// A tower of `lines` lines over its first, as a whole program.
-pub(super) fn tower(shape: Shape, lines: usize) -> String {
+pub fn tower(shape: Shape, lines: usize) -> String {
     let mut source = String::new();
 
     match shape {

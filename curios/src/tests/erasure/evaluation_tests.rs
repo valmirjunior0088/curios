@@ -1,6 +1,6 @@
 //! Erasure removes proofs; optimization removes unused total values, but preserves calls that may diverge — and a program pays for nothing it does not name.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` would keep it, and rebuilding the constructor would compute the field from binders the same erasure had dropped — `Eq/cong` erasing to `apply f(unit)`. A proof bound as a top-level item is not computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this holds is the classification.
 #[test]

@@ -1,6 +1,6 @@
 //! What the kernel types of a type the elaborator derived by substitution: one typed where a reader wrote it is typed at every value put in a variable's place, an arm no reduction takes there being typed by no rule.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 // An arm its scrutinee's indices rule out is not typed. `h`'s result matches on `t: Tag(n)`, and its `zero()` arm holds a proof that `n == 0`, typed under that case's `n := 0`. A `let` at `h(1, t)` is written at the result at `1`, where `Tag/zero()`'s target clashes with the index; at `0` the arm is the one taken and is typed.
 #[test]

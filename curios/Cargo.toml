@@ -15,6 +15,8 @@ profile = [
     "curios-verdict/profile",
     "curios-native/profile",
 ]
+# `test_support`: a module compiled and run in this process, which `curios-prelude`'s suite runs the library's programs by. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+test-support = []
 
 [dependencies]
 curios-profile = { workspace = true }

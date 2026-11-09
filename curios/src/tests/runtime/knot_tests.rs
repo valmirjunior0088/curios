@@ -1,7 +1,8 @@
 //! A recursive value knot: what is forced before it is read, and what traps rather than reading a hole.
 
 use {
-    crate::{test_support::*, *},
+    crate::tests::test_support::*,
+    crate::*,
     curios_common::fill,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost},

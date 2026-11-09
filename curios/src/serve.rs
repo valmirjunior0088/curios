@@ -33,7 +33,7 @@ use {
 };
 
 /// The port a page is served on where `--port` names none.
-pub(crate) const PORT: u16 = 8000;
+pub const PORT: u16 = 8000;
 
 /// The most a request's head may hold before it is refused: far past any a browser sends for a page.
 const HEAD: usize = 16 * 1024;
@@ -45,12 +45,12 @@ const HEADERS: usize = 64;
 const OUTCOME: usize = 16 * 1024 * 1024;
 
 /// A page held to serve: every file of it by its page path.
-pub(crate) struct Served {
-    pub(crate) files: BTreeMap<String, Vec<u8>>,
+pub struct Served {
+    pub files: BTreeMap<String, Vec<u8>>,
 }
 
 /// What a serve answers: one page, as `run` serves it, or a run of tests.
-pub(crate) enum Site<'a> {
+pub enum Site<'a> {
     Page(Served),
     Run(Run<'a>),
 }
@@ -66,7 +66,7 @@ impl Site<'_> {
 }
 
 /// A run of tests served: the runner document, each subject's page in plan order with how many tests it schedules, and where the run is.
-pub(crate) struct Run<'a> {
+pub struct Run<'a> {
     runner: Vec<u8>,
     pages: Vec<(Served, usize)>,
     state: Mutex<State<'a>>,
@@ -89,7 +89,7 @@ const DRIVEN_WHILE_IN_HAND: &str = "an outcome is read only while a step is in h
 
 impl<'a> Run<'a> {
     /// A run over `pages`, each with how many tests it schedules, `report` taking each step's outcome.
-    pub(crate) fn new(
+    pub fn new(
         pages: Vec<(Served, usize)>,
         report: impl FnMut(Step, Streams, &Posted) -> Streams + Send + 'a,
     ) -> Self {
@@ -168,7 +168,7 @@ fn step_of(state: &State<'_>, pages: usize) -> Option<Step> {
 }
 
 /// Where a browser opens the page served on `port`, its program handed `args`: the root, each argument a pair of the query under the key the page claims, every byte but the unreserved ones percent-encoded, as the loader decodes them.
-pub(crate) fn url(port: u16, args: &[OsString]) -> String {
+pub fn url(port: u16, args: &[OsString]) -> String {
     let query = args
         .iter()
         .map(|arg| {
@@ -194,19 +194,19 @@ pub(crate) fn url(port: u16, args: &[OsString]) -> String {
 }
 
 /// The listener a page is served on, at `port` of loopback, or why there is none: a port another process holds is refused by its number and by the flag that picks another.
-pub(crate) fn bound(port: u16) -> Result<TcpListener, String> {
+pub fn bound(port: u16) -> Result<TcpListener, String> {
     TcpListener::bind((Ipv4Addr::LOCALHOST, port)).map_err(|error| {
         format!("cannot serve on 127.0.0.1:{port}: {error}; `--port` serves on another")
     })
 }
 
 /// Answer every connection `listener` accepts with `served`, each on a thread of its own, until the process is stopped.
-pub(crate) fn serve_page(listener: &TcpListener, served: Served) -> Result<(), String> {
+pub fn serve_page(listener: &TcpListener, served: Served) -> Result<(), String> {
     serve(listener, &Site::Page(served))
 }
 
 /// Answer every connection `listener` accepts with `run`, each on a thread of its own, until every step of the run is taken and its last reply sent.
-pub(crate) fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), String> {
+pub fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), String> {
     serve(listener, &Site::Run(run))
 }
 

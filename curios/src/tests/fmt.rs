@@ -3,6 +3,7 @@
 //! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
+    super::test_support::*,
     crate::test_support::*,
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},
@@ -63,7 +64,7 @@ fn print_partial_evaluation_reduces_residual() {
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
-    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+    run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
         .expect("execution succeeded");
     assert_eq!(io.output(), b"Alice is 30");
 }
@@ -116,7 +117,7 @@ fn print_runtime_args_specializes_spine() {
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Bob"]).build();
-    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+    run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
         .expect("execution succeeded");
     assert_eq!(io.output(), b"Bob is 30");
 }
@@ -185,7 +186,7 @@ fn print_constant_args_collapses_at_anf() {
     );
 
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
+    run_wasm(&wasm_module, foreigns, system, ForeignBindings::empty())
         .expect("execution succeeded");
     assert_eq!(io.output(), b"x = 42, s = hello\n");
 }

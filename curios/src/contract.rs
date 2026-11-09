@@ -22,7 +22,7 @@ use {
 
 /// What a command takes its argument to select.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Accepts {
+pub enum Accepts {
     /// One program: one selected, or the governing package entire narrowed to its sole or `default` executable.
     Program,
     /// One program, as [`Accepts::Program`] takes one, or a library selected through one of its files.
@@ -41,7 +41,7 @@ pub(crate) enum Accepts {
 
 /// How a command reaches the store of verdicts and payloads beside the package it is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Access {
+pub enum Access {
     /// It opens none.
     None,
     /// It reads one and files what it compiled: a build, which files every unit and its product, and a question, which files the units a build would have.
@@ -50,7 +50,7 @@ pub(crate) enum Access {
 
 impl Access {
     /// The store beside `root` for a build to file into — `None` for an access that opens none. A question does not open one here: the `wonder` engine opens the store beside what it is asked about.
-    pub(crate) fn filed(self, root: &Path) -> Option<Verdicts> {
+    pub fn filed(self, root: &Path) -> Option<Verdicts> {
         match self {
             Self::Write => Some(Verdicts::at(root.to_path_buf())),
             Self::None => None,
@@ -60,7 +60,7 @@ impl Access {
 
 /// What a command leaves on disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Product {
+pub enum Product {
     /// Nothing beyond what the store keeps.
     Nothing,
     /// A native executable, or for a browser a directory holding its page, under the store beside the package that declares it, under the target it is built for, or wherever `--output` says — the one place a program no package declares can go.
@@ -85,17 +85,17 @@ impl Product {
 }
 
 /// What a command accepts, how it reaches the store, and what it leaves behind.
-pub(crate) struct Contract {
+pub struct Contract {
     /// The command as it is typed, for a refusal to name.
-    pub(crate) command: &'static str,
-    pub(crate) accepts: Accepts,
+    pub command: &'static str,
+    pub accepts: Accepts,
     /// Whether a program must be named by its own file rather than through one of its modules: a command that runs or builds a program performs it, and a module is not what performs.
-    pub(crate) own_file_only: bool,
-    pub(crate) access: Access,
-    pub(crate) product: Product,
+    pub own_file_only: bool,
+    pub access: Access,
+    pub product: Product,
 }
 
-pub(crate) const RUN: Contract = Contract {
+pub const RUN: Contract = Contract {
     command: "run",
     accepts: Accepts::Program,
     own_file_only: true,
@@ -103,7 +103,7 @@ pub(crate) const RUN: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const COMPILE: Contract = Contract {
+pub const COMPILE: Contract = Contract {
     command: "compile",
     accepts: Accepts::Program,
     own_file_only: true,
@@ -111,7 +111,7 @@ pub(crate) const COMPILE: Contract = Contract {
     product: Product::Executable,
 };
 
-pub(crate) const DOCUMENT: Contract = Contract {
+pub const DOCUMENT: Contract = Contract {
     command: "document",
     accepts: Accepts::Library,
     own_file_only: false,
@@ -119,7 +119,7 @@ pub(crate) const DOCUMENT: Contract = Contract {
     product: Product::Pages,
 };
 
-pub(crate) const DOCUMENT_STD: Contract = Contract {
+pub const DOCUMENT_STD: Contract = Contract {
     command: "document",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -127,7 +127,7 @@ pub(crate) const DOCUMENT_STD: Contract = Contract {
     product: Product::Pages,
 };
 
-pub(crate) const TEST: Contract = Contract {
+pub const TEST: Contract = Contract {
     command: "test",
     accepts: Accepts::Any,
     own_file_only: false,
@@ -135,7 +135,7 @@ pub(crate) const TEST: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const CURATE: Contract = Contract {
+pub const CURATE: Contract = Contract {
     command: "curate",
     accepts: Accepts::Entire,
     own_file_only: false,
@@ -144,7 +144,7 @@ pub(crate) const CURATE: Contract = Contract {
 };
 
 /// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no argument names it, and the store it reaches is the one a delivery is filed in rather than one it compiles into.
-pub(crate) const PIN: Contract = Contract {
+pub const PIN: Contract = Contract {
     command: "pin",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -152,7 +152,7 @@ pub(crate) const PIN: Contract = Contract {
     product: Product::Manifest,
 };
 
-pub(crate) const NEW: Contract = Contract {
+pub const NEW: Contract = Contract {
     command: "new",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -160,7 +160,7 @@ pub(crate) const NEW: Contract = Contract {
     product: Product::Package,
 };
 
-pub(crate) const LINT: Contract = Contract {
+pub const LINT: Contract = Contract {
     command: "lint",
     accepts: Accepts::Any,
     own_file_only: false,
@@ -168,7 +168,7 @@ pub(crate) const LINT: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const FORMAT: Contract = Contract {
+pub const FORMAT: Contract = Contract {
     command: "format",
     accepts: Accepts::Files,
     own_file_only: false,
@@ -178,7 +178,7 @@ pub(crate) const FORMAT: Contract = Contract {
 
 /// Its argument is a filed stream rather than anything a package declares, so nothing is resolved against a manifest and no store is opened: the file named is the whole of what it reads.
 #[cfg(feature = "profile")]
-pub(crate) const PROFILE: Contract = Contract {
+pub const PROFILE: Contract = Contract {
     command: "profile",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -186,7 +186,7 @@ pub(crate) const PROFILE: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const DIAGNOSTICS: Contract = Contract {
+pub const DIAGNOSTICS: Contract = Contract {
     command: "wonder",
     accepts: Accepts::Any,
     own_file_only: false,
@@ -194,7 +194,7 @@ pub(crate) const DIAGNOSTICS: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const TESTS: Contract = Contract {
+pub const TESTS: Contract = Contract {
     command: "wonder --tests",
     accepts: Accepts::Any,
     own_file_only: false,
@@ -202,7 +202,7 @@ pub(crate) const TESTS: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const COST: Contract = Contract {
+pub const COST: Contract = Contract {
     command: "wonder --cost",
     accepts: Accepts::Program,
     own_file_only: false,
@@ -210,7 +210,7 @@ pub(crate) const COST: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const STAGE: Contract = Contract {
+pub const STAGE: Contract = Contract {
     command: "wonder --stage",
     accepts: Accepts::Program,
     own_file_only: false,
@@ -219,7 +219,7 @@ pub(crate) const STAGE: Contract = Contract {
 };
 
 /// `wonder --stage` at a rung a unit has ([`Stage::of_a_unit`]): a library's file is reprinted there as a program is, where every rung past them is a program's alone.
-pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
+pub const STAGE_OF_A_UNIT: Contract = Contract {
     command: "wonder --stage",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
@@ -228,7 +228,7 @@ pub(crate) const STAGE_OF_A_UNIT: Contract = Contract {
 };
 
 /// A question about one file: a program's, named by its own file or through one of its modules, or a library's.
-pub(crate) const AT: Contract = Contract {
+pub const AT: Contract = Contract {
     command: "wonder --at",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
@@ -237,7 +237,7 @@ pub(crate) const AT: Contract = Contract {
 };
 
 /// A question about one file, as [`AT`] is.
-pub(crate) const DECLARATIONS: Contract = Contract {
+pub const DECLARATIONS: Contract = Contract {
     command: "wonder --declarations",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
@@ -245,7 +245,7 @@ pub(crate) const DECLARATIONS: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub(crate) const SERVER: Contract = Contract {
+pub const SERVER: Contract = Contract {
     command: "wonder --server",
     accepts: Accepts::Nothing,
     own_file_only: false,
@@ -255,7 +255,7 @@ pub(crate) const SERVER: Contract = Contract {
 
 impl Mode {
     /// The contract this command is dispatched under.
-    pub(crate) fn contract(&self) -> &'static Contract {
+    pub fn contract(&self) -> &'static Contract {
         match self {
             Mode::Run { .. } => &RUN,
             Mode::Compile { .. } => &COMPILE,
@@ -284,7 +284,7 @@ impl Mode {
     }
 
     /// The argument the contract resolves: the subject, for a command that takes one — for `format`, the first of its subjects, each of which is admitted alone the same way.
-    pub(crate) fn subject(&self) -> Option<&str> {
+    pub fn subject(&self) -> Option<&str> {
         match self {
             Mode::Run { subject, .. }
             | Mode::Compile { subject, .. }
@@ -301,12 +301,12 @@ impl Mode {
     }
 
     /// The manifest the command was told governs — `None` when it was told none, or reads no manifest.
-    pub(crate) fn manifest(&self) -> Option<&Path> {
+    pub fn manifest(&self) -> Option<&Path> {
         self.manifest_flag()?.manifest.as_deref()
     }
 
     /// Where the command was told to write what it builds — `None` when it was told nowhere, or builds nothing it could be told about.
-    pub(crate) fn output(&self) -> Option<&Path> {
+    pub fn output(&self) -> Option<&Path> {
         match self {
             Mode::Compile { output_path, .. } | Mode::Document { output_path, .. } => {
                 output_path.as_deref()
@@ -354,7 +354,7 @@ impl Mode {
 }
 
 /// What `format` rewrites for one subject.
-pub(crate) enum Rewritten {
+pub enum Rewritten {
     /// Files on disk, rewritten in place.
     Files(Vec<PathBuf>),
     /// Standard input, written back to standard output.
@@ -363,7 +363,7 @@ pub(crate) enum Rewritten {
 
 impl Contract {
     /// A `wonder` query's help: what it answers, and what no subject is for it where that is not what it is for the check, whose contract ([`DIAGNOSTICS`]) the one SUBJECT's help is read off.
-    pub(crate) fn query_help(&self, answers: &str) -> String {
+    pub fn query_help(&self, answers: &str) -> String {
         match self.no_subject() == DIAGNOSTICS.no_subject() {
             true => answers.to_string(),
             false => format!("{answers}; with no subject, {}", self.no_subject()),
@@ -371,7 +371,7 @@ impl Contract {
     }
 
     /// What a SUBJECT's help says for this command: the forms its argument takes, and what none means.
-    pub(crate) fn subject_help(&self) -> String {
+    pub fn subject_help(&self) -> String {
         let forms = match (self.accepts, self.own_file_only) {
             (Accepts::Library, _) => "A .crs file a library declares",
             (Accepts::Files, _) => {
@@ -417,7 +417,7 @@ impl Contract {
     }
 
     /// The program `subject` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
-    pub(crate) fn admit_program(
+    pub fn admit_program(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -457,7 +457,7 @@ impl Contract {
     }
 
     /// What `subject` selects for a rung a unit has: a program as [`Contract::admit_program`] admits one, or the library a file of one selects.
-    pub(crate) fn admit_staged(
+    pub fn admit_staged(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -473,7 +473,7 @@ impl Contract {
     }
 
     /// The library `subject` selects: a library, or the package entire's own.
-    pub(crate) fn admit_library(
+    pub fn admit_library(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -497,7 +497,7 @@ impl Contract {
     }
 
     /// Whatever `subject` selects.
-    pub(crate) fn admit_any(
+    pub fn admit_any(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -509,7 +509,7 @@ impl Contract {
     }
 
     /// The governing package entire, which is all a command taking no subject selects.
-    pub(crate) fn admit_entire(
+    pub fn admit_entire(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -527,7 +527,7 @@ impl Contract {
     }
 
     /// What `subject` rewrites: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input.
-    pub(crate) fn admit_files(
+    pub fn admit_files(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
@@ -567,6 +567,6 @@ fn homeless(command: &str, entry: &Entry) -> String {
 }
 
 /// Where the process stands, which is where an invocation's argument is resolved from.
-pub(crate) fn here() -> Result<PathBuf, String> {
+pub fn here() -> Result<PathBuf, String> {
     env::current_dir().map_err(|error| error.to_string())
 }

@@ -9,7 +9,7 @@ use {
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_native::append_bundle`]).
-pub(crate) fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), String> {
+pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();
 
     append_bundle(&mut bytes, bundle)?;

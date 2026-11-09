@@ -1,6 +1,6 @@
 //! A `Prop`-sorted concept resolves and then erases, and a witness must prove its concept's law.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A `Prop`-sorted concept: the witness is proof content and erases completely, and the method result is consumed in an erased argument slot. The runtime path never sees the concept apparatus.
 #[test]

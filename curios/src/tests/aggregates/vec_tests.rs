@@ -1,6 +1,6 @@
 //! The bound `Vec/get` carries past the end, which nothing fills. `Vec`'s surface — the index inside the length, the list round trip, `zip` and `fold` — is the corpus's `/aggregates/vec`.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // Past the end the bound reduces to `False`, and nothing fills it: the report names the binder, exactly as an out-of-range `List/get` does.
 #[test]

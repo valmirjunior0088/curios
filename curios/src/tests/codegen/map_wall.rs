@@ -1,7 +1,7 @@
 //! The `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
 
 use {
-    crate::*,
+    crate::test_support::*,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
@@ -15,7 +15,7 @@ const SPINES: &str = include_str!(concat!(
     "/../programs/spines/spines.crs"
 ));
 
-pub(super) fn compiled_of(source: &str) -> Compiled {
+pub fn compiled_of(source: &str) -> Compiled {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
@@ -28,7 +28,7 @@ pub(super) fn compiled_of(source: &str) -> Compiled {
 }
 
 /// One run, its size handed as the program's one argument: milliseconds around it — instantiate, and the whole call — and what the program printed.
-pub(super) fn run(compiled: &Compiled, n: u64) -> (f64, Vec<u8>) {
+pub fn run(compiled: &Compiled, n: u64) -> (f64, Vec<u8>) {
     let (host, io) = MockHost::builder()
         .args(["program".to_string(), n.to_string()])
         .build();
@@ -43,7 +43,7 @@ pub(super) fn run(compiled: &Compiled, n: u64) -> (f64, Vec<u8>) {
 }
 
 /// Best of five: a timing floor is what the slope subtracts.
-pub(super) fn timed(compiled: &Compiled, n: u64) -> f64 {
+pub fn timed(compiled: &Compiled, n: u64) -> f64 {
     (0..5)
         .map(|_| run(compiled, n).0)
         .fold(f64::INFINITY, f64::min)

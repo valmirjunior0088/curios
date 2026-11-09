@@ -1,6 +1,6 @@
 //! The erasure obligation: a partial value may not reach a proof, at any head a program can spell.
 
-use {super::test_support::*, crate::test_support::*, curios_analysis::Erased};
+use {super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased};
 
 // The second route (T) cannot see, and the one that needs no `exit` at all. `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing about `Box` or its type mentions a partial definition — and the certificate escapes through an arm binder, so `boom`'s body reaches `forge` without naming a partial type anywhere. The control's `Box` carries `True` and `forge` builds one at once.
 #[test]

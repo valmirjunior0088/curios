@@ -32,7 +32,7 @@ use {
 /// What a status line is about.
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
-pub(crate) enum Subject {
+pub enum Subject {
     /// A unit, by the prefix it mounts, or a module, by its path: `/` for the root, which joins to nothing.
     Mounted(Qualifier),
     /// A declared executable, by the name its manifest row gives it.
@@ -47,7 +47,7 @@ pub(crate) enum Subject {
 
 impl Subject {
     /// The subject a package is reported as. Its declared name *is* its mount prefix, so it is reported as one — which keeps the slash derived here as it is everywhere else instead of written by the caller.
-    pub(crate) fn package(name: &str) -> Self {
+    pub fn package(name: &str) -> Self {
         Self::Mounted(Qualifier::empty().with(name))
     }
 }
@@ -69,7 +69,7 @@ macro_rules! headings {
     ($($(#[$note:meta])* $variant:ident => $word:literal,)+) => {
         /// Every word that can head a status line. The tense is the contract: a present participle opens a line before its work and may accrue what it came to, a past participle states a settled fact after it, and the imperative addresses the reader.
         #[derive(Clone, Copy, PartialEq, Eq)]
-        pub(crate) enum Heading {
+        pub enum Heading {
             $($(#[$note])* $variant,)+
         }
 
@@ -142,7 +142,7 @@ const fn widest(headings: &[Heading]) -> usize {
 }
 
 /// The heading column: the widest heading, the columns a nested line's marker takes in front of it, and the three spaces every line keeps to its right.
-pub(crate) const HEADING_WIDTH: usize = widest(HEADINGS) + NESTED_WIDTH + 3;
+pub const HEADING_WIDTH: usize = widest(HEADINGS) + NESTED_WIDTH + 3;
 
 /// A line's heading column, padded out to where its subject begins. `marker` is [`NESTED`] for a step of the header above and empty for a line of its own.
 ///
@@ -152,22 +152,22 @@ fn head(marker: &str, heading: Heading) -> String {
 }
 
 /// One complete fact, on a line of its own.
-pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
+pub fn fact(heading: Heading, detail: impl fmt::Display) {
     eprintln!("{}", unnested(heading, detail));
 }
 
 /// One complete fact, as text — `Finished 3 passed, 1 failed` — for a fact written to the terminal and carried elsewhere as the same bytes.
-pub(crate) fn unnested(heading: Heading, detail: impl fmt::Display) -> String {
+pub fn unnested(heading: Heading, detail: impl fmt::Display) -> String {
     format!("{}{detail}", head("", heading))
 }
 
 /// How a build is taken rather than anything it did: a line of its own ahead of the header, spelled as a question spells its note.
-pub(crate) fn note(text: impl fmt::Display) {
+pub fn note(text: impl fmt::Display) {
     eprintln!("note: {text}");
 }
 
 /// What a question says where the store took nothing of what it compiled: the fact a build states for the same reason, in a question's words. A store nobody can write otherwise reads as a compiler that is slow.
-pub(crate) fn unfiled(refusal: String) {
+pub fn unfiled(refusal: String) {
     fact(
         Heading::Skipped,
         format!("storing what this compiled; {refusal}"),
@@ -177,12 +177,12 @@ pub(crate) fn unfiled(refusal: String) {
 /// One detail of the line above, in the columns a heading would occupy — the keys a `pin` wrote, under the row it wrote them into.
 ///
 /// Headingless because it is not a thing that happened, which is what every heading names; it is part of what the line above already reported.
-pub(crate) fn detail(text: impl fmt::Display) {
+pub fn detail(text: impl fmt::Display) {
     eprintln!("{:<HEADING_WIDTH$}  {text}", "");
 }
 
 /// One complete step of the header above, as text — `↳ Running hello`, or `↳ Tested /app; 3 passed, 1 failed` with `outcome` — for a step written to the terminal and carried elsewhere as the same bytes.
-pub(crate) fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>) -> String {
+pub fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>) -> String {
     match outcome {
         Some(outcome) => format!("{}{subject}; {outcome}", head(NESTED, heading)),
         None => format!("{}{subject}", head(NESTED, heading)),
@@ -190,17 +190,17 @@ pub(crate) fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>)
 }
 
 /// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.
-pub(crate) fn step(heading: Heading, subject: &Subject) {
+pub fn step(heading: Heading, subject: &Subject) {
     eprintln!("{}", nested(heading, subject, None));
 }
 
 /// The step a page is served with, naming where a browser opens it — the one fact a reader needs from what follows, which is nothing until the server is stopped.
-pub(crate) fn serving(url: &str) {
+pub fn serving(url: &str) {
     eprintln!("{}{url}", head(NESTED, Heading::Serving));
 }
 
 /// The header a build takes `subject` on with — `Processing serve` — naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
-pub(crate) fn processing(subject: &Subject, manifest: Option<&Path>) {
+pub fn processing(subject: &Subject, manifest: Option<&Path>) {
     let here = env::current_dir().and_then(|here| here.canonicalize());
     let spelled = manifest
         .zip(here.ok())
@@ -233,19 +233,19 @@ fn spelled_from(manifest: &Path, here: &Path) -> Option<String> {
 /// A subject being worked on, whose outcome arrives when the work is done.
 ///
 /// **The caller terminates the line**, with an `eprintln!()` once the subject is finished with — there is no method for it, because closing a line is a bare newline and a method taking `self` to write one carries no data worth the ceremony. A line never terminated stays unterminated, which is the intended reading of an interrupted compilation rather than an omission to repair.
-pub(crate) struct Line {
+pub struct Line {
     /// When the line opened, for the [`Line::done`] that closes it with what the work took — gone once an outcome has said the work did not happen.
     started: Option<Instant>,
 }
 
 impl Line {
     /// Open a line for `subject` — `Finished hello` — leaving it unterminated.
-    pub(crate) fn open(heading: Heading, subject: &Subject) -> Self {
+    pub fn open(heading: Heading, subject: &Subject) -> Self {
         Self::marked("", heading, subject)
     }
 
     /// Open a line for a step of the header above it — `↳ Compiling /hello`.
-    pub(crate) fn nested(heading: Heading, subject: &Subject) -> Self {
+    pub fn nested(heading: Heading, subject: &Subject) -> Self {
         Self::marked(NESTED, heading, subject)
     }
 
@@ -258,7 +258,7 @@ impl Line {
     }
 
     /// Close the work the line announced, with what it took — `; 1.4s`.
-    pub(crate) fn done(&mut self) {
+    pub fn done(&mut self) {
         let elapsed = self
             .started
             .take()
@@ -270,7 +270,7 @@ impl Line {
     /// Report what happened instead of the work — `; reused` — or what it came to — `; 3 passed, 1 failed`.
     ///
     /// The timing the line opened with is abandoned: an outcome is what happened *instead* of the work, so there is nothing left to time.
-    pub(crate) fn outcome(&mut self, outcome: &str) {
+    pub fn outcome(&mut self, outcome: &str) {
         self.started = None;
         eprint!("; {outcome}");
     }

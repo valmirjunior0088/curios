@@ -1,11 +1,9 @@
 //! The terminal session the coordination and host boundary measurements both drive.
-//!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use curios_native::{MockHost, MockIo};
 
 // The terminal answers the session's questions first, supporting none of what it asks after, so the loop asks the terminal's size where it is quiet. The keys pause twice between two whole keys, so the loop's deadline passes once at each and it reads the two scripted resizes, 16×6 and then 12×5.
-pub(super) fn listing_host() -> (MockHost, MockIo) {
+pub fn listing_host() -> (MockHost, MockIo) {
     let pair = || vec![b"\x1b[B".to_vec(), b"\x1b[A".to_vec()];
     let mut rest = Vec::new();
     for _ in 3..100 {
@@ -33,7 +31,7 @@ pub(super) fn listing_host() -> (MockHost, MockIo) {
         .build()
 }
 
-pub(super) fn assert_listing(io: &MockIo) {
+pub fn assert_listing(io: &MockIo) {
     let output = String::from_utf8(io.output()).expect("terminal output is UTF-8");
     assert!(output.starts_with(
         "\x1b[?u\x1b[?2026$p\x1b[?2027$p\x1b[?2048$p\x1b[c\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1004h"

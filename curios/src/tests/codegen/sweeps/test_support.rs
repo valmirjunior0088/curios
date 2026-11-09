@@ -1,6 +1,6 @@
 //! Runtime-dependent consumers of the optimizer's five snapshot sweeps.
 
-pub(super) const JUMPS: &str = r#"
+pub const JUMPS: &str = r#"
 use /std/{Nat, Bool, Option, List, Proc};
 let walk(n: Nat, acc: Nat) -> Nat =
     match n
@@ -18,7 +18,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-pub(super) const WORKERS: &str = r#"
+pub const WORKERS: &str = r#"
 use /std/{Nat, List, Proc};
 let left(n: Nat, pair: {Nat, Nat}) -> Nat =
     match n | 0 => pair.0 + pair.1 | k + 1 => left(k, (pair.1, (pair.0 + pair.1) % 65537)) + 1 end;
@@ -30,7 +30,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-pub(super) const UNCURRY: &str = r#"
+pub const UNCURRY_INDEPENDENT: &str = r#"
 use /std/{Nat, List, Proc};
 let left(n: Nat) -> (Nat) -> Nat =
     match n
@@ -56,7 +56,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-pub(super) const CALLS: &str = r#"
+pub const CALLS: &str = r#"
 use /std/{Nat, List, Proc};
 induct Side: Type | left(Nat) | right(Nat) end
 let left(side: Side) -> Nat =
@@ -87,7 +87,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-pub(super) const SCCS: &str = r#"
+pub const SCCS: &str = r#"
 use /std/{Nat, List, Proc};
 let walk(op: (Nat) -> Nat, n: Nat, acc: Nat) -> Nat =
     match n | 0 => acc | k + 1 => op(walk(op, k, (acc + n) % 65537)) end;

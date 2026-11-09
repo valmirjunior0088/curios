@@ -3,7 +3,7 @@
 //! **The plugin is assembled rather than checked in.** `curios-wasm` is the workspace's encoder and `curios-js`'s bridge builder is the precedent for standing a module up with it — which keeps the fixture readable as the thing it is, costs no `.wasm` in the tree, and means a change to the raw ABI shows up here as a compile error rather than as a binary nobody can read.
 
 use {
-    crate::run_wasm,
+    crate::test_support::*,
     curios_module::RootSource,
     curios_native::{DeclaredModule, MockHost, plugin_bindings},
     curios_pipeline::compile_with_prelude,

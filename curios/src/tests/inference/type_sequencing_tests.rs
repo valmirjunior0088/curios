@@ -1,6 +1,6 @@
 //! Sequencing inside type expressions follows ordinary monadic typing; purity and totality remain the checkers' obligations.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn a_function_computing_a_type_may_be_written_inside_its_annotation() {

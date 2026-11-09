@@ -5,7 +5,7 @@
 //! A growth that compiles past the size a stage once refused or never answered at is a fixture here; `growth_slopes`, among the instrumented tests, counts what each stage does at three sizes and holds the growths that are linear today to it.
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_common::fill,
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, test_support::*},
@@ -15,7 +15,7 @@ use {
 
 /// One axis a program grows along. Each writes a whole program whose result reads the process's argument count, so no stage can compute it ahead of the run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Growth {
+pub enum Growth {
     /// `let x{i} = x{i-1} + 1;`, each operator minting the metavariables of its witness, in one function's body.
     LetPlus,
     /// `let x{i} = Nat/add(x{i-1}, 1);`, the same chain written as calls, which mint nothing.
@@ -90,7 +90,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 35] = [
+    pub const ALL: [Growth; 35] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -130,7 +130,7 @@ impl Growth {
 }
 
 /// The program `growth` writes at `size`.
-pub(super) fn grown(growth: Growth, size: usize) -> String {
+pub fn grown(growth: Growth, size: usize) -> String {
     let last = size - 1;
     match growth {
         Growth::LetPlus => chain(size, |previous| format!("{previous} + 1")),

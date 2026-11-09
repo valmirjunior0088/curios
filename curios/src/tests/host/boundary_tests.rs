@@ -1,7 +1,7 @@
 //! What a program makes of a host's reply. A reply is a value of its wire type because whatever answered the row lowered it as one, so the program checks nothing where it receives one: the library reads the status as the outcome it names, whatever the status, and a failure's padding reaches no reader. Each reply here is written raw, past the native adapter, to show what that reading does with it.
 
 use {
-    crate::test_support::*,
+    crate::tests::test_support::*,
     curios_abi::{HostOp, status},
     curios_native::{ForeignBindings, MockHost, test_support::*},
 };

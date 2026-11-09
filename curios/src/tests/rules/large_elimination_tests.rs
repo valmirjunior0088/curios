@@ -1,6 +1,6 @@
 //! A proposition taken apart into data: the sort the guard reads off a motive however the motive is spelled, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
 
-use {super::test_support::*, crate::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // The guard reads the result's sort off the motive typed under its own binders, and a motive is held to land in a sort there. `F(i)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the motive would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. Typed at the binder `i` it lands in no sort, and the match is refused at its motive before either arm is read. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same motive to the kernel under this name. The control's motive is a proposition at every index.
 #[test]

@@ -7,7 +7,7 @@
 use super::*;
 
 /// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count. `through`, `into` and `pair` eliminate a proof of `Zero`, so unfolding one leaves its proof a stuck elimination's scrutinee: what comparing two calls by their spines first is for.
-pub(super) const STRUCTURAL: &str =
+pub const STRUCTURAL: &str =
     "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
 struct Record: pub Type { a: Nat, b: Nat }
 struct Empty: pub Type {}
@@ -31,27 +31,27 @@ let hold(@A: Type, a: A, count: Nat) -> A = match count: (_) => A | 0 => a | pre
 let carry(@A: Type, count: Nat, a: A) -> A = match count: (_) => A | 0 => a | pred + 1 => carry(pred, a) end;";
 
 /// The seeds at one type, under the binders they share.
-pub(super) struct Seeds {
-    pub(super) type_: &'static str,
-    pub(super) binders: &'static str,
+pub struct Seeds {
+    pub type_: &'static str,
+    pub binders: &'static str,
     /// What the audit puts in place of these seeds' neutral to state them closed under substitution, where the neutral is a binder no other binder's type names.
-    pub(super) compound: Option<Compound>,
-    pub(super) seeds: &'static [Seed],
+    pub compound: Option<Compound>,
+    pub seeds: &'static [Seed],
 }
 
 /// A compound term for a neutral: the binder it replaces, as declared, the term, and the binders the term is over.
-pub(super) struct Compound {
-    pub(super) binder: &'static str,
-    pub(super) term: &'static str,
-    pub(super) binders: &'static str,
+pub struct Compound {
+    pub binder: &'static str,
+    pub term: &'static str,
+    pub binders: &'static str,
 }
 
 /// One equation: the rule it is a seed of, its two sides, and whether the rule holds it.
-pub(super) struct Seed {
-    pub(super) rule: &'static str,
-    pub(super) left: &'static str,
-    pub(super) right: &'static str,
-    pub(super) holds: bool,
+pub struct Seed {
+    pub rule: &'static str,
+    pub left: &'static str,
+    pub right: &'static str,
+    pub holds: bool,
 }
 
 const fn held(rule: &'static str, left: &'static str, right: &'static str) -> Seed {
@@ -72,7 +72,7 @@ const fn miss(rule: &'static str, left: &'static str, right: &'static str) -> Se
     }
 }
 
-pub(super) const SEEDS: &[Seeds] = &[
+pub const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "(Nat) -> Nat",
         binders: "g: (Nat) -> Nat, k: (Nat) -> Nat",
@@ -516,7 +516,7 @@ pub(super) const SEEDS: &[Seeds] = &[
 
 impl Seeds {
     /// One seed as a row, under the binders these seeds share.
-    pub(super) fn row(&self, seed: &Seed) -> (String, String) {
+    pub fn row(&self, seed: &Seed) -> (String, String) {
         (
             self.binders.to_owned(),
             claim(self.type_, seed.left, seed.right),
@@ -524,13 +524,13 @@ impl Seeds {
     }
 
     /// These seeds as rows.
-    pub(super) fn rows(&self) -> Vec<(String, String)> {
+    pub fn rows(&self) -> Vec<(String, String)> {
         self.seeds.iter().map(|seed| self.row(seed)).collect()
     }
 }
 
 /// The claim that `left` and `right` are equal at `type_`. It states the type, where a carrier's row leaves it to inference: a row that left the type out would ask the elaborator for a solution as well, `Eq/refl()`'s implicit against a lambda whose type the item's drain settles, and what a seed asks for is a comparison.
-pub(super) fn claim(type_: &str, left: &str, right: &str) -> String {
+pub fn claim(type_: &str, left: &str, right: &str) -> String {
     format!("Eq(@({type_}))({left}, {right})")
 }
 

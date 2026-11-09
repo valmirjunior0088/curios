@@ -1,6 +1,6 @@
 //! How written members meet the slots of the telescope they fill: one rule at a call, a lambda and a concept literal.
 
-use {crate::test_support::*, curios_common::fill};
+use {super::test_support::*, curios_common::fill};
 
 const TWO: &str = r#"
     use /std/{Nat, Bool, Str, Show, print};

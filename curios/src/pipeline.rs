@@ -18,7 +18,7 @@ use {
 };
 
 /// Say, ahead of everything a command reports of `program`, that its file is one its package's directory holds and no unit declares, where it is one: the command takes it on its own, which `taken` words, and nothing after would say what it was not compiled against, so a name of the package refused in it reads as a typo. What would declare it follows the form it is written in ([`Unlinked::note`](curios_package::Unlinked::note)), read off the disk: a file that cannot be read is a program's to report.
-pub(crate) fn note_unlinked(program: &Program, taken: &str) {
+pub fn note_unlinked(program: &Program, taken: &str) {
     if let Some(unlinked) = program.unlinked() {
         let form = fs::read_to_string(&unlinked.file)
             .map_or(Form::Program, |text| Form::of(&unlinked.file, &text));
@@ -30,7 +30,7 @@ pub(crate) fn note_unlinked(program: &Program, taken: &str) {
 /// The payload `program` is built into for `target`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise: natively the precompiled `.cwasm`, filed under the engine that will run it, and for a browser the module Binaryen wrote, which any browser runs. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
 /// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
-pub(crate) fn payload_of(
+pub fn payload_of(
     budget: u64,
     program: Program,
     cache: Option<Verdicts>,
@@ -132,7 +132,7 @@ pub(crate) fn payload_of(
 /// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `store` when there is one.
 ///
 /// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` files the units a build would have and writes no pages, which is as far as a question goes. The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
-pub(crate) fn documentation_of(
+pub fn documentation_of(
     budget: u64,
     units: &[RootSource],
     store: Option<&Verdicts>,
@@ -153,7 +153,7 @@ pub(crate) fn documentation_of(
 /// What a program is reported as — the name that was asked for, never the file it resolved to.
 ///
 /// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A loose file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
-pub(crate) fn subject_of(program: &Program) -> Subject {
+pub fn subject_of(program: &Program) -> Subject {
     match (program.entry(), program.home()) {
         (_, Some(home)) => Subject::Executable(home.executable.clone()),
         (Entry::File(path), None) => Subject::File(path.clone()),
@@ -164,9 +164,7 @@ pub(crate) fn subject_of(program: &Program) -> Subject {
 /// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
 ///
 /// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so a read of it reports the end of the input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
-pub(crate) fn open(
-    entry: Option<&Path>,
-) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
+pub fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     match entry {
         Some(path) => opened(path),
         None => supplied(&drained()?),
@@ -174,7 +172,7 @@ pub(crate) fn open(
 }
 
 /// Standard input, drained to end — once, since a second read finds nothing.
-pub(crate) fn drained() -> Result<String, CompileError> {
+pub fn drained() -> Result<String, CompileError> {
     io::read_to_string(io::stdin())
         .map_err(|error| CompileError::failure(format!("failed to read standard input: {error}")))
 }
@@ -182,7 +180,7 @@ pub(crate) fn drained() -> Result<String, CompileError> {
 /// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrating each step under a header that names `manifest` when it is not where the invocation stands.
 ///
 /// The program's own step lasts until `finish` returns, so what it reports is what the payload took: the program the units link into, compiled to what a run executes.
-pub(crate) fn compile_entry<P>(
+pub fn compile_entry<P>(
     fold: Fold<'_>,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -219,14 +217,14 @@ pub(crate) fn compile_entry<P>(
 ///
 /// The lines outlive each event, which is why they are threaded rather than owned by [`report`]: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.
 #[derive(Default)]
-pub(crate) struct Steps {
+pub struct Steps {
     unit: Option<Line>,
     payload: Option<Line>,
 }
 
 impl Steps {
     /// Close the payload's line with what it took, once the payload exists: the program's own compile through to the machine code a run executes, which is where a test program's time goes.
-    pub(crate) fn finish(&mut self) {
+    pub fn finish(&mut self) {
         if let Some(mut line) = self.payload.take() {
             line.done();
             eprintln!();
@@ -234,7 +232,7 @@ impl Steps {
     }
 
     /// End whichever line a refusal interrupted, so the report below starts at column zero.
-    pub(crate) fn interrupted(&mut self) {
+    pub fn interrupted(&mut self) {
         if self.unit.take().or(self.payload.take()).is_some() {
             eprintln!();
         }
@@ -242,7 +240,7 @@ impl Steps {
 }
 
 /// Fold one [`Progress`] event onto `steps`, opening and closing lines as subjects begin and end.
-pub(crate) fn report(steps: &mut Steps, subject: &Subject, progress: Progress<'_>) {
+pub fn report(steps: &mut Steps, subject: &Subject, progress: Progress<'_>) {
     match progress {
         // A recompile over a baseline reads as a compile: what the line reports is that the unit is being worked on and how long it took, and the store this product hands the fold never offers a baseline anyway.
         Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {

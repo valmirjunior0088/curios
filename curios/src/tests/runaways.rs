@@ -6,11 +6,11 @@
 //!
 //! What a budget may never do is decide: the two fixtures at the end are a program refused at every budget, where a clash concluded from an unfinished computation would have excused an arm at an equation a lemma inhabits, and a pair of programs with one edge, where a memo crossing a declaration boundary would have let a neighbour pay for a fold. Both are stated at budgets rather than at sizes, so they read what exhaustion is allowed to conclude rather than what a unit buys.
 
-use {crate::test_support::*, curios_common::fill};
+use {super::test_support::*, curios_common::fill};
 
 /// What a runaway's claim makes a checker do.
 #[derive(Clone, Copy)]
-pub(super) enum Runaway {
+pub enum Runaway {
     /// `spin(k)` reduced at a literal no budget reaches: a step a unit, and nothing built.
     Spin,
     /// `f(c + k, k)` against itself at another first argument: unfolded, the two calls meet again under a binder, over a sum one summand longer.
@@ -70,7 +70,7 @@ const POWER: &str =
     "let pw(n: Nat, c: Nat, y: Nat) -> Nat = match n | 0 => c | k + 1 => pw(k, c * y, y) end;";
 
 /// A runaway as a whole program: its definitions, its one claim closed by `Eq/refl()`, and an entrypoint that reads none of them.
-pub(super) fn runaway(shape: Runaway) -> String {
+pub fn runaway(shape: Runaway) -> String {
     // What reads the claim after it, where a row measures what the kernel made of it: the kernel files what a judgment cost it where it begins the next.
     let mut reader = String::new();
     let (imports, definitions, claim) = match shape {

@@ -4,7 +4,7 @@
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::tests::sort` puts the same two propositions to the kernel under these names. Rename both or neither.
 
-use {super::test_support::*, crate::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // The direction the language needs. Two predicates, one a level above the other, are handed to slots that share one sort: under the binder each codomain is below it, whichever is read first. A predicate is no family of types, though: `Bool/Holds` is `(b : Bool) -> Prop`, and a slot wanting `(Bool) -> Type` refuses it. The refusal's control hands `apply` a family of types.
 #[test]

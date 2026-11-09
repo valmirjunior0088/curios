@@ -1,6 +1,6 @@
 //! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
 
-use {super::test_support::*, crate::test_support::*, curios_native::MockHost};
+use {super::test_support::*, crate::tests::test_support::*, curios_native::MockHost};
 
 #[test]
 fn vec_cons_with_nat_succ() {

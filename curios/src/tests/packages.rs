@@ -3,7 +3,7 @@
 //! Everything below `Selection::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-module`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_common::{Qualifier, digest, test_support::*},
     curios_module::{Overlay, RootSource, open_entrypoint},
     curios_native::{ForeignBindings, MockHost},

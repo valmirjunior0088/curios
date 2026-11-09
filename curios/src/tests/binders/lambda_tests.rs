@@ -1,6 +1,6 @@
 //! Plicity at a lambda and a bare reference: the hidden binders a lambda writes or has inserted, its surplus and short binders, and the hidden arguments a reference takes at its expectation.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 // === Plicity: insertion of omitted hidden binders, and exact checking of written ones. ====
 

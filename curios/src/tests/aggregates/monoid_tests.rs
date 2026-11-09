@@ -1,6 +1,6 @@
 //! `Bytes` and `List` as free monoids: a value does not depend on how its run is grouped, and a window must meet at its seam.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 #[test]
 fn list_match_is_a_foldr() {

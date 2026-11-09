@@ -1,6 +1,6 @@
 //! Derived `Hash`: the constructor tagged and each payload framed, a struct at ordinal zero, a proof taking no part, and the witness each payload needs.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // --- The `Hash` derivation: a constructor's ordinal, then its explicit payloads' encodings, every part framed. ---
 

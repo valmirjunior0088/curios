@@ -1,6 +1,9 @@
 //! Where an occurrence stands under a declaration's own arrows: strictly positive, positive and not strictly, or negative, and an occurrence of another type, which an arrow leaves alone.
 
-use {super::test_support::*, crate::test_support::*, curios_core::Polarity, curios_elab::Error};
+use {
+    super::test_support::*, crate::tests::test_support::*, curios_core::Polarity,
+    curios_elab::Error,
+};
 
 // The whole reason the gate exists. `Bad` is not the initial algebra of any functor — the payload is a function *out of* `Bad` — and admitting it hands back an eliminator that inhabits `False` in four lines with no recursion. The control's payload produces a `Bad`.
 #[test]

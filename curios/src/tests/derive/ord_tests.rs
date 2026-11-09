@@ -1,6 +1,6 @@
 //! Derived `Ord`: constructors ranked then payloads, fieldwise, a proof taking no part, and the equality its concept requires.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // --- The `Ord` derivation: constructors in declaration order, then payloads lexicographically through each one's own witness. ---
 

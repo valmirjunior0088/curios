@@ -5,7 +5,7 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude`'s `stored_prelude_measurements`, whose shape this follows.
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_module::RootSource,
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, test_support::*},
     curios_surface::Entrypoint,
@@ -129,7 +129,7 @@ fn emitted(module: &curios_anf::Module) -> usize {
 
 /// How a web's value is consumed — the axis that decides whether the kernel ever demands it.
 #[derive(Clone, Copy)]
-pub(super) enum Consumed {
+pub enum Consumed {
     /// Applied to the declaration's own binder and returned. Nothing demands the value, so nothing reduces the web.
     Applied,
     /// Scrutinized by a `match` at that binder, so the case equation's subject mentions a local.
@@ -159,7 +159,7 @@ fn consumer(suffix: &str, consumed: Consumed) -> String {
 }
 
 /// A web of `rules` predicate definitions consumed as `consumed` says, with each definition naming the one before it once or twice.
-pub(super) fn predicates(rules: usize, consumed: Consumed, twice: bool) -> String {
+pub fn predicates(rules: usize, consumed: Consumed, twice: bool) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Bool, Eq};\n\n\
          let Pred: Type = (x: Nat) -> Bool;\n\

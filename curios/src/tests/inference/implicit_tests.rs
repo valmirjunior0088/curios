@@ -1,6 +1,6 @@
 //! Solving an implicit argument from what the call site already fixes.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {

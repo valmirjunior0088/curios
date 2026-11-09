@@ -1,7 +1,7 @@
 //! Resolving a witness through the table: a method called by its path, a premise, an explicit override, several parameters, a later declaration and the operator concepts — and what a premise may be.
 
 use {
-    crate::test_support::*,
+    crate::tests::test_support::*,
     curios_common::{Qualifier, fill},
     curios_core::{Field, Global, Item, Proj, Subterm},
     curios_module::RootSource,

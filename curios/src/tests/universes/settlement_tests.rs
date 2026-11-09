@@ -1,6 +1,6 @@
 //! Which of a declaration's levels its callers choose, and where every other one lands.
 
-use {super::test_support::*, crate::test_support::*, curios_common::fill};
+use {super::test_support::*, crate::tests::test_support::*, curios_common::fill};
 
 // A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for). So `carrier`'s one parameter is the level its result holds, `Box`'s own, which the family is invariant in and a caller may need higher, and the `Type` it stores is no second one; `holder` takes that one beside the level of its `Type`-sorted parameter.
 //

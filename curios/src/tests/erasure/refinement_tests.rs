@@ -2,7 +2,7 @@
 //!
 //! Mutation-checked: with the refinement taken out of the successor arm and the cons arm of erasure's case splits (`curios-erase/src/lower/eliminate.rs`), each case split below panics at `erase: applied a non-function`, and the two folds, whose steps refine nothing, are unmoved.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. `g` is typed at `Step(x)`, a function type at a successor and at nothing else, so the call is read with `x` standing for `xp + 1`: with nothing refined, erasure meets a stuck `match` where it needs the callee's telescope.
 #[test]

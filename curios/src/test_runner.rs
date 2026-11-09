@@ -68,7 +68,7 @@ impl Totals {
 }
 
 /// How one test ended, in the vocabulary every source reports in: the verdict its entry answered, the exit that left it unanswered, or the trap that stopped it. Natively it is what `TestRun::run` answers, read into this once.
-pub(crate) enum Outcome {
+pub enum Outcome {
     Answered(bool),
     Exited(u8),
     Trapped(String),
@@ -86,9 +86,9 @@ impl From<Result<TestEnd, String>> for Outcome {
 
 /// Bytes on the two standard streams: what the printer wrote for one event, handed back so a reply can carry the same bytes, and what a guest wrote where a source hands its output over rather than the guest writing to the process's streams itself.
 #[derive(Default)]
-pub(crate) struct Streams {
-    pub(crate) stdout: Vec<u8>,
-    pub(crate) stderr: Vec<u8>,
+pub struct Streams {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
 }
 
 impl Streams {
@@ -103,14 +103,14 @@ impl Streams {
     }
 
     /// Take `other` after these, stream to stream.
-    pub(crate) fn append(&mut self, other: Streams) {
+    pub fn append(&mut self, other: Streams) {
         self.stdout.extend(other.stdout);
         self.stderr.extend(other.stderr);
     }
 }
 
 /// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
-pub(crate) fn run_tests(
+pub fn run_tests(
     budget: u64,
     selection: Selection,
     access: Access,
@@ -150,7 +150,7 @@ pub(crate) fn run_tests(
 }
 
 /// What a subject is reported as.
-pub(crate) fn shown(named: &Named) -> Subject {
+pub fn shown(named: &Named) -> Subject {
     match named {
         Named::Library(package) => Subject::package(package),
         Named::Executable(name) => Subject::Executable(name.clone()),
@@ -160,7 +160,7 @@ pub(crate) fn shown(named: &Named) -> Subject {
 }
 
 /// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: `Processing`, a `↳ Compiling` step for each unit it stands on, and `↳ Linking` for the program itself, which lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes.
-pub(crate) fn compiled(
+pub fn compiled(
     budget: u64,
     subject: &TestSubject,
     shown: &Subject,
@@ -243,7 +243,7 @@ fn edits(path: &str, filter: &str) -> usize {
 }
 
 /// What a run of tests comes to, printed as it goes: the `↳ Testing` and `↳ Tested` steps around each module's tests, one line per test as it ends, and the `Finished` tally, each written to the process's streams and handed back as the bytes written — with the tally, every test the subjects declare, and the one reason a store refused filing.
-pub(crate) struct Printer<'a> {
+pub struct Printer<'a> {
     /// The `--filter` arguments as written, for a refusal to name.
     filters: &'a [String],
     /// The prefixes every subject's test program schedules the tests at or under: those `filters` name, or the root where none is given.
@@ -266,7 +266,7 @@ pub(crate) struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
-    pub(crate) fn new(filters: &'a [String]) -> Self {
+    pub fn new(filters: &'a [String]) -> Self {
         let under = match filters.is_empty() {
             true => vec![Qualifier::empty()],
             false => filters.iter().map(|filter| prefix(filter)).collect(),
@@ -287,12 +287,12 @@ impl<'a> Printer<'a> {
     }
 
     /// The prefixes a subject's test program schedules the tests at or under.
-    pub(crate) fn under(&self) -> &[Qualifier] {
+    pub fn under(&self) -> &[Qualifier] {
         &self.under
     }
 
     /// Take what a subject's compile declared and which filters it selected a test under, and keep the first reason its store refused filing.
-    pub(crate) fn took(&mut self, store: Option<&Verdicts>, tested: &Tested) {
+    pub fn took(&mut self, store: Option<&Verdicts>, tested: &Tested) {
         self.refusal = self
             .refusal
             .take()
@@ -304,7 +304,7 @@ impl<'a> Printer<'a> {
     }
 
     /// The subject whose tests are `modules` taken on, and every line up to its first scheduled test: each module's `↳ Testing` step, followed at once by its `↳ Tested` step where it schedules none.
-    pub(crate) fn opened(&mut self, modules: &[TestModule]) -> Streams {
+    pub fn opened(&mut self, modules: &[TestModule]) -> Streams {
         self.modules.extend(modules.iter().cloned());
 
         let written = Streams {
@@ -356,12 +356,12 @@ impl<'a> Printer<'a> {
     }
 
     /// Whether a module of the subject in hand is still open: one of its scheduled tests is yet to end.
-    pub(crate) fn in_hand(&self) -> bool {
+    pub fn in_hand(&self) -> bool {
         !self.modules.is_empty()
     }
 
     /// The next scheduled test of the module in hand ended as `outcome`: `guest`'s streams first, where a source hands the guest's output over rather than the guest writing to the process's streams itself, then what only the runner knows, and the module's `↳ Tested` step where it was the module's last. The guest prints the outcome line of a test it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
-    pub(crate) fn ended(&mut self, outcome: Outcome, guest: Option<&Streams>) -> Streams {
+    pub fn ended(&mut self, outcome: Outcome, guest: Option<&Streams>) -> Streams {
         let mut written = Streams::default();
         if let Some(guest) = guest {
             written.stdout.extend_from_slice(&guest.stdout);
@@ -410,7 +410,7 @@ impl<'a> Printer<'a> {
     }
 
     /// A store's refusal, said once.
-    pub(crate) fn skipped(&self) {
+    pub fn skipped(&self) {
         if let Some(refusal) = &self.refusal {
             fact(
                 Heading::Skipped,
@@ -420,7 +420,7 @@ impl<'a> Printer<'a> {
     }
 
     /// Refuse each filter no subject's compile selected a test under, by name.
-    pub(crate) fn unmatched(&self) -> Result<(), CompileError> {
+    pub fn unmatched(&self) -> Result<(), CompileError> {
         let unmatched = self
             .filters
             .iter()
@@ -436,7 +436,7 @@ impl<'a> Printer<'a> {
     }
 
     /// The `Finished` line, closing the run with its tally — left out where it would repeat the one `↳ Tested` step the run wrote.
-    pub(crate) fn finished(&self) -> Streams {
+    pub fn finished(&self) -> Streams {
         let written = Streams {
             stdout: Vec::new(),
             stderr: match self.reported {
@@ -450,12 +450,12 @@ impl<'a> Printer<'a> {
     }
 
     /// Whether every test that ran passed.
-    pub(crate) fn green(&self) -> bool {
+    pub fn green(&self) -> bool {
         self.totals.all_green()
     }
 
     /// The end of a native run: a store's refusal said once, each filter that matched nothing refused by name, and the `Finished` line.
-    pub(crate) fn finish(self) -> Result<bool, CompileError> {
+    pub fn finish(self) -> Result<bool, CompileError> {
         self.skipped();
         self.unmatched()?;
         self.finished();
@@ -472,7 +472,7 @@ fn body(record: &TestRecord, lines: &mut String) {
 }
 
 /// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root, the socket it drives the run over, and the pages beside them one subject at a time, each outcome taken as the step in hand's and printed as native prints a test's end. `Ok(true)` when every selected test passed.
-pub(crate) fn serve_tests(
+pub fn serve_tests(
     budget: u64,
     selection: Selection,
     access: Access,

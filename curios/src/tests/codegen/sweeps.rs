@@ -36,7 +36,7 @@ fn independent_tuple_workers_keep_their_recursion_and_arguments() {
 
 #[test]
 fn independent_returned_closures_keep_their_captures_and_applications() {
-    answers(UNCURRY, ["37", "6421", "39126", "38087"]);
+    answers(UNCURRY_INDEPENDENT, ["37", "6421", "39126", "38087"]);
 }
 
 #[test]

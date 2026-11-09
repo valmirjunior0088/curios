@@ -4,7 +4,7 @@ mod resource_tests;
 mod sequence_tests;
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_common::{Qualifier, RootKind},
     curios_module::RootSource,
     curios_native::MockHost,

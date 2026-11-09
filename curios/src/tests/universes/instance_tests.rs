@@ -1,7 +1,7 @@
 //! Two instances of one name: the levels an occurrence carries, and what two of them compare as.
 
 use {
-    super::test_support::*, crate::test_support::*, curios_common::fill,
+    super::test_support::*, crate::tests::test_support::*, curios_common::fill,
     curios_pipeline::DEFAULT_BUDGET,
 };
 

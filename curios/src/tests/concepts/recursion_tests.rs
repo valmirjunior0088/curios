@@ -4,7 +4,7 @@
 //!
 //! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 /// The head of the declaration of `name` in `elaborated`, with the decorator standing above it where it has one: what says whether a witness is a definition or a group of one, a group of one being declared under `#{node = Rec}`. A decorator begins at the line's start, and a block it opens continues on indented lines down to the head.
 fn declaration(elaborated: &str, name: &str) -> String {

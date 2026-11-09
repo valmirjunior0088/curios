@@ -3,20 +3,20 @@
 use curios_common::fill;
 
 /// The chunk of standard input the program reads its leaf from: forty bytes, past an immediate's envelope and long enough for a window of twenty.
-pub(super) const ARRIVAL: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCD";
+pub const ARRIVAL: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCD";
 
 /// How one carrier spells the program's holes: its type, the bracket that opens a concatenation, its length and window, one element read as a number, the leaf made of the bytes that arrived, and the run settled into a fresh flat payload.
-pub(super) struct Carrier {
-    pub(super) run: &'static str,
-    pub(super) open: &'static str,
-    pub(super) len: &'static str,
-    pub(super) slice: &'static str,
-    pub(super) at: &'static str,
-    pub(super) leaf: &'static str,
-    pub(super) settled: &'static str,
+pub struct Carrier {
+    pub run: &'static str,
+    pub open: &'static str,
+    pub len: &'static str,
+    pub slice: &'static str,
+    pub at: &'static str,
+    pub leaf: &'static str,
+    pub settled: &'static str,
 }
 
-pub(super) const BYTES: Carrier = Carrier {
+pub const BYTES: Carrier = Carrier {
     run: "Bytes",
     open: "x[",
     len: "Bytes/len",
@@ -26,7 +26,7 @@ pub(super) const BYTES: Carrier = Carrier {
     settled: "Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00))",
 };
 
-pub(super) const LIST: Carrier = Carrier {
+pub const LIST: Carrier = Carrier {
     run: "List(Nat)",
     open: "[",
     len: "List/len",
@@ -39,7 +39,7 @@ pub(super) const LIST: Carrier = Carrier {
 /// A program over one chunk of standard input that prints a `1` for each of nine claims and a `0` for one that fails: that a node flattens to its own length, and that each of eight runs reads at every index, upward and then downward, as the same run settled into a fresh flat payload does. The eight are a leaf, two leaves, a window and a leaf either way round, a flattened node and a leaf, an unread node on either side of a leaf, and three appends.
 ///
 /// Each read is of a run built for it, so the upward walk meets every node unread and the downward one does too: a read that flattened the run for the one would otherwise hide what the other answers.
-pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
+pub fn reads_in_every_shape(carrier: &Carrier) -> String {
     r#"
     use /std/{Nat, Byte, Bytes, Bool, List, Option, Str, Io, print, Try, Proc};
 
@@ -113,7 +113,7 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
 /// A program over one chunk of standard input that prints a `1` for each of six claims and a `0` for one that fails, over runs that each repeat the leaf the arrival makes, flattened in an order that puts every arm of a flattening to work. `two` is flattened over its leaf, so exactly, and `three` over `two`, so with room, its extent its own length. `left` then claims the room `three` left and `right` finds the extent moved and copies, and `doubled` claims room enough for `again` appended to itself. A window of `three`, cut before anything extends its payload, is read after. Every run is read element by element against the leaf it repeats, and each flattening's settled copy as well, so a read of a run and the payload it was written into answer alike.
 ///
 /// The bindings stand in the order they are flattened in, each settled copy read in the claims, so no flattening is left for a read to do later.
-pub(super) fn extends_in_place(carrier: &Carrier) -> String {
+pub fn extends_in_place(carrier: &Carrier) -> String {
     let (run, open, len, slice, at, leaf, settled) = (
         carrier.run,
         carrier.open,

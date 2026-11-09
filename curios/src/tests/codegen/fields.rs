@@ -1,7 +1,7 @@
 //! Scalar replacement of structural tuples whose runtime-dependent type changes their width.
 
 use {
-    crate::*,
+    crate::test_support::*,
     curios_cps::{FieldGroup, Intrinsic, Node, ValueExpr},
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost},

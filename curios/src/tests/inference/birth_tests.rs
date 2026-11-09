@@ -2,7 +2,7 @@
 //!
 //! A metavariable holds the frames it was born under, and a solution's check stands on them where it is made elsewhere: each guard in the frame it was registered in, so a guard read under another is read under it there as it is where the metavariable was born, and nothing of the arm the judgment is made in is read.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 /// An implicit born under two guards is solved from an arm inside them. `same`'s `w` is born where the inner guard, read under the outer, is `y <= z`, and is solved inside the arm of `b`: its candidate holds the proof of `y <= z`, which checks where `w` was born, the inner guard under the outer. With the birth's guards registered again in one frame the inner one said nothing there, and the call was refused where `same(r)` compiled; it was refused the same from the arm of another guard, and compiled under one guard.
 #[test]

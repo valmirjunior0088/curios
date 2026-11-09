@@ -1,6 +1,6 @@
 //! A binder beside a concrete pattern: the cases a row is reached under, the value no arm matches, and the arm no value reaches.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 /// `function` put to `calls` over `z`, a `Nat` that is zero: the answers as one numeral, the first call's in the units, the second's in the tens. Once with `z` written `0`, which leaves every call for the compiler to fold, and once with a zero no fold reads, which leaves each to run.
 fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {

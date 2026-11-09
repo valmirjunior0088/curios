@@ -1,6 +1,6 @@
 //! Opening, reading and writing a file, and the scope its handle lives inside — synchronous, and across a suspension through the stream witnesses.
 
-use {crate::test_support::*, curios_native::MockHost};
+use {crate::tests::test_support::*, curios_native::MockHost};
 
 #[test]
 fn read_all_reads_a_seeded_file() {

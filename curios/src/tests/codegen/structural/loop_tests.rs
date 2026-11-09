@@ -1,6 +1,6 @@
 //! Hot loops and recursion: single-entry continuations, natural loops, scalars in registers, and no irreducible fallback.
 
-use {super::test_support::*, crate::test_support::*};
+use {super::test_support::*, crate::tests::test_support::*};
 
 // -- LCG --------------------------------------------------------------------
 

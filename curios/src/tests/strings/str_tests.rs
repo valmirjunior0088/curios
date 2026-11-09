@@ -1,6 +1,6 @@
 //! What a `Str` literal costs to compile and how one reads in a report. The `Str` surface itself — indexing, slicing and trimming at codepoint boundaries — is the corpus's `/strings/str`.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn literal_prints_its_bytes() {

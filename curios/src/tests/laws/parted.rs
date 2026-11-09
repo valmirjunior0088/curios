@@ -6,7 +6,7 @@ use super::*;
 
 /// The audit that states a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Audit {
+pub enum Audit {
     Seeds,
     Typed,
     Arms,
@@ -18,15 +18,15 @@ pub(super) enum Audit {
 }
 
 /// One row a checker puts on the other side than derived: the audit that states it, its name as that audit spells it, what each checker says, and the finding that holds why, by its heading in `documentation/roadmap/soundness/000-findings.md`.
-pub(super) type Parted = (Audit, String, Answers, &'static str);
+pub type Parted = (Audit, String, Answers, &'static str);
 
 /// Every row listed. There is none: both checkers put every row where its seed derives.
-pub(super) fn parted() -> Vec<Parted> {
+pub fn parted() -> Vec<Parted> {
     Vec::new()
 }
 
 /// Hold what `audit` found — each row a checker put on the other side than derived, with what each said — equal to the rows the table lists for it.
-pub(super) fn hold_to_the_table(audit: Audit, found: &[(String, Answers)]) {
+pub fn hold_to_the_table(audit: Audit, found: &[(String, Answers)]) {
     let listed = parted()
         .into_iter()
         .filter(|(stated_by, ..)| *stated_by == audit)

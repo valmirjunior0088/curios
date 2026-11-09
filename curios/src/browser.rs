@@ -10,7 +10,7 @@ use {
 };
 
 /// What `program` is built into for a browser: every file of its page by its page path — the module through Binaryen alone, filed in `store` as `payload_of` files it, the rows it reaches linked to the gateways its packages declare, and the page laid out by `curios-browser`, naming the program as its first argument and its title. Every file the page holds is read here, once, and what the page refuses is refused before anything is written or served.
-pub(crate) fn built(
+pub fn built(
     budget: u64,
     program: Program,
     store: Option<Verdicts>,
@@ -35,7 +35,7 @@ pub(crate) fn built(
 }
 
 /// Write `files`, each at its page path, under `directory`, creating what is missing. Where the directory is the store's own, `owned`, it is emptied first, so it holds the page and nothing an earlier build left; one `--output` names keeps whatever else it holds, a file of the page replacing the one of its name.
-pub(crate) fn emit_page(
+pub fn emit_page(
     directory: &Path,
     files: &BTreeMap<String, Vec<u8>>,
     owned: bool,

@@ -1,6 +1,6 @@
 //! Where irrelevance takes over from comparison: a function into a proposition and a record's proof component, and the relevant parts still compared.
 
-use {super::test_support::*, crate::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // The composition the row named as unattacked — "eta at a function type whose codomain is a proposition, where the expansion's body lands at a `Prop`-sorted goal and irrelevance discharges it without comparing anything" — and at Π there is nothing to attack, because the shape cannot arise. `turn` tries irrelevance *before* it dispatches on the goal type's shape, and `func_sort` makes a Π into a proposition a proposition whatever it quantifies over, so the goal is discharged whole at the top and eta never opens a binder at all. Any two such functions are equal, which is this accepting rung.
 //

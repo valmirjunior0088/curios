@@ -1,6 +1,6 @@
 //! The ordering witnesses beyond the numerics: `Cmp` and `Ord` on strings, bytes, booleans, lists, options and results, and `Eql`/`Show` on maps.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // UTF-8 bytewise order is scalar-value order, so `Cmp(Str)` compares code points without decoding: `é` (U+00E9) sorts after `z`, a prefix sorts before its extension, and the empty string before everything.
 #[test]

@@ -1,6 +1,6 @@
 //! Successful payloads, declared embeddings and first-failure sequencing.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 /// A written function reads its Test monad from the result, and Io embeds through its declared edge.
 #[test]

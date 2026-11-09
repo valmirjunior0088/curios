@@ -1,6 +1,6 @@
 //! The size-change obligation: what licenses a decrease — a dispatch or guard that rules out zero, a shrinking literal operand, a payload — and what does not.
 
-use {super::test_support::*, crate::test_support::*, curios_analysis::Erased};
+use {super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased};
 
 // The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and a `Nat` dispatch's default arm establishes nonzero exactly when `0` is one of the enumerated cases. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
 //

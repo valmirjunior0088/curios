@@ -1,6 +1,6 @@
 //! What a refusal at an argument tells the reader about the call it sits in.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A lambda handed in where the callee takes its list — the argument order every other language uses for `map` — is refused as a lambda against a non-function type, which is true and not what the reader needs. The report names the parameter the lambda filled and the parameter the callee takes a function as.
 #[test]

@@ -23,7 +23,7 @@ use {
 
 /// A target as `--target` takes it: the manifest's own spelling of each, read off [`Target::ALL`] and [`Target::spelled`], so the flag and the `[foreign.<target>]` tables cannot spell one target two ways.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct TargetValue(pub(crate) Target);
+pub struct TargetValue(pub Target);
 
 impl ValueEnum for TargetValue {
     fn value_variants<'a>() -> &'a [Self] {
@@ -43,33 +43,33 @@ static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
 /// Which manifest governs, for a command that resolves against a package.
 #[derive(Debug, Args)]
-pub(crate) struct ManifestFlag {
+pub struct ManifestFlag {
     /// The explicit override for scripting. It reaches only the governing package's manifest, never the umbrella question — see `documentation/usage.md`'s Which manifest governs.
     #[arg(
         long = "manifest",
         value_name = "PATH",
         help = "Use this curios.toml as the governing package's, instead of the nearest one"
     )]
-    pub(crate) manifest: Option<PathBuf>,
+    pub manifest: Option<PathBuf>,
 }
 
 /// What a command that elaborates reads: the work a declaration may spend, and which manifest governs.
 #[derive(Debug, Args)]
-pub(crate) struct Elaboration {
+pub struct Elaboration {
     #[arg(
         long,
         default_value_t = curios_pipeline::DEFAULT_BUDGET,
         value_name = "UNITS",
         help = "Units of reduction work each declaration may spend while type checking"
     )]
-    pub(crate) budget: u64,
+    pub budget: u64,
 
     #[command(flatten)]
-    pub(crate) manifest: ManifestFlag,
+    pub manifest: ManifestFlag,
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum Mode {
+pub enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(
         about = "Execute an executable, a .crs file, or standard input, or serve its page to a browser",
@@ -278,7 +278,7 @@ pub(crate) enum Mode {
 ///
 /// The name is a positional on both, and mandatory on both, so `--rev` and `--refresh` have a row to name without a flag to carry it. What differs is what the name *is*: a `[[foreign]]` row's is a handle no program refers to, and a `[dependencies]` key is the package's own declared name — which is why only the second is checked against the delivery, and why neither is ever discovered rather than stated.
 #[derive(Debug, Subcommand)]
-pub(crate) enum Pinned {
+pub enum Pinned {
     // Required, so a row is never written pointing nowhere; multiple, because `--url` and `--rev` are one delivery spelled in two words.
     #[command(
         about = "What a target links for this package's `foreign` declarations: a WebAssembly module natively, a JavaScript gateway in a browser",
@@ -386,18 +386,18 @@ pub(crate) enum Pinned {
 
 /// Whether the manifest is written, or only asked what it would say.
 #[derive(Debug, Args)]
-pub(crate) struct CheckFlag {
+pub struct CheckFlag {
     /// The delivery still happens under it — what a row *should* say cannot be known without fetching — and only the write is withheld. `format --check` is the precedent for the spelling and for the exit code.
     #[arg(
         long,
         help = "Write nothing; exit nonzero if the manifest would change (for CI)"
     )]
-    pub(crate) check: bool,
+    pub check: bool,
 }
 
 /// What `wonder` is asked of its subject: the check where no query is named, and otherwise the one its option names. At most one: the options form one group, so two are refused where the line is parsed, and this is the one value the parse leaves. A subject takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
 #[derive(Debug, Clone)]
-pub(crate) enum Query {
+pub enum Query {
     /// Every diagnostic, goal and lint, located; exit 0 once answered, whatever the answer.
     Check,
     Tests,
@@ -542,18 +542,18 @@ struct ParsedCli {
         global = true,
         help = "Write one record per span and event to PATH"
     )]
-    pub(crate) profile: Option<PathBuf>,
+    pub profile: Option<PathBuf>,
 
     #[command(subcommand)]
-    pub(crate) mode: Mode,
+    pub mode: Mode,
 }
 
 /// A command line whose `run` subject and program arguments have been separated. The private clap input cannot reach dispatch without this normalization.
 #[derive(Debug)]
-pub(crate) struct Cli {
+pub struct Cli {
     #[cfg(feature = "profile")]
-    pub(crate) profile: Option<PathBuf>,
-    pub(crate) mode: Mode,
+    pub profile: Option<PathBuf>,
+    pub mode: Mode,
 }
 
 impl CommandFactory for Cli {
@@ -568,12 +568,12 @@ impl CommandFactory for Cli {
 
 impl Cli {
     /// Read the process's arguments: the command they name, or what clap answered instead — help and the version, which are answers, or a line that does not parse. The caller prints it, and the process exits from `main` alone.
-    pub(crate) fn parse() -> Result<Self, Error> {
+    pub fn parse() -> Result<Self, Error> {
         Self::try_parse_from(env::args_os())
     }
 
     /// Parse once with clap, preserving the original OS words so a consumed leading separator can be distinguished from a subject.
-    pub(crate) fn try_parse_from(
+    pub fn try_parse_from(
         words: impl IntoIterator<Item = impl Into<OsString>>,
     ) -> Result<Self, Error> {
         let words = words.into_iter().map(Into::into).collect::<Vec<_>>();

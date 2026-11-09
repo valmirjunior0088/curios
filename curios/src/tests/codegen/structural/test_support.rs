@@ -1,8 +1,7 @@
 //! Compiling a fixture to raw pre-Binaryen wasm and asserting a structural property of the module.
-//!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
+    crate::test_support::*,
     curios_abi::ForeignStore,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost},
@@ -18,7 +17,7 @@ use {
 //
 // The runtime taint is read inside the entry function; its local annotations share that function's sequencing region.
 
-pub(super) const LCG: &str = r#"
+pub const LCG: &str = r#"
     use /std/{Nat, List, Proc};
     let loop(k : Nat, x : Nat) -> Nat =
         match k : (_) => Nat
@@ -32,7 +31,7 @@ pub(super) const LCG: &str = r#"
     entry()
     "#;
 
-pub(super) const TREES: &str = r#"
+pub const TREES: &str = r#"
     use /std/{Nat, List, Proc};
     induct Tree : Type
     | leaf(Nat)
@@ -55,7 +54,7 @@ pub(super) const TREES: &str = r#"
     entry()
     "#;
 
-pub(super) const HIGHER_ORDER: &str = r#"
+pub const HIGHER_ORDER: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let pick(b : Bool) -> (Nat) -> Nat =
         match b : (_) => (Nat) -> Nat
@@ -70,7 +69,7 @@ pub(super) const HIGHER_ORDER: &str = r#"
     entry()
     "#;
 
-pub(super) const DIRECT_ESCAPING: &str = r#"
+pub const DIRECT_ESCAPING: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
@@ -87,7 +86,7 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
     entry()
     "#;
 
-pub(super) const FUNCTION_ONLY: &str = r#"
+pub const FUNCTION_ONLY: &str = r#"
     use /std/{Nat, List, Proc};
     let down(n : Nat, acc : Nat) -> Nat =
         match n : (_) => Nat
@@ -102,7 +101,7 @@ pub(super) const FUNCTION_ONLY: &str = r#"
     "#;
 
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
-pub(super) const MUTUAL_RECURSION: &str = r#"
+pub const MUTUAL_RECURSION: &str = r#"
     use /std/{Nat, List, Proc};
     let ping(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
@@ -119,7 +118,7 @@ pub(super) const MUTUAL_RECURSION: &str = r#"
 /// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries three fields and `done` two, so the class is four slots wide and the shorter constructor exercises the filler. Neither constructor is unary on purpose: the immediate encoding hands a lone `done(Nat)` edge back as a bare payload rather than a construction, which would quietly retire this fixture's premise — exactly the decay the test's premise check exists to catch.
 ///
 /// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, which the fixture stops holding when that constant moves — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets [`a_returned_constructor_is_delivered_as_its_fields`] state that the callee is a different function from its callers instead of merely that some function exists.
-pub(super) const SPLIT_RETURN: &str = r#"
+pub const SPLIT_RETURN: &str = r#"
     use /std/{Nat, List, Proc};
     induct Step : Type
     | more(Nat, Nat, Nat)
@@ -158,7 +157,7 @@ pub(super) const SPLIT_RETURN: &str = r#"
 /// Nothing existing reaches it. The two lambdas leave as return values, so the recursion `walk → (s) => walk(m)(…) → walk` closes through an application of a value and no known-callee analysis sees a cycle at all; the closure is genuinely built and genuinely called through.
 ///
 /// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See [`a_returned_closure_every_caller_applies_is_absorbed`].
-pub(super) const UNCURRY: &str = r#"
+pub const UNCURRY: &str = r#"
     use /std/{Nat, List, Proc};
     let walk(n : Nat) -> (Nat) -> Nat =
         match n : (_) => (Nat) -> Nat
@@ -177,7 +176,7 @@ pub(super) const UNCURRY: &str = r#"
     "#;
 
 /// [`UNCURRY`]'s admissible shape with one difference: the caller applies the returned closure once *and* captures it in a lambda defined below the application, which escapes into a `List/map` so it is neither inlined nor dead. `mk` is recursive and `n` tainted so nothing folds the closure away, every return edge carries a closure, and the direct application is the resume's only *visible* use.
-pub(super) const UNCURRY_CAPTURED: &str = r#"
+pub const UNCURRY_CAPTURED: &str = r#"
     use /std/{Nat, List, Str, Proc};
     let mk(n : Nat) -> (Nat) -> Nat =
         match n : (_) => (Nat) -> Nat
@@ -198,7 +197,7 @@ pub(super) const UNCURRY_CAPTURED: &str = r#"
     "#;
 
 /// A parser one of whose arms returns through a call: `/std/Flt/grammar/exponent_after`'s `none` arm returns `Parse/pure`'s closure, and its `some` arm builds its action through the `Monad` dictionary's `bind` and tail-calls it. Read beneath `Parse`'s `chain`, every caller applies what it returns, which is what admits uncurrying. The program is the library's corpus reduced to what still showed it: without the map it builds and removes from, or with one entry fewer, the parse is compiled otherwise, and the text read is one that takes the `some` arm.
-pub(super) const UNCURRY_THROUGH_A_CALL: &str = r#"
+pub const UNCURRY_THROUGH_A_CALL: &str = r#"
     use /std/{Flt, Nat, Str, Option, Map, print};
 
     let read(text: Str) -> Str =
@@ -215,7 +214,7 @@ pub(super) const UNCURRY_THROUGH_A_CALL: &str = r#"
     "#;
 
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
-pub(super) const LOOPED_PICK: &str = r#"
+pub const LOOPED_PICK: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let spin(k : Nat, acc : Nat) -> Nat =
         match k : (_) => Nat
@@ -239,7 +238,7 @@ pub(super) const LOOPED_PICK: &str = r#"
 /// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction, so it cannot catch a filler at a raw carrier. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f64` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
 ///
 /// A conjunction whose second operand is a call of a total function: `spin`'s kernel reduces by `65537`, the needle that finds it, and the comparison before the `&&` reads the taint against `4`. Four arguments, the program's name among them, make it `true`, and `spin(4, 1)` is `20608`.
-pub(super) const CONJUNCTION_CALL: &str = r#"
+pub const CONJUNCTION_CALL: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let spin(n: Nat, acc: Nat) -> Nat =
         match n | 0 => acc | k + 1 => spin(k, (acc * 75 + 1) % 65537) end;
@@ -251,7 +250,7 @@ pub(super) const CONJUNCTION_CALL: &str = r#"
     "#;
 
 /// Two lists that differ at their first element, compared by a recursion a conjunction closes, `x == y && same(xs, ys)`, over `Nat`, whose `==` resolves to a known function: the recursion terminates and does nothing else, so it may be dropped.
-pub(super) const LIST_EQUALITY: &str = r#"
+pub const LIST_EQUALITY: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let same(a: List(Nat), b: List(Nat)) -> Bool =
         match a
@@ -267,7 +266,7 @@ pub(super) const LIST_EQUALITY: &str = r#"
 /// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
 ///
 /// **The demand is `spin`'s own `* +2.0`.** The program's tail follows a host call, so it is reached both where the answer arrives and through the suspension's continuation: `spin` is called from the two, stays a function and returns its result boxed, and a use past that return would leave the slot a reference.
-pub(super) const VARIANT_FILLER: &str = r#"
+pub const VARIANT_FILLER: &str = r#"
     use /std/{Nat, Flt, Option, List, Proc};
     let spin(k : Nat, o : Option(Flt)) -> Flt =
         match k : (_) => Flt
@@ -288,7 +287,7 @@ pub(super) const VARIANT_FILLER: &str = r#"
     "#;
 
 /// A loop that reads two float literals in registers, seeded by a float its own entry computes so its parameter is held in a register. `j % 7919` puts a small `Nat` the loop alone holds into it, the needle that finds it: a float literal's own text also stands in its global's initializer, outside every loop.
-pub(super) const FLOAT_LITERAL_LOOP: &str = r#"
+pub const FLOAT_LITERAL_LOOP: &str = r#"
     use /std/{Nat, Flt, List, Proc};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
@@ -302,7 +301,7 @@ pub(super) const FLOAT_LITERAL_LOOP: &str = r#"
     "#;
 
 /// A loop seeded by its function's own float parameter. `spin` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function, with `go` contified into it and seeded by `x`; `j % 7919` puts a small `Nat` the loop alone holds into it.
-pub(super) const KNOWN_PARAMETER_SEED: &str = r#"
+pub const KNOWN_PARAMETER_SEED: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
@@ -323,7 +322,7 @@ pub(super) const KNOWN_PARAMETER_SEED: &str = r#"
     "#;
 
 /// A loop seeded by a call's result. `base` is called from two places with values the input decides, and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function and `seed` arrives as what it hands back.
-pub(super) const CALL_RESULT_SEED: &str = r#"
+pub const CALL_RESULT_SEED: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
     let base(x : Flt) -> Flt =
         let b = x * +0.5 + x * +0.25 + +1.0;
@@ -345,7 +344,7 @@ pub(super) const CALL_RESULT_SEED: &str = r#"
     "#;
 
 /// A step function over a two-float structure, called once a round from a loop. `step` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function: the known-function worker takes its structures as their four fields, and the return protocol hands its answer back as two values. `j % 7919` puts a small `Nat` the loop alone holds into it.
-pub(super) const PAIR_STEP: &str = r#"
+pub const PAIR_STEP: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
     struct Vec2: Type { x: Flt, y: Flt }
     let step(p : Vec2, v : Vec2, dt : Flt) -> Vec2 =
@@ -371,7 +370,7 @@ pub(super) const PAIR_STEP: &str = r#"
     "#;
 
 /// A float computed in the entry seeds a loop there and is captured by a closure that escapes into a list, whose loop it seeds too. `inner` and `outer` are each called once, so each is contified where it is called: `outer` into the entry, `inner` into the closure's body, which reads `seed` as a value free in it. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
-pub(super) const CAPTURED_FLOAT: &str = r#"
+pub const CAPTURED_FLOAT: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc, Option};
     let inner(acc : Flt, k : Nat) -> Flt =
         match k
@@ -394,7 +393,7 @@ pub(super) const CAPTURED_FLOAT: &str = r#"
     "#;
 
 /// Two loops only a stated carrier seeds. `warp` escapes into a list, so its parameter arrives through its closure wrapper's uniform signature and seeds `go`'s loop; and the closure called out of the list hands its result back as a reference, which seeds `spin`'s. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
-pub(super) const STATED_SEEDS: &str = r#"
+pub const STATED_SEEDS: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc, Option};
     let go(acc : Flt, k : Nat) -> Flt =
         match k
@@ -419,7 +418,7 @@ pub(super) const STATED_SEEDS: &str = r#"
 /// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
 ///
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.
-pub(super) const SHARED_PAYLOAD: &str = r#"
+pub const SHARED_PAYLOAD: &str = r#"
     use /std/{Str, Flt, Nat, Result, List, Proc};
     let judged(n : Nat, depth : Nat) -> Result(Str, Flt) =
         match depth
@@ -447,7 +446,7 @@ pub(super) const SHARED_PAYLOAD: &str = r#"
     "#;
 
 /// The same slot met through a parser: `whole` binds a float and answers it after a later step, so the float is `success`'s payload beside the refusal `failure` carries, and here the refusal is built where the join can see it.
-pub(super) const PARSED_FLOAT: &str = r#"
+pub const PARSED_FLOAT: &str = r#"
     use /std/{Str, Flt, Parse, Nat, Char, List, Proc};
     let digits() -> Parse(Str, Flt) =
         let run = Parse/str/take_while(Char/is_ascii_digit)!;
@@ -464,7 +463,7 @@ pub(super) const PARSED_FLOAT: &str = r#"
     "#;
 
 /// A value whose type a match computes: `Held(b)` is a float where `b` holds and a string where it does not, so the one name `v` is joined from a float and from a string, and read as a float under one branch only. No variant is involved and no slot is shared: the parameter itself has two types.
-pub(super) const COMPUTED_TYPE: &str = r#"
+pub const COMPUTED_TYPE: &str = r#"
     use /std/{Str, Flt, Nat, Bool, List, Proc};
     let Held(b : Bool) -> Type =
         match b | true => Flt | false => Str end;
@@ -488,7 +487,7 @@ pub(super) const COMPUTED_TYPE: &str = r#"
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
 ///
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
-pub(super) const STRING_WALK: &str = r#"
+pub const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, Proc};
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
@@ -501,7 +500,7 @@ pub(super) const STRING_WALK: &str = r#"
 // -- helpers ----------------------------------------------------------------
 
 /// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module, beside the rows it imports, which a run of it carries. The module is the one `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
-pub(in crate::tests::codegen) fn compile_raw_program(source: &str) -> (Module, ForeignStore) {
+pub fn compile_raw_program(source: &str) -> (Module, ForeignStore) {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     compile_with_prelude(
@@ -514,12 +513,12 @@ pub(in crate::tests::codegen) fn compile_raw_program(source: &str) -> (Module, F
 }
 
 /// [`compile_raw_program`]'s module alone, for a test that reads it and runs nothing.
-pub(in crate::tests::codegen) fn compile_raw(source: &str) -> Module {
+pub fn compile_raw(source: &str) -> Module {
     compile_raw_program(source).0
 }
 
 /// The raw module's WAT text. Not digit-normalized: literal constants and exact token counts are load-bearing here.
-pub(in crate::tests::codegen) fn wat(source: &str) -> String {
+pub fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
 
@@ -530,7 +529,7 @@ pub(in crate::tests::codegen) fn wat(source: &str) -> String {
 /// **The suspension path's allocations are the other exception, and they are separated by where they stand.** A bind whose action may suspend hands the suspension out with its continuation appended, through `io/carry`, so the continuation's closure — and the close of the watch it waits on — is built on the arm that calls `carry`, in the straight run of instructions that ends in that call, and nowhere else: a block boundary ends the run, and a run that ends in no such call is kept. A closure `start` builds is a module constant, built once whatever it closes over, so nothing there is built per call either.
 ///
 /// **The separation of the carrier is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity's table and type instead: `call_indirect $clsr/0 $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
-pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+pub fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     assert!(
         needle.starts_with("struct.new") || needle.starts_with("array.new"),
         "`{needle}` names no definition of its own, so the `$io/` hint cannot separate carrier from user code — use `user_functions_with`",
@@ -562,7 +561,7 @@ pub(in crate::tests::codegen) fn user_allocations<'a>(wat: &'a str, needle: &str
 /// The names of the user's own emitted functions whose bodies contain `needle`.
 ///
 /// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Two kinds of function are the effect boundary rather than the user's code: one carrying an `$io/…` hint — the thunk of a description, the steps a suspension takes (`$io/carry`, `$io/later`), and a turn of a program that can suspend (`$io/main` and `$io/advance`, which force the description the host hands back, and `$io/turn`, which takes apart what it answered) — and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
-pub(super) fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
+pub fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
     functions
         .iter()
         .filter(|function| function.body.contains(needle))
@@ -572,20 +571,20 @@ pub(super) fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &st
 }
 
 /// One emitted function: its `$name` and full text.
-pub(in crate::tests::codegen) struct Function<'a> {
-    pub(in crate::tests::codegen) name: &'a str,
-    pub(in crate::tests::codegen) body: &'a str,
+pub struct Function<'a> {
+    pub name: &'a str,
+    pub body: &'a str,
 }
 
 impl Function<'_> {
     /// How many times this function calls itself directly. `call $name` is a substring of `return_call $name`, so this counts tail and non-tail self calls alike.
-    pub(in crate::tests::codegen) fn self_calls(&self) -> usize {
+    pub fn self_calls(&self) -> usize {
         self.body.matches(&format!("call {}", self.name)).count()
     }
 }
 
 /// Split the module WAT into its emitted functions. Each starts at a `    (func ` line (module indent); its text runs to the next one. Module items after the last function (exports, `$start`) never open a `    (func ` line, so they ride along on the final entry without introducing calls or refs of their own.
-pub(in crate::tests::codegen) fn functions(wat: &str) -> Vec<Function<'_>> {
+pub fn functions(wat: &str) -> Vec<Function<'_>> {
     const MARKER: &str = "\n    (func ";
     let mut starts = Vec::new();
     let mut cursor = 0;
@@ -615,7 +614,7 @@ pub(in crate::tests::codegen) fn functions(wat: &str) -> Vec<Function<'_>> {
 /// "Exactly one function mentions it" is not that fact, and the gap is what a moved budget walks straight into. Inlining a callee into two callers puts the needle in both, and the count catches it — but inlining those callers into a common ancestor merges the mentions back down to one, and the count passes while handing back the ancestor. Raising `MULTI_SITE_INLINE_LIMIT` does exactly that to `SPLIT_RETURN`: `first` and `second` fold into `main` and `advance` into both, so a count would hand back `main` — the wrong function entirely, and one lucky substring away from passing while asserting nothing.
 ///
 /// Excluding the entry closes that case and reports it in the terms the reader needs, which is what the fixture must change rather than what the assertion saw. A fixture wanting more than this — that the callee is distinct from a *particular* caller rather than merely from the entry — gives each participant its own constant and compares the names, as [`a_returned_constructor_is_delivered_as_its_fields`] does.
-pub(super) fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {
+pub fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {
     let hits = functions
         .iter()
         .filter(|function| function.body.contains(needle))
@@ -638,7 +637,7 @@ pub(super) fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> 
 }
 
 /// The declaration of the `family` row alone, from its `(type` to the parenthesis that closes it. The display puts a recursion group on one line, so the line that names a row holds every other row's fields beside its own.
-pub(super) fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
+pub fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
     let name = format!("$/{family}");
     let start = wat
         .match_indices("(type $row/")
@@ -667,7 +666,7 @@ pub(super) fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
 }
 
 /// The innermost `loop … end` enclosing each occurrence of `needle`, one for every copy of the code that holds it. A loop that follows a host call is held twice — where the call answers at once and in the continuation a suspension carries — and each copy is its own loop.
-pub(super) fn loops_containing<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+pub fn loops_containing<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     let loops = wat
         .match_indices(needle)
         .map(|(offset, _)| loop_at(wat, offset))
@@ -740,7 +739,7 @@ fn loop_at(wat: &str, needle_offset: usize) -> &str {
 }
 
 /// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"` for directly-called functions, `"struct.new $envr/"` for materialized closures); the digit run stops at the optional `$hint` suffix.
-pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
+pub fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     let mut set = BTreeSet::new();
     let mut cursor = 0;
     while let Some(offset) = wat[cursor..].find(prefix) {
@@ -755,7 +754,7 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 }
 
 /// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `/std/Proc/args()!`, which drives the taint.
-pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
+pub fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
     let code = curios_cranelift::compile(&to_bytes(&module))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
@@ -769,9 +768,9 @@ pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
 }
 
 /// Run the module through the ordinary Binaryen + Cranelift path, for the same input — the reference the raw path must agree with.
-pub(super) fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
+pub fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
-    let compiled = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
+    let compiled = to_compiled(&module, foreigns).expect("binaryen path compiles");
 
     let (system, io) = MockHost::builder().args(args).build();
     compiled

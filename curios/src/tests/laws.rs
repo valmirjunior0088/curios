@@ -13,7 +13,7 @@
 //! **The rules no law table states have seeds.** Beta, delta, zeta, iota, eta and irrelevance are conversion's as the carriers' laws are, and `structural` states one equation for each and the near miss beside it, which `contexts` places under every child a term former holds. A seed states no side: [`asked_alone`] reads which side each checker puts it on — the elaborator by the proof it is handed, since a candidate search costs a seed's row more than elaborating it does — and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find. Why a row's verdict is derived from its seed and asked of each checker alone is `documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md`.
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_common::Qualifier,
     curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
     curios_module::RootSource,
@@ -406,16 +406,16 @@ fn top_level(list: &str) -> Vec<&str> {
 }
 
 /// One binder of a telescope the sweep reorders: its name, its type, and the binders its type names.
-pub(super) struct Binder<'a> {
-    pub(super) name: &'a str,
-    pub(super) type_: &'a str,
-    pub(super) needs: &'a [&'a str],
+pub struct Binder<'a> {
+    pub name: &'a str,
+    pub type_: &'a str,
+    pub needs: &'a [&'a str],
 }
 
 /// `count` orders of `binders`, each a telescope as source: the order they are declared in, that order reversed, and shuffles drawn from a fixed sequence, so every run states the same orders. A binder is kept after the binders its type names, by taking from each candidate order the first binder whose needs are already placed.
 ///
 /// **An order is a verdict's adversary.** A binder is minted where it is declared, so its age, and with it a rank — the order a product holds its factors in, the side a linear view puts an atom on — moves with the declaration order, and a verdict that rests on a rank holds at one order and fails at another. Two fixed orders cannot tell such a verdict from a law; a sweep can.
-pub(super) fn orders(binders: &[Binder<'_>], count: usize) -> Vec<String> {
+pub fn orders(binders: &[Binder<'_>], count: usize) -> Vec<String> {
     let declared = (0..binders.len()).collect::<Vec<_>>();
     let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
     let mut draw = move |below: usize| {

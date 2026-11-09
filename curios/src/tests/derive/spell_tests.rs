@@ -1,6 +1,6 @@
 //! Derived `Spell`: constructor paths and literals, payloads through their own witnesses, a family under its premise or indices, and text that re-parses.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // --- The `Spell` derivation: a value spells as its constructor's absolute path applied to its explicit payloads, each spelled by its own witness, so the text re-parses wherever the names are visible. ---
 

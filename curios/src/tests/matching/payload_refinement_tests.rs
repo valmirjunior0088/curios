@@ -1,6 +1,6 @@
 //! What an arm learns from its scrutinee's payload: the value it carried, kept through arithmetic and a refinement key, and the equations it may not assume.
 
-use {crate::test_support::*, curios_native::MockHost};
+use {crate::tests::test_support::*, curios_native::MockHost};
 
 // A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. A scrutinee carrying an *inferred* metavariable is the hard case: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness would key differently and the arm would silently refine nothing. Solved metavariables are materialized into the key, which is what makes the two spellings one.
 //

@@ -1,6 +1,6 @@
 //! What erasure keeps computes the value the checker proved: each value this program prints is one a proof in the same program states, with one row per place erasure deletes something beside the data it keeps.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 /// Every row states its value twice — as a proof both checkers must accept, and as the printed result of the same expression — so a row fails exactly when the compiled program disagrees with a theorem the compiler certified.
 ///

@@ -3,7 +3,7 @@
 //! Everything the library *computes* is a `test` declaration in `curios-prelude/std/Tui/tests/`, where one compile serves every test of the library. What stays here is what needs the compiler's own answer rather than a program's — a spelling that must be refused, which a test could only express by failing to compile and taking the library's every other test with it — and what needs a terminal: the session bracket and the loop run against the scripted host, whose standard input arrives in chunks a reader suspends between, exactly as a terminal delivers keystrokes.
 
 use {
-    crate::test_support::*,
+    super::test_support::*,
     curios_abi::{Failure, HostOp, TtySize},
     curios_native::MockHost,
 };
@@ -357,7 +357,7 @@ fn a_program_outlives_the_end_of_its_input() {
 }
 
 // Shared with the coordination measurement so both exercise the same application.
-pub(super) const LISTING_PROGRAM: &str = r#"
+pub const LISTING_PROGRAM: &str = r#"
     use /std/{Nat, Str, Bool, List, Option, Try, Io, Show, Tui};
     use /std/Tui/{Style, Pane, Key, Event, Directive, Listing};
     let app: Tui(Listing(Str), Nat) =

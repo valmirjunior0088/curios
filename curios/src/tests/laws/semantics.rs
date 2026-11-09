@@ -7,7 +7,7 @@ use {
 
 /// A closed value of one carrier.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Value {
+pub enum Value {
     Natural(Natural),
     Integer(Integer),
     Boolean(bool),
@@ -72,7 +72,7 @@ fn samples(carrier: Carrier) -> Vec<Value> {
 }
 
 /// Whether `law` holds at every assignment of its variables over their samples; an assignment where either side is undefined — a narrowing outside its domain — is outside the law and skipped. `Err` names the first assignment where the two sides differ.
-pub(super) fn holds(law: &Law) -> Result<(), String> {
+pub fn holds(law: &Law) -> Result<(), String> {
     let mut variables = Vec::new();
     collect(&law.left, &mut variables);
     collect(&law.right, &mut variables);

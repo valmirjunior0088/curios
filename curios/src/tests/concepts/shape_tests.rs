@@ -1,6 +1,6 @@
 //! Keying a witness on an anonymous type — a tuple's shape: what registers, what resolves, and the surprise the key's identity holds. A function type is not keyable, and the refusal that says so closes the file.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // The base case: a tuple type has no name to be headed by, so its shape — the label at each position — is the head. `Tag/tag(z)` reduces the parameter to `{Nat, Bool}`, keys it as `{_, _}`, and finds the entry; the field types were never in the key and are checked by unification after the lookup.
 #[test]

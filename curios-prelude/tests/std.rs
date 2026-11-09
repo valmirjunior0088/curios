@@ -3,7 +3,7 @@
 //! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one store under the build's scratch directory, which a rerun of an unchanged build takes whole.
 
 use {
-    curios::{TestSubject, run_wasm, test_subjects},
+    curios::{TestSubject, test_subjects, test_support::*},
     curios_common::{Qualifier, fill},
     curios_module::{Overlay, RootSource},
     curios_native::{ForeignBindings, MockHost, TestEnd},

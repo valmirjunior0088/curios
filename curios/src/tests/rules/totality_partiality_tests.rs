@@ -1,7 +1,8 @@
 //! A partial definition's place: usable in a program and refused in a type, and the type-level loops diagnosed rather than aborted.
 
 use {
-    super::test_support::*, crate::test_support::*, curios_analysis::Erased, curios_core::Quality,
+    super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased,
+    curios_core::Quality,
 };
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`. The control's alias is `Sink({})`, which ties nothing, and `delta` refutes a unit with it.

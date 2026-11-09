@@ -1,6 +1,6 @@
 //! Eta at a function and a record: an expansion that drops a binder or swaps components is none, a literal's eta where no type directs it, and a struct's function fields.
 
-use {super::test_support::*, crate::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // Eta and untyped child positions. Conversion is type-directed, so eta is what converts `f` with `(x) => f(x)` and `p` with `(p.0, p.1)` without either side having to be written in that shape. Both rules are *accepting*, so each widens what counts as equal, and the two refusals beside them are what keep the acceptance from reading as "any two functions convert" and "any two records convert": drop the binder from the expansion and the equation dies, swap the components and it dies. Without them a `compare` that answered `true` at every Π and every Σ would satisfy the accepting rung and nothing here would notice.
 #[test]

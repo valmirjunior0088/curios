@@ -1,6 +1,6 @@
 //! A type declared under a `use` premise, and the heads that take a call's marks.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A struct over `use Key(K)` is built, read and witnessed at the registered dictionary: the bare literal takes it from its expected type, the applied head and the signatures resolve it, a field's type resolves through the premise, and the witness over the type states the premise it is keyed under.
 #[test]

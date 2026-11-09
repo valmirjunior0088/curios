@@ -1,7 +1,7 @@
 //! Every rounding direction, executed against the model: the emitted helpers that compute what Wasm has no instruction for, held to `curios_num::Floating` bit for bit.
 
 use {
-    crate::test_support::*,
+    crate::tests::test_support::*,
     curios_common::fill,
     curios_num::{Floating, Integer, Natural, Rounding},
 };

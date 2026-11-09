@@ -2,7 +2,7 @@
 //!
 //! The rule is `curios-cert`'s README, *A member is read by value once it is known to terminate*. The kernel's half is `curios_cert`'s `recheck::recursion_tests`, under the same names.
 
-use {super::test_support::*, crate::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // `Flip` calls nothing, so its turn finds it known, and `claimed`, beside it in a local group, states `Flip(false)` in its own body, which is the `True` the control states as `stated`'s type, where its body is checked. Both run.
 #[test]

@@ -1,6 +1,6 @@
 //! Resolving a witness keyed on a type former: by imitation, through a written former or a type-level lambda, and through a partially applied family.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, `o : Option(Nat)` against `?M(?A)` waits for the call, which imitates it where it completes, and the committed `?M := Option` gives the parked goal its key, which the table resolves to the prelude's `Monad(Option)` witness. Also covers the cached-prelude replay of a higher-kinded witness.
 #[test]

@@ -1,6 +1,6 @@
 //! UTF-8 validity, decoding, and the automaton that certifies a slice.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn slice_proof_aligns_with_byte_walk() {

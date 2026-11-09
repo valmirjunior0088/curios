@@ -3,7 +3,7 @@
 //! What the thirty-two-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
-    crate::*,
+    crate::test_support::*,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, MockHost, test_support::*},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},

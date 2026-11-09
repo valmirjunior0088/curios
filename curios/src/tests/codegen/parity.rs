@@ -1,6 +1,6 @@
 //! Codegen parity for concept-dispatched operators (the witness-projection folding gate). No dedicated folding rule exists in core — none is needed: after erasure a witness is a bakeable value (a one-method dictionary collapses to its bare method field, a many-method one is a tuple of methods), so its resolved instance argument is a specialization candidate. Closure specialization bakes it into the caller, the `Tuple.get`s (for a tuple witness) fold to the known methods, and the CPS inliner beta-reduces the chain down to the bare intrinsic instruction. These tests pin that pipeline behavior: a concept method call at a concrete intrinsic type must emit the *same operations* as calling the intrinsic wrapper directly. The generated names differ — the concept path threads the witness through an extra specialization, decorating clone names with its key — but that provenance names no instruction, so the emitted operations match exactly. These guard the infix rewrite that routes every operator through the concepts.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 /// The operations `source` compiles to, refusing an empty answer.
 ///

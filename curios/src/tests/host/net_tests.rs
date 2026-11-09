@@ -2,6 +2,7 @@
 
 use {
     crate::test_support::*,
+    crate::tests::test_support::*,
     curios_common::{fill, test_support::*},
     curios_module::RootSource,
     curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
@@ -319,7 +320,7 @@ fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
     bindings.define("/abort", Termination);
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
@@ -351,7 +352,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     bindings.define("/double", |x: u64| x * 2);
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 42);
     assert!(io.output().is_empty());
@@ -384,7 +385,7 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     bindings.define("/flip", |byte: u8| 255 - byte);
 
     let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 255);
 }
@@ -420,7 +421,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
     bindings.define("/halve", |x: f64| x / 2.0);
 
     let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 7, "the halved float compared equal to 42.0");
 }
@@ -454,7 +455,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
     bindings.define("/probe", |n: u64| (n as f64 * 2.0, n + 4));
 
     let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(
         code, 7,
@@ -499,7 +500,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
     });
 
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(io.output(), b"1 7 2,3");
 }
@@ -543,7 +544,7 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
     });
 
     let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 7, "every list came back as the host answered it");
 }
@@ -588,7 +589,7 @@ fn an_option_crosses_both_ways() {
     });
 
     let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
+    let code = run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(code, 7, "every option came back as the host answered it");
 }
@@ -620,8 +621,8 @@ fn a_list_element_past_the_wire_is_refused() {
     bindings.define("/nats", |xs: Vec<u64>| xs);
 
     let (system, _io) = MockHost::builder().build();
-    let refusal = crate::run_wasm(&module, foreigns, system, bindings)
-        .expect_err("the element is past the wire");
+    let refusal =
+        run_wasm(&module, foreigns, system, bindings).expect_err("the element is past the wire");
     assert!(
         refusal.contains("past what the wire carries"),
         "stopped, but not on the wire:\n{refusal}"

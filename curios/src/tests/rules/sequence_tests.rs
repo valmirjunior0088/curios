@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::test_support::*,
+    crate::tests::test_support::*,
     curios_cert::Verdict,
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},

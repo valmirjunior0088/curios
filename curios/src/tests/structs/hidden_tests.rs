@@ -1,6 +1,6 @@
 //! A structure's hidden field: declared under `@`, left out where the value is built and where it is read, and a fact wherever the value is in scope.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // An invariant written once, on the data it constrains. The literal writes the plain field and the bound is discharged as a call's would be; a function over the value has the bound as a fact, with nothing passed or matched to get it.
 #[test]

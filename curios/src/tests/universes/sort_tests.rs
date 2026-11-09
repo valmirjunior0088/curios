@@ -1,6 +1,6 @@
 //! A sort its declaration leaves to each caller: what one written `Sort` closes as, what a use states, and where the word is refused.
 
-use {super::test_support::*, crate::test_support::*, curios_common::fill};
+use {super::test_support::*, crate::tests::test_support::*, curios_common::fill};
 
 // One definition serves a number and a proof: each use states the sort it stands at, and the proof handed to it weighs nothing the number's use reads.
 #[test]

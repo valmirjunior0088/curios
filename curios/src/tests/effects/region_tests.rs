@@ -1,6 +1,6 @@
 //! A `!` region's monad: read from its expected type, waited for where it has yet to come, refused where it is no monad or never comes, and a sequencing left stranded.
 
-use {crate::test_support::*, curios_common::fill};
+use {crate::tests::test_support::*, curios_common::fill};
 
 /// An action whose head is not a monad at all is called out as such — suggesting an edge that could never be declared would be a trap.
 #[test]

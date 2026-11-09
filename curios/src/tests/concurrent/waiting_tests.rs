@@ -1,6 +1,6 @@
 //! Waiting on the program's own state: a fulfilment woken once whatever waits on it twice, receivers woken together where one can take, an offer that loses a selection, coalescing signals, and a waiter cancelled where it waits.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // One fulfilment wakes a waiter once, however many of its offers wait on the same future.
 #[test]

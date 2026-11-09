@@ -9,7 +9,7 @@ use {
 };
 
 /// Every family the table declares, at the operation and carrier declaring it.
-pub(super) fn declared() -> Vec<(Carrier, Operation, Family)> {
+pub fn declared() -> Vec<(Carrier, Operation, Family)> {
     TABLE
         .iter()
         .flat_map(|declared| {
@@ -22,15 +22,15 @@ pub(super) fn declared() -> Vec<(Carrier, Operation, Family)> {
 }
 
 /// One generated row: where it comes from, the law, and its spelling — binders, then claim.
-pub(super) struct Row {
-    pub(super) carrier: Carrier,
-    pub(super) operation: Operation,
-    pub(super) law: Law,
-    pub(super) source: (String, String),
+pub struct Row {
+    pub carrier: Carrier,
+    pub operation: Operation,
+    pub law: Law,
+    pub source: (String, String),
 }
 
 impl Row {
-    pub(super) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         format!(
             "{:?} at {:?}, {:?}",
             self.operation, self.carrier, self.law.family
@@ -39,7 +39,7 @@ impl Row {
 }
 
 /// The rows the families in `declared` state, in its order.
-pub(super) fn rows(declared: &[(Carrier, Operation, Family)]) -> Vec<Row> {
+pub fn rows(declared: &[(Carrier, Operation, Family)]) -> Vec<Row> {
     declared
         .iter()
         .flat_map(|(carrier, operation, family)| {
@@ -75,7 +75,7 @@ fn by_carrier(rows: &[Row]) -> Vec<(String, Vec<(String, String)>)> {
 }
 
 /// A law as Curios source: its binders — the variables, then a proof for every narrowing it takes — and `Eq()(left, right)`.
-pub(super) fn spell(law: &Law) -> (String, String) {
+pub fn spell(law: &Law) -> (String, String) {
     spell_over(law, |index, carrier| {
         let name = name(index, carrier);
         (name.to_owned(), format!("{name}: {}", type_name(carrier)))
@@ -83,7 +83,7 @@ pub(super) fn spell(law: &Law) -> (String, String) {
 }
 
 /// [`spell`] with each variable spelled by `variable`, which answers what stands for it in a term and the binder that is stated under: a law over terms that are no binder of its own, each written wherever its variable is.
-pub(super) fn spell_over(
+pub fn spell_over(
     law: &Law,
     variable: impl Fn(usize, Carrier) -> (String, String),
 ) -> (String, String) {
@@ -92,13 +92,13 @@ pub(super) fn spell_over(
 
 /// Which side of a claim a term stands on.
 #[derive(Clone, Copy, PartialEq)]
-pub(super) enum Side {
+pub enum Side {
     Left,
     Right,
 }
 
 /// [`spell_over`] with each variable spelled by the side it stands on, and stated under one binder whichever side that is: a law whose two sides write one value two ways.
-pub(super) fn spell_sides(
+pub fn spell_sides(
     law: &Law,
     variable: impl Fn(Side, usize, Carrier) -> (String, String),
 ) -> (String, String) {
@@ -107,7 +107,7 @@ pub(super) fn spell_sides(
 }
 
 /// [`spell_sides`]' binders and its two sides, for a claim that puts each side somewhere before it equates them.
-pub(super) fn spell_parts(
+pub fn spell_parts(
     law: &Law,
     variable: impl Fn(Side, usize, Carrier) -> (String, String),
 ) -> (String, String, String) {
@@ -133,7 +133,7 @@ pub(super) fn spell_parts(
 }
 
 /// The variables a law states, each once, in the order its left side and then its right meet them.
-pub(super) fn variables(law: &Law) -> Vec<(usize, Carrier)> {
+pub fn variables(law: &Law) -> Vec<(usize, Carrier)> {
     let mut variables = Vec::new();
     collect(&law.left, &mut variables);
     collect(&law.right, &mut variables);
@@ -157,7 +157,7 @@ fn collect(expr: &Expr, into: &mut Vec<(usize, Carrier)>) {
 }
 
 /// A variable's name: its carrier's letters in order, the fourth kept for a word's element.
-pub(super) fn name(index: usize, carrier: Carrier) -> &'static str {
+pub fn name(index: usize, carrier: Carrier) -> &'static str {
     let names: [&str; 5] = match carrier {
         Carrier::Natural => ["x", "y", "z", "a", "w"],
         Carrier::Integer => ["i", "j", "k", "l", "q"],
@@ -170,7 +170,7 @@ pub(super) fn name(index: usize, carrier: Carrier) -> &'static str {
     names[index]
 }
 
-pub(super) fn type_name(carrier: Carrier) -> &'static str {
+pub fn type_name(carrier: Carrier) -> &'static str {
     match carrier {
         Carrier::Natural => "Nat",
         Carrier::Integer => "Int",
@@ -183,7 +183,7 @@ pub(super) fn type_name(carrier: Carrier) -> &'static str {
 }
 
 /// `operation` at `carrier` over operands already spelled, for a row whose operands are no variables of the law.
-pub(super) fn applied(carrier: Carrier, operation: Operation, operands: &[String]) -> String {
+pub fn applied(carrier: Carrier, operation: Operation, operands: &[String]) -> String {
     Spelling {
         proofs: Vec::new(),
         variable: &|index, carrier| name(index, carrier).to_owned(),
@@ -334,7 +334,7 @@ impl Spelling<'_> {
 }
 
 /// A rounding direction as `/std/Flt/Rounding` spells it.
-pub(super) fn direction(rounding: Rounding) -> &'static str {
+pub fn direction(rounding: Rounding) -> &'static str {
     match rounding {
         Rounding::TiesToEven => "ties_to_even",
         Rounding::TiesToAway => "ties_to_away",

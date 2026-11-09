@@ -1,6 +1,6 @@
 //! A concept field that carries a type, chosen by a witness or an explicit dictionary and unfolded through its projection, and one that states a proposition, whose level no method's value reads.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A `Type`-sorted field and a `Type`-returning method both spell `Type` in the field type's result spine. The method-wrapper signature lowers that span under the record's role — `input_type`'s lexical `Generalizable` — rather than at the default `Flexible` its output position would give, since one universe seed cannot take two roles; so the associated type registers, resolves through the table, and its projection unfolds definitionally: `v : alias` checks `3` against `Nat`, and `b : picked` checks `true` against `Bool`.
 #[test]

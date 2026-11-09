@@ -1,7 +1,8 @@
 //! One witness per key: duplicates, orphans, and the standard library's witnesses that a user program may not shadow.
 
 use {
-    super::test_support::*, crate::test_support::*, curios_common::Qualifier, curios_elab::Error,
+    super::test_support::*, crate::tests::test_support::*, curios_common::Qualifier,
+    curios_elab::Error,
 };
 
 // Registering two witnesses for the same `(concept, head)` key is a coherence error (global uniqueness) — independent of, and checked alongside, the orphan rule below. The control declares the witness once.

@@ -1,6 +1,6 @@
 //! Derived `Eql`: structural and fieldwise, a proof taking no part and a hidden member taking part, and the standard library's own.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // --- The `Eql` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
 

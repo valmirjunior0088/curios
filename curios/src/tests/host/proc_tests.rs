@@ -2,6 +2,7 @@
 
 use {
     crate::test_support::*,
+    crate::tests::test_support::*,
     curios_abi::ChildExit,
     curios_common::fill,
     curios_module::RootSource,
@@ -86,8 +87,8 @@ fn exit_halts_with_code() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
-        .expect("execution succeeded");
+    let code =
+        run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
@@ -129,8 +130,8 @@ fn exit_in_local_binding_halts() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
-        .expect("execution succeeded");
+    let code =
+        run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 3);
     assert!(io.output().is_empty());
@@ -164,8 +165,8 @@ fn an_exit_ends_a_region_of_any_type() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
-        .expect("execution succeeded");
+    let code =
+        run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
@@ -189,8 +190,8 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, ForeignBindings::empty())
-        .expect("execution succeeded");
+    let code =
+        run_wasm(&module, foreigns, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 3);
     assert!(io.output().is_empty());

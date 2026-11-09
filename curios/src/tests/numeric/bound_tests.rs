@@ -1,6 +1,6 @@
 //! Discharging a bound: by a guard, by evaluation, or not at all.
 
-use {crate::test_support::*, curios_pipeline::DEFAULT_BUDGET};
+use {crate::tests::test_support::*, curios_pipeline::DEFAULT_BUDGET};
 
 // The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided bound discharges by reduction. Identical in every other respect to the half below, which differs only in what the base arm returns.
 #[test]

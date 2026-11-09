@@ -68,7 +68,7 @@ curios-common = { workspace = true }
 
 # The library's claims compile through the whole pipeline and run under the mock host, so its suite depends on the compiler the library is a part of. Cargo admits the cycle because it runs through a dev-dependency, and the build script, which reads its build-dependencies alone, never sees it.
 [dev-dependencies]
-curios = { workspace = true }
+curios = { workspace = true, features = ["test-support"] }
 curios-abi = { workspace = true }
 curios-cert = { workspace = true }
 # `curios_core::test_support`'s builders, which the `/sys` roster's suite builds its fixtures with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.

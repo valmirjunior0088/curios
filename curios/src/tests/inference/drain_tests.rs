@@ -1,6 +1,6 @@
 //! A problem nothing wakes, and one the drain decides: what each refusal names, and an argument held to the value its call's type states.
 
-use crate::test_support::*;
+use crate::tests::test_support::*;
 
 // A lambda whose expectation never gains structure settles by synthesizing its own type — annotations state what they state, and an unannotated domain stands as a metavariable for the body, or whatever the settled type later meets, to pin. `(x) => x` pins nothing anywhere, so the survivor is the domain itself, and it is reported as the parameter it is rather than as an internal expectation.
 #[test]

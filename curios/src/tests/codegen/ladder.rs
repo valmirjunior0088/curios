@@ -16,6 +16,7 @@
 
 use {
     super::structural::test_support::*,
+    crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
     std::time::Instant,
@@ -397,7 +398,7 @@ fn walk_mirror_attribution_measurements() {
             curios_cranelift::compile(&to_bytes(&module)).expect("raw module compiles"),
             foreigns.clone(),
         );
-        let optimized = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
+        let optimized = to_compiled(&module, foreigns).expect("binaryen path compiles");
 
         (label, counts, raw, optimized)
     });
@@ -508,7 +509,7 @@ fn decoder_doubling_slope() {
     const DECODERS: [&str; 3] = ["json", "html", "tokens"];
 
     let (module, foreigns) = compile_raw_program(DECODER_DOUBLING);
-    let compiled = crate::to_compiled(&module, foreigns).expect("binaryen path compiles");
+    let compiled = to_compiled(&module, foreigns).expect("binaryen path compiles");
 
     let mut taken = vec![vec![Vec::new(); SIZES.len()]; DECODERS.len()];
     for round in 0..WARMUP + ROUNDS {
