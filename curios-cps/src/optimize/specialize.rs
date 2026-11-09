@@ -133,9 +133,9 @@ pub(crate) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec
         .collect()
 }
 /// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the given parameter positions and call constraints.
-pub(crate) fn invariant_fixpoint(
-    params_of: &BTreeMap<FunctionId, Vec<ValueId>>,
-    constraints: &[(FunctionId, Vec<Atom>)],
+pub(crate) fn invariant_fixpoint<K: Ord>(
+    params_of: &BTreeMap<K, Vec<ValueId>>,
+    constraints: &[(K, Vec<Atom>)],
     known_literals: &BTreeMap<ValueId, Atom>,
 ) -> BTreeMap<ValueId, Knowledge> {
     Solver::solve(params_of.values().flatten().copied(), |rules| {

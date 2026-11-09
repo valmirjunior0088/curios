@@ -173,8 +173,9 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
     module.verify().unwrap();
 }
 
+/// A callback bound only at its call site, out of the component's scope, is handed to a copy that joins the callback's own group, inside the call's scope, which the component precedes: the call names the copy, and the copy's body may name the callback, which the next substitution then puts in place of its parameter.
 #[test]
-fn a_callback_bound_only_at_its_call_site_does_not_justify_a_copy() {
+fn a_callback_bound_only_at_its_call_site_is_handed_to_a_copy_beside_it() {
     let fixture = polymorphic_loop(true, 0);
     let mut module = fixture.module;
     let entry = module.entry().unwrap();
@@ -211,11 +212,38 @@ fn a_callback_bound_only_at_its_call_site_does_not_justify_a_copy() {
         }
     }
     module.verify().unwrap();
-    let original = module.to_string();
+    let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
+        .nodes
+        .len();
     let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
-    assert!(!specialize_scc_calls(&mut module, &mut budget));
-    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT));
-    assert_eq!(module.to_string(), original);
+    assert!(specialize_scc_calls(&mut module, &mut budget));
+    module.verify().unwrap();
+    let mut copied = 0;
+    for caller in [fixture.call1, fixture.call2] {
+        let callee = known_callee(&module, caller);
+        if callee == fixture.loop_fn {
+            continue;
+        }
+        copied += 1;
+        let Node::ApplyFun { ref args, .. } = *module.node(caller).unwrap() else {
+            unreachable!()
+        };
+        let Atom::Fun(helper) = args[0] else {
+            unreachable!()
+        };
+        assert!(
+            module.live_nodes().any(|(_, node)| matches!(
+                node,
+                Node::LetFun { functions, .. } if functions.contains(&helper) && functions.contains(&callee)
+            )),
+            "the copy joins the group that binds the callback it is handed",
+        );
+    }
+    assert!(
+        copied > 0,
+        "a call handing a callback out of scope is given a copy"
+    );
+    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT - copied * cost));
 }
 
 #[test]

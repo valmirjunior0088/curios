@@ -288,6 +288,117 @@ fn a_function_every_call_hands_reaches_a_function_that_is_not_recursive_within_i
     );
 }
 
+/// `main() = loop k(p) = let r = p() in k(p)`, entered with `f`: where `f_first`, `f`'s group encloses the loop, which its body may then name, and otherwise `f` is bound between the loop and its entry, which the jump may name and the loop's body may not.
+fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let f = module.reserve_function();
+    let f_return = module.reserve_continuation();
+    let f_body = module.add_node(Node::ApplyCont(Edge {
+        target: f_return,
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+    }));
+    module.define_function(
+        f,
+        Function {
+            debug_name: Some("f".into()),
+            params: vec![],
+            return_cont: f_return,
+            body: f_body,
+            droppable: false,
+        },
+    );
+
+    let looped = module.reserve_continuation();
+    let p = module.add_value(Some("p".into()));
+    let r = module.add_value(Some("r".into()));
+    let after = module.reserve_continuation();
+    let again = module.add_node(Node::ApplyCont(Edge {
+        target: looped,
+        args: vec![Atom::Value(p)],
+    }));
+    module.define_continuation(
+        after,
+        Continuation {
+            debug_name: None,
+            params: vec![r],
+            body: again,
+        },
+    );
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(p),
+        args: vec![],
+        return_to: after,
+    });
+    let loop_body = module.add_node(Node::LetCont {
+        continuations: vec![after],
+        body: apply,
+    });
+    module.define_continuation(
+        looped,
+        Continuation {
+            debug_name: Some("loop".into()),
+            params: vec![p],
+            body: loop_body,
+        },
+    );
+
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: looped,
+        args: vec![Atom::Fun(f)],
+    }));
+    let body = if f_first {
+        let bound = module.add_node(Node::LetCont {
+            continuations: vec![looped],
+            body: enter,
+        });
+        module.add_node(Node::LetFun {
+            functions: vec![f],
+            body: bound,
+        })
+    } else {
+        let named = module.add_node(Node::LetFun {
+            functions: vec![f],
+            body: enter,
+        });
+        module.add_node(Node::LetCont {
+            continuations: vec![looped],
+            body: named,
+        })
+    };
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, p)
+}
+
+#[test]
+fn a_function_a_loop_is_entered_with_and_passes_on_reaches_its_body_within_its_scope() {
+    // The back edge forwards `p` to itself, which the flat join over a continuation's transfers reads as a conflict; the fixpoint over them sees one function at every entry.
+    let (enclosed, p) = a_loop_handed_a_function(true);
+    assert!(
+        matches!(known_values(&enclosed).get(&p), Some(Atom::Fun(_))),
+        "`f`'s group encloses the loop, so its body may name it",
+    );
+
+    let (between, p) = a_loop_handed_a_function(false);
+    assert_eq!(
+        known_values(&between).get(&p),
+        None,
+        "`f` is bound after the loop: its entry may name it and its body may not",
+    );
+}
+
 #[test]
 fn sccs_group_cycles_and_stay_deterministic() {
     // 0 <-> 1 form a cycle; 1 -> 2 and 2 -> 2 leaves 2 a self-looping singleton; 3 is isolated.

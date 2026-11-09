@@ -1,7 +1,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, FunctionId, InScope, Knowledge, Module, Node, NodeId,
-        Solver, ValueExpr, ValueId, atoms, merge_inputs, record_known_literals,
+        Solver, ValueExpr, ValueId, atoms, invariant_fixpoint, merge_inputs, record_known_literals,
         scc_invariant_knowns,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -546,6 +546,48 @@ pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     for (continuation, inputs) in continuation_inputs {
         let params = &module.continuation(continuation).unwrap().params;
         record_known_literals(params, &inputs, &mut known);
+    }
+
+    // A loop's parameter is forwarded by its own back edges, which the flat join above reads as a conflict, so a function its entry hands it and every back edge passes on is recovered by the fixpoint the recursive members' parameters take below, over every transfer into a continuation: an edge hands its arguments, and an operation delivering into its `return_to` a value nothing sees, which is a conflict. Only a function is taken from it, where the continuation's body may name it, so a loop over a combinator a caller hands its step calls the step directly; what it finds of literals the flat join already answers where it may.
+    let continuation_scopes = module.continuation_scopes();
+    let mut continuation_params = BTreeMap::<ContinuationId, Vec<ValueId>>::new();
+    for (continuation, definition) in module.live_continuations() {
+        continuation_params.insert(continuation, definition.params.clone());
+    }
+    let mut transfers = Vec::<(ContinuationId, Vec<Atom>)>::new();
+    for (_, node) in module.live_nodes() {
+        match node {
+            Node::ApplyCont(edge) => transfers.push((edge.target, edge.args.clone())),
+            Node::Switch { cases, default, .. } => transfers.extend(
+                cases
+                    .values()
+                    .chain(default.iter())
+                    .map(|edge| (edge.target, edge.args.clone())),
+            ),
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Channel { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
+                if let Some(params) = continuation_params.get(return_to) {
+                    transfers.push((*return_to, vec![Atom::Filler; params.len()]));
+                }
+            }
+            _ => {}
+        }
+    }
+    let owner_of_param = continuation_params
+        .iter()
+        .flat_map(|(continuation, params)| params.iter().map(move |param| (*param, *continuation)))
+        .collect::<BTreeMap<_, _>>();
+    for (param, knowledge) in invariant_fixpoint(&continuation_params, &transfers, &known) {
+        if let Knowledge::Known(Atom::Fun(passed)) = knowledge
+            && continuation_scopes
+                .get(&owner_of_param[&param])
+                .is_some_and(|scope| scope.contains(&passed))
+        {
+            known.insert(param, Atom::Fun(passed));
+        }
     }
 
     // Recursive members are skipped above because a self-forwarded argument pollutes the flat per-call join. Recover their provably-invariant known parameters with a dedicated SCC fixpoint and fold them in.

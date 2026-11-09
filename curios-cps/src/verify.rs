@@ -462,10 +462,26 @@ impl Module {
     ///
     /// A function the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
     pub(crate) fn lexical_scopes(&self) -> BTreeMap<FunctionId, InScope<FunctionId>> {
+        self.scopes().0
+    }
+
+    /// The functions each continuation's body may name, by the same walk as [`Self::lexical_scopes`]: those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. A continuation the walk does not reach is absent.
+    pub(crate) fn continuation_scopes(&self) -> BTreeMap<ContinuationId, InScope<FunctionId>> {
+        self.scopes().1
+    }
+
+    /// The walk [`Self::lexical_scopes`] and [`Self::continuation_scopes`] each answer half of.
+    fn scopes(
+        &self,
+    ) -> (
+        BTreeMap<FunctionId, InScope<FunctionId>>,
+        BTreeMap<ContinuationId, InScope<FunctionId>>,
+    ) {
         let Some(entry) = self.entry() else {
-            return BTreeMap::new();
+            return (BTreeMap::new(), BTreeMap::new());
         };
         let mut scopes = BTreeMap::new();
+        let mut continuation_scopes = BTreeMap::new();
         let mut walk = ScopeVerifier {
             function_work: vec![(entry, InScope::default(), InScope::of(entry))],
             ..ScopeVerifier::default()
@@ -488,10 +504,19 @@ impl Module {
             let Some(node) = self.node(node_id) else {
                 continue;
             };
+            if let Node::LetCont {
+                continuations: members,
+                ..
+            } = node
+            {
+                for member in members {
+                    continuation_scopes.insert(*member, functions.clone());
+                }
+            }
             let step = self.scope_step(None, node, values, functions, continuations);
             walk.queue(step.tasks);
         }
-        scopes
+        (scopes, continuation_scopes)
     }
 
     /// The scope a function's own body sees: its parameters join the values it inherits, and no continuation crosses the boundary.
