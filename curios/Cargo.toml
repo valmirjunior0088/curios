@@ -50,6 +50,8 @@ httparse = { version = "1.10.1" }
 curios-native = { workspace = true, features = ["test-support"] }
 # The puts, which judge a program or a module with the prelude in scope as the board does. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-pipeline = { workspace = true, features = ["test-support"] }
+# Its test support too: a library's documentation record made the way a question compiles, and the names a subject and its records are read by. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-wonder = { workspace = true, features = ["test-support"] }
 # The law table the generated grid states and holds at closed values.
 curios-algebra = { workspace = true }
 # Where a totality refusal stands, erased as a proof or as a type, which the rules' suites hold a refusal to.

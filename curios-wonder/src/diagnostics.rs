@@ -27,7 +27,7 @@ pub struct Diagnosed {
     pub reached: BTreeSet<Qualifier>,
     /// Why the store took nothing of what this compilation would have filed, where it could not be written: the store's own first refusal, for a transport with somewhere to say it. No part of the answer, which is what it would have been.
     pub unfiled: Option<String>,
-    /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold ([`checked`]): every text of the file the subject was lowered from, with the names each writes. Empty where no file was asked about, or the subject did not lower.
+    /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold (`checked`): every text of the file the subject was lowered from, with the names each writes. Empty where no file was asked about, or the subject did not lower.
     pub written: Vec<Written>,
 }
 
@@ -73,8 +73,8 @@ impl Subject {
         Some((unlinked.note(taken, form), source))
     }
 
-    /// [`Self::unlinked`]'s words alone, for a question whose answer is no list of diagnostics and that says it on standard error.
-    pub(crate) fn said_unlinked(&self, overlay: &Overlay, taken: &str) -> Option<String> {
+    /// `Self::unlinked`'s words alone, for a question whose answer is no list of diagnostics and that says it on standard error.
+    pub fn said_unlinked(&self, overlay: &Overlay, taken: &str) -> Option<String> {
         self.unlinked(overlay, taken).map(|(said, _)| said)
     }
 
@@ -128,7 +128,7 @@ impl Subject {
     }
 
     /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
-    pub(crate) fn formed(self, overlay: &Overlay) -> Self {
+    pub fn formed(self, overlay: &Overlay) -> Self {
         match self {
             Subject::Entry {
                 units,
@@ -166,7 +166,7 @@ pub enum Origin {
     Text { label: String, text: String },
 }
 
-/// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles. `overlay` is consulted before the disk for every file read, the entry included.
+/// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles — with what the subject reached beside the records. `overlay` is consulted before the disk for every file read, the entry included.
 ///
 /// **A library is asked through the fold alone.** It has no written program, and none is synthesized for it: the subject is the fold's last unit, and what the fold decided about it is the answer — its refusal, or its lints. A loose file written as a module is asked the same way, as a unit of its own. An entry is asked under its written tail alone.
 ///
@@ -182,21 +182,11 @@ pub fn diagnostics(
     subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
-) -> Vec<Diagnosis> {
-    diagnosed(budget, subject, overlay, cache).diagnostics
-}
-
-/// [`diagnostics`], with what the subject reached beside the records.
-pub fn diagnosed(
-    budget: u64,
-    subject: Subject,
-    overlay: &Overlay,
-    cache: Option<&Verdicts>,
 ) -> Diagnosed {
     diagnosed_reading(budget, subject, overlay, cache, None)
 }
 
-/// [`diagnosed`], with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::written`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
+/// [`diagnostics`](diagnostics()), with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::written`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
 pub fn checked(
     budget: u64,
     subject: Subject,
@@ -207,7 +197,7 @@ pub fn checked(
     diagnosed_reading(budget, subject, overlay, cache, Some(file))
 }
 
-/// [`diagnosed`], reading what `file` writes where there is one.
+/// [`diagnostics`](diagnostics()), reading what `file` writes where there is one.
 fn diagnosed_reading(
     budget: u64,
     subject: Subject,
@@ -324,7 +314,7 @@ impl Diagnosed {
 }
 
 /// `program` parsed, with the loader its modules resolve through — both reading through `overlay` — or the one diagnostic a program that does not parse gets.
-pub(crate) fn open(
+pub fn open(
     origin: Origin,
     declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
@@ -357,7 +347,7 @@ pub(crate) fn open(
 }
 
 /// A compile failure as records: the classification the compile path made, on every report it carries — for a mixed failure, the first `failures` reports as errors and the rest as goals, which is how it says which is which.
-pub(crate) fn of_error(error: CompileError) -> Vec<Diagnosis> {
+pub fn of_error(error: CompileError) -> Vec<Diagnosis> {
     let (reports, failures) = match error {
         CompileError::Incomplete(reports) => (reports, 0),
         CompileError::Failure(reports) => {
@@ -381,7 +371,7 @@ pub(crate) fn of_error(error: CompileError) -> Vec<Diagnosis> {
 }
 
 /// Every unit reading through `overlay`.
-pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSource> {
+pub fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSource> {
     units
         .into_iter()
         .map(|unit| unit.with_overlay(overlay.clone()))
@@ -389,7 +379,7 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
 }
 
 /// `units` with the last, a question's subject, compiled tested: a question is answered of the unit as `curios test` compiles it, its tests and what they read included, and of every unit it stands on as built.
-pub(crate) fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
+pub fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
     if let Some(subject) = units.pop() {
         units.push(subject.tested());
     }
@@ -402,14 +392,14 @@ pub(crate) fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
 /// **A stored unit is verified through the overlay.** A unit is believed on a re-read of every file it was compiled from, and here that re-read takes an open document's text over the disk's (`Verdicts::get_overlaid`), so a unit whose source an editor holds edited is a miss and one whose source is merely open is not. The rule is exact because the record lists what the unit read: a document the unit never read — an executable beside a package's library, in the very directory the library reads from — leaves the hit standing. Refusing on containment instead would cost the language server that library on every keystroke in a program file.
 ///
 /// **A unit is filed where the disk holds every text its fold has read** — its own and those of every unit before it, each restored on a record the disk confirms or compiled from text the disk holds, whole or over a baseline — which is [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../documentation/design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md)'s rule. How it was compiled is no part of the test: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so the slot is the one a build files. A fold that has read a text the disk does not hold files nothing: a record names what each unit before it contained, so a unit filed after one nothing on disk reproduces would be a miss for every later reader, in the place of a slot that may have held the disk's own.
-pub(crate) struct Overlaid<'a> {
+pub struct Overlaid<'a> {
     cache: &'a Verdicts,
     overlay: &'a Overlay,
 }
 
 impl<'a> Overlaid<'a> {
     /// `cache` as one fold of a question reading through `overlay` reaches it.
-    pub(crate) fn over(cache: &'a Verdicts, overlay: &'a Overlay) -> Self {
+    pub fn over(cache: &'a Verdicts, overlay: &'a Overlay) -> Self {
         Self { cache, overlay }
     }
 }

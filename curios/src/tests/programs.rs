@@ -36,6 +36,7 @@ fn programs(directory: &Path) -> Vec<PathBuf> {
 /// The lints `subject` reports, rendered; an error is a lint here too, since a program that does not compile cannot be said to lint clean.
 fn findings(subject: Subject) -> Vec<String> {
     diagnostics(DEFAULT_BUDGET, subject, &Overlay::default(), None)
+        .diagnostics
         .into_iter()
         .filter(|diagnostic| matches!(diagnostic.severity, Severity::Lint | Severity::Error))
         .map(|diagnostic| diagnostic.render())

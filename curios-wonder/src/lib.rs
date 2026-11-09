@@ -16,31 +16,42 @@ pub const STDIN_LABEL: &str = "<stdin>";
 pub const STDIN_MOUNT: &str = "stdin";
 
 mod record;
-pub use record::*;
+use record::*;
+pub use record::{Diagnosis, Severity};
 
 mod declared;
-pub use declared::*;
+use declared::*;
 
 mod diagnostics;
-pub use diagnostics::*;
+use diagnostics::*;
+pub use diagnostics::{Diagnosed, Origin, Subject, diagnostics};
 
 mod document;
-pub use document::*;
+pub use document::std_documentation;
 
 mod stage;
-pub use stage::*;
+use stage::*;
 
 mod named;
-pub use named::*;
+use named::*;
+pub use named::{Declaration, Named, Written};
 
 mod cost;
-pub use cost::*;
+use cost::*;
 
 mod ask;
-pub use ask::*;
+use ask::*;
+pub use ask::{
+    Place, Staged, file_subject, wonder_at, wonder_cost, wonder_declarations, wonder_diagnostics,
+    wonder_stage, wonder_tests, written_as_a_module,
+};
 
 mod server;
-pub use server::*;
+pub use server::{SETTLE, serve};
 
 mod lint;
-pub use lint::*;
+pub use lint::{Linted, lint};
+
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_wonder::test_support` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

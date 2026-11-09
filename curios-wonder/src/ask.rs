@@ -7,7 +7,7 @@
 use {
     crate::{
         Declaration, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity,
-        Subject, Uncosted, Written, checked, cost, declared_tests, diagnosed, stage, unit_stage,
+        Subject, Uncosted, Written, checked, cost, declared_tests, diagnostics, stage, unit_stage,
         written,
     },
     curios_common::Span,
@@ -99,7 +99,7 @@ impl Asked {
 
     /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
-        diagnosed(budget, self.subject, overlay, self.store.as_ref())
+        diagnostics(budget, self.subject, overlay, self.store.as_ref())
     }
 
     /// [`Asked::diagnosed`], with what `file` writes read off the same fold's lowering of the subject ([`Diagnosed::written`]).
@@ -214,7 +214,7 @@ fn refused(store: Option<&Verdicts>) -> Option<String> {
 /// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the store when there is one and recompiled when there is not — is the price of the same independence.
 ///
 /// Beside them, the first reason a store gave for taking nothing of what an answer compiled: one store refuses every unit for one reason, and the subjects of a package share it.
-pub(crate) fn rendered(
+pub fn rendered(
     answers: Vec<Asked>,
     budget: u64,
     overlay: &Overlay,

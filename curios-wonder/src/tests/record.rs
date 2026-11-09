@@ -17,6 +17,7 @@ fn of(text: &str) -> Vec<crate::Diagnosis> {
         &Overlay::default(),
         None,
     )
+    .diagnostics
 }
 
 #[test]
@@ -192,7 +193,8 @@ fn a_library_reports_its_own_lints() {
         },
         &Overlay::default(),
         None,
-    );
+    )
+    .diagnostics;
     let [report] = diagnostics.as_slice() else {
         panic!("one lint, got {diagnostics:?}");
     };
@@ -222,7 +224,8 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
         },
         &Overlay::default(),
         None,
-    );
+    )
+    .diagnostics;
 
     let [report] = diagnostics.as_slice() else {
         panic!("one refusal, got {diagnostics:?}");

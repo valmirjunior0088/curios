@@ -522,7 +522,8 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
         },
         &overlay,
         Some(&store),
-    );
+    )
+    .diagnostics;
 
     let [record] = diagnostics.as_slice() else {
         panic!("one record, got {diagnostics:?}");
@@ -545,7 +546,7 @@ fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
     let asked = |root: &Path| {
         let store = Verdicts::at(root.to_path_buf());
 
-        diagnosed(
+        diagnostics(
             DEFAULT_BUDGET,
             Subject::Unit {
                 units: crate::overlaid(mounted(root), &overlay),
@@ -647,6 +648,7 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
         overlay,
         Some(&store),
     )
+    .diagnostics
 }
 
 /// Every unit slot the store at `root` holds, by name, with its bytes.

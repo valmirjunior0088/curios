@@ -8,6 +8,10 @@ description = "What the compiler knows about a program, handed out as records: t
 [lints]
 workspace = true
 
+[features]
+# `test_support`: a library's documentation record made the way a question compiles, and the names a subject and its records are read by, which `curios`'s suites read. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+test-support = []
+
 # Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
 # runs the compiler as far as it needs and reads the answer off the store through `curios-verdict`;
 # the one rung the driver cannot render, `wasm-optm`, is handed back for the product that owns

@@ -6,7 +6,7 @@ use {
     curios_module::Overlay,
     curios_package::{Governing, order},
     curios_pipeline::DEFAULT_BUDGET,
-    curios_wonder::{documentation, std_documentation},
+    curios_wonder::{std_documentation, test_support::*},
     std::fs,
 };
 

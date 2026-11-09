@@ -137,7 +137,7 @@ pub fn written(
 }
 
 /// One question's reads of the disk, each asked once: which source is the file asked about, and which file still holds the text a unit the compiler was built with read.
-pub(crate) struct Reading<'a> {
+pub struct Reading<'a> {
     /// The file asked about, under the one spelling two paths to it share.
     file: PathBuf,
     overlay: &'a Overlay,
@@ -149,7 +149,7 @@ pub(crate) struct Reading<'a> {
 
 impl<'a> Reading<'a> {
     /// What reads the file at `file`, through `overlay`, as a question about what it writes.
-    pub(crate) fn of(file: &Path, overlay: &'a Overlay) -> Self {
+    pub fn of(file: &Path, overlay: &'a Overlay) -> Self {
         Self {
             file: identity(file),
             overlay,
@@ -159,7 +159,7 @@ impl<'a> Reading<'a> {
     }
 
     /// What the file asked about writes in the subject `text` is the lowering of, compiled against `scope`, with the term its program closes with where it is one.
-    pub(crate) fn read(
+    pub fn read(
         &self,
         scope: &[&Unit],
         text: &PreparedText,
