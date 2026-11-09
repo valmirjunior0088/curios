@@ -13,7 +13,7 @@ use {
         ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
         TestSyntax,
     },
-    curios_core::{Free, Global, InductDecl, Polarity, StructDecl, Term},
+    curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
 };
 
@@ -236,5 +236,9 @@ impl Env for Scope {
 
     fn judged(&self, _: &Global) -> bool {
         false
+    }
+
+    fn applications(&self, _: &Global) -> Option<Applications> {
+        None
     }
 }

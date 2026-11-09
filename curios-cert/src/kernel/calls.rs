@@ -11,10 +11,10 @@ mod tests;
 
 use {
     super::{Error, Kernel},
-    crate::{decide, grade, member_arities, nonzero_by, refined_by_arm},
+    crate::{binder_bounds, decide, grade, handed, member_arities, nonzero_by, refined_by_arm},
     curios_analysis::{Call, SizeContext},
     curios_common::Keyed,
-    curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -39,6 +39,10 @@ pub(super) struct Calls {
     spine_head: bool,
     /// Whether the lambdas the next check opens are a member body's leading lambdas, whose binders are the member's parameters.
     parameters: bool,
+    /// What the lambda the next check opens is handed where its callee applies it ([`handed`]): taken by that check alone, as `parameters` is.
+    assumed: Option<Vec<CallMatrix>>,
+    /// The member the next typing of a bare member local names, with what its callee hands it ([`handed`]): calls graded through each in place of one claiming nothing. Keyed by the member, so no other local's typing takes it.
+    handed: Option<(Free, Vec<CallMatrix>)>,
 }
 
 /// One group whose bodies are being checked.
@@ -136,6 +140,34 @@ impl Calls {
     /// Mark the next check as still opening a member's leading lambdas — the body of one that was.
     pub(super) fn continue_parameters(&mut self) {
         self.parameters = true;
+    }
+
+    /// What the lambda the check about to run opens is handed, clearing it for the ones after it.
+    pub(super) fn take_assumed(&mut self) -> Option<Vec<CallMatrix>> {
+        self.assumed.take()
+    }
+
+    /// The calls the typing of `member` about to run makes where its callee applies it, clearing them: `None` for any other local.
+    pub(super) fn take_handed(&mut self, member: &Free) -> Option<Vec<CallMatrix>> {
+        match &self.handed {
+            Some((handed, _)) if handed == member => self.handed.take().map(|(_, handed)| handed),
+            _ => None,
+        }
+    }
+
+    /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a member local as the calls it makes.
+    pub(super) fn hand(&mut self, argument: &Term, handed: Vec<CallMatrix>) {
+        match &**argument {
+            Subterm::Func(_) => self.assumed = Some(handed),
+            Subterm::Var(var) => self.handed = var.as_free().map(|member| (*member, handed)),
+            _ => {}
+        }
+    }
+
+    /// Clear whatever the check of an argument left of what was handed to it, whether or not it took it.
+    pub(super) fn clear_handed(&mut self) {
+        self.assumed = None;
+        self.handed = None;
     }
 
     /// What the local `name` unfolds to in reduction: where it names a member known to terminate of a group whose bodies are being checked, its selection out of the members known to terminate ([`Kernel::read_known`]), and nothing otherwise. A member withheld stands for nothing in its group's bodies.
@@ -267,6 +299,105 @@ impl Kernel<'_> {
         let call = grade(self, &context, caller, &params, callee, arity, &arguments);
         self.calls.context = context;
         self.calls.frames[frame].calls.push(call?);
+        Ok(())
+    }
+
+    /// The member whose body is being checked innermost, with the parameters its leading lambdas bound: what a call it makes is graded against.
+    fn recording_caller(&self) -> Option<(usize, Vec<Free>)> {
+        self.calls
+            .frames
+            .iter()
+            .rev()
+            .find_map(|frame| frame.caller.clone())
+    }
+
+    /// What a call of `callee` with `arguments`, typed in a body being checked, hands each argument at a parameter `callee` applies as its summary states ([`handed`]), graded against the parameters of the member whose body it is: `None` at every position outside a body.
+    pub(super) fn handed_to(
+        &mut self,
+        callee: &Global,
+        arguments: &[Term],
+    ) -> Result<Vec<Option<Vec<CallMatrix>>>, Error> {
+        let Some((_, params)) = self
+            .recording_caller()
+            .filter(|_| self.recording() && !self.positions.suppressed())
+        else {
+            return Ok(vec![None; arguments.len()]);
+        };
+        // Asked first and of the record alone, since grading what a call hands reads each argument whole, and most calls are of a definition that summarizes nothing.
+        let summarized = self
+            .globals
+            .applications(callee)
+            .is_some_and(|applications| {
+                (0..arguments.len()).any(|position| {
+                    applications
+                        .of(position)
+                        .is_some_and(|applied| !applied.is_empty())
+                })
+            });
+        if !summarized {
+            return Ok(vec![None; arguments.len()]);
+        }
+        // Graded on what each argument passes, as a call is ([`Kernel::record_call`]).
+        let arguments = arguments
+            .iter()
+            .map(|argument| self.graded(argument))
+            .collect::<Vec<_>>();
+        let context = mem::take(&mut self.calls.context);
+        let handed = handed(self, &context, &params, callee, &arguments);
+        self.calls.context = context;
+        handed
+    }
+
+    /// Within the current bracket, each of `binders`, a lambda's handed where its callee applies it as `handed` grades, stands to the parameters of the member whose body it is as [`binder_bounds`] reads them.
+    pub(super) fn assume_handed(&mut self, binders: &[Free], handed: &[CallMatrix]) {
+        let Some((_, params)) = self.recording_caller().filter(|_| self.recording()) else {
+            return;
+        };
+        let bounds = binder_bounds(handed, &params, binders);
+        if bounds.is_empty() {
+            return;
+        }
+        self.calls.context.assume(bounds);
+        // A typing remembered outside the lambda does not answer inside it, where its binders stand below what the caller was handed.
+        self.memos.begin_sizes();
+    }
+
+    /// Record the calls a bare `member` local makes where its callee applies it as `handed` grades: one for each application, where the member belongs to the group whose body is being checked innermost and an application hands it all its parameters, and one claiming nothing otherwise.
+    pub(super) fn record_handed(
+        &mut self,
+        member: &Free,
+        handed: &[CallMatrix],
+    ) -> Result<(), Error> {
+        let innermost = self
+            .calls
+            .frames
+            .iter()
+            .rposition(|frame| frame.caller.is_some());
+        let callee = innermost.and_then(|frame| {
+            self.calls.frames[frame]
+                .members
+                .iter()
+                .position(|candidate| candidate == member)
+                .map(|callee| (frame, callee))
+        });
+        let Some((frame, callee)) = callee.filter(|_| !self.positions.suppressed()) else {
+            return self.record_call(member, &[]);
+        };
+        let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
+            return self.record_call(member, &[]);
+        };
+        let arity = self.calls.frames[frame].arities[callee];
+        for matrix in handed {
+            let matrix = match matrix.columns() == arity && matrix.rows() == params.len() {
+                true => matrix.clone(),
+                false => CallMatrix::unknown(params.len(), arity),
+            };
+            self.calls.frames[frame].calls.push(Call {
+                caller,
+                callee,
+                matrix,
+            });
+        }
         Ok(())
     }
 

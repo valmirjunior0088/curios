@@ -21,7 +21,8 @@
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
 use curios_core::{
-    Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term, Variance,
+    Applications, Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term,
+    Variance,
 };
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
@@ -86,6 +87,11 @@ pub trait Env {
 
     /// Whether this checker judged the family `name` and holds the vector it filed for it. Strict positivity reads a family it reaches outside the set it analyses as a sink of the occurrence relation only where it was judged, since one not judged yet may reach the set again through what nothing has read ([`positivity_vectors`](crate::positivity_vectors)).
     fn judged(&self, name: &Global) -> bool;
+
+    /// How the definition `name` applies its parameters, as the record this checker reads it by files it ([`Applications`]): `None` where nothing is filed. A read of what was concluded of `name`, as its totality is.
+    ///
+    /// Asked of the checker for the reason [`Env::polarity`] is: the kernel's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
+    fn applications(&self, name: &Global) -> Option<Applications>;
 
     /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
     ///

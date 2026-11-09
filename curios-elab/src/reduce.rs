@@ -32,14 +32,14 @@ use {
     },
     curios_common::{SyntaxRegistry, recurse},
     curios_core::{
-        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
-        Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
-        Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Quality,
-        Rec, RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        Universes, Var, Variant, Visit, accelerable, eta_head, instantiate_universes,
-        probe_spellings, project_erased_universes, project_literal, reduce_closed,
-        reduce_intrinsic, weak_head_value,
+        Advance, Applications, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost,
+        ClosedMemo, Cost, Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
+        Instance, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj,
+        Quality, Rec, RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, Universes, Var, Variant, Visit, accelerable, eta_head,
+        instantiate_universes, probe_spellings, project_erased_universes, project_literal,
+        reduce_closed, reduce_intrinsic, weak_head_value,
     },
     std::{
         cell::OnceCell,
@@ -202,6 +202,10 @@ impl curios_analysis::Env for Context<'_> {
     /// Whether the registries hold the family, which they do once its declaration is published with its entries' vectors: a declaration reaching one stored after it outside its group is refused as a cycle before anything reads it.
     fn judged(&self, name: &Global) -> bool {
         Context::induct_decl(self, name).is_some() || Context::struct_decl(self, name).is_some()
+    }
+
+    fn applications(&self, name: &Global) -> Option<Applications> {
+        self.definition_applications(name)
     }
 }
 

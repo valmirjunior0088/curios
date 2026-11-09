@@ -66,9 +66,10 @@ use {
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
-        Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
-        LevelHead, Names, Notation, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
-        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
+        Advance, Applications, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global,
+        InductDecl, Level, LevelHead, Names, Notation, Polarity, Probe, Quality, Reads,
+        ReduceError, Reducer, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
+        Universes, Variance,
     },
     std::{
         collections::{BTreeMap, HashMap},
@@ -583,6 +584,10 @@ impl Env for Kernel<'_> {
     fn variance(&self, name: &Global, index: usize) -> Variance {
         Kernel::variance(self, name, index)
     }
+
+    fn applications(&self, name: &Global) -> Option<Applications> {
+        Kernel::applications(self, name)
+    }
 }
 
 impl Judge for Kernel<'_> {
@@ -1051,6 +1056,17 @@ impl<'s> Kernel<'s> {
     /// File the polarity vector the walk computed, or adopted, for the registry entry under `name`: what every later judgment that composes through the family reads.
     pub(crate) fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
         self.globals.file_polarities(name, vector);
+    }
+
+    /// File how the definition `name`, which the walk judged or took, applies its parameters: what every later judgment that hands it a callback reads.
+    pub(crate) fn file_applications(&mut self, name: &Global, applications: Applications) {
+        self.globals.file_applications(name, applications);
+    }
+
+    /// How the definition `name` applies its parameters, by what this walk or the walk over its unit filed: a read of its signature, as a read of its verdict is.
+    pub(crate) fn applications(&self, name: &Global) -> Option<Applications> {
+        self.reads.signature(name);
+        self.globals.applications(name).cloned()
     }
 
     /// The verdict on `name`, which a definition being classified mentions: a read of its signature, as typing a mention is, and the one read of a name mentioned where no rule types, an arm no reduction takes.

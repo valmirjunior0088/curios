@@ -31,10 +31,10 @@ use {
     crate::{foreign_operands, foreign_signature, spine},
     curios_common::recurse,
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
-        Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec, Reducer,
-        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
-        Variant,
+        Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
+        Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec,
+        Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
+        TupleType, Variant,
     },
     curios_num::{Binary, Natural},
     std::convert::Infallible,
@@ -137,7 +137,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 
         // A variable has the type it was bound at. There is no fallback: an unbound name in a finished term is a broken term.
         //
-        // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout.
+        // A member of a group being checked, named anywhere but at the head of an application, is a call no size relation can be read off — passed along, it may be applied to anything — so it is recorded with no arguments, which grades as unknown throughout; save where it is handed to a definition that applies it as its summary states, whose applications are the calls it makes ([`Kernel::record_handed`]).
         //
         // A *bound* index reaching here is the other broken term, and it is refused rather than looked up: a term closed under the scopes above it has none, which the boundary holds every position to (`curios_core::open_positions_of`), and the scope holds no type for a variable with no identity to look one up by (`Var::as_free`). The depth is all the refusal can name, the index having no identity, and it is the rule's own as much as the boundary's — a rule that aborted where a boundary already refused would die before the verdict was read.
         Subterm::Var(var) => {
@@ -148,7 +148,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             };
 
             if !spine_head {
-                kernel.record_call(free, &[])?;
+                match kernel.calls.take_handed(free) {
+                    Some(handed) => kernel.record_handed(free, &handed)?,
+                    None => kernel.record_call(free, &[])?,
+                }
             }
 
             kernel
@@ -198,6 +201,15 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 });
             }
 
+            // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, and a member there the calls it makes.
+            let mut handed = match &*apply.head {
+                Subterm::Instance(instance) => {
+                    let arguments = apply.params().cloned().collect::<Vec<_>>();
+                    kernel.handed_to(&instance.name, &arguments)?
+                }
+                _ => Vec::new(),
+            };
+
             let mut cursor = telescope.cursor();
             for (position, argument) in apply.arguments.iter().enumerate() {
                 let (_, domain) = cursor.entry().expect("arity was checked above");
@@ -212,7 +224,12 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                     });
                 }
 
-                check(kernel, &argument.term, &domain)?;
+                if let Some(handed) = handed.get_mut(position).and_then(Option::take) {
+                    kernel.calls.hand(&argument.term, handed);
+                }
+                let checked = check(kernel, &argument.term, &domain);
+                kernel.calls.clear_handed();
+                checked?;
                 cursor.advance(argument.term.clone());
             }
 
@@ -876,6 +893,8 @@ fn check_free_monoid(
 pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Error> {
     // Whether this check opens a member body's leading lambdas — taken first, so it holds for this term alone and the λ rule is the one reader that carries it on.
     let parameters = kernel.calls.take_parameters();
+    // What a lambda checked here is handed where its callee applies it, taken here for the same reason.
+    let assumed = kernel.calls.take_assumed();
 
     // Seed for the erasure obligations, recorded before the rules dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. The answer is remembered beside the kernel's sorts, which keeps that to one question per distinct type.
     let before = kernel.partial_groups();
@@ -890,7 +909,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Er
             Ok(())
         }
         None => {
-            let checked = check_rules(kernel, term, expected, parameters);
+            let checked = check_rules(kernel, term, expected, parameters, assumed);
             if checked.is_ok() {
                 let closed = kernel.partial_groups() > before;
                 kernel.check_store(term, expected, closed);
@@ -968,6 +987,7 @@ fn check_rules(
     term: &Term,
     expected: &Term,
     parameters: bool,
+    assumed: Option<Vec<CallMatrix>>,
 ) -> Result<(), Error> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
     if let Subterm::Let(Let { bindings, tail }) = &**term {
@@ -985,7 +1005,9 @@ fn check_rules(
         {
             let lambda = func.telescope.clone();
             let against = expected_func.telescope.clone();
-            return kernel.scoped(|kernel| check_lambda(kernel, lambda, against, parameters));
+            return kernel.scoped(|kernel| {
+                check_lambda(kernel, lambda, against, parameters, assumed.as_deref())
+            });
         }
         // Anything else — a non-Π expectation, a plicity or arity mismatch — falls through, so the refusal keeps its ordinary inferred-versus-expected shape.
     }
@@ -1019,8 +1041,10 @@ fn check_lambda(
     lambda: Telescope<Term>,
     against: Telescope<Term>,
     parameters: bool,
+    assumed: Option<&[CallMatrix]>,
 ) -> Result<(), Error> {
     let mut walk = Lockstep::new(&lambda, &against);
+    let mut binders = Vec::new();
 
     loop {
         match walk.step() {
@@ -1040,10 +1064,14 @@ fn check_lambda(
                 if parameters {
                     kernel.bind_parameter(&binder);
                 }
+                binders.push(binder);
             }
             Step::Bodies(body, codomain) => {
                 if parameters {
                     kernel.calls.continue_parameters();
+                }
+                if let Some(handed) = assumed {
+                    kernel.assume_handed(&binders, handed);
                 }
                 return check(kernel, &body, &codomain);
             }

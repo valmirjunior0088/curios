@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Candidates, Digest, Facet, Member, Object, candidate_prefix},
     curios_core::{
-        Certification, Certified, Definition, DefinitionKind, Definitions, Free, Item, ItemRun,
-        Places, ReadTable, Reads, Term, Totality, Universes,
+        Applications, Certification, Certified, Definition, DefinitionKind, Definitions, Free,
+        Item, ItemRun, Places, ReadTable, Reads, Term, Totality, Universes,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -333,10 +333,22 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
     let (low_places, high_places) = (Places::of(&low), Places::of(&high));
     for body in [false, true] {
         assert_ne!(
-            held_digest(&low, &low_places, &global("G"), (false, None, None), body)
-                .expect("G digests"),
-            held_digest(&high, &high_places, &global("G"), (false, None, None), body)
-                .expect("G digests"),
+            held_digest(
+                &low,
+                &low_places,
+                &global("G"),
+                (false, None, None, None),
+                body
+            )
+            .expect("G digests"),
+            held_digest(
+                &high,
+                &high_places,
+                &global("G"),
+                (false, None, None, None),
+                body
+            )
+            .expect("G digests"),
             "the read-digest of G holds its value_sort (body read: {body})",
         );
     }
@@ -466,6 +478,7 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
             global("five"),
             Certified {
                 totality: Totality::Partial,
+                applications: Applications::default(),
                 reads: Reads::default(),
             },
         )],
@@ -486,13 +499,13 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
     };
     assert_eq!(
         read_digest(&globals, &global("five"), false).expect("the part digests"),
-        digest((false, None, None)),
+        digest((false, None, None, None)),
         "the certifier's own digest reads the name as classified by no record",
     );
     assert_eq!(
         part_digest(&definitions, &places, &partial, &global("five"), false)
             .expect("the part digests"),
-        digest((false, None, None)),
+        digest((false, None, None, None)),
         "and so does the digest a stage outside the certifier asks a part by",
     );
 }

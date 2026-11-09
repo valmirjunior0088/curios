@@ -613,3 +613,68 @@ fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });
 }
+
+// A recursion through a callback a list function applies descends where the function's record files how it applies it: `List/any` applies `pred` to an element below `l`, and `children` is below `t`, so `has_zero(c)` is below `t`, and a type may reach it. The refusal hands the callback the tree rebuilt around the same children, which loops wherever there is a child, and stays as refused as a recursion through a callback was before any record said how one is applied.
+#[test]
+fn a_call_in_a_callback_descends_where_its_callee_applies_it_below() {
+    control(
+        r#"
+        use /std/{Nat, List, Bool};
+        induct Rose : Type
+        | node(label : Nat, children : List(Rose))
+        end
+        let has_zero(t : Rose) -> Bool =
+            match t
+            | node(label, children) => label == 0 || List/any(children, (c) => has_zero(c))
+            end;
+        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "(c) => has_zero(c)",
+        "(c) => has_zero(Rose/node(label, children))",
+    )])
+    .by_elaborator_in("/Zeroed", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_kernel_in("/Zeroed", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A parameter a list function uses otherwise than by applying it or handing it on to itself at its own place is summarized as nothing, since what is done with it there is not seen: `any_kept` hands its `pred` to `List/any`, so a recursion through a callback handed to `any_kept` is graded as one through a callback was before any record said how one is applied, and a type reaching it is refused. The control recurses through `List/any` itself.
+#[test]
+fn a_callback_its_callee_hands_on_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat, List, Bool};
+        induct Rose : Type
+        | node(label : Nat, children : List(Rose))
+        end
+        let any_kept(l : List(Rose), pred : (Rose) -> Bool) -> Bool =
+            match l
+            | [] => false
+            | [h, ..t] => List/any([h], pred) || any_kept(t, pred)
+            end;
+        let has_zero(t : Rose) -> Bool =
+            match t
+            | node(label, children) => label == 0 || List/any(children, (c) => has_zero(c))
+            end;
+        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "List/any(children, (c) => has_zero(c))",
+        "any_kept(children, (c) => has_zero(c))",
+    )])
+    .by_elaborator_in("/Zeroed", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_kernel_in("/Zeroed", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

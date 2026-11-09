@@ -6,8 +6,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Certification, Certified, Definition, Definitions, Entrypoint, Free, Func, Intrinsic, Item,
-        Level, Places, Program, Reads, Subterm, Term, Totality, UniverseParam, Universes, Variance,
+        Applications, Certification, Certified, Definition, Definitions, Entrypoint, Free, Func,
+        Intrinsic, Item, Level, Places, Program, Reads, Subterm, Term, Totality, UniverseParam,
+        Universes, Variance,
     },
     std::collections::BTreeMap,
 };
@@ -336,6 +337,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
                         *name,
                         Certified {
                             totality,
+                            applications: Applications::default(),
                             reads: Reads::default(),
                         },
                     )

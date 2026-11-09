@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    crate::{Concluded, Global, Polarity, Reads, Totality, Variance},
+    crate::{Applications, Concluded, Global, Polarity, Reads, Totality, Variance},
     curios_common::Digest,
     std::collections::HashMap,
 };
@@ -40,6 +40,7 @@ struct TabledJudged {
     signatures: Vec<Option<Option<[u8; 32]>>>,
     bodies: Vec<Option<Option<[u8; 32]>>>,
     totality: Totality,
+    applications: Applications,
     vectors: Option<(Vec<Polarity>, Vec<Variance>)>,
 }
 
@@ -63,6 +64,7 @@ impl TabledReads {
             signatures: made.signatures,
             bodies: made.bodies,
             totality: made.totality,
+            applications: made.applications,
             vectors: made.vectors,
         });
 
@@ -95,6 +97,7 @@ impl ReadTable {
                     signatures: made.signatures.clone(),
                     bodies: made.bodies.clone(),
                     totality: made.totality,
+                    applications: made.applications.clone(),
                     vectors: made.vectors.clone(),
                 }),
             })

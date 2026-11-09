@@ -32,6 +32,8 @@ pub enum Question<N = Global, K = WitnessKey> {
     Totality(N),
     /// The variance vectors a definition filed, its own and its fields'.
     Variances(N),
+    /// How a definition applies its parameters.
+    Applications(N),
     /// The sort a definition's value inhabits, where its value is a type.
     Sort(N),
     /// An inductive family's registry entry.
@@ -57,6 +59,7 @@ impl<N, K> Question<N, K> {
             | Question::Kind(name)
             | Question::Totality(name)
             | Question::Variances(name)
+            | Question::Applications(name)
             | Question::Sort(name)
             | Question::Induct(name)
             | Question::Struct(name)
@@ -79,6 +82,7 @@ impl<N, K> Question<N, K> {
             Question::Kind(subject) => Question::Kind(name(subject)?),
             Question::Totality(subject) => Question::Totality(name(subject)?),
             Question::Variances(subject) => Question::Variances(name(subject)?),
+            Question::Applications(subject) => Question::Applications(name(subject)?),
             Question::Sort(subject) => Question::Sort(name(subject)?),
             Question::Induct(subject) => Question::Induct(name(subject)?),
             Question::Struct(subject) => Question::Struct(name(subject)?),

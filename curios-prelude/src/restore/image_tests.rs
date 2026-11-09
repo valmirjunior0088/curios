@@ -4,7 +4,7 @@ use {
     super::{test_support::*, *},
     curios_cert::certify_definitions,
     curios_common::{Qualifier, digest},
-    curios_core::{Item, Zonked},
+    curios_core::{Item, Size, Zonked},
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
@@ -100,6 +100,38 @@ fn every_root_restores_the_record_its_establishing_walk_filed() {
                 );
             }
         }
+    });
+}
+
+/// **The record files how a list function applies its callback.** `/std/List/any` hands `pred` an element of `l`, and a recursion through a callback handed to it is graded by that: every application of `pred` its record files, its own and the one reached through its recursion, grades the element below `l`. Asked of the restored bytes, which every compilation reads it from.
+#[test]
+fn the_std_record_files_that_any_applies_its_predicate_below_its_list() {
+    with_prelude(|prelude| {
+        let (root, any) = prelude
+            .iter()
+            .find_map(|root| {
+                let name = root
+                    .core()
+                    .items
+                    .iter()
+                    .flat_map(Item::declared_names)
+                    .find(|name| name.faithful().to_string() == "/std/List/any")?;
+                Some((root, *name))
+            })
+            .expect("the prelude declares /std/List/any");
+        let applied = root
+            .certification()
+            .applications(&any)
+            .and_then(|applications| applications.of(2))
+            .expect("/std/List/any's record files how it applies `pred`");
+
+        assert!(
+            !applied.is_empty()
+                && applied
+                    .iter()
+                    .all(|application| application.entry(1, 0) == Size::Less),
+            "{applied:?}"
+        );
     });
 }
 

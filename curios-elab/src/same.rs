@@ -26,6 +26,7 @@ pub struct Same {
     kind: bool,
     totality: bool,
     variances: bool,
+    applications: bool,
     sort: bool,
     induct: bool,
     struct_: bool,
@@ -40,6 +41,7 @@ impl Same {
             totality: made_classified.totality == held_classified.totality,
             // A field's vector, and the field of a binder the value is, are read as a question about the definition's vectors, so all three are this one part.
             variances: made_classified.vectors == held_classified.vectors,
+            applications: made_classified.applications == held_classified.applications,
             ..Self::default()
         };
         match (made, held) {
@@ -68,6 +70,7 @@ impl Same {
             kind,
             totality,
             variances: classified.variances,
+            applications: classified.applications,
             // Read through the mark, as the body part is: a proof publishes neither, so neither part may be compared off the field alone (`curios_core::Definition::published`).
             sort: match (made.published().1, held.published().1) {
                 (Some(made), Some(held)) => spelled_alike(made, held),
@@ -95,6 +98,7 @@ impl Same {
             kind,
             totality,
             variances: classified.variances,
+            applications: classified.applications,
             // A group's member files no sort.
             sort: true,
             ..Self::default()
@@ -119,6 +123,7 @@ impl Same {
             (self.kind, Parts::KIND),
             (self.totality, Parts::TOTALITY),
             (self.variances, Parts::VARIANCES),
+            (self.applications, Parts::APPLICATIONS),
             (self.sort, Parts::SORT),
             (self.induct, Parts::INDUCT),
             (self.struct_, Parts::STRUCT),
@@ -137,6 +142,7 @@ impl Same {
             Question::Kind(_) => self.kind,
             Question::Totality(_) => self.totality,
             Question::Variances(_) => self.variances,
+            Question::Applications(_) => self.applications,
             Question::Sort(_) => self.sort,
             Question::Induct(_) => self.induct,
             Question::Struct(_) => self.struct_,
@@ -257,6 +263,9 @@ pub fn item_part_digest(
         }
         Question::Totality(_) => sealed(curios_archive::to_bytes(&totality)).map(Some),
         Question::Variances(_) => sealed(curios_archive::to_bytes(&classified.vectors)).map(Some),
+        Question::Applications(_) => {
+            sealed(curios_archive::to_bytes(&classified.applications)).map(Some)
+        }
         Question::Sort(_) => {
             // A group's member files none.
             let sort = plain

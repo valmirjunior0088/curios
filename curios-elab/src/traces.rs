@@ -16,7 +16,9 @@ use {
     curios_common::{
         Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
     },
-    curios_core::{Global, Order, ParameterField, Totality, Trace, Variance, WitnessKey},
+    curios_core::{
+        Applications, Global, Order, ParameterField, Totality, Trace, Variance, WitnessKey,
+    },
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -156,6 +158,8 @@ pub struct Traces {
 pub struct Classified {
     /// Whether the definition terminates on every input, together with everything it reaches: `Partial` where something partial is in its closure, so a declaration that mentions it inherits the verdict rather than analysing what it reaches again. What the elaborator's gates read: a written type or a proof that reaches a partial definition is refused by name. `Partial` where nothing was concluded, so a definition no one classified fails closed.
     pub totality: Totality,
+    /// How the definition applies its parameters, where it applies one every use of which is seen ([`Applications`]): what a recursion through a callback it is handed is graded by.
+    pub applications: Applications,
     /// Where the definition's universe parameters reach its value ([`Vectors`]).
     pub vectors: Vectors,
 }
@@ -331,8 +335,9 @@ impl Parts {
     pub const STRUCT: Parts = Parts(1 << 6);
     pub const CONCEPT: Parts = Parts(1 << 7);
     pub const SORT: Parts = Parts(1 << 8);
+    pub const APPLICATIONS: Parts = Parts(1 << 9);
     /// Every part: what a declaration made or taken away moves of what it declares.
-    pub const ALL: Parts = Parts((1 << 9) - 1);
+    pub const ALL: Parts = Parts((1 << 10) - 1);
 
     /// The part `question` asks of the name it is about, where it asks one: a witness's key, whether one is declared and whether lemmas are on offer ask none.
     pub fn of(question: &Question) -> Option<Parts> {
@@ -342,6 +347,7 @@ impl Parts {
             Question::Kind(_) => Parts::KIND,
             Question::Totality(_) => Parts::TOTALITY,
             Question::Variances(_) => Parts::VARIANCES,
+            Question::Applications(_) => Parts::APPLICATIONS,
             Question::Sort(_) => Parts::SORT,
             Question::Induct(_) => Parts::INDUCT,
             Question::Struct(_) => Parts::STRUCT,
@@ -360,6 +366,7 @@ impl Parts {
             (Parts::KIND, Question::Kind(name)),
             (Parts::TOTALITY, Question::Totality(name)),
             (Parts::VARIANCES, Question::Variances(name)),
+            (Parts::APPLICATIONS, Question::Applications(name)),
             (Parts::SORT, Question::Sort(name)),
             (Parts::INDUCT, Question::Induct(name)),
             (Parts::STRUCT, Question::Struct(name)),

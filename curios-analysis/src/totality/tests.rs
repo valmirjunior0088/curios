@@ -5,8 +5,8 @@
 use {
     super::*,
     curios_core::{
-        Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Rec, Size, StructDecl,
-        Subterm, Term,
+        Applications, Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Rec, Size,
+        StructDecl, Subterm, Term,
     },
     curios_num::Binary,
 };
@@ -64,6 +64,10 @@ impl Env for Probe {
 
     fn judged(&self, _: &Global) -> bool {
         false
+    }
+
+    fn applications(&self, _: &Global) -> Option<Applications> {
+        None
     }
 }
 
@@ -412,6 +416,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         entered: Vec::new(),
         walked: HashMap::new(),
         calls: Vec::new(),
+        tracked: None,
     };
     walk.walk(&body);
 
@@ -488,6 +493,7 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
         entered: Vec::new(),
         walked: HashMap::new(),
         calls: Vec::new(),
+        tracked: None,
     };
     walk.walk(body);
 

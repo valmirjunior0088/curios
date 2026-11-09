@@ -82,17 +82,18 @@ use {
         Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Stated, Totals, Unvisited,
         bytes_of, carried_marks, check_case_counts, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
-        free_locals_of, held_digest, open_positions_of, open_quality, positivity_vectors,
-        read_digest, rewrite_universe_levels, state_definition, state_rec_group, stated_entrypoint,
-        stated_marks, universe_metas, universe_verdict, unstated_entry, variance_vectors,
+        free_locals_of, group_applications, held_digest, open_positions_of, open_quality,
+        positivity_vectors, read_digest, rewrite_universe_levels, state_definition,
+        state_rec_group, stated_entrypoint, stated_marks, universe_metas, universe_verdict,
+        unstated_entry, variance_vectors,
     },
     curios_analysis::{Declarations, PositivityRefusal},
     curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
-        Abroad, Bound, Certification, Certified, Changes, Concluded, Definition, Definitions,
-        Entrypoint, Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId, Notation,
-        Places, Polarity, Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality,
-        Variance, Zonked,
+        Abroad, Applications, Bound, Certification, Certified, Changes, Concluded, Definition,
+        Definitions, Entrypoint, Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId,
+        Notation, Places, Polarity, Program, ReadRecord, ReadTable, Reads, StructDecl, Term,
+        Totality, Variance, Zonked,
     },
     std::{
         cell::{OnceCell, RefCell},
@@ -772,6 +773,8 @@ fn verdicts_within<'s>(
     // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
     let mut variances: BTreeMap<Global, Vec<Variance>> = BTreeMap::new();
+    // How each definition the walk settled applies its parameters, where it applies one every use of which is seen.
+    let mut applications: BTreeMap<Global, Applications> = BTreeMap::new();
     // The names of the declarations the walk judged, whose reads are its own.
     let mut judged = Vec::new();
     // The records the walk took a verdict from, of a store, by the name each was filed under.
@@ -815,6 +818,12 @@ fn verdicts_within<'s>(
             for (name, vector) in adopted.variances {
                 variances.insert(name, vector);
             }
+            for name in item.declared_names() {
+                if let Some(applied) = adopting.baseline().certification.applications(name) {
+                    kernel.file_applications(name, applied.clone());
+                    applications.insert(*name, applied.clone());
+                }
+            }
             adopting.adopted(item);
             // Its families stand as the baseline's walk stated them, as the item does.
             for (name, declaration) in carried(&stated.items[*place]).0 {
@@ -837,6 +846,7 @@ fn verdicts_within<'s>(
                     totals: &totals,
                     polarities: &polarities,
                     variances: &variances,
+                    applications: &applications,
                 };
                 stored(candidates, globals, kernel, &now, *place, item)
             }
@@ -849,6 +859,10 @@ fn verdicts_within<'s>(
                 let made = record.made().expect("a record taken is complete");
                 if made.totality != Totality::Total {
                     totals.adopt(name);
+                }
+                if !made.applications.is_empty() {
+                    kernel.file_applications(&name, made.applications.clone());
+                    applications.insert(name, made.applications.clone());
                 }
                 if let Some((vector, variance)) = made.vectors.clone() {
                     kernel.file_polarities(&name, vector.clone());
@@ -866,6 +880,7 @@ fn verdicts_within<'s>(
                     |name| totals.partial(kernel, name),
                     &polarities,
                     &variances,
+                    &applications,
                 );
             }
             settled.extend(item.declared_names().into_iter().copied());
@@ -940,7 +955,18 @@ fn verdicts_within<'s>(
                 let universes = rec.universe_context.clone();
 
                 let proofs = match check_rec_group(kernel, &members, &rec.group, &universes) {
-                    Ok(proofs) => proofs,
+                    Ok(proofs) => {
+                        // How each member applies its parameters, read off the group as checked, within the item's judgment: what it reads is the item's. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
+                        if let Ok(applied) = group_applications(kernel, &rec.group) {
+                            for ((name, _), applied) in members.iter().zip(applied) {
+                                if !applied.is_empty() {
+                                    kernel.file_applications(name, applied.clone());
+                                    applications.insert(*name, applied);
+                                }
+                            }
+                        }
+                        proofs
+                    }
                     Err(error) => {
                         verdicts.push(Verdict {
                             name: item_name,
@@ -1022,6 +1048,7 @@ fn verdicts_within<'s>(
                 |name| totals.partial(kernel, name),
                 &polarities,
                 &variances,
+                &applications,
             );
         }
         settled.extend(item.declared_names().into_iter().copied());
@@ -1066,6 +1093,7 @@ fn verdicts_within<'s>(
                 taken: &taken,
                 reads: &reads,
                 totality: &totality,
+                applications: &applications,
                 polarities: &polarities,
                 variances: &variances,
             },
@@ -1103,6 +1131,7 @@ fn verdicts_within<'s>(
                             *name,
                             Certified {
                                 totality: totality(name),
+                                applications: applications.get(name).cloned().unwrap_or_default(),
                                 reads,
                             },
                         )
@@ -1129,6 +1158,7 @@ struct Judged<'w> {
     taken: &'w BTreeMap<Global, HeldReads>,
     reads: &'w BTreeMap<Global, Reads>,
     totality: &'w dyn Fn(&Global) -> Totality,
+    applications: &'w BTreeMap<Global, Applications>,
     polarities: &'w BTreeMap<Global, Vec<Polarity>>,
     variances: &'w BTreeMap<Global, Vec<Variance>>,
 }
@@ -1150,6 +1180,7 @@ fn revised(
                 *name,
                 Certified {
                     totality: (judged.totality)(name),
+                    applications: judged.applications.get(name).cloned().unwrap_or_default(),
                     reads: judged.reads.get(name).cloned().unwrap_or_default(),
                 },
             ),
@@ -1449,6 +1480,7 @@ struct Settled<'w> {
     totals: &'w Totals<'w>,
     polarities: &'w BTreeMap<Global, Vec<Polarity>>,
     variances: &'w BTreeMap<Global, Vec<Variance>>,
+    applications: &'w BTreeMap<Global, Applications>,
 }
 
 /// The records a store holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
@@ -1536,6 +1568,7 @@ fn stands(
                     .vectors
                     .as_ref()
                     .map(|(_, variances)| variances.as_slice()),
+                Some(&concluded.applications).filter(|applied| !applied.is_empty()),
             );
             return held_digest(now.stated, now.places, read, verdict, body)
                 .ok()
@@ -1547,11 +1580,13 @@ fn stands(
                     now.totals.partial(kernel, read),
                     now.polarities.get(read).map(Vec::as_slice),
                     now.variances.get(read).map(Vec::as_slice),
+                    now.applications.get(read),
                 ),
                 (false, true) => (
                     now.baseline.certification.totality(read) != Some(Totality::Total),
                     now.baseline.certification.polarities(read),
                     now.baseline.certification.variances(read),
+                    now.baseline.certification.applications(read),
                 ),
                 (false, false) => return None,
             };

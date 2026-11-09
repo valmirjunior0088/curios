@@ -37,12 +37,13 @@ use {
     crate::Env,
     curios_common::recurse,
     curios_core::{
-        Advance, Arity, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, InductType,
-        Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec, RecGroup, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Foreign, Free, Func,
+        FuncType, InductType, Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec,
+        RecGroup, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple,
+        TupleType, Two, Variant,
     },
     curios_num::Natural,
-    std::collections::{HashMap, hash_map::Entry},
+    std::collections::{BTreeSet, HashMap, hash_map::Entry},
 };
 
 /// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
@@ -68,12 +69,106 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality,
             entered: Vec::new(),
             walked: HashMap::new(),
             calls: Vec::new(),
+            tracked: None,
         };
         walk.walk(&member.body)?;
         calls.extend(walk.calls);
     }
 
     Ok(decide(calls))
+}
+
+/// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Partial`.
+const APPLICATIONS_LIMIT: usize = 64;
+
+/// How each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no member uses otherwise than as the head of an application or handed on unchanged at that position to a member, every application of it a member body makes, graded against that member's parameters, and every one reached through a path of the group's calls, graded through the path.
+///
+/// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to another function, handed to a member at another position, or named in a type — leaves the position unsummarized in every member, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
+pub fn group_applications<E: Env>(
+    env: &mut E,
+    group: &RecGroup,
+) -> Result<Vec<Applications>, E::Error> {
+    curios_profile::profile!("group_applications");
+    let mut members = Vec::new();
+    for index in 0..group.length() {
+        members.push(Member::of(env, group, index));
+    }
+    let arities = members
+        .iter()
+        .map(|member| member.params.len())
+        .collect::<Vec<_>>();
+
+    let mut calls = Vec::new();
+    let mut uses = Vec::new();
+    for (index, member) in members.iter().enumerate() {
+        let mut walk = Walk {
+            env,
+            group,
+            arities: &arities,
+            caller: index,
+            params: &member.params,
+            context: SizeContext::default(),
+            entered: Vec::new(),
+            walked: HashMap::new(),
+            calls: Vec::new(),
+            tracked: Some(Tracked::new(member.params.len())),
+        };
+        walk.walk(&member.body)?;
+        calls.extend(walk.calls);
+        uses.push(walk.tracked.expect("a tracking walk keeps its record"));
+    }
+
+    let width = arities.iter().copied().max().unwrap_or(0);
+    let seen = (0..width)
+        .map(|position| {
+            uses.iter()
+                .all(|used| !used.escaped.get(position).copied().unwrap_or(false))
+        })
+        .collect::<Vec<_>>();
+    let closed = close(calls);
+
+    Ok((0..members.len())
+        .map(|member| {
+            let applied = (0..arities[member])
+                .map(|position| {
+                    let closed = closed.as_ref().filter(|_| seen[position])?;
+                    let mut matrices = uses[member].applied[position]
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
+                    for path in closed.iter().filter(|path| path.caller == member) {
+                        for applied in uses[path.callee]
+                            .applied
+                            .get(position)
+                            .into_iter()
+                            .flatten()
+                        {
+                            if let Some(through) = path.matrix.compose(applied) {
+                                matrices.insert(through);
+                            }
+                        }
+                    }
+                    (matrices.len() <= APPLICATIONS_LIMIT).then(|| matrices.into_iter().collect())
+                })
+                .collect();
+            Applications::new(applied)
+        })
+        .collect())
+}
+
+/// What a walk summarizing its member's parameters found of each ([`group_applications`]): the matrices of its applications, and whether it is used otherwise.
+struct Tracked {
+    applied: Vec<Vec<CallMatrix>>,
+    escaped: Vec<bool>,
+}
+
+impl Tracked {
+    fn new(params: usize) -> Self {
+        Self {
+            applied: vec![Vec::new(); params],
+            escaped: vec![false; params],
+        }
+    }
 }
 
 /// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease.
@@ -141,6 +236,8 @@ struct Walk<'a, E: Env> {
     /// The `let` values the walk is past, in a later binding of their `let` or in its tail, each walked where its `let` binds it, and how many `let`s bind each. The walk reads a later binding and the tail with each binder standing for its value, so they hold a copy at every use; a copy is the value's calls again, with the same arguments, and what held where the `let` binds it still holds wherever one stands. So the matrix graded at the binding describes every copy, and a copy is passed over. Scoped to the `let`: past it the same term is another position, read under what holds there.
     walked: HashMap<Term, usize>,
     calls: Vec<Call>,
+    /// The record of its member's parameters a walk for [`group_applications`] keeps, and `None` for a walk deciding descent alone, which grades nothing but the group's calls and so spends exactly what the decision does.
+    tracked: Option<Tracked>,
 }
 
 impl<E: Env> Walk<'_, E> {
@@ -157,6 +254,79 @@ impl<E: Env> Walk<'_, E> {
         )?;
         self.calls.push(call);
         Ok(())
+    }
+
+    /// Where a walk summarizing its member's parameters keeps a record, the position of `name` among them.
+    fn tracked_position(&self, name: Option<&Free>) -> Option<usize> {
+        self.tracked.as_ref()?;
+        self.params.iter().position(|param| Some(param) == name)
+    }
+
+    /// Whether `term` names a parameter a summarizing walk keeps a record of.
+    fn names_tracked(&self, term: &Term) -> bool {
+        self.tracked.is_some() && self.params.iter().any(|param| term.mentions_free(param))
+    }
+
+    /// Record an application of the parameter at `position` to `arguments`, graded against the member's parameters under what the enclosing arms established.
+    fn applied(&mut self, position: usize, arguments: &[Term]) -> Result<(), E::Error> {
+        let graded = grade(
+            self.env,
+            &self.context,
+            self.caller,
+            self.params,
+            self.caller,
+            arguments.len(),
+            arguments,
+        )?;
+        if let Some(tracked) = &mut self.tracked {
+            tracked.applied[position].push(graded.matrix);
+        }
+        Ok(())
+    }
+
+    /// Record a use of `name` the walk does not follow, where it is a parameter a summarizing walk keeps a record of.
+    fn escaped(&mut self, name: Option<&Free>) {
+        if let Some(position) = self.tracked_position(name)
+            && let Some(tracked) = &mut self.tracked
+        {
+            tracked.escaped[position] = true;
+        }
+    }
+
+    /// Walk a lambda handed where its callee applies it as `handed` grades: each entry type, then the body with every binder standing to this member's parameters as [`binder_bounds`] reads them.
+    fn walk_handed(
+        &mut self,
+        telescope: Telescope<Term>,
+        handed: &[CallMatrix],
+    ) -> Result<(), E::Error> {
+        let mut cursor = telescope.cursor();
+        let mut binders = Vec::new();
+        while let Some((_, entry)) = cursor.entry() {
+            self.walk_term(&entry)?;
+            binders.push(cursor.advance_fresh(|hint| self.env.fresh(hint)));
+        }
+        let body = cursor.body().expect("a cursor past every entry");
+        self.context
+            .assume(binder_bounds(handed, self.params, &binders));
+        let walked = self.walk_term(&body);
+        self.context.exit();
+        walked
+    }
+
+    /// Record the calls of member `callee` a definition makes where it applies it as `handed` grades: one for each application, and one claiming nothing where an application hands it other than all its parameters.
+    fn call_handed(&mut self, callee: usize, handed: &[CallMatrix]) {
+        let arity = self.arities[callee];
+        for matrix in handed {
+            let matrix = match matrix.columns() == arity {
+                true => matrix.clone(),
+                false => CallMatrix::unknown(self.params.len(), arity),
+            };
+            self.calls.push(Call {
+                caller: self.caller,
+                callee,
+                matrix,
+            });
+        }
     }
 
     /// The reader of terms as sizes, under the context this walk has built so far.
@@ -415,17 +585,21 @@ impl<E: Env> Walk<'_, E> {
 
     fn step(&mut self, term: &Term) -> Result<(), E::Error> {
         // A call is a member reference, so a term that holds no group holds no call, and what an arm inside it establishes is scoped to that arm: there is nothing in it for the walk to find or to carry out. Asked of the node's own cache, so a value a `let` puts at every use costs one question each. And a `let`'s value walked where it is bound is passed over in the tail — see `walked`.
-        if !term.has_group() || self.walked.contains_key(term) {
+        if (!term.has_group() && !self.names_tracked(term)) || self.walked.contains_key(term) {
             return Ok(());
         }
 
         match &**term {
-            // Nothing here can contain a call.
-            Subterm::Sort(_) | Subterm::Var(_) | Subterm::Instance(_) | Subterm::Metavar(_) => {
+            // A parameter named where nothing above took it as an application's head or handed it on is a use the walk does not follow.
+            Subterm::Var(var) => {
+                self.escaped(var.as_free());
                 Ok(())
             }
 
-            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
+            // Nothing here can contain a call.
+            Subterm::Sort(_) | Subterm::Instance(_) | Subterm::Metavar(_) => Ok(()),
+
+            // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully — save where it is handed to a definition that applies it as its summary states, which the application arm below grades through each application. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
             Subterm::Rec(_)
                 if term
                     .as_rec_proj()
@@ -441,7 +615,52 @@ impl<E: Env> Walk<'_, E> {
                     && group == self.group
                 {
                     self.call(index, &arguments)?;
+                    // A parameter handed on at its own position is the callee's parameter there, whose applications the summary reaches through this call.
+                    let handed_on = |(position, argument): &(usize, &Term)| {
+                        self.tracked.is_some()
+                            && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
+                    };
+                    let rest = arguments
+                        .iter()
+                        .enumerate()
+                        .filter(|entry| !handed_on(entry))
+                        .map(|(_, argument)| argument.clone())
+                        .collect::<Vec<_>>();
+                    return self.walks(&rest);
+                }
+                if let Subterm::Var(var) = &*spine_head
+                    && let Some(position) = self.tracked_position(var.as_free())
+                {
+                    self.applied(position, &arguments)?;
                     return self.walks(&arguments);
+                }
+                // A call of a definition that applies a parameter as its summary states hands a lambda there binders standing to this member's parameters as each application of it stands, and hands a member of this group there a call graded through each.
+                if let Subterm::Instance(instance) = &*spine_head {
+                    let handed = handed(
+                        self.env,
+                        &self.context,
+                        self.params,
+                        &instance.name,
+                        &arguments,
+                    )?;
+                    if handed.iter().any(Option::is_some) {
+                        for (argument, handed) in arguments.iter().zip(handed) {
+                            let member = argument
+                                .as_rec_proj()
+                                .filter(|(group, _)| *group == self.group)
+                                .map(|(_, index)| index);
+                            match (handed, &**argument, member) {
+                                (Some(handed), Subterm::Func(Func { telescope, .. }), _) => {
+                                    self.walk_handed(telescope.clone(), &handed)?;
+                                }
+                                (Some(handed), _, Some(member)) => {
+                                    self.call_handed(member, &handed)
+                                }
+                                _ => self.walk_term(argument)?,
+                            }
+                        }
+                        return Ok(());
+                    }
                 }
                 // A lambda at the head of a spine is graded as its contractum: the body is walked with each binder standing for the argument it was applied to, so a call inside reads its arguments as what they are rather than as fresh binders nothing is below. This is what keeps a convoy — an arm generalized over a hypothesis and applied back to it — from hiding the descent it carries. The arguments are walked on their own first, because a binder the body never uses would otherwise drop a call from the walk.
                 if let Subterm::Func(Func { telescope, .. }) = &*spine_head {
@@ -507,7 +726,7 @@ impl<E: Env> Walk<'_, E> {
             // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the kernel checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
             Subterm::Let(Let { bindings, tail }) => {
                 let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
-                // Only a value that holds a group is worth remembering: the rest are passed over as they stand. Counted, since two `let`s may bind one term and the inner one leaves first.
+                // Only a value that holds a group, or names a parameter a summarizing walk keeps a record of, is worth remembering: the rest are passed over as they stand. A copy of one names the parameter again with the same arguments, applied or used otherwise where the `let` binds it. Counted, since two `let`s may bind one term and the inner one leaves first.
                 let mut remembered: Vec<Term> = Vec::new();
                 let mut walked = Ok(());
                 for binding in bindings {
@@ -518,7 +737,7 @@ impl<E: Env> Walk<'_, E> {
                     if walked.is_err() {
                         break;
                     }
-                    if value.has_group() {
+                    if value.has_group() || self.names_tracked(&value) {
                         *self.walked.entry(value.clone()).or_default() += 1;
                         remembered.push(value.clone());
                     }

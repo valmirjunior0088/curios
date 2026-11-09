@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl, Items, Level,
-        Lexicon, Many, Marks, Members, Mentions, Place, Places, Polarity, Quality, ReadEntry,
-        ReadTable, RecGroup, Scope, Sharing, StructDecl, StructType, Subterm, Symbols, Telescope,
-        Term, UniverseContext, UniverseError, UniverseParam, Universes, Variance, WitnessId,
-        foreign_produced, wire_term,
+        Applications, Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl,
+        Items, Level, Lexicon, Many, Marks, Members, Mentions, Place, Places, Polarity, Quality,
+        ReadEntry, ReadTable, RecGroup, Scope, Sharing, StructDecl, StructType, Subterm, Symbols,
+        Telescope, Term, UniverseContext, UniverseError, UniverseParam, Universes, Variance,
+        WitnessId, foreign_produced, wire_term,
     },
     curios_abi::ForeignFunction,
     curios_common::{
@@ -59,6 +59,9 @@ pub struct Certification {
     /// Each judged definition's totality, closed over everything it mentions.
     #[archived_with(InKeyOrder)]
     totalities: Sorted<Global, Totality>,
+    /// How each judged definition applies its parameters, where it applies one every use of which is seen: what a later walk grades a call in a callback the definition is handed by.
+    #[archived_with(InKeyOrder)]
+    applications: Sorted<Global, Applications>,
     /// How each `induct` and `struct` entry the walk accepted uses its parameters, as the walk computed it: what a later walk composes through where a family it judges mentions this one. The vector the entry itself carries is elaboration's, which no walk reads.
     #[archived_with(InKeyOrder)]
     polarities: Sorted<Global, Vec<Polarity>>,
@@ -184,6 +187,8 @@ pub struct Concluded {
     pub bodies: Vec<Option<Option<[u8; 32]>>>,
     /// The definition's totality, closed over what it mentions.
     pub totality: Totality,
+    /// How it applies its parameters ([`Applications`]).
+    pub applications: Applications,
     /// The vectors of the registry entry its former carries, where it carries one.
     pub vectors: Option<(Vec<Polarity>, Vec<Variance>)>,
 }
@@ -335,6 +340,7 @@ pub struct Abroad {
 impl PartialEq for Certification {
     fn eq(&self, other: &Self) -> bool {
         self.totalities == other.totalities
+            && self.applications == other.applications
             && self.polarities == other.polarities
             && self.variances == other.variances
             && self.read() == other.read()
@@ -349,6 +355,8 @@ impl Eq for Certification {}
 pub struct Certified {
     /// Whether the definition terminates, closed over everything it mentions.
     pub totality: Totality,
+    /// How it applies its parameters ([`Applications`]).
+    pub applications: Applications,
     /// What judging it read of other items. A recursive group is judged as one item, so each of its members holds the group's reads; a declaration's registry entry is accepted as part of its type former, whose entry holds what that acceptance read.
     pub reads: Reads,
 }
@@ -406,6 +414,7 @@ impl Certification {
 
         Revision {
             totalities: self.totalities.clone(),
+            applications: self.applications.clone(),
             polarities: self.polarities.clone(),
             variances: self.variances.clone(),
             by: read.by.clone(),
@@ -469,6 +478,11 @@ impl Certification {
         self.totalities.get(name).copied()
     }
 
+    /// How `name` applies its parameters, where this record files it: a definition applying none of them, or using each it applies otherwise as well, has nothing filed.
+    pub fn applications(&self, name: &Global) -> Option<&Applications> {
+        self.applications.get(name)
+    }
+
     /// What judging `name` read of other items, when this record covers it.
     pub fn reads(&self, name: &Global) -> Option<&Reads> {
         self.read().by.get(name).map(|held| &***held)
@@ -511,6 +525,7 @@ impl Certification {
 #[derive(Debug, Clone)]
 pub struct Revision {
     totalities: Sorted<Global, Totality>,
+    applications: Sorted<Global, Applications>,
     polarities: Sorted<Global, Vec<Polarity>>,
     variances: Sorted<Global, Vec<Variance>>,
     by: Sorted<Global, HeldReads>,
@@ -521,6 +536,7 @@ impl Revision {
     /// Record what the walk concluded of `name`, which it judged.
     pub fn judged(&mut self, name: Global, certified: Certified) {
         self.totalities.insert(name, certified.totality);
+        self.applied(name, certified.applications);
         self.by
             .insert(name, Rc::new(ReadRecord::new(certified.reads)));
     }
@@ -529,6 +545,7 @@ impl Revision {
     pub fn adopted(&mut self, name: Global, record: HeldReads) {
         if let Some(made) = record.made() {
             self.totalities.insert(name, made.totality);
+            self.applied(name, made.applications.clone());
         }
         self.by.insert(name, record);
     }
@@ -536,9 +553,22 @@ impl Revision {
     /// Take out everything recorded of `name`, which the unit no longer declares.
     pub fn dropped(&mut self, name: &Global) {
         self.totalities.remove(name);
+        self.applications.remove(name);
         self.by.remove(name);
         self.polarities.remove(name);
         self.variances.remove(name);
+    }
+
+    /// File how `name` applies its parameters, or take out what was filed where it applies none ([`Applications::is_empty`]).
+    fn applied(&mut self, name: Global, applications: Applications) {
+        match applications.is_empty() {
+            true => {
+                self.applications.remove(&name);
+            }
+            false => {
+                self.applications.insert(name, applications);
+            }
+        }
     }
 
     /// File the vectors of the registry entry the walk accepted under `name`, or take out the ones filed under it where it accepted none there.
@@ -574,6 +604,7 @@ impl Revision {
     pub fn filed(self) -> Certification {
         Certification {
             totalities: self.totalities,
+            applications: self.applications,
             polarities: self.polarities,
             variances: self.variances,
             reads: Recorded::held(Read {

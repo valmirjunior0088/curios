@@ -7,8 +7,8 @@ use {
     crate::{Classified, Error, Vectors, Witness},
     curios_common::{Mount, Qualifier},
     curios_core::{
-        ConceptDecl, FuncType, Global, HeadKey, InductDecl, ParameterField, StructDecl, Subterm,
-        Term, Totality, UniverseContext, Variance, WitnessKey,
+        Applications, ConceptDecl, FuncType, Global, HeadKey, InductDecl, ParameterField,
+        StructDecl, Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     std::collections::BTreeMap,
 };
@@ -28,6 +28,8 @@ pub struct Program<'s> {
     witness_table: BTreeMap<(Global, WitnessKey), Witness>,
     /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and the unit files ([`Classified`]). Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
+    /// How each definition of the unit applies its parameters, where it applies one every use of which is seen.
+    applications: BTreeMap<Global, Applications>,
     /// Each finished definition's variance vector with how many arguments one spine applies it in full by, kept for a definition irrelevant in some level: any other is compared level by level, which is what a name with no entry answers.
     variances: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Each finished record-valued definition's field vectors with its arity, kept for a definition one of whose fields is irrelevant in some level: a projection of any other is read by the definition's own vector, which is what a name with no entry answers.
@@ -289,6 +291,18 @@ impl<'s> Program<'s> {
         self.totality.insert(*name, totality);
     }
 
+    /// Record how a definition applies its parameters the moment its group is classified, where it applies one every use of which is seen.
+    pub fn record_definition_applications(&mut self, name: &Global, applications: Applications) {
+        match applications.is_empty() {
+            true => {
+                self.applications.remove(name);
+            }
+            false => {
+                self.applications.insert(*name, applications);
+            }
+        }
+    }
+
     /// File the vectors read off the finished definition `name` of type `type_`, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
     pub fn record_vectors(&mut self, name: &Global, type_: &Term, vectors: &Vectors) {
         let arity = match &**type_ {
@@ -304,6 +318,7 @@ impl<'s> Program<'s> {
     pub fn classified(&self, name: &Global) -> Classified {
         Classified {
             totality: self.totality.get(name).copied().unwrap_or_default(),
+            applications: self.applications.get(name).cloned().unwrap_or_default(),
             vectors: Vectors {
                 variances: self
                     .variances
@@ -390,6 +405,13 @@ impl<'s> Program<'s> {
         self.value_sorts
             .get(name)
             .or_else(|| self.scope?.definition(name)?.value_sort)
+    }
+
+    /// How a definition applies its parameters, as this unit or the unit in scope declaring it filed it: `None` where nothing is filed.
+    pub fn definition_applications(&self, name: &Global) -> Option<&Applications> {
+        self.applications
+            .get(name)
+            .or_else(|| self.scope?.definition(name)?.applications)
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.

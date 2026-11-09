@@ -4,8 +4,8 @@ use {
     crate::{Answered, Classified, Context, Declared, Error, Question, Vectors, Witness},
     curios_common::{Mount, Qualifier},
     curios_core::{
-        Atom, ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
-        UniverseContext, Variance, WitnessKey,
+        Applications, Atom, ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl,
+        Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -86,6 +86,22 @@ impl<'s> Context<'s> {
         self.typing.program.definition_totality(name)
     }
 
+    pub(crate) fn record_definition_applications(
+        &mut self,
+        name: &Global,
+        applications: Applications,
+    ) {
+        self.typing
+            .program
+            .record_definition_applications(name, applications);
+    }
+
+    /// How a definition applies its parameters ([`Program::definition_applications`](crate::Program::definition_applications)), asked of it.
+    pub(crate) fn definition_applications(&self, name: &Global) -> Option<Applications> {
+        self.asks(name, Question::Applications);
+        self.typing.program.definition_applications(name).cloned()
+    }
+
     /// [`Program::record_vectors`](crate::Program::record_vectors).
     pub(crate) fn record_vectors(&mut self, name: &Global, type_: &Term, vectors: &Vectors) {
         self.typing.program.record_vectors(name, type_, vectors);
@@ -99,6 +115,7 @@ impl<'s> Context<'s> {
         classified: &Classified,
     ) {
         self.record_definition_totality(name, classified.totality);
+        self.record_definition_applications(name, classified.applications.clone());
         self.record_vectors(name, type_, &classified.vectors);
     }
 

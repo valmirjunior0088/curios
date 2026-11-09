@@ -22,8 +22,8 @@ use {
     super::Error,
     crate::Baseline,
     curios_core::{
-        Certification, Definitions, Global, InductDecl, Item, Place, Places, Polarity, StructDecl,
-        Term, Totality, UniverseContext, Universes, Variance,
+        Applications, Certification, Definitions, Global, InductDecl, Item, Place, Places,
+        Polarity, StructDecl, Term, Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -353,6 +353,15 @@ impl<'s> Globals<'s> {
             .find_map(|mounted| mounted.polarities(name))
     }
 
+    /// How the definition `name` applies its parameters, as the record of the unit holding it files it, read only where that record covers its unit, as [`Globals::partial`] reads a verdict.
+    pub(crate) fn applications(&self, name: &Global) -> Option<&'s Applications> {
+        self.mounted.iter().find_map(|mounted| {
+            (mounted.covered && mounted.places.place(name).is_some())
+                .then(|| mounted.certification.applications(name))
+                .flatten()
+        })
+    }
+
     /// The variance vector the record of the unit holding the registry entry `name` files for it.
     pub(crate) fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
         self.mounted
@@ -422,6 +431,8 @@ pub(super) struct Environment<'s> {
     vectors: BTreeMap<Global, Vec<Polarity>>,
     /// The variance vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what a comparison of two instances of the family reads. The vector an entry carries is elaboration's, which the walk holds to this one and reads nowhere else.
     variances: BTreeMap<Global, Vec<Variance>>,
+    /// How each definition the walk judged or took applies its parameters, where it applies one every use of which is seen: what a later judgment grades a call in a callback the definition is handed by.
+    applications: BTreeMap<Global, Applications>,
 }
 
 impl<'s> Environment<'s> {
@@ -602,6 +613,22 @@ impl<'s> Environment<'s> {
             .or_else(|| self.scope.and_then(|scope| scope.variances(name)))
             .and_then(|vector| vector.get(index).copied())
             .unwrap_or(Variance::Invariant)
+    }
+
+    /// File how the definition `name` applies its parameters: what the walk in progress concluded of it, or took, read from then on by every judgment that hands it a callback.
+    pub(super) fn file_applications(&mut self, name: &Global, applications: Applications) {
+        self.applications.insert(*name, applications);
+    }
+
+    /// How the definition `name` applies its parameters, by what this walk filed for it, the baseline's record where this walk has passed it, or the record of its unit in scope.
+    pub(super) fn applications(&self, name: &Global) -> Option<&Applications> {
+        self.applications
+            .get(name)
+            .or_else(|| {
+                self.passed_vectors(name)
+                    .and_then(|baseline| baseline.certification.applications(name))
+            })
+            .or_else(|| self.scope.and_then(|scope| scope.applications(name)))
     }
 
     /// File `vector` as the polarity vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every judgment that composes through the family.

@@ -6,12 +6,15 @@ use {
     super::{Call, Carriers, Guard, Shape, Tag, spine},
     crate::{Env, forceable},
     curios_core::{
-        CallMatrix, Free, FreeMonoid, Intrinsic, Layer, Nat, Probe, Struct, Subterm, Term, Tuple,
-        Variant,
+        CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Size, Struct, Subterm,
+        Term, Tuple, Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
+
+/// How a binder stands to the parameters of the member whose body holds it, each parameter it is graded against beside the relation it bears to it: what a summary hands a lambda's binder ([`binder_bounds`]).
+pub type Standing = Vec<(Free, Size)>;
 
 /// Whether shape reading may force `term`.
 ///
@@ -54,6 +57,8 @@ pub struct SizeContext {
     ///
     /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as any other application does.
     pub(super) payloads: BTreeSet<Free>,
+    /// The binders of a lambda a call hands a parameter its callee applies as a summary states ([`Applications`](curios_core::Applications)), each with how it stands to the caller's parameters it was graded against: what an application of the parameter hands it, wherever the callee applies it.
+    pub(super) assumed: BTreeMap<Free, Standing>,
     /// One entry per scope [`SizeContext::enter`] has opened and [`SizeContext::exit`] has yet to close.
     pub(super) scopes: Vec<Undo>,
 }
@@ -68,6 +73,8 @@ pub(super) struct Undo {
     nonzero: Option<Free>,
     /// The binders this scope added to `payloads`, empty when it added none.
     payloads: Vec<Free>,
+    /// The binders this scope assumed bounds of, each with what it stood for before.
+    assumed: Vec<(Free, Option<Standing>)>,
 }
 
 impl SizeContext {
@@ -132,6 +139,21 @@ impl SizeContext {
             refined,
             nonzero,
             payloads,
+            assumed: Vec::new(),
+        });
+    }
+
+    /// Open a scope in which each of `bounds`' binders stands to the caller's parameters as it states ([`binder_bounds`]): the body of a lambda handed where its callee applies it.
+    pub fn assume(&mut self, bounds: Vec<(Free, Standing)>) {
+        let assumed = bounds
+            .into_iter()
+            .map(|(binder, bound)| (binder, self.assumed.insert(binder, bound)))
+            .collect();
+        self.scopes.push(Undo {
+            refined: Vec::new(),
+            nonzero: None,
+            payloads: Vec::new(),
+            assumed,
         });
     }
 
@@ -153,6 +175,12 @@ impl SizeContext {
         }
         for binder in undo.payloads {
             self.payloads.remove(&binder);
+        }
+        for (binder, previous) in undo.assumed.into_iter().rev() {
+            match previous {
+                Some(previous) => self.assumed.insert(binder, previous),
+                None => self.assumed.remove(&binder),
+            };
         }
     }
 
@@ -192,11 +220,30 @@ pub fn grade<E: Env>(
         .iter()
         .map(|param| grader.expand(param, EXPAND_FUEL))
         .collect::<Vec<_>>();
+    // A binder a summary bounds is graded against as a parameter is, and what an argument is of it composes with where it stands to the caller's: `f(c)` with `c` below `t` is below `t`, and so is a payload an arm takes `c` apart into.
+    let bounded = context
+        .assumed
+        .iter()
+        .filter_map(|(binder, bound)| {
+            let rows = bound
+                .iter()
+                .filter_map(|(param, size)| Some((params.iter().position(|p| p == param)?, *size)))
+                .collect::<Vec<_>>();
+            (!rows.is_empty()).then(|| (grader.expand(binder, EXPAND_FUEL), rows))
+        })
+        .collect::<Vec<_>>();
 
     for (column, argument) in arguments.iter().enumerate().take(callee_arity) {
         let shape = grader.shape_of(argument)?;
         for (row, parameter) in expanded.iter().enumerate() {
             matrix.set(row, column, shape.against(parameter));
+        }
+        for (binder, rows) in &bounded {
+            let below = shape.against(binder);
+            for (row, bound) in rows {
+                let through = below.compose(*bound);
+                matrix.set(*row, column, matrix.entry(*row, column).join(through));
+            }
         }
     }
 
@@ -205,6 +252,70 @@ pub fn grade<E: Env>(
         callee,
         matrix,
     })
+}
+
+/// What a call of `callee` with `arguments`, from a member whose parameters are `params`, hands each argument at a parameter `callee` applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter against `params`, through what the call hands `callee` under `context`. `None` at a position `callee` summarizes nothing at or applies nowhere, and at every position where nothing is filed of `callee` or the call does not hand it every parameter.
+pub fn handed<E: Env>(
+    env: &mut E,
+    context: &SizeContext,
+    params: &[Free],
+    callee: &Global,
+    arguments: &[Term],
+) -> Result<Vec<Option<Vec<CallMatrix>>>, E::Error> {
+    let mut handed = vec![None; arguments.len()];
+    let Some(applications) = env.applications(callee) else {
+        return Ok(handed);
+    };
+    let applied = |position: usize| {
+        applications
+            .of(position)
+            .filter(|applied| !applied.is_empty())
+    };
+    if (0..arguments.len()).all(|position| applied(position).is_none()) {
+        return Ok(handed);
+    }
+    let call = grade(env, context, 0, params, 0, arguments.len(), arguments)?.matrix;
+    for (position, handed) in handed.iter_mut().enumerate() {
+        *handed = applied(position).and_then(|applied| {
+            applied
+                .iter()
+                .map(|application| call.compose(application))
+                .collect::<Option<Vec<_>>>()
+        });
+    }
+
+    Ok(handed)
+}
+
+/// How each of `binders`, a lambda's handed where its callee applies it as `handed` grades, stands to `params`: at each parameter, what every application establishes of the binder at its place, and nothing where one hands it less than that.
+pub fn binder_bounds(
+    handed: &[CallMatrix],
+    params: &[Free],
+    binders: &[Free],
+) -> Vec<(Free, Standing)> {
+    binders
+        .iter()
+        .enumerate()
+        .map(|(column, binder)| {
+            let bound = params
+                .iter()
+                .enumerate()
+                .filter_map(|(row, param)| {
+                    let size = handed
+                        .iter()
+                        .map(|application| match column < application.columns() {
+                            true => application.entry(row, column),
+                            false => Size::Unknown,
+                        })
+                        .min()
+                        .unwrap_or(Size::Unknown);
+                    (size != Size::Unknown).then_some((*param, size))
+                })
+                .collect::<Vec<_>>();
+            (*binder, bound)
+        })
+        .filter(|(_, bound)| !bound.is_empty())
+        .collect()
 }
 
 /// The binder a boolean arm taken `taken` rules zero out for, when `head` compares a binder against a literal in a way that does.

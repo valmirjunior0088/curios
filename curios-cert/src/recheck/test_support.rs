@@ -4261,6 +4261,10 @@ pub(super) fn doctored(
         certification.iter().map(|(name, totality)| {
             let certified = Certified {
                 totality,
+                applications: certification
+                    .applications(name)
+                    .cloned()
+                    .unwrap_or_default(),
                 reads: certification
                     .reads(name)
                     .cloned()

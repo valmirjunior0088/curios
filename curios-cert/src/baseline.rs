@@ -14,9 +14,9 @@ use {
     super::{Globals, Held, held, induct_alike, struct_alike},
     curios_common::{Digest, Qualifier, digest},
     curios_core::{
-        Certification, Concluded, Definition, DefinitionKind, Definitions, Global, InductDecl,
-        Item, ItemRun, Nominal, Places, Polarity, Reads, RecDefinition, RecItem, Sharing,
-        StructDecl, Totality, Variance,
+        Applications, Certification, Concluded, Definition, DefinitionKind, Definitions, Global,
+        InductDecl, Item, ItemRun, Nominal, Places, Polarity, Reads, RecDefinition, RecItem,
+        Sharing, StructDecl, Totality, Variance,
     },
     std::collections::{BTreeMap, HashMap},
 };
@@ -152,6 +152,7 @@ pub(crate) fn read_digest(
         partial: globals.partial(name),
         polarities: globals.polarities(name),
         variances: globals.variances(name),
+        applications: globals.applications(name),
     };
 
     read.digest(body).map(Some)
@@ -162,7 +163,7 @@ pub(crate) fn held_digest(
     definitions: &Definitions,
     places: &Places,
     name: &Global,
-    (partial, polarities, variances): (bool, Option<&[Polarity]>, Option<&[Variance]>),
+    (partial, polarities, variances, applications): Beside<'_>,
     body: bool,
 ) -> Result<Option<String>, String> {
     let Some(held) = held(definitions, places, name) else {
@@ -175,10 +176,19 @@ pub(crate) fn held_digest(
         partial,
         polarities,
         variances,
+        applications,
     };
 
     read.digest(body).map(Some)
 }
+
+/// What a signature read of a definition reads beside its terms: whether it is not known to terminate, the vectors of the entry its former carries, and how it applies its parameters.
+pub(crate) type Beside<'a> = (
+    bool,
+    Option<&'a [Polarity]>,
+    Option<&'a [Variance]>,
+    Option<&'a Applications>,
+);
 
 /// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the kernel records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
 pub fn part_digest(
@@ -196,6 +206,7 @@ pub fn part_digest(
         classified && certification.totality(name) == Some(Totality::Partial),
         certification.polarities(name).filter(|_| nominal),
         certification.variances(name).filter(|_| nominal),
+        certification.applications(name).filter(|_| classified),
     );
 
     held_digest(definitions, places, name, verdicts, body)
@@ -209,6 +220,7 @@ struct Readable<'a> {
     partial: bool,
     polarities: Option<&'a [Polarity]>,
     variances: Option<&'a [Variance]>,
+    applications: Option<&'a Applications>,
 }
 
 impl Readable<'_> {
@@ -250,6 +262,7 @@ impl Readable<'_> {
             self.partial,
             self.polarities.map(<[Polarity]>::to_vec),
             self.variances.map(<[Variance]>::to_vec),
+            self.applications.cloned(),
         );
 
         curios_archive::to_bytes(&part).map(|bytes| digest(&bytes))
@@ -315,6 +328,11 @@ impl Completing<'_> {
             signatures,
             bodies,
             totality: self.certification.totality(name)?,
+            applications: self
+                .certification
+                .applications(name)
+                .cloned()
+                .unwrap_or_default(),
             vectors: self
                 .certification
                 .polarities(name)
@@ -449,6 +467,7 @@ impl<'a> Adopting<'a> {
         partial: impl Fn(&Global) -> bool,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
         variances: &BTreeMap<Global, Vec<Variance>>,
+        applications: &BTreeMap<Global, Applications>,
     ) {
         let baseline = self.baseline;
         let certification = baseline.certification;
@@ -458,6 +477,7 @@ impl<'a> Adopting<'a> {
                     partial(name),
                     polarities.get(name).map(Vec::as_slice),
                     variances.get(name).map(Vec::as_slice),
+                    applications.get(name),
                 );
                 held_digest(definitions, places, name, verdict, body)
                     .ok()
@@ -468,6 +488,7 @@ impl<'a> Adopting<'a> {
                     certification.totality(name) != Some(Totality::Total),
                     certification.polarities(name),
                     certification.variances(name),
+                    certification.applications(name),
                 );
                 held_digest(baseline.definitions, baseline.places, name, verdict, body)
                     .ok()

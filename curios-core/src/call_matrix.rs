@@ -131,3 +131,31 @@ impl CallMatrix {
         (0..self.rows.min(self.columns)).any(|index| self.entry(index, index) == Size::Less)
     }
 }
+
+/// How a definition applies each of its parameters: for each, every matrix grading what an application of it hands against the definition's parameters, or nothing where the parameter is used otherwise than applied or handed on unchanged.
+///
+/// What a certifier's record stores of a definition beside its totality, so a call a callback makes is graded where the definition handed it applies it: `/std/List/any` applies `pred` to an element below `l`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Applications {
+    parameters: Vec<Option<Vec<CallMatrix>>>,
+}
+
+impl Applications {
+    /// The applications of each parameter in order: `None` for one used otherwise.
+    pub fn new(parameters: Vec<Option<Vec<CallMatrix>>>) -> Self {
+        Self { parameters }
+    }
+
+    /// Every matrix grading an application of parameter `index`, where every use of it is one; `None` where it is used otherwise, and for a parameter the definition has not.
+    pub fn of(&self, index: usize) -> Option<&[CallMatrix]> {
+        self.parameters.get(index)?.as_deref()
+    }
+
+    /// Whether no parameter is applied where every use of it is seen: what a record files nothing for.
+    pub fn is_empty(&self) -> bool {
+        self.parameters
+            .iter()
+            .all(|applied| applied.as_ref().is_none_or(Vec::is_empty))
+    }
+}

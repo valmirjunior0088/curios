@@ -105,6 +105,9 @@ impl<'a> Standing<'a> {
         let place = self.places().place(name)?;
         let classified = self.traces.classified(name);
         let totality = classified.map_or(Totality::Partial, |classified| classified.totality);
+        let applications = classified
+            .map(|classified| &classified.applications)
+            .filter(|applications| !applications.is_empty());
         let vectors = classified.map(|classified| &classified.vectors);
         let variances = vectors.map_or(&[][..], |vectors| &vectors.variances);
         let field_variances = vectors.map_or(&[][..], |vectors| &vectors.field_variances);
@@ -120,6 +123,7 @@ impl<'a> Standing<'a> {
                     body: definition.published().0,
                     universe_context: &definition.universe_context,
                     totality,
+                    applications,
                     variances,
                     field_variances,
                     parameter_field,
@@ -137,6 +141,7 @@ impl<'a> Standing<'a> {
                     body: (!definition.proof).then_some(body),
                     universe_context: &rec.universe_context,
                     totality,
+                    applications,
                     variances,
                     field_variances,
                     parameter_field,

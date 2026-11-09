@@ -24,6 +24,7 @@ fn judged(input: &[u8]) -> Concluded {
         signatures: vec![Some(Some([7; 32]))],
         bodies: Vec::new(),
         totality: Totality::Total,
+        applications: Applications::default(),
         vectors: None,
     }
 }

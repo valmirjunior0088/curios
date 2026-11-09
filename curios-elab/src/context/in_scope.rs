@@ -9,8 +9,8 @@
 use {
     curios_common::Qualifier,
     curios_core::{
-        ConceptDecl, FuncType, Global, InductDecl, ParameterField, RecGroup, StructDecl, Subterm,
-        Term, Totality, UniverseContext, Variance, WitnessKey,
+        Applications, ConceptDecl, FuncType, Global, InductDecl, ParameterField, RecGroup,
+        StructDecl, Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     std::fmt::Debug,
 };
@@ -34,6 +34,8 @@ pub struct Defined<'a> {
     pub universe_context: &'a UniverseContext,
     /// What its unit's elaboration concluded of it as it published it ([`crate::Classified::totality`]), `Partial` where it filed nothing: elaboration's own conclusion, and the only answer this checker has. The kernel reads the certifier's record of the unit instead, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
     pub totality: Totality,
+    /// How it applies its parameters, where its publication filed that ([`crate::Classified::applications`]).
+    pub applications: Option<&'a Applications>,
     /// The vector its publication filed, empty where it filed none ([`crate::Vectors::variances`]).
     pub variances: &'a [Variance],
     /// The vector of each field of its value its publication filed, empty where it filed none ([`crate::Vectors::field_variances`]).

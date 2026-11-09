@@ -24,7 +24,7 @@ use {
         validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
         zonk_solved_term_metas,
     },
-    curios_analysis::group_totality,
+    curios_analysis::{group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
@@ -634,6 +634,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
         for definition in rec.definitions() {
             record_definition_totality(context, &definition, verdict)?;
         }
+        record_applications(context, &rec);
 
         // A group's member files no vector.
         return Ok((Item::Rec(rec), Vectors::default()));
@@ -936,8 +937,19 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     for definition in rec.definitions() {
         record_definition_totality(context, &definition, group)?;
     }
+    record_applications(context, &rec);
 
     Ok(rec)
+}
+
+/// Record how each member of `rec` applies its parameters, as the kernel files it of the group it certifies. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
+fn record_applications(context: &mut Context, rec: &RecItem) {
+    let Ok(applied) = group_applications(context, &rec.group) else {
+        return;
+    };
+    for (definition, applications) in rec.definitions.iter().zip(applied) {
+        context.record_definition_applications(&definition.name, applications);
+    }
 }
 
 /// How a declaration that closes over its members' locals names them in what it stores outside itself: by their declarations, at its own instance ([`Outside::stored`]).
