@@ -101,6 +101,28 @@ const SPINES: &str = r#"
         end;
 "#;
 
+/// A search tree whose insert rebuilds the node it takes apart on every path, threaded once through a loop.
+const SEARCH_TREE: &str = r#"
+    induct Tree: Type
+    | leaf()
+    | node(left: Tree, key: Nat, right: Tree)
+    end
+    let insert(t: Tree, k: Nat) -> Tree =
+        match t
+        | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
+        | node(l, x, r) =>
+            choose
+            | k < x => Tree/node(insert(l, k), x, r)
+            | x < k => Tree/node(l, x, insert(r, k))
+            | _ => Tree/node(l, x, r)
+            end
+        end;
+    let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
+    let walk(n: Nat, x: Nat, t: Tree) -> Tree =
+        match n | 0 => t | k + 1; _ => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
+    let shared(n: Nat) -> Tree = Tree/node(Tree/leaf(), n + 1, Tree/leaf());
+"#;
+
 /// A map filled with `n` keys, then drained of every other one and of keys it never held.
 const REMOVALS: &str = r#"
     let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
@@ -172,9 +194,9 @@ fn map_remove_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
     assert!(rebuilds_of(&module, NODE) >= 4, "{module}");
 }
 
-/// What looks fresh and is shared: a map read after its insert, a map whose successor's predecessor is read again, a map a list holds, a map a closure captures, a map an effect description holds, and a map that is constant data. None of them is rebuilt.
+/// What looks fresh and is shared: a map read after its insert, a map whose successor's predecessor is read again, a map a list holds, a map a closure captures, and a map that is constant data. Each program answers as it does when every insert copies, a rebuild of what another map still holds showing in what it prints.
 #[test]
-fn a_map_something_else_still_holds_is_never_rebuilt() {
+fn a_map_something_else_still_holds_answers_as_if_copied() {
     let walks = [
         // Read after its insert.
         r#"
@@ -235,14 +257,16 @@ fn a_map_something_else_still_holds_is_never_rebuilt() {
         "walk(n, Map/empty(), 0)",
         "walk(n, Map/empty(), 0)",
     ]) {
-        let (_, module) = modules(&program(walk, start));
-        assert_eq!(rebuilds_of(&module, NODE), 0, "{walk}\n{module}");
+        let (lowered, module) = modules(&program(walk, start));
+        let mut kept = lowered;
+        curios_cps::optimize(&mut kept);
+        assert_eq!(run(&module, "300"), run(&kept, "300"), "{walk}");
     }
 }
 
-/// A map a cell holds: taken out of it, inserted into and taken out again, the cell still hands back the map it was filled with, so the insert copies.
+/// A map a cell holds: taken out of it, inserted into and taken out again, the cell still hands back the map it was filled with, as it does when the insert copies.
 #[test]
-fn a_map_a_cell_holds_is_never_rebuilt() {
+fn a_map_a_cell_holds_answers_as_if_copied() {
     let source = r#"
         use /std/{Str, Nat, Map, List, Option, Result, Try, Io, Proc, Fmt, Cell};
         let execute() -> Try(Io, Str, {}) =
@@ -261,7 +285,6 @@ fn a_map_a_cell_holds_is_never_rebuilt() {
         execute()
     "#;
     let (lowered, module) = modules(source);
-    assert_eq!(rebuilds_of(&module, NODE), 0, "{module}");
     let mut kept = lowered;
     curios_cps::optimize(&mut kept);
     assert_eq!(run(&module, "5"), run(&kept, "5"));
@@ -306,7 +329,30 @@ fn a_constant_leaf_a_fork_holds_is_never_rebuilt() {
     );
 }
 
-/// A search tree's insert that hands back the node it was handed where the key is found: the child it hands on is held by a node it may return, so no unique value enters the loop and nothing is rebuilt.
+/// A search tree inserted into where it is read again, beside one threaded once through a loop: the first insert reaches the function as it is, and the loop, handed what each insert hands back, reaches a copy that rebuilds the forks it takes apart while the shared tree answers as it did.
+#[test]
+fn a_search_tree_shared_in_one_place_and_threaded_in_another_rebuilds_in_a_copy() {
+    let source = program(
+        SEARCH_TREE,
+        "size(insert(shared(n), 3)) + size(shared(n)) + size(walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n, Tree/leaf())))",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "300"), run(&kept, "300"));
+    let rebuilt = rebuilt(&module);
+    let trees = rebuilt
+        .iter()
+        .filter(|(name, _)| name.ends_with("/Tree"))
+        .collect::<Vec<_>>();
+    assert!(trees.len() >= 2, "{module}");
+    assert!(
+        trees.iter().all(|(_, slots)| !slots.contains(&0)),
+        "{module}"
+    );
+}
+
+/// A search tree's insert that hands back the node it was handed where the key is found, first handed the constant empty tree: the child it hands on is held by a node it may return, and what the insert of a constant hands back may be that constant, so no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
     let tree = r#"
@@ -330,7 +376,7 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
     "#;
     let (_, module) = modules(&program(
         tree,
-        "size(walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n, Tree/leaf())))",
+        "size(walk(n, (n + 1) % 65537, Tree/leaf()))",
     ));
     assert_eq!(rebuilds_of(&module, "/Tree"), 0, "{module}");
 }
@@ -493,14 +539,17 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         SPINES,
         "Map/fold(walk(n, (n + 1) % 65537, Map/empty()), 0, (_, v, acc) => (acc + v) % 1000003)",
     );
+    let tree = program(SEARCH_TREE, "size(walk(n, (n + 1) % 65537, Tree/leaf()))");
     let removals = program(
         REMOVALS,
         "Map/fold(drain(n, fill(n, Map/empty())), 0, (_, v, acc) => (acc + v) % 1000003)",
     );
-    for (source, n) in corpus
-        .into_iter()
-        .chain([(heap, "300"), (spines, "300"), (removals, "300")])
-    {
+    for (source, n) in corpus.into_iter().chain([
+        (heap, "300"),
+        (spines, "300"),
+        (removals, "300"),
+        (tree, "300"),
+    ]) {
         let (lowered, rebuilt) = modules(&source);
         let mut kept = lowered;
         curios_cps::optimize(&mut kept);

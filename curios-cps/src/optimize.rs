@@ -70,6 +70,10 @@ pub(crate) const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 pub(crate) const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// Maximum cumulative jump-specialization copying, including head rebuilds.
 pub(crate) const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
+/// How many nodes the reuse version of one function a rebuild in place copies may have.
+pub(crate) const REBUILD_CLONE_NODE_LIMIT: usize = SCC_CLONE_NODE_LIMIT;
+/// Maximum cumulative copying of reuse versions, each within [`REBUILD_CLONE_NODE_LIMIT`].
+pub(crate) const REBUILD_COPY_NODE_LIMIT: usize = 64 * REBUILD_CLONE_NODE_LIMIT;
 /// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
 pub(crate) const ENTRY_CLONE_LIMIT: usize = 64;
 

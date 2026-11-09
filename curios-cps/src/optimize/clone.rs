@@ -250,6 +250,8 @@ impl CopyPlan {
 pub(crate) struct Copies {
     pub(crate) functions: BTreeMap<FunctionId, FunctionId>,
     pub(crate) continuations: BTreeMap<ContinuationId, ContinuationId>,
+    /// Each copied node's copy.
+    pub(crate) nodes: BTreeMap<NodeId, NodeId>,
 }
 
 /// Execute an admitted plan, copying its roots and everything nested inside them into fresh identities.
@@ -398,6 +400,7 @@ pub(crate) fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
     Copies {
         functions: minted,
         continuations: conts,
+        nodes,
     }
 }
 

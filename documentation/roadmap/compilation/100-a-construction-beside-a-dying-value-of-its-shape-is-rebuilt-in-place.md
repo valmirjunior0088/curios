@@ -1,6 +1,6 @@
 # A construction beside a dying value of its shape is rebuilt in place
 
-[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that a construction beside a dying value of its own shape rebuilds that value in place where the compiler has proved it unshared and dead there, and that `/std` writes what it rebuilds linearly. `curios-cps` rebuilds in place where every known call of a function hands it a unique value (`rebuild_in_place`), but a function some calls hand a shared value has no copy for the others, so a search tree whose first insert is handed the constant empty tree rebuilds nothing. Its next step is stage 5, reuse versions.
+[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that a construction beside a dying value of its own shape rebuilds that value in place where the compiler has proved it unshared and dead there, and that `/std` writes what it rebuilds linearly. `curios-cps` rebuilds in place (`rebuild_in_place`), copying a function as its reuse version where some calls hand it a unique value and others a shared one, and what is left is measuring it. Its next step is stage 6, measurement.
 
 ## What it costs
 
@@ -49,6 +49,7 @@ So rebuilding in place is about a third of `spines` natively and a quarter to a 
 
 ## Open
 
+- **A slot read twice on one path.** Both reads are taken for shared, which leaves the zipper fixture's descent unrebuilt where the first read is dead on the path to the second; telling a dead alias from a live one asks the liveness of each read along the other's paths.
 - **A dead cell across a call.** The memory a rebuild waits on stays held through the calls before it, bounded by the depth of the descent; whether any program holds it longer.
 - **A map threaded through a closure.** `Map/union` and `Map/filter` insert into an accumulator `Node/fold` hands a closure, whose parameter an escaping function receives: whether the specializer makes those calls known, or those inserts stay copies.
 - **What a mutable row costs elsewhere.** Under Binaryen and both engines, measured per row the rewrite reaches.
@@ -56,7 +57,6 @@ So rebuilding in place is about a third of `spines` natively and a quarter to a 
 
 ## Stages
 
-5. **Reuse versions,** judged with the base ones as **Settled** states and made for the calls that reach them through the specializer's copies and their allowance, with a codegen test holding that a search tree whose first insert is handed the constant empty tree rebuilds its forks in the loop after it.
 6. **Measurement:** `spines` natively and under V8 by the protocol above, a map grown by new keys and shared, the corpus's sizes, the harness's compile and a benchmark reading.
 
 ## Retirement

@@ -43,6 +43,606 @@ pub(crate) fn rebuilds(module: &Module) -> Vec<Rebuild> {
     }
 }
 
+/// The version of a function a judgment is of: its base version, or its reuse version, which assumes unique the parameters it takes apart at a row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum World {
+    Base,
+    Reuse,
+}
+
+/// Which calls reach a reuse version, each judged in the version of the function it stands in, and the functions some reached call reaches the reuse version of while another reaches the base one: each copied, its copy the reuse version.
+pub(crate) struct Routes {
+    pub(crate) copied: Vec<FunctionId>,
+    pub(crate) reuse: BTreeSet<(NodeId, World)>,
+}
+
+/// Both versions of every function solved together, as the greatest fixpoint of uniqueness over both: a call reaches its callee's reuse version where it hands each parameter that version assumes a unique value dead after it, and a call's result takes the facts of the version it reaches, so a loop threading what a reuse version hands back holds it unique where that is consistent. A reuse version counts only where a call from a version that counts reaches it, so a cycle no unique value enters never does.
+pub(crate) fn routes(module: &Module) -> Routes {
+    let shape = Shape::of(module);
+    let borrowed = BTreeSet::new();
+    let mut assumed = BTreeMap::<FunctionId, BTreeSet<usize>>::new();
+    for (function, definition) in module.live_functions() {
+        if shape.open.contains(&function) {
+            continue;
+        }
+        for (index, param) in definition.params.iter().enumerate() {
+            if matches!(shape.read_at.get(param), Some(Some(_))) {
+                assumed.entry(function).or_default().insert(index);
+            }
+        }
+    }
+    let arities = module.return_arities();
+    let constant = module.constant_data();
+    let base = sources(module, &shape, &borrowed, &BTreeMap::new());
+    let reuse = sources(module, &shape, &borrowed, &assumed);
+    let aggregates = aggregates(module, &shape);
+    let (shape, assumed, arities, base, reuse, constant, aggregates) = (
+        &shape,
+        &assumed,
+        &arities,
+        &base,
+        &reuse,
+        &constant,
+        &aggregates,
+    );
+    let world_of = move |value: ValueId, world: World| match shape.home.get(&value) {
+        Some(function) if assumed.contains_key(function) => world,
+        _ => World::Base,
+    };
+    let keys = shape
+        .defs
+        .keys()
+        .flat_map(|value| {
+            [
+                (World::Base, Key::Value(*value)),
+                (World::Reuse, Key::Value(*value)),
+            ]
+        })
+        .chain(arities.iter().flat_map(|(function, arity)| {
+            (0..*arity).flat_map(move |index| {
+                [World::Base, World::Reuse].map(|world| (world, Key::Returned(*function, index)))
+            })
+        }))
+        .collect::<Vec<_>>();
+    let facts = Solver::solve(keys, |rules| {
+        rules.add(move |solver| {
+            for key in base {
+                solver.join((World::Base, *key), Shared(true));
+            }
+            for key in reuse {
+                solver.join((World::Reuse, *key), Shared(true));
+            }
+        });
+        let shared =
+            move |solver: &Solver<Shared, (World, Key)>, world: World, atom: &Atom| match atom {
+                Atom::Value(value) => solver
+                    .fact(&(world_of(*value, world), Key::Value(*value)))
+                    .is_none_or(|fact| fact.0),
+                Atom::Filler => false,
+                Atom::Literal(_) | Atom::Fun(_) => true,
+            };
+        let route = move |solver: &Solver<Shared, (World, Key)>, call: NodeId, world: World| {
+            route(module, shape, assumed, call, &|atom| {
+                shared(solver, world, atom)
+            })
+        };
+        for world in [World::Base, World::Reuse] {
+            for (value, def) in &shape.defs {
+                let value = *value;
+                if world_of(value, world) != world {
+                    continue;
+                }
+                match *def {
+                    Def::Field(of) => {
+                        let read = shape.binder[&value];
+                        let consumed_after = shape
+                            .consumed(of, &borrowed)
+                            .iter()
+                            .any(|point| shape.reaches(read, point.node));
+                        rules.add(move |solver| {
+                            if consumed_after || shared(solver, world, &Atom::Value(of)) {
+                                solver.join((world, Key::Value(value)), Shared(true));
+                            }
+                        });
+                    }
+                    Def::Param(function, index) => {
+                        if world == World::Reuse
+                            && assumed
+                                .get(&function)
+                                .is_some_and(|params| params.contains(&index))
+                        {
+                            continue;
+                        }
+                        // A caller is judged in its base version, the one every call can run as.
+                        let calls = shape.calls.get(&function).cloned().unwrap_or_default();
+                        rules.add(move |solver| {
+                            for call in &calls {
+                                if let Some(Node::ApplyFun { args, .. }) = module.node(*call)
+                                    && args
+                                        .get(index)
+                                        .is_none_or(|atom| shared(solver, World::Base, atom))
+                                {
+                                    solver.join((world, Key::Value(value)), Shared(true));
+                                }
+                            }
+                        });
+                    }
+                    Def::ContParam(continuation, index) => {
+                        let entries = shape
+                            .entries
+                            .get(&continuation)
+                            .cloned()
+                            .unwrap_or_default();
+                        let resumes = shape
+                            .resumes
+                            .get(&continuation)
+                            .cloned()
+                            .unwrap_or_default();
+                        rules.add(move |solver| {
+                            let entered = entries.iter().any(|entry| {
+                                entry
+                                    .args
+                                    .get(index)
+                                    .is_none_or(|atom| shared(solver, world, atom))
+                            });
+                            let resumed = resumes.iter().any(|node| match module.node(*node) {
+                                Some(Node::ApplyFun {
+                                    callee: Callee::Known(callee),
+                                    ..
+                                }) => solver
+                                    .fact(&(
+                                        route(solver, *node, world),
+                                        Key::Returned(*callee, index),
+                                    ))
+                                    .is_none_or(|fact| fact.0),
+                                _ => true,
+                            });
+                            if entered || resumed {
+                                solver.join((world, Key::Value(value)), Shared(true));
+                            }
+                        });
+                    }
+                    // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
+                    Def::Construction => {
+                        let stored = stored_values(module, shape, value, constant, aggregates);
+                        rules.add(move |solver| {
+                            if stored.iter().any(|atom| shared(solver, world, atom)) {
+                                solver.join((world, Key::Value(value)), Shared(true));
+                            }
+                        });
+                    }
+                    Def::Other => {}
+                }
+            }
+            for (function, nodes) in &shape.returns {
+                let function = *function;
+                if world == World::Reuse && !assumed.contains_key(&function) {
+                    continue;
+                }
+                for node in nodes {
+                    let node = *node;
+                    rules.add(move |solver| match module.node(node) {
+                        Some(Node::ApplyCont(edge)) => {
+                            for (index, atom) in edge.args.iter().enumerate() {
+                                if shared(solver, world, atom) {
+                                    solver.join(
+                                        (world, Key::Returned(function, index)),
+                                        Shared(true),
+                                    );
+                                }
+                            }
+                        }
+                        Some(Node::ApplyFun {
+                            callee: Callee::Known(callee),
+                            ..
+                        }) => {
+                            let reached = route(solver, node, world);
+                            for index in 0..arities.get(&function).copied().unwrap_or(0) {
+                                if solver
+                                    .fact(&(reached, Key::Returned(*callee, index)))
+                                    .is_none_or(|fact| fact.0)
+                                {
+                                    solver.join(
+                                        (world, Key::Returned(function, index)),
+                                        Shared(true),
+                                    );
+                                }
+                            }
+                        }
+                        _ => {}
+                    });
+                }
+            }
+        }
+    });
+    let shared = |world: World, atom: &Atom| match atom {
+        Atom::Value(value) => facts
+            .get(&(world_of(*value, world), Key::Value(*value)))
+            .is_none_or(|fact| fact.0),
+        Atom::Filler => false,
+        Atom::Literal(_) | Atom::Fun(_) => true,
+    };
+    // The versions some call reaches: every function's base version, and a reuse version a call from a reached version reaches.
+    let mut calls = BTreeMap::<FunctionId, Vec<(NodeId, FunctionId)>>::new();
+    for (callee, nodes) in &shape.calls {
+        for node in nodes {
+            let (block, _) = shape.place[node];
+            calls
+                .entry(shape.owner[&block])
+                .or_default()
+                .push((*node, *callee));
+        }
+    }
+    let mut reached = module
+        .live_functions()
+        .map(|(function, _)| (function, World::Base))
+        .collect::<BTreeSet<_>>();
+    let mut work = reached.iter().copied().collect::<Vec<_>>();
+    let mut reuse_calls = BTreeSet::new();
+    let mut base_called = BTreeSet::new();
+    while let Some((function, world)) = work.pop() {
+        for (call, callee) in calls.get(&function).into_iter().flatten() {
+            match route(module, shape, assumed, *call, &|atom| shared(world, atom)) {
+                World::Reuse => {
+                    reuse_calls.insert((*call, world));
+                    if reached.insert((*callee, World::Reuse)) {
+                        work.push((*callee, World::Reuse));
+                    }
+                }
+                World::Base => {
+                    base_called.insert(*callee);
+                }
+            }
+        }
+    }
+    Routes {
+        copied: reached
+            .iter()
+            .filter(|(function, world)| *world == World::Reuse && base_called.contains(function))
+            .map(|(function, _)| *function)
+            .collect(),
+        reuse: reuse_calls,
+    }
+}
+
+/// What a value may be as far as taking it apart goes: a row or a tuple, and which of its fields, where it is a tuple, may hold one. A row's slots are followed by the row; a tuple has no name to key its fields by, so its value carries them.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct Aggregate {
+    may_be: bool,
+    fields: Fields,
+}
+
+/// The fields of a tuple that may hold a row or a tuple: these, or any.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Fields {
+    Of(BTreeSet<usize>),
+    Any,
+}
+
+impl Default for Fields {
+    fn default() -> Self {
+        Fields::Of(BTreeSet::new())
+    }
+}
+
+impl Aggregate {
+    /// What a value the module cannot see into may be: anything.
+    fn any() -> Self {
+        Aggregate {
+            may_be: true,
+            fields: Fields::Any,
+        }
+    }
+}
+
+impl Lattice for Aggregate {
+    fn bottom() -> Self {
+        Aggregate::default()
+    }
+
+    fn join(&mut self, incoming: Self) {
+        self.may_be |= incoming.may_be;
+        self.fields = match (std::mem::take(&mut self.fields), incoming.fields) {
+            (Fields::Any, _) | (_, Fields::Any) => Fields::Any,
+            (Fields::Of(mut left), Fields::Of(right)) => {
+                left.extend(right);
+                Fields::Of(left)
+            }
+        };
+    }
+}
+
+/// The values that may be a row or a tuple, which a read can take apart: a construction of one, a read of a row's slot some construction of it stores one in, a read of a tuple's field its constructions store one in, a list's element, what a closure, a cell or a channel hands back, a parameter of a function the module does not see every caller of, and what flows from any of them through calls, jumps and returns. A number, an immediate's payload, a sequence, bytes, a closure and what a host hands back are none, so a slot holding numbers is no aggregate whatever its carrier says.
+fn aggregates(module: &Module, shape: &Shape) -> BTreeSet<ValueId> {
+    let arities = module.return_arities();
+    let keys = shape
+        .defs
+        .keys()
+        .map(|value| TagKey::Value(*value))
+        .collect::<Vec<_>>();
+    let arities = &arities;
+    let anything = |node: Option<&Node>| {
+        matches!(
+            node,
+            Some(
+                Node::Cell { .. }
+                    | Node::Channel { .. }
+                    | Node::ApplyFun {
+                        callee: Callee::Closure(_),
+                        ..
+                    }
+            )
+        )
+    };
+    let facts = Solver::solve(keys, |rules| {
+        let fact = |solver: &Solver<Aggregate, TagKey>, atom: &Atom| match atom {
+            Atom::Value(value) => solver
+                .fact(&TagKey::Value(*value))
+                .cloned()
+                .unwrap_or_default(),
+            _ => Aggregate::default(),
+        };
+        for (value, def) in &shape.defs {
+            let value = *value;
+            let node = shape
+                .binder
+                .get(&value)
+                .and_then(|binder| module.node(*binder));
+            match *def {
+                Def::Construction => match node {
+                    Some(Node::LetValue {
+                        value: ValueExpr::Row(row, atoms),
+                        ..
+                    }) => {
+                        let (row, atoms) = (*row, atoms.clone());
+                        rules.add(move |solver| {
+                            solver.join(
+                                TagKey::Value(value),
+                                Aggregate {
+                                    may_be: true,
+                                    fields: Fields::default(),
+                                },
+                            );
+                            for (index, atom) in atoms.iter().enumerate() {
+                                let stored = fact(solver, atom);
+                                solver.join(TagKey::Slot(Some(row), index), stored);
+                            }
+                        });
+                    }
+                    Some(Node::LetValue {
+                        value: ValueExpr::Rebuilt { row, slots, .. },
+                        ..
+                    }) => {
+                        let (row, slots) = (*row, slots.clone());
+                        rules.add(move |solver| {
+                            solver.join(
+                                TagKey::Value(value),
+                                Aggregate {
+                                    may_be: true,
+                                    fields: Fields::default(),
+                                },
+                            );
+                            for (index, atom) in &slots {
+                                let stored = fact(solver, atom);
+                                solver.join(TagKey::Slot(Some(row), *index), stored);
+                            }
+                        });
+                    }
+                    Some(Node::LetValue {
+                        value: ValueExpr::Tuple(atoms),
+                        ..
+                    }) => {
+                        let atoms = atoms.clone();
+                        rules.add(move |solver| {
+                            let fields = atoms
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, atom)| fact(solver, atom).may_be)
+                                .map(|(index, _)| index)
+                                .collect();
+                            solver.join(
+                                TagKey::Value(value),
+                                Aggregate {
+                                    may_be: true,
+                                    fields: Fields::Of(fields),
+                                },
+                            );
+                        });
+                    }
+                    _ => {}
+                },
+                Def::Field(of) => match node {
+                    Some(Node::LetIntrinsic {
+                        op: Intrinsic::RowGet(row, index),
+                        ..
+                    }) => {
+                        let slot = TagKey::Slot(Some(*row), *index);
+                        rules.add(move |solver| {
+                            let read = solver.fact(&slot).cloned().unwrap_or_default();
+                            solver.join(TagKey::Value(value), read);
+                        });
+                    }
+                    Some(Node::LetIntrinsic {
+                        op: Intrinsic::TupleGet(index),
+                        ..
+                    }) => {
+                        let index = *index;
+                        rules.add(move |solver| {
+                            let holds = match solver
+                                .fact(&TagKey::Value(of))
+                                .map(|parent| &parent.fields)
+                            {
+                                Some(Fields::Of(fields)) => fields.contains(&index),
+                                Some(Fields::Any) | None => true,
+                            };
+                            if holds {
+                                solver.join(TagKey::Value(value), Aggregate::any());
+                            }
+                        });
+                    }
+                    _ => {}
+                },
+                // A list's element may be anything; an immediate's payload is a number.
+                Def::Other => {
+                    if let Some(Node::LetIntrinsic {
+                        op: Intrinsic::ListGet,
+                        ..
+                    }) = node
+                    {
+                        rules
+                            .add(move |solver| solver.join(TagKey::Value(value), Aggregate::any()));
+                    }
+                }
+                Def::Param(function, index) => {
+                    let open = shape.open.contains(&function);
+                    let calls = shape.calls.get(&function).cloned().unwrap_or_default();
+                    rules.add(move |solver| {
+                        if open {
+                            solver.join(TagKey::Value(value), Aggregate::any());
+                        }
+                        for call in &calls {
+                            if let Some(Node::ApplyFun { args, .. }) = module.node(*call)
+                                && let Some(atom) = args.get(index)
+                            {
+                                let handed = fact(solver, atom);
+                                solver.join(TagKey::Value(value), handed);
+                            }
+                        }
+                    });
+                }
+                Def::ContParam(continuation, index) => {
+                    let entries = shape
+                        .entries
+                        .get(&continuation)
+                        .cloned()
+                        .unwrap_or_default();
+                    let resumes = shape
+                        .resumes
+                        .get(&continuation)
+                        .cloned()
+                        .unwrap_or_default();
+                    rules.add(move |solver| {
+                        for entry in &entries {
+                            if let Some(atom) = entry.args.get(index) {
+                                let handed = fact(solver, atom);
+                                solver.join(TagKey::Value(value), handed);
+                            }
+                        }
+                        for node in &resumes {
+                            let returned = match module.node(*node) {
+                                Some(Node::ApplyFun {
+                                    callee: Callee::Known(callee),
+                                    ..
+                                }) => solver
+                                    .fact(&TagKey::Returned(*callee, index))
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                other if anything(other) => Aggregate::any(),
+                                _ => Aggregate::default(),
+                            };
+                            solver.join(TagKey::Value(value), returned);
+                        }
+                    });
+                }
+            }
+        }
+        for (function, nodes) in &shape.returns {
+            let function = *function;
+            for node in nodes {
+                let node = *node;
+                rules.add(move |solver| {
+                    let arity = arities.get(&function).copied().unwrap_or(0);
+                    let handed = match module.node(node) {
+                        Some(Node::ApplyCont(edge)) => {
+                            edge.args.iter().map(|atom| fact(solver, atom)).collect()
+                        }
+                        Some(Node::ApplyFun {
+                            callee: Callee::Known(callee),
+                            ..
+                        }) => (0..arity)
+                            .map(|index| {
+                                solver
+                                    .fact(&TagKey::Returned(*callee, index))
+                                    .cloned()
+                                    .unwrap_or_default()
+                            })
+                            .collect(),
+                        other if anything(other) => vec![Aggregate::any(); arity],
+                        _ => Vec::new(),
+                    };
+                    for (index, handed) in handed.into_iter().enumerate() {
+                        solver.join(TagKey::Returned(function, index), handed);
+                    }
+                });
+            }
+        }
+    });
+    facts
+        .into_iter()
+        .filter_map(|(key, fact)| match key {
+            TagKey::Value(value) if fact.may_be => Some(value),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What the construction binding `value` stores that a read could take apart and a rebuild write into: the values it holds that may be a row or a tuple, a constant among them left out.
+fn stored_values(
+    module: &Module,
+    shape: &Shape,
+    value: ValueId,
+    constant: &BTreeSet<ValueId>,
+    aggregates: &BTreeSet<ValueId>,
+) -> Vec<Atom> {
+    match shape
+        .binder
+        .get(&value)
+        .and_then(|binder| module.node(*binder))
+    {
+        Some(Node::LetValue {
+            value: ValueExpr::List(atoms) | ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms),
+            ..
+        }) => atoms
+            .iter()
+            .filter(|atom| {
+                matches!(atom, Atom::Value(stored) if !constant.contains(stored) && aggregates.contains(stored))
+            })
+            .cloned()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The version of its callee `call` reaches, where `shared` judges its arguments.
+fn route(
+    module: &Module,
+    shape: &Shape,
+    assumed: &BTreeMap<FunctionId, BTreeSet<usize>>,
+    call: NodeId,
+    shared: &dyn Fn(&Atom) -> bool,
+) -> World {
+    let Some(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args,
+        ..
+    }) = module.node(call)
+    else {
+        return World::Base;
+    };
+    match assumed.get(callee) {
+        Some(params)
+            if params.iter().all(|index| {
+                args.get(*index)
+                    .is_some_and(|atom| matches!(atom, Atom::Value(_)) && !shared(atom))
+                    && handed_dead(module, shape, call, *index)
+            }) =>
+        {
+            World::Reuse
+        }
+        _ => World::Base,
+    }
+}
+
 /// A function's body or a continuation's: a chain of nodes, entered at its first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Block {
@@ -117,6 +717,8 @@ struct Shape {
     read_at: BTreeMap<ValueId, Option<RowId>>,
     /// The projections of each value.
     fields: BTreeMap<ValueId, Vec<ValueId>>,
+    /// The slot each projection reads.
+    slot_of: BTreeMap<ValueId, usize>,
     /// The row reads of each value: the row and what the read binds.
     row_reads: BTreeMap<ValueId, Vec<(RowId, ValueId)>>,
     /// The values each function's nodes name but do not bind, and the functions defined within it name likewise.
@@ -150,6 +752,7 @@ impl Shape {
             uses: BTreeMap::new(),
             read_at: BTreeMap::new(),
             fields: BTreeMap::new(),
+            slot_of: BTreeMap::new(),
             row_reads: BTreeMap::new(),
             captured: BTreeSet::new(),
             live_in: BTreeMap::new(),
@@ -221,6 +824,11 @@ impl Shape {
                                     Some(Atom::Value(of)),
                                 ) => {
                                     shape.fields.entry(*of).or_default().push(*result);
+                                    if let Intrinsic::RowGet(_, slot) | Intrinsic::TupleGet(slot) =
+                                        op
+                                    {
+                                        shape.slot_of.insert(*result, *slot);
+                                    }
                                     if let Intrinsic::RowGet(row, _) = op {
                                         shape
                                             .row_reads
@@ -754,86 +1362,10 @@ impl<'s> Facts<'s> {
         shape: &'s Shape,
         borrowed: &'s BTreeSet<(FunctionId, usize)>,
     ) -> Self {
-        let constant = module.constant_data();
+        let sources = sources(module, shape, borrowed, &BTreeMap::new());
+        let constant = &module.constant_data();
+        let aggregates = &aggregates(module, shape);
         let arities = module.return_arities();
-        let mut sources = BTreeSet::new();
-        for (value, def) in &shape.defs {
-            let consumed = shape.consumed(*value, borrowed);
-            let mut seen = BTreeSet::new();
-            let twice = consumed.iter().any(|point| !seen.insert(*point));
-            let not_last = consumed
-                .iter()
-                .any(|point| shape.live_after(module, *point, *value));
-            let source = match def {
-                Def::Other => true,
-                Def::Construction => constant.contains(value),
-                Def::Param(function, index) => {
-                    shape.open.contains(function)
-                        || borrowed.contains(&(*function, *index))
-                        || shape.calls.get(function).is_none_or(|calls| {
-                            calls
-                                .iter()
-                                .any(|call| !handed_dead(module, shape, *call, *index))
-                        })
-                }
-                Def::ContParam(continuation, index) => {
-                    shape
-                        .entries
-                        .get(continuation)
-                        .into_iter()
-                        .flatten()
-                        .any(|entry| {
-                            !arg_dead(
-                                shape,
-                                &entry.args[*index],
-                                &entry.args,
-                                Block::Cont(*continuation),
-                            )
-                        })
-                        || shape
-                            .resumes
-                            .get(continuation)
-                            .into_iter()
-                            .flatten()
-                            .any(|node| {
-                                !matches!(
-                                    module.node(*node),
-                                    Some(Node::ApplyFun {
-                                        callee: Callee::Known(_),
-                                        ..
-                                    })
-                                )
-                            })
-                }
-                Def::Field(_) => false,
-            };
-            if source || twice || not_last || shape.captured.contains(value) {
-                sources.insert(Key::Value(*value));
-            }
-        }
-        for (function, nodes) in &shape.returns {
-            for node in nodes {
-                let opaque = match module.node(*node) {
-                    Some(Node::ApplyCont(edge)) => edge
-                        .args
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
-                        .map(|(index, _)| index)
-                        .collect(),
-                    Some(Node::ApplyFun {
-                        callee: Callee::Known(_),
-                        ..
-                    }) => Vec::new(),
-                    _ => (0..arities.get(function).copied().unwrap_or(0)).collect(),
-                };
-                sources.extend(
-                    opaque
-                        .into_iter()
-                        .map(|index| Key::Returned(*function, index)),
-                );
-            }
-        }
         let keys =
             shape
                 .defs
@@ -914,7 +1446,16 @@ impl<'s> Facts<'s> {
                             }
                         });
                     }
-                    Def::Construction | Def::Other => {}
+                    // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
+                    Def::Construction => {
+                        let stored = stored_values(module, shape, value, constant, aggregates);
+                        rules.add(move |solver| {
+                            if stored.iter().any(|atom| shared(solver, atom)) {
+                                solver.join(Key::Value(value), Shared(true));
+                            }
+                        });
+                    }
+                    Def::Other => {}
                 }
             }
             for (function, nodes) in &shape.returns {
@@ -1026,6 +1567,109 @@ impl<'s> Facts<'s> {
         }
         rebuilds
     }
+}
+
+/// The facts that hold whatever the others say: a value's own sharing — a literal, constant data, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
+fn sources(
+    module: &Module,
+    shape: &Shape,
+    borrowed: &BTreeSet<(FunctionId, usize)>,
+    assumed: &BTreeMap<FunctionId, BTreeSet<usize>>,
+) -> BTreeSet<Key> {
+    let constant = module.constant_data();
+    let arities = module.return_arities();
+    let mut sources = BTreeSet::new();
+    for (value, def) in &shape.defs {
+        let consumed = shape.consumed(*value, borrowed);
+        let mut seen = BTreeSet::new();
+        let twice = consumed.iter().any(|point| !seen.insert(*point));
+        let not_last = consumed
+            .iter()
+            .any(|point| shape.live_after(module, *point, *value));
+        let source = match def {
+            Def::Other => true,
+            Def::Construction => constant.contains(value),
+            Def::Param(function, index)
+                if assumed
+                    .get(function)
+                    .is_some_and(|params| params.contains(index)) =>
+            {
+                false
+            }
+            Def::Param(function, index) => {
+                shape.open.contains(function)
+                    || borrowed.contains(&(*function, *index))
+                    || shape.calls.get(function).is_none_or(|calls| {
+                        calls
+                            .iter()
+                            .any(|call| !handed_dead(module, shape, *call, *index))
+                    })
+            }
+            Def::ContParam(continuation, index) => {
+                shape
+                    .entries
+                    .get(continuation)
+                    .into_iter()
+                    .flatten()
+                    .any(|entry| {
+                        !arg_dead(
+                            shape,
+                            &entry.args[*index],
+                            &entry.args,
+                            Block::Cont(*continuation),
+                        )
+                    })
+                    || shape
+                        .resumes
+                        .get(continuation)
+                        .into_iter()
+                        .flatten()
+                        .any(|node| {
+                            !matches!(
+                                module.node(*node),
+                                Some(Node::ApplyFun {
+                                    callee: Callee::Known(_),
+                                    ..
+                                })
+                            )
+                        })
+            }
+            // Two reads of one slot on one path name one object.
+            Def::Field(of) => shape.fields.get(of).into_iter().flatten().any(|other| {
+                *other != *value
+                    && shape.slot_of.get(other) == shape.slot_of.get(value)
+                    && (shape.reaches(shape.binder[value], shape.binder[other])
+                        || shape.reaches(shape.binder[other], shape.binder[value]))
+            }),
+        };
+        if source || twice || not_last || shape.captured.contains(value) {
+            sources.insert(Key::Value(*value));
+        }
+    }
+    for (function, nodes) in &shape.returns {
+        for node in nodes {
+            let opaque = match module.node(*node) {
+                Some(Node::ApplyCont(edge)) => edge
+                    .args
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
+                    .map(|(index, _)| index)
+                    .collect(),
+                Some(Node::ApplyFun {
+                    callee: Callee::Known(_),
+                    ..
+                }) => Vec::new(),
+                _ => (0..arities.get(function).copied().unwrap_or(0)).collect(),
+            };
+            sources.extend(
+                opaque
+                    .into_iter()
+                    .map(|index| Key::Returned(*function, index)),
+            );
+        }
+    }
+    sources
 }
 
 /// Whether no constant may be `value` at `node`: none reaches it, or a test of its tag around `node` rules out every constant's tag.
