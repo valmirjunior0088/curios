@@ -177,6 +177,28 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// The preheader of the innermost natural loop the code being emitted stands in, which runs before each entry into that loop from outside; `None` outside every natural loop, where the code runs once each time its function does or, inside an irreducible component's dispatcher alone, has no one place it is entered from.
+    pub(crate) fn loop_preheader(&mut self) -> Option<&mut Vec<curios_wasm::Instr>> {
+        match self {
+            Self::Const { .. } => None,
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => frames
+                .iter_mut()
+                .rev()
+                .find(|frame| frame.blocks.iter().any(|(_, block)| block.is_loop_header()))
+                .map(|frame| &mut frame.preheader),
+        }
+    }
+
+    /// Leave a natural loop's frame, answering its preheader.
+    pub(crate) fn leave_loop(&mut self) -> Vec<curios_wasm::Instr> {
+        match self {
+            Self::Const { .. } => panic!("`Context` lacks frame stack"),
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => {
+                frames.pop().expect("`Context` lacks frame").preheader
+            }
+        }
+    }
+
     pub(crate) fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
         match self {
             Self::Const { .. } => None,

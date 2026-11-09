@@ -82,6 +82,20 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
     }
 }
 
+/// A read that stands in no loop runs once each time its function does, so it keeps no run: the leaf split in front of the shared helper, in each carrier.
+#[test]
+fn a_read_outside_every_loop_keeps_no_run() {
+    let packed = wat(&intrinsic_main(
+        curios_cps::Intrinsic::BytesGet,
+        vec![bytes_lit(vec![1, 2, 3, 4]), nat(1)],
+    ));
+
+    for wat in [packed, wat(&list_read())] {
+        assert_absent(&wat, "read_kept_rope");
+        assert_absent(&wat, "ref.eq");
+    }
+}
+
 /// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, the host's deep and scalar forms and the write a force fills its payload by read no `array.len` at all, and a force reads one, the capacity of its first piece's payload, where it claims that piece's room.
 #[test]
 fn a_consumer_of_a_forced_payload_reads_the_runs_length() {

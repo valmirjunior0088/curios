@@ -108,6 +108,76 @@ fn a_flattening_writes_every_element_where_it_stands() {
     assert_eq!(String::from_utf8(io.output().to_vec()).unwrap(), expected);
 }
 
+/// One read in a loop answers whatever shape each turn hands it: a walk over a leaf, over a concatenation it flattens partway, and over each of a text's lines, which are views; one site reading the first byte of each of those in turn; and a walk over a list of appended ranges. A site keeps the run it last resolved, so each turn is either that run or one resolved afresh, and every element is weighed where it stands.
+#[test]
+fn a_read_in_a_loop_answers_whatever_shape_each_turn_hands_it() {
+    let (system, io) = MockHost::builder()
+        .args(["shapes".to_string(), "abcdefghij".to_string()])
+        .build();
+    run_text(
+        r#"
+        use /std/{Str, Nat, List, Bytes, Byte, Io, Proc, Option};
+
+        let weigh(b: Bytes, acc: Nat) -> Nat =
+            match b | x[] => acc | x[h, ..t] => weigh(t, (acc * 31 + Byte/to_nat(h)) % 1000003) end;
+
+        let head(b: Bytes) -> Nat =
+            match b | x[] => 0 | x[h, .._] => Byte/to_nat(h) end;
+
+        let heads(ps: List(Bytes), acc: Nat) -> Nat =
+            match ps | [] => acc | [p, ..rest] => heads(rest, (acc * 31 + head(p)) % 1000003) end;
+
+        let weigh_all(ps: List(Bytes), acc: Nat) -> Nat =
+            match ps | [] => acc | [p, ..rest] => weigh_all(rest, weigh(p, acc)) end;
+
+        let sum(xs: List(Nat), acc: Nat) -> Nat =
+            match xs | [] => acc | [x, ..rest] => sum(rest, (acc * 31 + x) % 1000003) end;
+
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let leaf = match List/try_get(arguments, 1) | some(b) => b | none() => x[] end;
+            let joined = x[..leaf, ..Str/to_bytes("-mid-"), ..leaf];
+            let text = Str/concat(Nat/to_str(List/len(arguments)), "\nalpha\nbeta gamma\ndelta");
+            let viewed = List/map(Str/lines(text), Str/to_bytes);
+            let parts = [leaf, joined, ..viewed, joined, leaf];
+            let n = Bytes/len(leaf);
+            let grown = [..List/range(0, n), ..List/range(n, 2 * n), ..List/range(0, 3)];
+            /std/print(Str/join(" ", List/map([heads(parts, 0), weigh_all(parts, 0), sum(grown, 0)], Nat/to_str)));
+
+        entry()
+        "#,
+        system,
+    )
+    .expect("the shapes run");
+
+    let leaf = b"abcdefghij".to_vec();
+    let joined = [leaf.clone(), b"-mid-".to_vec(), leaf.clone()].concat();
+    let parts = [
+        leaf.clone(),
+        joined.clone(),
+        b"2".to_vec(),
+        b"alpha".to_vec(),
+        b"beta gamma".to_vec(),
+        b"delta".to_vec(),
+        joined,
+        leaf,
+    ];
+    let step = |acc: u64, x: u64| (acc * 31 + x) % 1_000_003;
+    let heads = parts
+        .iter()
+        .fold(0, |acc, part| step(acc, u64::from(part[0])));
+    let weights = parts
+        .iter()
+        .flatten()
+        .fold(0, |acc, byte| step(acc, u64::from(*byte)));
+    let sum = (0..10).chain(10..20).chain(0..3).fold(0, step);
+
+    assert_eq!(
+        String::from_utf8(io.output().to_vec()).unwrap(),
+        format!("{heads} {weights} {sum}"),
+    );
+}
+
 /// A run built once from a window and read once holds no room: room is given past a flattened node, the run itself read and grown since, and a window first piece shows nothing of the kind. The run here is a window of twelve mebibytes of a base it keeps alive, read whole once by a cut; under a heap of sixty-four mebibytes the base and an exact payload fit, and the base and a payload twice the run do not.
 #[test]
 fn a_run_built_from_a_window_and_read_once_holds_no_room() {

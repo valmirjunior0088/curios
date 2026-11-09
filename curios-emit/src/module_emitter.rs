@@ -838,6 +838,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.bytes_resolve_used() {
+            ropes.emit_resolve_func(&self.table.bytes_rope(), self.table.bytes_resolve_func());
+        }
+
+        if self.table.list_resolve_used() {
+            ropes.emit_resolve_func(&self.table.list_rope(), self.table.list_resolve_func());
+        }
+
         // After everything that takes a run exact — a host operand, a settle, a host list's elements — and before `force`, which each calls.
         if self.table.bytes_exact_used() {
             ropes.emit_exact_func(

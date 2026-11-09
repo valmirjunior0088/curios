@@ -375,6 +375,59 @@ fn a_rope_is_entered_through_its_final_shapes() {
     assert_eq!(run(source), b"231084");
 }
 
+/// A byte read in a loop keeps the run it last resolved: the walk `Str/fold` lowers to compares the rope it reads with the one it kept before it splits on the rope's shape, asks the shared `resolve` helper where another rope's run lies flat, a flattened node's cache or a view's base at its offset, bounds the read by the run's length rather than the payload's, which may hold room, and reaches the shared `read` helper at one site, for a node never flattened.
+#[test]
+fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
+    let wat = wat(r#"
+        use /std/{Str, Char, Nat, List, Proc};
+
+        let entry() -> /std/Io({}) =
+            let n = List/len(Proc/args()!);
+            let text = Str/concat(Nat/to_str(n + 7), Str/repeat("é→𝄞", 4));
+            /std/print(Nat/to_str(Str/fold(text, 0, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003)));
+        entry()
+        "#);
+    let functions = functions(&wat);
+    let walks = functions
+        .iter()
+        .filter(|function| {
+            function.body.contains("call $bytes/read") && function.body.contains("loop $")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        walks.len(),
+        1,
+        "the fold's walk is the one loop reading bytes"
+    );
+    let walk = walks[0].body;
+
+    for needle in ["read_kept_rope", "ref.eq", "call $bytes/resolve"] {
+        assert!(
+            walk.contains(needle),
+            "the walk's read names `{needle}`:\n{walk}"
+        );
+    }
+    assert_eq!(walk.matches("call $bytes/read").count(), 1, "{walk}");
+    assert!(!walk.contains("array.len"), "{walk}");
+
+    let resolve = functions
+        .iter()
+        .find(|function| function.name == "$bytes/resolve")
+        .expect("the resolver is emitted beside the walk that calls it")
+        .body;
+    for needle in [
+        "struct.get $rope/bytes/node $cache",
+        "struct.get $rope/bytes/view $offset",
+        "struct.get $rope/bytes $len",
+    ] {
+        assert!(
+            resolve.contains(needle),
+            "the resolver names `{needle}`:\n{resolve}"
+        );
+    }
+    assert!(!resolve.contains("array.len"), "{resolve}");
+}
+
 /// A window walk holds its end and its length in words read unsigned. A window counts down to its end, so each field is a length or what a monus of one leaves, which the representation's bounds put below `2³²`: both ride `Repr::Length` round the loop, where an offset grown by a sum each step was bounded by nothing the analysis could see and stayed a reference.
 #[test]
 fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {

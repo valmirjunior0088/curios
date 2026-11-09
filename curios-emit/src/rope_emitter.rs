@@ -624,6 +624,91 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$<carrier>/resolve (ref <base>) -> (ref null <payload>, i32, i32)`: where a rope's run already lies flat, without forcing anything — its payload, the run's length and where the run starts in that payload — for a read that keeps the run it last resolved. A leaf answers its own payload from zero, a flattened node its cache, and a view its base's payload, which is flat, at its offset; a node never flattened answers a null payload, and the reader takes the shared `read` helper instead.
+    ///
+    /// The length is the run's `len`, never the payload's, which may hold room past it ([A flattening extends the payload its first piece wrote last](../README.md#a-flattening-extends-the-payload-its-first-piece-wrote-last)).
+    pub(crate) fn emit_resolve_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
+        let r = curios_wasm::LocalName::from("r");
+        let base = curios_wasm::LocalName::from("base");
+        let tag = |shape: i32| {
+            wasm![
+                get(&r),
+                field_get(&rope.base, &rope.tag_field),
+                i32_const(shape),
+                curios_wasm::Instr::I32Eq,
+            ]
+        };
+        let answer = |payload: Vec<curios_wasm::Instr>, start: Vec<curios_wasm::Instr>| {
+            wasm![
+                payload,
+                get(&r),
+                field_get(&rope.base, &rope.len_field),
+                start,
+                curios_wasm::Instr::Return,
+            ]
+        };
+        let instrs = wasm![
+            tag(0),
+            when(answer(
+                wasm![
+                    get(&r),
+                    cast(&rope.leaf),
+                    field_get(&rope.leaf, &rope.payload_field)
+                ],
+                wasm![i32_const(0)],
+            )),
+            tag(1),
+            when(answer(
+                wasm![
+                    get(&r),
+                    cast(&rope.node),
+                    field_get(&rope.node, &rope.cache_field)
+                ],
+                wasm![i32_const(0)],
+            )),
+            // A view, whose base is flat: a leaf or a flattened node.
+            get(&r),
+            cast(&rope.view),
+            field_get(&rope.view, &rope.base_field),
+            tee(&base),
+            field_get(&rope.base, &rope.tag_field),
+            curios_wasm::Instr::I32Eqz,
+            either(
+                concrete_val(rope.payload.clone(), true),
+                wasm![
+                    get(&base),
+                    cast(&rope.leaf),
+                    field_get(&rope.leaf, &rope.payload_field)
+                ],
+                wasm![
+                    get(&base),
+                    cast(&rope.node),
+                    field_get(&rope.node, &rope.cache_field)
+                ],
+            ),
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            get(&r),
+            cast(&rope.view),
+            field_get(&rope.view, &rope.offset_field),
+        ];
+
+        declare_helper(
+            self.module,
+            func_name,
+            Scope {
+                params: vec![(r, concrete_val(rope.base.clone(), false))],
+                locals: vec![(base, concrete_val(rope.base.clone(), true))],
+            },
+            [
+                concrete_val(rope.payload.clone(), true),
+                i32_type(),
+                i32_type(),
+            ],
+            instrs,
+        );
+    }
+
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then take every element exact through `$bytes/exact` into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
     pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();

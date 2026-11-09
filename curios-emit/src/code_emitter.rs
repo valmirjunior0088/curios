@@ -1,8 +1,8 @@
 use {
     super::{
-        BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, FltHelper, ImmediateLayout,
-        LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, concrete_val, either, get,
-        rounding_code, set, tee, when,
+        BigHelper, Bitwise, Chunk, Context, EmissionCode, EmissionValueName, FltHelper,
+        ImmediateLayout, LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, concrete_val,
+        either, get, i32_const, i32_type, null, rounding_code, set, tee, wasm, when,
     },
     curios_num::Rounding,
 };
@@ -1217,7 +1217,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a packed element read with the immediate split: an i31 answers by shift and mask — the bounds trap first, exactly where the helper's leaf arm traps — and a rope takes the leaf split in front of the shared helper. On an immediate key this is the whole read: no call, no load, no allocation.
+    /// Lower a packed element read with the immediate split: an i31 answers by shift and mask — the bounds trap first, exactly where the helper's leaf arm traps — and a rope takes the leaf split in front of the shared helper. On an immediate key this is the whole read: no call, no load, no allocation. Inside a loop the read keeps the run it last resolved ([`Self::memoized_read`]), the immediate split standing behind that comparison.
     fn emit_bytes_get(&mut self, carrier: &'a EmissionValueName, index: &'a EmissionValueName) {
         let len_shift = ImmediateLayout::new().len_shift;
         let rope = self.context.table().bytes_rope();
@@ -1228,11 +1228,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         );
         let i32_result =
             curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(curios_wasm::NumType::I32));
-
-        self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
-        self.emit_instr(curios_wasm::Instr::RefTest {
-            ref_type: Table::int_type(false),
-        });
 
         let mut imm_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         imm_arm.extend([
@@ -1294,6 +1289,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         read_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
         read_arm.push(curios_wasm::Instr::Call { func_name: read });
 
+        if self.context.loop_preheader().is_some() {
+            let read = self.memoized_read(carrier, index, &rope, Some(imm_arm), read_arm);
+            self.emit_instrs(read);
+            return;
+        }
+
         let mut rope_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         rope_arm.push(Self::is_leaf(&rope));
         rope_arm.push(curios_wasm::Instr::If {
@@ -1303,12 +1304,139 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             else_instructions: read_arm,
         });
 
+        self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
+        self.emit_instr(curios_wasm::Instr::RefTest {
+            ref_type: Table::int_type(false),
+        });
         self.emit_instr(curios_wasm::Instr::If {
             label_name: curios_wasm::LabelName::from("bytes_get"),
             block_type: i32_result,
             then_instructions: imm_arm,
             else_instructions: rope_arm,
         });
+    }
+
+    /// Lower an element read inside a natural loop: the site keeps, in locals of its own, the rope it last resolved, that rope's flat payload, its run's length and where the run starts in the payload, and a read of the same rope compares the index with the length and loads the element. Another rope is resolved by the shared `resolve` helper, which answers where its run already lies flat, without forcing — a leaf's payload, a flattened node's cache, a view's base payload at its offset — and the site keeps that and reads; a node never flattened takes `slow`, the shared `read` helper, which reads it as [A read of a run answers from a part already flat](../README.md#a-read-of-a-run-answers-from-a-part-already-flat) states, and the site forgets what it kept. `immediate` is the arm a value that is not a rope takes, behind the comparison: a `Bytes` read's i31 split.
+    ///
+    /// The kept payload is safe to read for as long as the rope lives: a leaf's payload is exactly its run, the slots below a run's length are written once and never again, and a view's base is flat ([`curios-emit`'s README](../README.md#a-flattening-extends-the-payload-its-first-piece-wrote-last)). The bound is the run's `len`, never the payload's, which may hold room past it, and an index past it refuses as the helper does. What the site keeps is reset in the preheader of the innermost loop around it, so it lives through that loop alone: kept from the function's start instead, its default would ride through every loop before the site's, a register those loops pay for.
+    fn memoized_read(
+        &mut self,
+        carrier: &'a EmissionValueName,
+        index: &'a EmissionValueName,
+        rope: &RopeData,
+        immediate: Option<Vec<curios_wasm::Instr>>,
+        slow: Vec<curios_wasm::Instr>,
+    ) -> Vec<curios_wasm::Instr> {
+        let packed = rope.payload == self.context.table().bytes_type();
+        let (element, load_element, resolve) = if packed {
+            (
+                i32_type(),
+                curios_wasm::Instr::ArrayGetU {
+                    type_name: rope.payload.clone(),
+                },
+                self.context.table().bytes_resolve_func(),
+            )
+        } else {
+            (
+                Table::top_type(true),
+                curios_wasm::Instr::ArrayGet {
+                    type_name: rope.payload.clone(),
+                },
+                self.context.table().list_resolve_func(),
+            )
+        };
+        let eq = |is_nullable| curios_wasm::RefType {
+            is_nullable,
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Eq),
+        };
+        let no_rope = || curios_wasm::Instr::RefNull {
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Eq),
+        };
+        let kept_rope = self
+            .context
+            .push_local("read_kept_rope", curios_wasm::ValType::Ref(eq(true)));
+        let kept_payload = self.context.push_local(
+            "read_kept_payload",
+            concrete_val(rope.payload.clone(), true),
+        );
+        let kept_len = self.context.push_local("read_kept_len", i32_type());
+        let kept_start = self.context.push_local("read_kept_start", i32_type());
+        let this = self
+            .context
+            .push_local("read_rope", curios_wasm::ValType::Ref(eq(true)));
+
+        let at = self.context.load_value_instrs(index, LoadAs::Nat);
+        let rope_value = self.context.load_value_instrs(carrier, LoadAs::NonNull);
+        let refuse = curios_wasm::Instr::If {
+            label_name: self.context.table().special_label(),
+            block_type: curios_wasm::BlockType::Empty,
+            then_instructions: self
+                .context
+                .table()
+                .refuse_instrs(curios_cps::Panic::OutOfBounds),
+            else_instructions: vec![],
+        };
+        let hit = wasm![
+            at.clone(),
+            get(&kept_len),
+            curios_wasm::Instr::I32GeU,
+            refuse,
+            get(&kept_payload),
+            at,
+            get(&kept_start),
+            curios_wasm::Instr::I32Add,
+            load_element,
+        ];
+        let resolved = wasm![
+            rope_value.clone(),
+            self.context.table().enter(&rope.base, false),
+            call(&resolve),
+            set(&kept_start),
+            set(&kept_len),
+            tee(&kept_payload),
+            curios_wasm::Instr::RefIsNull,
+            either(
+                element.clone(),
+                wasm![no_rope(), set(&kept_rope), slow],
+                wasm![get(&this), set(&kept_rope), hit.clone()],
+            ),
+        ];
+        let miss = match immediate {
+            Some(immediate) => wasm![
+                rope_value.clone(),
+                curios_wasm::Instr::RefTest {
+                    ref_type: Table::int_type(false),
+                },
+                either(element.clone(), immediate, resolved),
+            ],
+            None => resolved,
+        };
+
+        let reset = wasm![
+            no_rope(),
+            set(&kept_rope),
+            null(&rope.payload),
+            set(&kept_payload),
+            i32_const(0),
+            set(&kept_len),
+            i32_const(0),
+            set(&kept_start),
+        ];
+        self.context
+            .loop_preheader()
+            .expect("a read keeps a run only inside a natural loop")
+            .extend(reset);
+
+        wasm![
+            rope_value,
+            curios_wasm::Instr::RefCast {
+                ref_type: eq(false)
+            },
+            tee(&this),
+            get(&kept_rope),
+            curios_wasm::Instr::RefEq,
+            either(element, hit, miss),
+        ]
     }
 
     /// Lower a packed equality with the immediate split: two immediates compare as one `i32` equality — small-canonical means equal values are bit-identical — a mixed pair is unequal by construction, since a canonical rope lies past the envelope and an immediate inside it, and two ropes pay the shared helper.
@@ -1660,7 +1788,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a sequence read with the leaf split inline: a leaf answers `payload[i]` without leaving the function, and every other shape pays the shared `read` helper. Binaryen never produces this split from the module at any level setting, and a wider split reaching cached nodes measured as pure noise on the map wall's own workload — both recorded in `map_wall_spines_slope` — so exactly this invariant lives here and no more. The split changes no trap: a leaf's payload length is its logical length, so the inline read refuses exactly the index the helper's leaf arm refuses.
+    /// Lower a sequence read with the leaf split inline: a leaf answers `payload[i]` without leaving the function, and every other shape pays the shared `read` helper. Binaryen never produces this split from the module at any level setting. The split changes no trap: a leaf's payload length is its logical length, so the inline read refuses exactly the index the helper's leaf arm refuses. Inside a loop the read keeps the run it last resolved instead ([`Self::memoized_read`]), which a site that runs once would only pay for in code.
     fn emit_seq_get(
         &mut self,
         carrier: &'a EmissionValueName,
@@ -1686,9 +1814,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             Table::top_type(true)
         };
 
-        self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
-        self.emit_instr(Self::is_leaf(rope));
-
         let mut leaf_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         leaf_arm.push(curios_wasm::Instr::RefCast {
             ref_type: curios_wasm::RefType {
@@ -1709,6 +1834,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             func_name: read_func,
         });
 
+        if self.context.loop_preheader().is_some() {
+            let read = self.memoized_read(carrier, index, rope, None, read_arm);
+            self.emit_instrs(read);
+            return;
+        }
+
+        self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
+        self.emit_instr(Self::is_leaf(rope));
         self.emit_instr(curios_wasm::Instr::If {
             label_name: curios_wasm::LabelName::from("seq_get"),
             block_type: curios_wasm::BlockType::Inline(elem_type),

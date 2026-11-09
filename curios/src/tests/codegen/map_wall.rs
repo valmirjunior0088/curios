@@ -72,7 +72,7 @@ pub(super) fn timed(compiled: &Compiled, n: u64) -> f64 {
 /// # What the design rests on
 ///
 /// - **The key rides the i31.** Small-canonical `Bytes` — length in the top 2 payload bits, bytes LSB-first below — deletes the dependent loads of the key's bytes, which are the wall.
-/// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. The read protocol's *call* component is not the wall, so a wider split answering cached nodes inline is not worth its ~15 instructions per site.
+/// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. A map's reads are of immediate keys, so the read protocol's *call* component is not this wall; a walk's are of one rope at every turn, which a read inside a loop keeps ([`curios-emit`'s README](../../../../curios-emit/README.md#a-read-in-a-loop-keeps-the-run-it-last-resolved)).
 /// - **The crit-bit trie stands.** An immediate key's bit test costs a few register ops, so seventeen cheap levels beat a qp-trie's four or five, each paying an O(width) child copy per rebuild.
 /// - **The map walks once.** `Node/insert` and `Node/remove` descend once and decide on the way back up.
 #[test]

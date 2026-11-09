@@ -430,6 +430,8 @@ pub(crate) struct Table<'a> {
     list_slice: OnceCell<curios_wasm::FuncName>,
     bytes_read: OnceCell<curios_wasm::FuncName>,
     list_read: OnceCell<curios_wasm::FuncName>,
+    bytes_resolve: OnceCell<curios_wasm::FuncName>,
+    list_resolve: OnceCell<curios_wasm::FuncName>,
     bytes_eql: OnceCell<curios_wasm::FuncName>,
     // The pointwise trio takes forced payloads.
     bytes_and: OnceCell<curios_wasm::FuncName>,
@@ -527,6 +529,8 @@ impl<'a> Table<'a> {
             list_slice: OnceCell::new(),
             bytes_read: OnceCell::new(),
             list_read: OnceCell::new(),
+            bytes_resolve: OnceCell::new(),
+            list_resolve: OnceCell::new(),
             bytes_eql: OnceCell::new(),
             bytes_and: OnceCell::new(),
             bytes_or: OnceCell::new(),
@@ -1206,6 +1210,28 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_read_used(&self) -> bool {
         self.list_read.get().is_some()
+    }
+
+    /// `$bytes/resolve (ref $rope/bytes) -> (ref null $bytes, i32, i32)`: where a rope's run already lies flat, for a read that keeps the run it last resolved — `RopeEmitter::emit_resolve_func`'s.
+    pub(crate) fn bytes_resolve_func(&self) -> curios_wasm::FuncName {
+        self.bytes_resolve
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/resolve"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_resolve_used(&self) -> bool {
+        self.bytes_resolve.get().is_some()
+    }
+
+    /// `$list/resolve (ref $rope/list) -> (ref null $elems, i32, i32)`: the `List` mirror of [`bytes_resolve_func`](Self::bytes_resolve_func).
+    pub(crate) fn list_resolve_func(&self) -> curios_wasm::FuncName {
+        self.list_resolve
+            .get_or_init(|| curios_wasm::FuncName::from("list/resolve"))
+            .clone()
+    }
+
+    pub(crate) fn list_resolve_used(&self) -> bool {
+        self.list_resolve.get().is_some()
     }
 
     /// `$bytes/eql (ref $rope/bytes, ref $rope/bytes) -> i32`: whole-value byte equality — unequal rope lengths answer without forcing, equal lengths force both payloads once and compare bytewise.

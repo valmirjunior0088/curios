@@ -109,6 +109,11 @@ impl<'a> BlockData<'a> {
         }
     }
 
+    /// Whether this is a natural loop's header as its own body sees it, entered by going back to the loop's start: a frame registering one is the scope of that body, and its preheader runs once each time the loop is entered from outside.
+    pub(crate) fn is_loop_header(&self) -> bool {
+        matches!(self.dispatch, Dispatch::NaturalLoop { .. })
+    }
+
     /// The values this block binds on entry, in the order a branch pushes them. A branch reads them to load each argument the way the parameter it feeds is held.
     pub(crate) fn params(&self) -> &[(&'a EmissionValueName, LocalData)] {
         &self.params
@@ -187,6 +192,8 @@ pub(crate) struct Frame<'a> {
     pub aggregates: HashSet<&'a EmissionValueName>,
     pub blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
     pub instrs: Vec<curios_wasm::Instr>,
+    /// What a natural loop's frame runs before the loop each time it is entered from outside, and never on a back edge: the reset of what a read inside it keeps from one turn to the next.
+    pub preheader: Vec<curios_wasm::Instr>,
 }
 
 impl<'a> Frame<'a> {
@@ -201,6 +208,7 @@ impl<'a> Frame<'a> {
             aggregates,
             blocks,
             instrs: Default::default(),
+            preheader: Vec::new(),
         }
     }
 

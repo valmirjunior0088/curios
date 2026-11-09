@@ -504,8 +504,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     block_params,
                     dispatch,
                 );
-                self.context.leave_frame();
+                // Entry from outside falls through the preheader into the loop; a back edge branches to the loop's label, past it.
+                let preheader = self.context.leave_loop();
 
+                code.extend(preheader);
                 code.extend([
                     curios_wasm::Instr::Loop {
                         label_name: loop_label,
