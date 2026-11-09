@@ -352,6 +352,30 @@ fn a_search_tree_shared_in_one_place_and_threaded_in_another_rebuilds_in_a_copy(
     );
 }
 
+/// A tree a path copy was made of and is read again: the copy holds the branches the insert left untouched, which the original still holds, so a later insert into the copy, reaching the version that rebuilds, must not rebuild them. The loop that grows the tree rebuilds as it may, and every size the program prints is the one it prints when every insert copies.
+#[test]
+fn a_path_copy_keeps_the_branches_it_shares_out_of_a_rebuild() {
+    let source = program(
+        &[
+            SEARCH_TREE,
+            r#"
+            let copied(n: Nat) -> Nat =
+                let t0 = walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n + 30000, Tree/leaf()));
+                let t1 = insert(t0, 1);
+                let t2 = insert(insert(t1, 2), 65000);
+                size(t0) * 100000 + size(t1) * 100 + size(t2);
+            "#,
+        ]
+        .concat(),
+        "copied(n)",
+    );
+    let (lowered, module) = modules(&source);
+    assert!(rebuilds_of(&module, "/Tree") > 0, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "50"), run(&kept, "50"));
+}
+
 /// A search tree's insert that hands back the node it was handed where the key is found, first handed the constant empty tree: the child it hands on is held by a node it may return, and what the insert of a constant hands back may be that constant, so no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
