@@ -80,7 +80,7 @@ fn func_type(
 }
 
 /// The bridge as a `curios_wasm::Module`: the canonical `bytes` type with its four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set`), the canonical `elems` list type with its four (`list_len`, `list_get`, `list_new`, `list_set`), the canonical `longs` type a list of `Nat` or `Int` crosses as with its four (`longs_len`, `longs_get`, `longs_new`, `longs_set`), the canonical `words` type a list of `Bool` crosses as with its four (`words_len`, `words_get`, `words_new`, `words_set`) — each body its parameters' `local.get`s followed by its ops — and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
-pub(crate) fn bridge_module() -> Module {
+pub fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
     let bytes = TypeName::from("bytes");
@@ -407,6 +407,6 @@ pub(crate) fn bridge_module() -> Module {
 }
 
 /// The encoded bridge, ready for `WebAssembly.instantiate`.
-pub(crate) fn bridge_bytes() -> Vec<u8> {
+pub fn bridge_bytes() -> Vec<u8> {
     to_bytes(&bridge_module())
 }

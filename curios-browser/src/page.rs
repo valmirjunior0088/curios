@@ -235,7 +235,7 @@ struct ImportMap {
 }
 
 /// `value` as JSON.
-pub(crate) fn json(value: &(impl Serialize + ?Sized)) -> String {
+pub fn json(value: &(impl Serialize + ?Sized)) -> String {
     serde_json::to_string(value).expect("plain data renders as JSON")
 }
 
