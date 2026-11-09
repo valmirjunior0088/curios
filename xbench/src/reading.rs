@@ -12,48 +12,48 @@ use {
 
 /// One sitting of the bench.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Reading {
+pub struct Reading {
     /// The day it was taken, a TOML local date: TOML refuses a day its month does not have.
     #[serde(serialize_with = "day", deserialize_with = "dated")]
-    pub(crate) taken: Date,
+    pub taken: Date,
     /// The compiler the reading is about: the version it reports of itself and the commit it was built from.
-    pub(crate) subject: String,
-    pub(crate) platform: Platform,
+    pub subject: String,
+    pub platform: Platform,
     /// The tool pins it ran under, true because a check refused to proceed otherwise. Recorded because readings outlive a pin, and nothing else would say which era one belongs to.
-    pub(crate) pinned: Vec<Pin>,
+    pub pinned: Vec<Pin>,
     /// The size each workload was measured at, once for the whole reading. Recorded rather than read from the contest, so changing a workload's size later cannot relabel what an earlier reading measured.
-    pub(crate) sizes: Vec<Size>,
-    pub(crate) timed: Vec<Timed>,
+    pub sizes: Vec<Size>,
+    pub timed: Vec<Timed>,
 }
 
 /// One tool and the version a reading ran it at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Pin {
-    pub(crate) tool: String,
-    pub(crate) version: String,
+pub struct Pin {
+    pub tool: String,
+    pub version: String,
 }
 
 /// One workload and the size a reading measured it at.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Size {
-    pub(crate) workload: String,
-    pub(crate) size: u64,
+pub struct Size {
+    pub workload: String,
+    pub size: u64,
 }
 
 /// One contestant's wall clock on one workload, as it was measured.
 ///
 /// Each group is an independent batch, and within a batch the contestants ran interleaved, so a disturbance during a group reaches all three alike and the ratio between them survives it. Within a group is iteration noise; between groups is drift.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Timed {
-    pub(crate) workload: String,
-    pub(crate) contestant: String,
+pub struct Timed {
+    pub workload: String,
+    pub contestant: String,
     /// Whole-process wall clock in whole microseconds, one group per batch, each group's executions in the order they ran: an integer, so the record is exact.
-    pub(crate) microseconds: Vec<Vec<u64>>,
+    pub microseconds: Vec<Vec<u64>>,
 }
 
 impl Timed {
     /// The groups in milliseconds, the unit every figure is stated in.
-    pub(crate) fn milliseconds(&self) -> Vec<Vec<f64>> {
+    pub fn milliseconds(&self) -> Vec<Vec<f64>> {
         self.microseconds
             .iter()
             .map(|group| group.iter().map(|&took| took as f64 / 1000.0).collect())
@@ -63,24 +63,24 @@ impl Timed {
 
 impl Reading {
     /// The reading as `collect` prints it and its file holds it.
-    pub(crate) fn filed(&self) -> Result<String, String> {
+    pub fn filed(&self) -> Result<String, String> {
         toml::to_string(self).map_err(|error| error.to_string())
     }
 
     /// A reading as its file holds it.
-    pub(crate) fn read(text: &str) -> Result<Reading, String> {
+    pub fn read(text: &str) -> Result<Reading, String> {
         toml::from_str(text).map_err(|error| error.to_string())
     }
 
     /// The size `workload` was measured at, where this reading measured it.
-    pub(crate) fn size(&self, workload: &str) -> Option<u64> {
+    pub fn size(&self, workload: &str) -> Option<u64> {
         self.sizes
             .iter()
             .find_map(|sized| (sized.workload == workload).then_some(sized.size))
     }
 
     /// What `contestant` took on `workload`, where this reading timed it.
-    pub(crate) fn took(&self, workload: &str, contestant: &str) -> Option<&Timed> {
+    pub fn took(&self, workload: &str, contestant: &str) -> Option<&Timed> {
         self.timed
             .iter()
             .find(|timed| timed.workload == workload && timed.contestant == contestant)

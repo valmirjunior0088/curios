@@ -20,24 +20,24 @@ use {
 
 /// One workload of the measurement corpus, `programs/<name>/`, which carries the same program in Curios and in Rust. What each computes is `programs/README.md`'s.
 #[derive(Debug)]
-pub(crate) struct Workload {
-    pub(crate) name: &'static str,
+pub struct Workload {
+    pub name: &'static str,
     /// How a table names it.
-    pub(crate) title: &'static str,
+    pub title: &'static str,
     /// The letter its size is reported under.
-    pub(crate) letter: &'static str,
+    pub letter: &'static str,
     /// The size it is timed at.
-    pub(crate) size: u64,
+    pub size: u64,
     /// The small size every contestant is first held to one answer at.
-    pub(crate) check: u64,
+    pub check: u64,
     /// What every contestant prints at `check`.
-    pub(crate) answer: &'static str,
+    pub answer: &'static str,
     /// What every contestant prints at `size`: the corpus's anchor.
-    pub(crate) anchor: &'static str,
+    pub anchor: &'static str,
 }
 
 /// The corpus's workloads, in the order their tables are printed.
-pub(crate) const WORKLOADS: &[Workload] = &[
+pub const WORKLOADS: &[Workload] = &[
     Workload {
         name: "lcg",
         title: "LCG",
@@ -96,16 +96,16 @@ pub(crate) const WORKLOADS: &[Workload] = &[
 
 /// One contestant: a compiler's build of a workload, run as its own process.
 #[derive(Debug)]
-pub(crate) struct Contestant {
-    pub(crate) name: &'static str,
+pub struct Contestant {
+    pub name: &'static str,
     /// How a table names it.
-    pub(crate) title: &'static str,
+    pub title: &'static str,
 }
 
 /// Curios, and the one anchor, compiled two ways.
 ///
 /// Rust native is the ceiling, and Rust native against Rust to WebAssembly is what WebAssembly itself costs, so what stands between Curios and `rust-wasm` is Curios's. On a workload that allocates, `rust-wasm` manages linear memory and is a *bound* rather than a peer: the gap holds Curios's codegen and the whole cost of delegating collection, and no contestant separates them.
-pub(crate) const CONTESTANTS: &[Contestant] = &[
+pub const CONTESTANTS: &[Contestant] = &[
     Contestant {
         name: "curios",
         title: "Curios",
@@ -275,7 +275,7 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
 }
 
 /// Whether every contestant printed `expected`, or, where nothing is expected, the same answer as the others; and which did not where they differ.
-pub(crate) fn agreement(answers: &[(&str, String)], expected: Option<&str>) -> Result<(), String> {
+pub fn agreement(answers: &[(&str, String)], expected: Option<&str>) -> Result<(), String> {
     let Some(expected) = expected.or_else(|| answers.first().map(|(_, first)| first.as_str()))
     else {
         return Ok(());
@@ -356,7 +356,7 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>
 /// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the reading as the TOML file that records it.
 ///
 /// The reading is numbered after `filed`, the readings already filed, which the binary keeps. Standard output carries the reading alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error, the name to file it under among it.
-pub(crate) fn collect(filed: usize) -> Result<(), String> {
+pub fn collect(filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.

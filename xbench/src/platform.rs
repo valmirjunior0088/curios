@@ -17,13 +17,13 @@ const UNKNOWN: &str = "unknown";
 
 /// Where a reading was taken, as the host answers it and the reading records it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Platform {
+pub struct Platform {
     /// The machine itself. Differs between two readings, and they are of different machines.
-    pub(crate) machine: String,
+    pub machine: String,
     /// How it was arranged when the reading was taken. Differs, and the same machine was running under different rules.
-    pub(crate) state: String,
+    pub state: String,
     /// What was running on it. Recorded, never gated.
-    pub(crate) software: String,
+    pub software: String,
 }
 
 /// The value `told` gives for `name`, where it is a file of `name: value` lines — `/proc/cpuinfo`, which states each field once per processor and identically.
@@ -74,7 +74,7 @@ fn told(path: &str) -> String {
 }
 
 /// What the host answers about itself, as a reading records it.
-pub(crate) fn capture() -> Platform {
+pub fn capture() -> Platform {
     let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
     let meminfo = fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let cpus = thread::available_parallelism()
