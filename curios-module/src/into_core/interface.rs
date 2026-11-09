@@ -12,7 +12,7 @@ use {
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone, PartialEq)]
 #[curios_archive::archived]
-pub(crate) struct PublicInterface {
+pub struct PublicInterface {
     #[archived_with(OrderedMap)]
     pub children: HashMap<String, Entry>,
     #[archived_with(OrderedMap)]
@@ -30,7 +30,7 @@ impl PublicInterface {
 
 #[derive(Clone, PartialEq)]
 #[curios_archive::archived]
-pub(crate) struct Entry {
+pub struct Entry {
     pub target: Qualifier,
     /// The nominal declaration whose representation this export exposes. Kept distinct from `target` so re-exports cannot manufacture representation visibility and aliases can inherit it during the post-lowering audit.
     pub representation: Option<Qualifier>,
@@ -93,11 +93,11 @@ impl PubUse {
 ///
 /// Module audiences are a fixed point (a `pub use` chain may cycle, and cyclic module dependencies are supported); binding audiences read off the converged module map in one pass.
 ///
-/// **A unit decides the audience of each name it declares, and of no other.** Its audiences are a function of its own direct interface and export view ([`Audiences::of`]), so they are made once for the unit and kept with it, and a unit lowered after it reads them as they stand ([`AudienceScope`]): no later unit widens one. None needs to: a unit reaches another's name through public hops from the compilation root alone, and its own unit already shows a name so reached to everyone, which every lowering asserts of its exports ([`AudienceScope::widens_nothing`]).
+/// **A unit decides the audience of each name it declares, and of no other.** Its audiences are a function of its own direct interface and export view (`Audiences::of`), so they are made once for the unit and kept with it, and a unit lowered after it reads them as they stand (`AudienceScope`): no later unit widens one. None needs to: a unit reaches another's name through public hops from the compilation root alone, and its own unit already shows a name so reached to everyone, which every lowering asserts of its exports (`AudienceScope::widens_nothing`).
 ///
-/// **Persistent, and revised by what changed** ([`Audiences::revised`]): a unit lowered over a baseline holds the baseline's audiences with those of the names its changed modules declare or export read again.
+/// **Persistent, and revised by what changed** (`Audiences::revised`): a unit lowered over a baseline holds the baseline's audiences with those of the names its changed modules declare or export read again.
 #[derive(Clone)]
-pub(super) struct Audiences {
+pub struct Audiences {
     modules: Persistent<Qualifier, Vec<Qualifier>>,
     bindings: Persistent<Qualifier, Vec<Qualifier>>,
     /// Each name one of this unit's exports shows at a path other than its own, with every such export: what a name under an internal root is seen through ([`AudienceScope::seen`]). Recorded beside the audiences, never folded into one: a name's own audience stays its declaring unit's.
@@ -110,7 +110,7 @@ pub(super) struct Audiences {
 
 /// One export of a name at a path other than its own: the path the export stands at, and who sees that path.
 #[derive(Clone, PartialEq)]
-pub(super) struct Relay {
+pub struct Relay {
     site: Qualifier,
     exposure: Vec<Qualifier>,
 }
@@ -447,7 +447,7 @@ fn shown_through(
 ///
 /// A *scope*, not a merged map. A name is asked of the unit that declares it, found by the prefix it lies under, so an earlier unit's audiences are made only where a lowering asks about one of that unit's names.
 #[derive(Clone, Copy)]
-pub(super) struct AudienceScope<'a> {
+pub struct AudienceScope<'a> {
     own: &'a Audiences,
     /// The unit's own prefixes, and the mounts it may name — its own among them.
     own_mounts: &'a [Mount],
@@ -457,7 +457,7 @@ pub(super) struct AudienceScope<'a> {
 }
 
 impl<'a> AudienceScope<'a> {
-    pub(super) fn over(
+    pub fn over(
         own: &'a Audiences,
         own_mounts: &'a [Mount],
         own_visible: &'a [Mount],
@@ -472,7 +472,7 @@ impl<'a> AudienceScope<'a> {
     }
 
     /// Who can see the binding `qualifier` names where `item`'s signature names it, beside the paths of the exports that show it, which a refusal reads the keeping module off. A name is seen by its own audience, except one under an internal root named outside that root: no reader but a unit that may name the root reaches it by its own path, so it is seen within those units and wherever an export shows it, whichever unit's export that is. An item under the root shares its readers, so what it names is seen as its own unit decided.
-    pub(super) fn seen(
+    pub fn seen(
         &self,
         qualifier: &Qualifier,
         item: &Qualifier,
@@ -546,7 +546,7 @@ impl<'a> AudienceScope<'a> {
     }
 
     /// The audience of the module `qualifier` names — see [`Audiences::module`].
-    pub(super) fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+    pub fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
         match self.declaring(qualifier) {
             Some(unit) => unit.audiences().module(qualifier),
             None => self.own.module(qualifier),
@@ -554,7 +554,7 @@ impl<'a> AudienceScope<'a> {
     }
 
     /// The audience of the binding `qualifier` names — see [`Audiences::binding`].
-    pub(super) fn binding(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+    pub fn binding(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
         match self.declaring(qualifier) {
             Some(unit) => unit.audiences().binding(qualifier),
             None => self.own.binding(qualifier),
@@ -562,7 +562,7 @@ impl<'a> AudienceScope<'a> {
     }
 
     /// Whether no export of `public`, the unit's own export view, shows an earlier unit's name to anyone its own unit does not: what lets every unit decide its audiences alone.
-    pub(super) fn widens_nothing(&self, public: &Table<PublicInterface>) -> bool {
+    pub fn widens_nothing(&self, public: &Table<PublicInterface>) -> bool {
         public.iter().all(|(module, interface)| {
             let exposure = self.own.module(module);
             let children = interface.children.values().all(|entry| {
@@ -622,7 +622,7 @@ fn widen(
 }
 
 /// The target of `parent`'s child module `label` as seen from `consumer`, or `None` when it is absent or out of view.
-pub(crate) fn visible_child(
+pub fn visible_child(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
@@ -643,7 +643,7 @@ pub(crate) fn visible_child(
 }
 
 /// The target of `parent`'s binding `label` as seen from `consumer`, or `None` when it is absent or out of view.
-pub(crate) fn visible_binding(
+pub fn visible_binding(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
@@ -664,7 +664,7 @@ pub(crate) fn visible_binding(
 }
 
 /// Why `consumer` cannot step from `parent` to `label`, sought as `sought`: the one value every resolution that stops in a module raises, the lowering's and the export view's alike. Private where `parent` declares the label out of the consumer's view, since a consumer inside `parent` would have been answered; absent otherwise. The nearest name is chosen among what the consumer may write there: what `parent` exports, and what it declares where the consumer lies within it.
-pub(super) fn unresolved(
+pub fn unresolved(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
@@ -719,7 +719,7 @@ pub(super) fn unresolved(
 /// Every public interface in scope that carries `label` in the namespace `sought` names, as the absolute path the label has there: the paths a refusal offers for a name that resolved to nothing. Found by the label alone — a module and a declaration of one name are two things, and nothing here pairs a path with another that exports the same declaration. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the path a reader may write is the exporting module's: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
 ///
 /// A candidate `consumer` may not write is dropped first — one under a root the unit may not name, or one through a module it cannot see — because a report that offered one would spell a way out the next compile refuses. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
-pub(super) fn carriers(
+pub fn carriers(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
@@ -770,7 +770,7 @@ fn reachable(
 }
 
 /// The refusal of a reach into a root the unit may not name: the root of `resolved` as the step that failed, for the reason `missing` gives, with every path `consumer` may write that carries `wanted`, the name it reached for under that root and the namespace it sought it in.
-pub(super) fn out_of_reach(
+pub fn out_of_reach(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
@@ -795,7 +795,7 @@ pub(super) fn out_of_reach(
 /// Seed this unit's interfaces over its scope's — constructor modules included, which are also added to `table`, the direct-interface view, so lowering (`process_items`) can classify private-vs-missing accesses through them — then resolve every `pub use` to a fixed point. Runs after discovery has built `table` and before any item is lowered.
 ///
 /// **One resolution for every unit.** What differs is which items are seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own. Each prefix takes an explicit `seed` call, since `seed`'s own recursion follows only the `TopItem::Mod` items it is handed.
-pub(super) fn resolve_unit<'a>(
+pub fn resolve_unit<'a>(
     root: &[Headed],
     own: &[Mount],
     modules: &HashMap<Qualifier, Rc<Loaded>>,
@@ -843,7 +843,7 @@ pub(super) fn resolve_unit<'a>(
     clippy::too_many_arguments,
     reason = "the tables resolution reads, and the baseline with what discovery found moved"
 )]
-pub(super) fn resolve_unit_over<'a>(
+pub fn resolve_unit_over<'a>(
     root: &[Headed],
     modules: &HashMap<Qualifier, Rc<Loaded>>,
     order: &HashMap<Qualifier, usize>,
@@ -922,7 +922,7 @@ pub(super) fn resolve_unit_over<'a>(
 }
 
 /// What resolving a unit's export view over a baseline's found ([`resolve_unit_over`]): the modules it seeded again, and the bindings whose entries are not the baseline's ([`Consulted`]).
-pub(super) struct Resolution {
+pub struct Resolution {
     pub affected: HashSet<Qualifier>,
     pub moved: HashSet<Consulted>,
     pub changed: BTreeSet<Qualifier>,
@@ -954,7 +954,7 @@ fn heads_of<'h>(
 /// The bindings whose entries in `table` and `public`, the unit's own halves, are not `baseline`'s, among `modules`, beside the modules whose entries are not: what a resolution reads of a module, read off the labels each declares or exports, and the labels a glob reads.
 ///
 /// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time.
-pub(super) fn moved_between<'m>(
+pub fn moved_between<'m>(
     baseline: &PreparedText,
     table: &Table<ModuleInfo>,
     public: &Table<PublicInterface>,

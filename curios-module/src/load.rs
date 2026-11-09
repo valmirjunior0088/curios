@@ -16,13 +16,8 @@ pub fn read_module(path: impl AsRef<Path>) -> Result<Module, LoadError> {
     parsed(path.as_ref(), None).map(|(module, _)| module)
 }
 
-/// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of `Entrypoint`'s `FromStr`, distinguished by keeping the real path in the [`Source`] so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`] the caller pairs it with.
-pub fn read_entrypoint(path: impl AsRef<Path>) -> Result<Entrypoint, LoadError> {
-    sourced(path).map(|(entrypoint, _)| entrypoint)
-}
-
-/// [`read_entrypoint`], handing back the text that was parsed as well as what it parsed to.
-fn sourced(path: impl AsRef<Path>) -> Result<(Entrypoint, Arc<Source>), LoadError> {
+/// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression), handing back the text that was parsed as well as what it parsed to. The file-path counterpart of `Entrypoint`'s `FromStr`, distinguished by keeping the real path in the [`Source`] so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`] the caller pairs it with.
+fn read_entrypoint(path: impl AsRef<Path>) -> Result<(Entrypoint, Arc<Source>), LoadError> {
     let path = path.as_ref();
     let source = Source::read(path).map_err(|error| LoadError::Read {
         path: path.into(),
@@ -36,11 +31,11 @@ fn sourced(path: impl AsRef<Path>) -> Result<(Entrypoint, Arc<Source>), LoadErro
 
 /// Reads `path` as an entrypoint, paired with the [`RootSource`] the directory it sits in anchors and the text that was parsed — the file is the root of its unit, so `mod util` in `main.crs` reads `util.crs` beside it.
 ///
-/// The pairing is the point: [`read_entrypoint`] leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
+/// The pairing is the point: `read_entrypoint` leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
 ///
 /// **The loader logs the entry's own header as read, from the text parsed here.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body — so it is logged where the two are paired (`RootSource::opened`), and a cache that verifies a compilation against what it read finds the entry among the rest. It must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale. The source comes back too, for a caller that files what the whole program compiled to.
 pub fn open_entrypoint(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), LoadError> {
-    let (entrypoint, source) = sourced(path)?;
+    let (entrypoint, source) = read_entrypoint(path)?;
     let loader = RootSource::opened(path, &source);
 
     Ok((entrypoint, loader, source))

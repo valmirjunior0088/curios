@@ -126,7 +126,7 @@ impl Lint {
 }
 
 /// Lints in reading order, as `anchors` place them: by the file they are about, then by position in it, unlocated ones last. Resolution walks a unit's items in dependency order and the modules in discovery order, neither of which is the order a reader opens files in.
-pub(crate) fn ordered(mut lints: Vec<Lint>, anchors: &curios_core::Anchors) -> Vec<Lint> {
+pub fn ordered(mut lints: Vec<Lint>, anchors: &curios_core::Anchors) -> Vec<Lint> {
     // An unlocated lint keys as `None`, which sorts first; `Reverse` on the presence alone puts it last without touching the order of the rest.
     lints.sort_by_cached_key(|lint| {
         let located = lint.at.and_then(|at| anchors.resolve(&at)).map(|span| {

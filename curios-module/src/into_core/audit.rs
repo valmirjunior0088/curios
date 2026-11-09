@@ -41,7 +41,7 @@ fn exposed_nominal<'a>(
 ///
 /// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream would answer it too, with a map whose correctness here depended on somebody else having concatenated the prelude into it and nothing saying so. See `documentation/design/compilation/a-unit-holds-its-own-definitions-and-the-prelude-is-an-environment.md`.
 #[derive(Clone, Copy)]
-pub(super) struct NominalScope<'a> {
+pub struct NominalScope<'a> {
     /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.
     predecessors: &'a [&'a PreparedText],
     induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
@@ -51,7 +51,7 @@ pub(super) struct NominalScope<'a> {
 }
 
 impl<'a> NominalScope<'a> {
-    pub(super) fn new(
+    pub fn new(
         predecessors: &'a [&'a PreparedText],
         induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
         struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
@@ -128,7 +128,7 @@ fn referent_audience(
 }
 
 /// A name some reader of an item cannot see, with the subtrees whose modules can, and the paths of the exports through which a name under an internal root is seen.
-pub(super) struct Unseen {
+pub struct Unseen {
     pub(super) referent: curios_core::Global,
     reach: Vec<Qualifier>,
     relays: Vec<Qualifier>,
@@ -140,10 +140,7 @@ impl Unseen {
     /// `None` where what stands there is the name itself, a declaration written without `pub`, and where the reach stops for a reason its own path does not show, an export elsewhere. A name under an internal root is kept by the module its export stands in, read off the export's path instead.
     ///
     /// **The widest subtree, not the innermost private module.** A name declared in one private module and exported out of it into another reaches the second one's audience: writing `pub` on the first changes nothing, and it is the second that a reader is told of.
-    pub(super) fn behind(
-        &self,
-        child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
-    ) -> Option<Qualifier> {
+    pub fn behind(&self, child: &dyn Fn(&Qualifier, &str) -> Option<bool>) -> Option<Qualifier> {
         self.referent
             .qualifier()
             .into_iter()
@@ -203,7 +200,7 @@ fn audit_dependencies(
     clippy::too_many_arguments,
     reason = "the tables an audit reads, and what it audits of them"
 )]
-pub(super) fn audit_public_exposures(
+pub fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
     definitions: &[(curios_core::Global, &Declared)],

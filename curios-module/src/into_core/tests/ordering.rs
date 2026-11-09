@@ -87,7 +87,7 @@ fn an_entry_reads_its_modules_beside_it_and_a_module_from_its_stem_directory() {
     .unwrap();
     let loader = RootSource::entry(&base.join("main.crs"));
 
-    crate::into_core::into_core(&entrypoint, &loader, syntax()).unwrap();
+    into_core(&entrypoint, &loader, syntax()).unwrap();
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
     .unwrap();
 
     assert!(matches!(
-        crate::into_core::into_core(&entrypoint, &RootSource::none(), syntax()).unwrap_err(),
+        into_core(&entrypoint, &RootSource::none(), syntax()).unwrap_err(),
         Error::Located { error, .. }
             if matches!(error.as_ref(), Error::ModuleNotFound { path } if path == "/A")
     ));

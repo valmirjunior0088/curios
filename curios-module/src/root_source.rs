@@ -622,7 +622,7 @@ fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
 /// The tree `source` parses to, parsed once per thread for as long as the thread holds that text of the file: the half of [`parsed`] a reader of [`RootSource::read`] calls once it needs the tree after all.
 ///
 /// A parse that succeeds is the file's last good one from then on. One that fails is not entered and evicts nothing, and a source the thread does not hold — an earlier text of its file, or a text with no file — is parsed and not remembered.
-pub(crate) fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
+pub fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
     let key = source.path.as_deref().map(identity);
 
     let hit = PARSED.with(|parsed| {
@@ -658,7 +658,7 @@ pub(crate) fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
 /// **A hit hands back the same `Arc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file ([`Held`]), its parse replaced when a later text of the file parses. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
 ///
 /// Thread-local because a surface module is an `Rc` tree, which cannot cross a thread; its spans could, since a source is shared by `Arc`. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
-pub(crate) fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
+pub fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
     let source = sourced(path, held)?;
 
     Ok((tree_of(&source)?, source))

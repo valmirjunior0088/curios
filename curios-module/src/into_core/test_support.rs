@@ -1,26 +1,26 @@
 //! Lowering a source to core and reading the result back: the harness every case in these suites asserts through.
-//!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
+    super::lower_unit,
     crate::*,
+    curios_abi::ForeignStore,
     curios_common::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-        EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-        Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
-        SyntaxRegistry, TestSyntax, test_support::*,
+        EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, Mount,
+        NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax,
+        ProofSyntax, Qualifier, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
+        SyntaxName, SyntaxRegistry, TestSyntax, test_support::*,
     },
     curios_core::test_support::*,
     curios_surface::Entrypoint,
-    std::{collections::BTreeSet, fs, path::Path},
+    std::{collections::BTreeSet, fs, path::Path, rc::Rc},
 };
 
-pub(super) const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
+pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
 }
 
-pub(super) const fn registry_field(
+pub const fn registry_field(
     segments: &'static [&'static str],
     label: &'static str,
 ) -> ConceptField {
@@ -30,7 +30,7 @@ pub(super) const fn registry_field(
     }
 }
 
-pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     option: OptionSyntax {
         family: registry_name(&["sys", "Option"]),
         some: registry_name(&["sys", "Option", "some"]),
@@ -179,23 +179,23 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
 };
 
-pub(super) fn syntax() -> &'static SyntaxRegistry {
+pub fn syntax() -> &'static SyntaxRegistry {
     &SYNTAX
 }
 
 /// A top-level definition's identity, from the path a test writes. Fixture-only — production code carries the `Qualifier` from resolution instead of recovering it from a spelling.
-pub(super) fn global_name(path: &str) -> curios_core::Global {
+pub fn global_name(path: &str) -> curios_core::Global {
     curios_core::Global::Authored(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
 
 /// What a fixture's entry resolves through: no filesystem, and the entry tested, so its tests are lowered as a question lowers a subject's. What a build passes over is held by a test of its own.
-pub(super) fn fixture_loader() -> RootSource {
+pub fn fixture_loader() -> RootSource {
     RootSource::none().tested()
 }
 
 /// The entry's body as the lowering writes it, the module it closes over left aside.
-pub(super) fn run(src: &str) -> curios_core::Term {
-    let (program, _, _, _) = super::into_core(
+pub fn run(src: &str) -> curios_core::Term {
+    let (program, _, _, _) = into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -206,8 +206,8 @@ pub(super) fn run(src: &str) -> curios_core::Term {
 }
 
 /// What `src` lowers to as a suite reads it: each definition's name, type and body in the module's order, beside the entry's body.
-pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
-    let (program, _, _, _) = super::into_core(
+pub fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
+    let (program, _, _, _) = into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -225,10 +225,10 @@ pub(super) fn lowered(src: &str) -> (Vec<Lowered>, curios_core::Term) {
 }
 
 /// A definition as [`lowered`] reads it: its name, its type and its body.
-pub(super) type Lowered = (curios_core::Global, curios_core::Term, curios_core::Term);
+pub type Lowered = (curios_core::Global, curios_core::Term, curios_core::Term);
 
-pub(super) fn lowered_definitions(src: &str) -> curios_core::Definitions {
-    let (program, _, _, _) = super::into_core(
+pub fn lowered_definitions(src: &str) -> curios_core::Definitions {
+    let (program, _, _, _) = into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -239,7 +239,7 @@ pub(super) fn lowered_definitions(src: &str) -> curios_core::Definitions {
 }
 
 /// The members of the one item `src` lowers to, where it is a recursive group whose bodies name no declaration but its own members: `None` where it is anything else.
-pub(super) fn closed_group(src: &str) -> Option<Vec<String>> {
+pub fn closed_group(src: &str) -> Option<Vec<String>> {
     let definitions = lowered_definitions(src);
     let [curios_core::Item::Rec(group)] = &definitions.items.iter().collect::<Vec<_>>()[..] else {
         return None;
@@ -266,7 +266,7 @@ pub(super) fn closed_group(src: &str) -> Option<Vec<String>> {
         })
 }
 
-pub(super) fn written_type(id: usize) -> curios_core::Term {
+pub fn written_type(id: usize) -> curios_core::Term {
     curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
 }
 
@@ -275,7 +275,7 @@ fn elaborate_program(
     src: &str,
     established: &curios_elab::Established<'_>,
 ) -> curios_core::Program {
-    let (program, minted, _, mounts) = super::into_core(
+    let (program, minted, _, mounts) = into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -298,17 +298,17 @@ fn elaborate_program(
 }
 
 /// `src` elaborated with nothing in scope, and the term it closes with.
-pub(super) fn elaborate_source_program(src: &str) -> curios_core::Program {
+pub fn elaborate_source_program(src: &str) -> curios_core::Program {
     elaborate_program(src, &curios_elab::Established::nothing())
 }
 
 /// The module `src` elaborates to with nothing in scope.
-pub(super) fn elaborate_source(src: &str) -> curios_core::Definitions {
+pub fn elaborate_source(src: &str) -> curios_core::Definitions {
     elaborate_source_program(src).definitions
 }
 
-pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
-    let (lowered, minted, _, mounts) = super::into_core(
+pub fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
+    let (lowered, minted, _, mounts) = into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -337,7 +337,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
 }
 
 /// The lints of `src` lowered alone, each as `kind: message`.
-pub(super) fn lints(src: &str) -> Vec<String> {
+pub fn lints(src: &str) -> Vec<String> {
     let entrypoint = src.parse::<Entrypoint>().unwrap();
     let loader = fixture_loader();
     super::into_core_unit(
@@ -353,7 +353,7 @@ pub(super) fn lints(src: &str) -> Vec<String> {
 }
 
 /// What stops `src` compiling, as its lowering knows it: the refusal it raised, or, where it raised none, every name it filed as resolving to nothing, each as elaboration reports it of the declaration that wrote it. A name written in a declaration refuses that declaration and not the lowering, so a fixture about a name reads both.
-pub(super) fn run_err(src: &str) -> String {
+pub fn run_err(src: &str) -> String {
     let entrypoint = src.parse::<Entrypoint>().unwrap();
     let loader = fixture_loader();
 
@@ -368,8 +368,8 @@ pub(super) fn run_err(src: &str) -> String {
 }
 
 // A refusal the lowering raised, rendered as the reader sees it: the message and, where the error was placed, its snippet.
-pub(super) fn run_err_report(src: &str) -> String {
-    super::into_core(
+pub fn run_err_report(src: &str) -> String {
+    into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &fixture_loader(),
         syntax(),
@@ -379,17 +379,17 @@ pub(super) fn run_err_report(src: &str) -> String {
 }
 
 /// A directory of its own, removed however the test that holds it ends.
-pub(super) fn temp_dir(name: &str) -> Temporary {
+pub fn temp_dir(name: &str) -> Temporary {
     Temporary::new("into-core", name)
 }
 
-pub(super) fn write_module(base: &Path, path: &str, source: &str) {
+pub fn write_module(base: &Path, path: &str, source: &str) {
     let path = base.join(path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, source).unwrap();
 }
 
-pub(super) fn universe_parameters(definitions: &curios_core::Definitions, name: &str) -> usize {
+pub fn universe_parameters(definitions: &curios_core::Definitions, name: &str) -> usize {
     definitions
         .items
         .iter()
@@ -408,4 +408,31 @@ pub(super) fn universe_parameters(definitions: &curios_core::Definitions, name: 
             _ => None,
         })
         .unwrap_or_else(|| panic!("{name} is declared"))
+}
+
+/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-module`'s own stage tests do: the program, the counters its lowering minted from, its `foreign` rows and the prefixes its unit claims.
+pub fn into_core(
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    syntax: &SyntaxRegistry,
+) -> Result<
+    (
+        curios_core::Program,
+        Rc<curios_core::Minted>,
+        ForeignStore,
+        Vec<Mount>,
+    ),
+    Error,
+> {
+    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax, None)?;
+
+    Ok((
+        curios_core::Program {
+            definitions: unit.core,
+            entrypoint: entry.expect("an entry source's parse holds its final term"),
+        },
+        unit.minted,
+        unit.foreigns,
+        unit.mounts,
+    ))
 }

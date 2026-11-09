@@ -12,8 +12,8 @@ use {
 /// What the unit-wide passes read of one lowered item, taken once, where it is lowered and its terms are open: the passes then read no term, so an item a later lowering keeps answers them as one it lowers does.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct LoweredItem {
-    /// Every name the item's declaration references ([`node_reference_names`]), in the names' order.
+pub struct LoweredItem {
+    /// Every name the item's declaration references (`node_reference_names`), in the names' order.
     pub reaches: Vec<curios_core::Global>,
     /// What each of its definitions declares, in the item's order.
     pub definitions: Vec<Declared>,
@@ -24,7 +24,7 @@ pub(crate) struct LoweredItem {
 /// One definition of a lowered item, as the exposure audit and the `unused-declaration` lint read it.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Declared {
+pub struct Declared {
     /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines, and what the unit's anchors place a report about it by (`curios_core::Anchors::label`). `None` for a definition that was built rather than written.
     pub label: Option<curios_core::Extent>,
     /// The top-level definitions its declared type names, in the order a term lists the declarations it references. Taken of a definition written under its own name alone, the only kind the audit asks of.
@@ -80,19 +80,19 @@ fn written_under_its_name(let_: &FlatLet) -> bool {
 }
 
 /// Every definition `term` names: the globals it refers to, and the head of every construction in it. A construction's head is no variable — a structure literal, a variant and a type former's normal form hold their name in the node (`Subterm::construction_names`) — so a term that *builds* a structure names it without referring to it. The edges of the `unused-declaration` lint are these, from an item's terms and from the entrypoint's alike.
-pub(super) fn named(term: &curios_core::Term) -> impl Iterator<Item = curios_core::Global> {
+pub fn named(term: &curios_core::Term) -> impl Iterator<Item = curios_core::Global> {
     globals(&term.mentions())
         .into_iter()
         .chain(term.construction_names())
 }
 
 /// The declarations among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
-pub(super) fn globals(names: &curios_core::Mentions) -> Vec<curios_core::Global> {
+pub fn globals(names: &curios_core::Mentions) -> Vec<curios_core::Global> {
     names.declarations().copied().collect()
 }
 
 /// The full set of names one node's declaration references: the declarations its own terms reference, plus (for a declared inductive/struct) those its registry entry's do. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
-pub(super) fn node_reference_names(
+pub fn node_reference_names(
     item: &FlatItem,
     declared: &[curios_core::Global],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
@@ -165,7 +165,7 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
 }
 
 /// Owner index (declared name → node) over the given nodes only.
-pub(super) fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
+pub fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
     nodes
         .iter()
         .flat_map(|&n| items[n].names().into_iter().map(move |name| (name, n)))
@@ -193,7 +193,7 @@ fn struct_references(struct_decl: &curios_core::StructDecl) -> HashSet<curios_co
 /// A definition whose body is a bare top-level name: what it stands for and, where it is a type alias written out in full, every top-level name its body mentions.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct AliasEdge {
+pub struct AliasEdge {
     pub target: curios_core::Global,
     pub dependencies: Option<Vec<curios_core::Global>>,
 }
@@ -210,7 +210,7 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 }
 
 /// Every alias among `items`, by the name that is one, read off the facts taken of each.
-pub(super) fn aliases<'f>(
+pub fn aliases<'f>(
     items: impl IntoIterator<Item = (Vec<curios_core::Global>, &'f LoweredItem)>,
 ) -> Aliases {
     let edges = items
@@ -224,7 +224,7 @@ pub(super) fn aliases<'f>(
 }
 
 /// A unit's bare, transparent aliases: what each stands for, and for each name every alias that reaches it, which the exposure audit reads an audience through. Made once for the unit and kept with it: a unit lowered over a baseline that changed no alias holds the baseline's.
-pub(crate) struct Aliases {
+pub struct Aliases {
     pub(super) edges: BTreeMap<curios_core::Global, AliasEdge>,
     pub(super) sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
 }

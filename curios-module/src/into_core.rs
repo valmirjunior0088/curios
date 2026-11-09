@@ -15,9 +15,15 @@ use audit::*;
 
 mod lowered;
 use lowered::*;
+pub use lowered::{
+    ArchivedBaselineHalf, ArchivedConsulted, ArchivedHalfEntry, ArchivedLookup,
+    ArchivedLoweredDeclaration, BaselineHalf, Consulted, HalfEntry, Lookup, LookupReaders,
+    LoweredDeclaration,
+};
 
 mod context;
 use context::*;
+pub use context::{ArchivedChildInfo, ArchivedModuleInfo, ChildInfo, ModuleInfo};
 
 mod lowerer;
 use lowerer::*;
@@ -27,21 +33,27 @@ use match_compile::*;
 
 mod interface;
 use interface::*;
+pub use interface::{ArchivedEntry, ArchivedPublicInterface, Audiences, Entry, PublicInterface};
 
 mod lint;
 use lint::*;
 
 mod references;
 use references::*;
+pub use references::{
+    AliasEdge, Aliases, ArchivedAliasEdge, ArchivedDeclared, ArchivedLoweredItem, Declared,
+    LoweredItem,
+};
 
 mod scoped;
 use scoped::*;
 
 mod document;
-pub use document::*;
+use document::*;
+pub use document::{Heading, heading};
 
 mod head;
-use head::*;
+pub use head::*;
 
 mod witness;
 use witness::*;
@@ -51,8 +63,10 @@ pub use mention::*;
 
 mod revision;
 use revision::*;
+pub use revision::{Bodies, Revision};
 
 mod reachability;
+pub use reachability::Reachability;
 use reachability::*;
 
 use {
@@ -88,19 +102,19 @@ mod tests;
 ///
 /// Carried as one value because it is threaded through the whole of resolution: the walk that follows a `use` to its provider asks both questions at every hop, and two parallel parameters through ten functions drift.
 #[derive(Clone, Copy)]
-pub(super) struct Reach<'a> {
+pub struct Reach<'a> {
     mounts: &'a [Mount],
     visible: &'a [Mount],
 }
 
 impl<'a> Reach<'a> {
     /// `mounts` is every prefix in the compilation; `visible` is the subset this unit declared, plus its own.
-    pub(super) fn over(mounts: &'a [Mount], visible: &'a [Mount]) -> Self {
+    pub fn over(mounts: &'a [Mount], visible: &'a [Mount]) -> Self {
         Self { mounts, visible }
     }
 
     /// Every prefix the compilation mounts — what owns a name, never what may write one.
-    pub(super) fn mounts(&self) -> &'a [Mount] {
+    pub fn mounts(&self) -> &'a [Mount] {
         self.mounts
     }
 
@@ -428,7 +442,7 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
 }
 
 /// One file-backed module as a lowering holds it: what its items declare, and their trees where anything has needed them.
-pub(super) struct Loaded {
+pub struct Loaded {
     module: Qualifier,
     /// What the module's items declare: read off its tree, or a baseline's scan of the same text.
     pub heads: Rc<Vec<Headed>>,
@@ -3469,33 +3483,6 @@ fn into_core_unit_within(
     };
 
     Ok((unit, entry))
-}
-
-/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-module`'s own stage tests do: the program, the counters its lowering minted from, its `foreign` rows and the prefixes its unit claims.
-pub fn into_core(
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-    syntax: &SyntaxRegistry,
-) -> Result<
-    (
-        curios_core::Program,
-        Rc<curios_core::Minted>,
-        ForeignStore,
-        Vec<Mount>,
-    ),
-    Error,
-> {
-    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax, None)?;
-
-    Ok((
-        curios_core::Program {
-            definitions: unit.core,
-            entrypoint: entry.expect("an entry source's parse holds its final term"),
-        },
-        unit.minted,
-        unit.foreigns,
-        unit.mounts,
-    ))
 }
 
 /// The interface of the unit `unit` was lowered into from `source`, for its consumers, or `None` where the source marks no mount as documented: an entry program, which has no consumer.

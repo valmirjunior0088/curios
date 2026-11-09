@@ -23,7 +23,7 @@ type LoweredParams = Vec<(Plicity, curios_core::Free, curios_core::Term)>;
 /// A source binder brought into lexical scope: what it was written as, and the identity every reference to it lowers to.
 ///
 /// Minted once, where the binder is introduced, and reused everywhere that binder is in scope — a progressively-extended parameter list re-enters the same identities rather than re-minting them, or an earlier domain and the body would disagree about which binder a name meant.
-pub(super) type Binder = (String, curios_core::Free);
+pub type Binder = (String, curios_core::Free);
 
 /// The binders in lexical scope, innermost last, beside the places each written name stands at among them: a name resolves to its innermost binder by one lookup, where a search would read every binder above it — a parameter list reads each annotation under all the parameters before it.
 #[derive(Default)]
@@ -74,7 +74,7 @@ impl LexicalScope {
 }
 
 /// The prefixes of one list of binders, lowered under in turn, each at least as long as the last: a telescope's annotations, each reading the binders before it. The scope grows by the binders a prefix adds over the last and stands again as it did before the first once the prefixes are dropped, where binding each prefix afresh would enter it whole at every annotation.
-pub(super) struct Prefixes<'l, 'p> {
+pub struct Prefixes<'l, 'p> {
     scope: &'l RefCell<LexicalScope>,
     binders: &'p [Binder],
     /// The scope's length before the first prefix.
@@ -85,7 +85,7 @@ pub(super) struct Prefixes<'l, 'p> {
 
 impl Prefixes<'_, '_> {
     /// `body` lowered with the first `count` binders in scope.
-    pub(super) fn under<T>(
+    pub fn under<T>(
         &mut self,
         count: usize,
         body: impl FnOnce() -> Result<T, Error>,
@@ -112,7 +112,7 @@ impl Drop for Prefixes<'_, '_> {
 }
 
 /// A region's ordered lexical and sequencing context. Keeping bindings beside bangs lets a nested expression contribute its entire continuation without losing the scope of its local names or inventing a new monadic region. Each frame closes over the frames after it; adjacent ordinary bindings are emitted as one flat Core block.
-pub(super) enum RegionFrame {
+pub enum RegionFrame {
     Bang {
         binder: curios_core::Free,
         action: curios_core::Term,
@@ -151,7 +151,7 @@ struct LoweredGroup {
     frames: Vec<RegionFrame>,
 }
 
-pub(super) struct Lowerer<'a, 'b> {
+pub struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
     /// The declaration this lowers, which a lint names its binders by: the one identity a later lowering of the declaration unchanged gives them too. `None` for an entry's final term.
     declaration: Option<curios_core::Global>,
@@ -175,13 +175,13 @@ struct Candidate {
 /// A `let`-like signature as the lowering holds it: what was written, and the binders of its parameters when it is the function-definition sugar `f(params) -> output = body`.
 ///
 /// The sugar's telescope becomes both a Π-type's binders and the body lambda's, and the leaves are minted once, here, so a parameter is one identity in both. A mention in the result type is then a use of the binder the body binds, with nothing to pair afterwards, and the Π's binder carries the written place the lambda's does, so a proof the elaborator writes in the type credits the same binder.
-pub(super) struct Signature<'s> {
+pub struct Signature<'s> {
     written: &'s LetSignature,
     leaves: Vec<Binder>,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
-    pub(super) fn new(context: &'a Context<'b>, declaration: Option<curios_core::Global>) -> Self {
+    pub fn new(context: &'a Context<'b>, declaration: Option<curios_core::Global>) -> Self {
         Self {
             context,
             declaration,
@@ -193,7 +193,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// `written` with its parameters minted, when it is the function-definition sugar: what [`Self::signature_type`] and [`Self::signature_value`] lower, in whichever order the site needs.
-    pub(super) fn signature<'s>(&self, written: &'s LetSignature) -> Signature<'s> {
+    pub fn signature<'s>(&self, written: &'s LetSignature) -> Signature<'s> {
         let leaves = match written {
             LetSignature::Func { params, .. } => {
                 self.mint_written(param_labels(&func_sugar_params(params)))
@@ -204,7 +204,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// The type a signature declares, under `declared` where the site spans it. The sugar's is the Π-type over its parameters: a plain name is the binder its lambda binds, while a compound pattern has no one name to give, so its slot is anonymous and its leaves are out of every domain's and the output's scope.
-    pub(super) fn signature_type(
+    pub fn signature_type(
         &self,
         signature: &Signature,
         declared: Option<&Span>,
@@ -240,7 +240,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// The value a signature binds: the sugar's is the lambda over its parameters, and a plain one is its body, lowered as `lower_value` lowers a value at the site.
-    pub(super) fn signature_value(
+    pub fn signature_value(
         &self,
         signature: &Signature,
         lower_value: impl FnOnce(&Term) -> Result<curios_core::Term, Error>,
@@ -283,7 +283,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Mint one binder identity per written name, in order. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.
     ///
     /// An unwritten (`_` or empty) name still gets an identity — it occupies a binder position — but no reference can reach it. A binder minted here is never linted: it is a declaration telescope's, or a Π-type's, which a reference in the declaration reads as part of its type.
-    pub(super) fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Binder> {
+    pub fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Binder> {
         names
             .into_iter()
             .map(|name| {
@@ -330,7 +330,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
     ///
     /// The scope is a stack, so a shadowing inner binder simply sits above the outer one, and [`Self::resolve_name`] reads the innermost binder of a name. A flat `let` block holds one mark around its loop instead, restoring it on either success or refusal.
-    pub(super) fn bound<T>(
+    pub fn bound<T>(
         &self,
         binders: &[Binder],
         body: impl FnOnce() -> Result<T, Error>,
@@ -350,7 +350,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// The type the `foreign` declaration `declared` has and the body it binds, both read off its row: the function of the row's operands, none included, whose call is the row's own and names the declaration. The type is core's reading of the row (`curios_core::wire_term`, `curios_core::foreign_produced`), the one both checkers type the call by, so no second reading of a row stands beside it.
     ///
     /// A row that does not return takes the type its description yields ahead of its operands, an implicit of the same list. No binder has a hint: a declaration writes no operand name, and the binder for what a diverging call yields is the compiler's own.
-    pub(super) fn foreign(
+    pub fn foreign(
         &self,
         function: &Arc<ForeignFunction>,
         declared: curios_core::Global,
@@ -404,11 +404,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. A value body is a region root; each `!` hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Type expressions go through [`Self::term`], where an annotation keeps its own expectation.
-    pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.region(term)
     }
 
-    pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
         // With room to recurse: every child a term holds is lowered through here, so a nesting is a nesting of these.
         recurse(|| self.term_within(term))
     }
@@ -428,13 +428,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Lower a type in an input position. The role is lexical, so every written `Type` inside a nested higher-kinded domain remains eligible for declaration generalization.
-    pub(super) fn input_type(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub fn input_type(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.context
             .with_universe_role(curios_core::UniverseRole::Generalizable, || self.term(term))
     }
 
     /// A dependent Π-type over `params`: each parameter type sees the *preceding* parameters' binders and the output sees them all, so they lower under a progressively-extended scope. The output is produced by the caller under those binders rather than lowered from a written term, so a declaration whose result the compiler fixes — a `test`'s `/std/Test` — closes an already-resolved core term under the written telescope instead of spelling a surface name it may not be able to import.
-    pub(super) fn func_type_under(
+    pub fn func_type_under(
         &self,
         params: &[FuncTypeParam],
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
@@ -461,7 +461,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// The prefixes of `binders`, each to be lowered under in turn ([`Prefixes`]).
-    pub(super) fn prefixes<'p>(&self, binders: &'p [Binder]) -> Prefixes<'_, 'p> {
+    pub fn prefixes<'p>(&self, binders: &'p [Binder]) -> Prefixes<'_, 'p> {
         Prefixes {
             scope: &self.scope,
             binders,
@@ -483,7 +483,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses, through [`reference()`].
-    pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Mention, Error> {
+    pub fn resolve_name(&self, name: &Name) -> Result<curios_core::Mention, Error> {
         if name.is_abs() || !name.is_single() {
             // A path that names nothing refuses the declaration it is written in and no other, as a bare name does below: it lowers to the same binder nothing binds, and what failed is filed under it.
             return match self.context.resolve_term_name(name) {
@@ -541,12 +541,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // # What bounds a literal
     //
     // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than a native reduction level, and guarded depth is flat in the length. No figure is quoted here; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape. A native scan intrinsic is refused (see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`): it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike.
-    pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
+    pub fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::str_literal(&self.context.syntax().string, bytes)
     }
 
     // A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.
-    pub(super) fn proof_literal(&self, literal: &ProofLiteral) -> Result<curios_core::Term, Error> {
+    pub fn proof_literal(&self, literal: &ProofLiteral) -> Result<curios_core::Term, Error> {
         match literal {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
             ProofLiteral::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
@@ -554,11 +554,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    pub(super) fn subterm(
-        &self,
-        term: &Subterm,
-        span: Option<&Span>,
-    ) -> Result<curios_core::Term, Error> {
+    pub fn subterm(&self, term: &Subterm, span: Option<&Span>) -> Result<curios_core::Term, Error> {
         Ok(match term {
             Subterm::Type => curios_core::Term::type_at(
                 self.context
@@ -722,7 +718,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/std/Monad/bind` — see `wrap`.
     ///
     /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so unstamped, a value body rooted at a whole-term form would reach elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
-    pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         let lowered = self
             .region_root(term)
             .map_err(|error| Self::located(error, term))?;
@@ -763,7 +759,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Closes a run of value bindings and its tail as one sequencing region. Nested blocks use the same collector, so the position of a statement cannot introduce a region.
-    pub(super) fn lower_let_region(
+    pub fn lower_let_region(
         &self,
         groups: &[LetGroup],
         tail: &Term,
@@ -912,7 +908,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Walks a non-boundary expression, elaborating to core and accumulating each `Bang` into `binds` (in evaluation order) replaced by a fresh variable. Function bodies and branch arms begin regions; ordinary `let` blocks contribute their lexical frames, and match scrutinees contribute their actions, to the enclosing context.
     ///
     /// Span stamping happens here rather than inside the walk for the same reason [`Self::term`] stamps at its own boundary: every spine arm *rebuilds* its node (`apply_marked`, `proj`, `infix`, …) instead of routing through `term`, so a node lowered in a value body would otherwise reach elaboration with no span and report its errors unlocated. `with_span` is innermost-wins, so the arms that do delegate — leaves through `term`, lambdas through `region` — keep the span they already carry.
-    pub(super) fn collect(
+    pub fn collect(
         &self,
         term: &Term,
         binds: &mut Vec<RegionFrame>,
@@ -1027,7 +1023,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// A nested block contributes the context its actions need to the enclosing region. Pure bindings after its last action stay inside the expression: in particular, a recursive proof passed as an argument must remain in that proof position.
-    pub(super) fn build_let(
+    pub fn build_let(
         &self,
         let_: &Let,
         binds: &mut Vec<RegionFrame>,
@@ -1048,7 +1044,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Each annotation sees the *preceding* parameters' binders, exactly as a dependent Π-type's domains do (the `Subterm::FuncType` arm), so a lambda may be written `(s, t, q : Eq()(s, t)) => …`. That is why the walk runs in declaration order under a progressively-extended scope: `Telescope::build` captures each earlier binder in every later domain, so the core side needs nothing further. A compound pattern binds no leaf name at the core binder — its leaves are projections off the synthetic binder — so a later annotation naming one of those leaves gets that pattern's field-`let` chain wrapped around the *domain* as well, mirroring what the body gets.
     ///
     /// The chains wrap body and domains alike in reverse, so each pattern's chain wraps *before* an earlier pattern's chain wraps that, giving declaration-order nesting.
-    pub(super) fn lower_func_params(
+    pub fn lower_func_params(
         &self,
         params: &[FuncParam],
         binders: &[Binder],
@@ -1128,7 +1124,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// One pattern-leaf binder: its written spelling and the identity it lowers to. `_` gets an identity nothing can name, so repeated wildcards never collide.
-    pub(super) fn pattern_binder(&self, name: &Label) -> Binder {
+    pub fn pattern_binder(&self, name: &Label) -> Binder {
         self.mint_written([(name.to_string(), name.span().cloned())])
             .remove(0)
     }
@@ -1158,7 +1154,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// A nominal head's resolved name, or the binder the head lowers to where it names no structure. Only a global declares one, so a head resolving to a local or to nothing names none: lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference. A head that resolved to nothing is filed already; one that is a local is filed here, as a name that is in scope and names no structure.
-    pub(super) fn resolve_nominal(
+    pub fn resolve_nominal(
         &self,
         name: &Name,
     ) -> Result<Result<curios_core::Global, curios_core::Free>, Error> {
@@ -1251,7 +1247,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Holds the scrutinee to the struct named by its pattern, using the same resolved check as the region's lexical frames.
-    pub(super) fn held_to_head(
+    pub fn held_to_head(
         &self,
         head: &Name,
         binder: &curios_core::Free,
@@ -1261,7 +1257,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Projects the leaves of a compound parameter pattern under its already-minted identities.
-    pub(super) fn lower_pattern_fields(
+    pub fn lower_pattern_fields(
         &self,
         fields: &[PatternField],
         scrutinee: &curios_core::Free,
@@ -1297,7 +1293,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Closes the ordered context without re-reading source names. Ordinary bindings are batched into a flat block; a bang closes its following frames into a continuation, keeping the written bang's span on the resulting transient.
-    pub(super) fn wrap(
+    pub fn wrap(
         &self,
         frames: Vec<RegionFrame>,
         mut body: curios_core::Term,
@@ -1397,7 +1393,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Lowers a list literal's entries. A spread-free literal lowers to a plain `List`, `[]` included. With spreads, elements join the literal through [`Self::flush_list_run`] and the whole becomes an n-ary `ListConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `ListConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
-    pub(super) fn lower_list_literal(
+    pub fn lower_list_literal(
         &self,
         span: Option<&Span>,
         entries: &[ListEntry],
@@ -1470,7 +1466,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BytesConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bytes_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
     /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined motive without unfolding anything.
-    pub(super) fn lower_bytes_literal(
+    pub fn lower_bytes_literal(
         segments: &[BytesSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
@@ -1531,7 +1527,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Lowers a literal written at `span`, where its term has one.
-    pub(super) fn literal(
+    pub fn literal(
         &self,
         span: Option<&Span>,
         literal: &Literal,
@@ -1610,7 +1606,7 @@ fn pattern_names(pattern: &Pattern) -> Vec<String> {
 }
 
 /// The term a resolved name lowers to: a declaration as it is written, whose instance elaboration chooses, or the binder it is.
-pub(super) fn reference(resolved: curios_core::Mention) -> curios_core::Term {
+pub fn reference(resolved: curios_core::Mention) -> curios_core::Term {
     match resolved {
         curios_core::Mention::Declaration(name) => curios_core::Term::written(name),
         curios_core::Mention::Local(local) => curios_core::Term::var(curios_core::Var::free(local)),

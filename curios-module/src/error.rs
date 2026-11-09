@@ -309,7 +309,7 @@ impl fmt::Display for Error {
     }
 }
 
-/// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`read_entrypoint`](crate::read_entrypoint); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
+/// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`open_entrypoint`](crate::open_entrypoint) and [`read_module`](crate::read_module); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
 #[derive(Debug)]
 pub enum LoadError {
     Read { path: PathBuf, error: io::Error },

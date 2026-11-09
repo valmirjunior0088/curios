@@ -12,7 +12,7 @@ fn no_items_simple_tail() {
 
 #[test]
 fn written_types_get_distinct_levels_and_lexical_roles() {
-    let (_, minted, _, _) = crate::into_core::into_core(
+    let (_, minted, _, _) = into_core(
         &"let id(@A : Type, x : A) -> A = x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
@@ -42,7 +42,7 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
 /// A written `Sort` is one quality however many times its text is lowered, in the signature and under the lambda the definition is, and each written `Sort` is a quality of its own, counted from zero for its declaration.
 #[test]
 fn each_written_sort_is_one_quality_of_its_declaration() {
-    let (_, minted, _, _) = crate::into_core::into_core(
+    let (_, minted, _, _) = into_core(
         &"let first(@A : Sort, x : A) -> A = x; let both(@A : Sort, @B : Sort, x : A, y : B) -> A = x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
@@ -79,7 +79,7 @@ fn a_sort_outside_a_signature_is_refused_with_where_it_stands() {
             "let outer(n : Type) -> Type = let inner(@A : Sort, a : A) -> A = a; n; Type",
         ),
     ] {
-        let refusal = crate::into_core::into_core(
+        let refusal = into_core(
             &source.parse::<Entrypoint>().unwrap(),
             &RootSource::none(),
             syntax(),
@@ -100,7 +100,7 @@ fn a_sort_outside_a_signature_is_refused_with_where_it_stands() {
 #[test]
 fn a_declaration_lowers_the_same_whatever_is_written_before_it() {
     let lowered = |source: &str| {
-        let (program, minted, _, _) = crate::into_core::into_core(
+        let (program, minted, _, _) = into_core(
             &source.parse::<Entrypoint>().unwrap(),
             &RootSource::none(),
             syntax(),

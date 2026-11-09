@@ -4,28 +4,43 @@
 //!
 //! A [`Mount`](curios_common::Mount) binds a logical prefix to a unit, looked up longest-match since the entry mounts the empty prefix, and a [`RootSource`] binds each of those prefixes to a base — qualifier `a/b/c` under the empty prefix reads `base/a/b/c.crs` — which is a directory or a tree already in memory, as `curios-js` supplies every body inline. The resolver contract is a qualifier in and a module out; why the two halves stay apart is `README.md`'s decision.
 //!
-//! `curios-surface`'s terms keep sugar as written, which its `README.md` decides, and lowering undoes it. Every lowering is [`into_core_unit`], over a [`UnitSource`] pairing a resolver with the entrypoint the one unit that has one carries; [`into_core`](into_core()), [`prepare_prelude`] and [`into_core_with_prelude`] are the three spellings its callers want, differing only in what they hand back. All four take an explicit [`SyntaxRegistry`](curios_common::SyntaxRegistry), whose slots this stage reads but never fills.
+//! `curios-surface`'s terms keep sugar as written, which its `README.md` decides, and lowering undoes it. Every lowering is [`into_core_unit`], over a [`UnitSource`] pairing a resolver with the entrypoint the one unit that has one carries; [`prepare_prelude`] and [`into_core_with_prelude`] are the two spellings its callers want, differing only in what they hand back. All three take an explicit [`SyntaxRegistry`](curios_common::SyntaxRegistry), whose slots this stage reads but never fills.
 //!
 //! Surface `Type` is nullary, as `documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md` decides. Lowering owns a lexical universe allocator and assigns exactly one `curios_core::UniverseMetaId` plus a role-and-origin seed to each written `Type`; it never remints that identity during elaboration. [`PreparedText`] archives the seed table, and the allocator starts at zero for every unit, since no term in scope carries a universe metavariable for a fresh one to collide with. Elaboration solves, generalizes, validates and erases the resulting levels.
 
 mod error;
-pub use error::*;
+pub use error::{Error, LoadError};
 
 mod archive;
-// A deliberate narrowing of the crate-root `pub use` convention: the module's items are archive plumbing with no consumer outside the crate.
-pub(crate) use archive::*;
+pub use archive::SortedEntries;
+use archive::*;
 
 mod lint;
-pub use lint::*;
+use lint::*;
+pub use lint::{
+    ArchivedLint, ArchivedLintKind, ArchivedLintedBinder, Lint, LintKind, LintedBinder,
+};
 
 mod root_source;
-pub use root_source::*;
+use root_source::*;
+pub use root_source::{ArchivedCompiled, Compiled, Overlay, RootSource, identity};
 
 mod into_core;
-pub use into_core::*;
+pub use into_core::{
+    AliasEdge, Aliases, ArchivedAliasEdge, ArchivedBaselineHalf, ArchivedBrokenItem,
+    ArchivedChildInfo, ArchivedConsulted, ArchivedDeclared, ArchivedEntry, ArchivedFamily,
+    ArchivedHalfEntry, ArchivedHead, ArchivedHeaded, ArchivedInterface, ArchivedLabelled,
+    ArchivedLookup, ArchivedLoweredDeclaration, ArchivedLoweredItem, ArchivedModuleInfo,
+    ArchivedNominal, ArchivedPreparedText, ArchivedPublicInterface, ArchivedScan, Audiences,
+    BaselineHalf, Bodies, BrokenItem, ChildInfo, Consulted, Declared, Entry, EntryNames, Family,
+    HalfEntry, Head, Headed, Heading, Interface, Labelled, Lookup, LookupReaders,
+    LoweredDeclaration, LoweredEntry, LoweredItem, Mention, ModuleInfo, Nominal, PreparedText,
+    PublicInterface, Reachability, Revision, Scan, Text, UnitSource, document_unit, heading,
+    into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude, prepare_prelude,
+};
 
 mod registry;
-pub use registry::*;
+pub use registry::SYNTAX;
 
 mod load;
-pub use load::*;
+pub use load::{open_entrypoint, overlay_entrypoint, read_module, supply_entrypoint};

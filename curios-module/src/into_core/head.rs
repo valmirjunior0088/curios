@@ -13,7 +13,7 @@ use {
 /// A name an item declares, and whether it is `pub`.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Labelled {
+pub struct Labelled {
     pub label: Label,
     pub vis_pub: bool,
 }
@@ -21,7 +21,7 @@ pub(crate) struct Labelled {
 /// One `induct` of a group: its name, whether the name and the representation are `pub`, and its constructors' names.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Family {
+pub struct Family {
     pub label: Label,
     pub vis_pub: bool,
     pub rep_pub: bool,
@@ -31,7 +31,7 @@ pub(crate) struct Family {
 /// One `struct` of a group: its name, and whether the name and the representation are `pub`.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Nominal {
+pub struct Nominal {
     pub label: Label,
     pub vis_pub: bool,
     pub rep_pub: bool,
@@ -40,7 +40,7 @@ pub(crate) struct Nominal {
 /// One `concept` of a group: its name, whether it is `pub`, and its methods' names. A superclass edge has none.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Interface {
+pub struct Interface {
     pub label: Label,
     pub vis_pub: bool,
     pub fields: Vec<Label>,
@@ -51,7 +51,7 @@ pub(crate) struct Interface {
 /// A `mod` written inline holds its items' heads, so the type reaches itself and its archived bounds are the ones a recursive type states.
 #[derive(Debug, Clone)]
 #[curios_archive::archived(recursive)]
-pub(crate) enum Head {
+pub enum Head {
     /// A `mod`: its name, whether it is `pub`, where the whole declaration is written, and its items' heads where its body is written inline. A file-backed module's are its file's.
     Mod {
         label: Label,
@@ -80,7 +80,7 @@ pub(crate) enum Head {
 /// One item's head, and where the item's own text lies in its file. `None` for an item that was built rather than written.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Headed {
+pub struct Headed {
     pub head: Head,
     pub own: Option<Span>,
 }
@@ -88,7 +88,7 @@ pub(crate) struct Headed {
 /// What one file of a unit declared: its items' heads, in the text they were read from. A later lowering that reads the same text takes these and does not parse the file.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct Scan {
+pub struct Scan {
     pub source: Arc<Source>,
     pub heads: Rc<Vec<Headed>>,
 }

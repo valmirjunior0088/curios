@@ -10,17 +10,17 @@ use {
 };
 
 /// One unit of match lowering: borrows the [`Lowerer`] doing the surrounding term lowering — for name resolution, scoping, and recursing back into [`Lowerer::term`] or [`Lowerer::region`] at each arm's body — and writes a match as the matrix it is written as ([`curios_core::Matrix`]). The patterns are compiled where the scrutinee's type is known, by elaboration; what is decided here is what the syntax alone says.
-pub(super) struct MatchCompiler<'l, 'a, 'b> {
+pub struct MatchCompiler<'l, 'a, 'b> {
     lowerer: &'l Lowerer<'a, 'b>,
 }
 
 impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
-    pub(super) fn new(lowerer: &'l Lowerer<'a, 'b>) -> Self {
+    pub fn new(lowerer: &'l Lowerer<'a, 'b>) -> Self {
         Self { lowerer }
     }
 
     /// Leaf shim for the plain (non-region) lowering path — matches [`Self::headed`]'s `leaf: fn(&Self, &Term)` shape. Also passed as a bare function pointer from [`Lowerer::subterm`], so it needs to be visible there too.
-    pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.lowerer.term(term)
     }
 
@@ -30,7 +30,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Desugars a `match` inside a region: the scrutinee's bangs are collected into `binds` (hoisted out — the scrutinee runs unconditionally), while each arm is desugared as its own region (branch-local effects). This mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect` on the head and `region` on arm bodies.
-    pub(super) fn match_region(
+    pub fn match_region(
         &self,
         match_: &Match,
         binds: &mut Vec<RegionFrame>,
@@ -40,7 +40,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Desugars a `choose` inside a region: the head arm's test mirrors the `subterm` path's right-fold, but only the *first* condition runs unconditionally, so only its bangs hoist into `binds`. Every deeper condition evaluates just when its predecessor is false, so each lowers as its own sub-region inside that false branch (see [`Self::ladder_region`]).
-    pub(super) fn choose_region(
+    pub fn choose_region(
         &self,
         choose: &Choose,
         binds: &mut Vec<RegionFrame>,
@@ -88,7 +88,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Lowers a `choose` bind arm `| pattern = value => body` — with `value` and `rest`, the rest of its ladder, already lowered — as the matrix of two rows over `value`: its own, and a `_` whose body is `rest`, which a value the pattern does not match takes. A refutable pattern only: a bare-binder pattern cannot fail (a plain `let`) and is rejected.
-    pub(super) fn bind_arm(
+    pub fn bind_arm(
         &self,
         pattern: &MatchPattern,
         value: curios_core::Term,
@@ -123,7 +123,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// Lowers a headed match — its scrutinee already lowered — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
     ///
     /// Two refusals are read off the arms as they are written. A final arm that binds a name after arms that dispatch is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]). And a written motive is only meaningful when the head itself dispatches on one carrier directly — every arm's *top-level* pattern being the same dispatchable shape, a final `_` apart — since that is the only case where a core `Match` node exists for the *original* scrutinee to attach the motive to: a tuple/struct-headed or plain-binder match never builds one, and the motive would be silently discarded ([`Error::MatrixMotiveRequiresCtorHead`]).
-    pub(super) fn headed(
+    pub fn headed(
         &self,
         head: curios_core::Term,
         motive: &Option<Term>,

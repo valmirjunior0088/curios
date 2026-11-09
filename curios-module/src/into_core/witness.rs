@@ -19,10 +19,10 @@ use {
 };
 
 /// A name's declaration as a key reads it: its kind, and its body where it is a `let`'s.
-pub(super) type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
+pub type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
 
 /// How `item` declares each of its names, as a key reads it: a `let` with its body, a group's members without theirs.
-pub(super) fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
+pub fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
     match item {
         FlatItem::Let(let_) => vec![(let_.name, (let_.kind.declared(), Some(&let_.body)))],
         // A member's body is closed over its group, which a key is not read through.
@@ -47,13 +47,13 @@ fn written(declared: Option<Keyed<'_>>) -> curios_core::Written {
 }
 
 /// How a unit's own declarations are read where a key names one: how each is written, and the marks of a concept's parameters, `None` for a name the unit does not declare, which is read as the units in scope declare it.
-pub(super) struct Own<'o> {
+pub struct Own<'o> {
     pub written: &'o dyn Fn(&curios_core::Global) -> Option<Keyed<'o>>,
     pub marks: &'o dyn Fn(&curios_core::Global) -> Option<Option<Vec<Plicity>>>,
 }
 
 /// Which witnesses a lowering names: every one, where the unit is lowered whole; over a baseline, those of `modules`, every other keeping the name it holds, and each kept one of them whose key `spelled` holds, read again where it is not there.
-pub(super) struct Naming<'n> {
+pub struct Naming<'n> {
     pub modules: &'n HashSet<Qualifier>,
     /// What the baseline spells each kept witness at, by the name it holds, for each whose key reads nothing that moved.
     pub spelled: &'n dyn Fn(&curios_core::Global) -> Option<(Qualifier, curios_core::WitnessKey)>,
@@ -62,7 +62,7 @@ pub(super) struct Naming<'n> {
 /// The name each witness of `items` takes, by the name it holds, where that is another, beside what each named witness's key read, by the name it takes. A witness whose signature spells a concept and a key is named by them and its place among the witnesses its module declares ahead of it at that concept and key — none in a coherent unit; one whose signature spells none keeps its name.
 ///
 /// `scope` holds every unit in scope, in dependency order.
-pub(super) fn witness_names(
+pub fn witness_names(
     items: &[FlatItem],
     own: &Own<'_>,
     scope: &[&PreparedText],
@@ -156,7 +156,7 @@ fn module_of(witness: &FlatLet) -> Qualifier {
 }
 
 /// The tables a unit's lowering keys by a declaration's name, each as it stands once every item is lowered.
-pub(super) struct Named<'a> {
+pub struct Named<'a> {
     pub items: &'a mut [FlatItem],
     pub minted: &'a mut curios_core::Minted,
     pub imports: &'a mut curios_core::Imports,
@@ -164,7 +164,7 @@ pub(super) struct Named<'a> {
 }
 
 /// Give each witness `names` holds the name it takes there ([`witness_names`]), in each table that holds the name it holds.
-pub(super) fn rename_witnesses(
+pub fn rename_witnesses(
     named: Named<'_>,
     names: &BTreeMap<curios_core::Global, curios_core::Global>,
 ) {

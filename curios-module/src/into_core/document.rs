@@ -31,7 +31,7 @@ use {
 };
 
 /// Where a name is written: the path of the file it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
-pub(super) type Written = (Option<PathBuf>, usize, usize);
+pub type Written = (Option<PathBuf>, usize, usize);
 
 /// The indent a broken signature continues at — the formatter's.
 const INDENT: usize = 4;
@@ -71,7 +71,7 @@ fn chip(prefix: &Qualifier) -> Option<String> {
     clippy::too_many_arguments,
     reason = "one over the line: each argument is a table the lowering built or a fact about its scope, and the one caller holds each under these names, so a struct would be a second spelling of the same eight"
 )]
-pub(super) fn document(
+pub fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &Scoped<'_, ModuleInfo>,
     public: &Scoped<'_, PublicInterface>,

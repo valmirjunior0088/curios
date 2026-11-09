@@ -22,19 +22,19 @@ use {
 };
 
 /// A lowered declaration as a later lowering finds it: by its anchor and the stamp of its text.
-pub(super) type Key = (curios_core::Anchor, u32);
+pub type Key = (curios_core::Anchor, u32);
 
 /// A declaration's record as a unit holds it: shared with every version that keeps it, beside the digest it is stored under.
-pub(crate) type HeldRecord = Rc<Filed<LoweredDeclaration>>;
+pub type HeldRecord = Rc<Filed<LoweredDeclaration>>;
 
 /// A file's scan as a unit holds it: shared with every version that keeps it, beside the digest it is stored under.
-pub(crate) type HeldScan = Rc<Filed<Scan>>;
+pub type HeldScan = Rc<Filed<Scan>>;
 
 /// Each file-backed module's scan, by the module.
-pub(crate) type Scans = BTreeMap<Qualifier, HeldScan>;
+pub type Scans = BTreeMap<Qualifier, HeldScan>;
 
 /// A unit's records, by the place of each declaration's first item among the unit's items ([`curios_core::Items::places`]): the declarations lie in the order their items do.
-pub(crate) type Records = Ordered<HeldRecord>;
+pub type Records = Ordered<HeldRecord>;
 
 /// Who read each binding, of a unit's lowered declarations and of the `use` declarations of its module bodies, read backwards: what a lowering over the unit finds the declarations and the bodies an edit could reach by, from the bindings it moved ([`Consulted`]).
 ///
@@ -42,7 +42,7 @@ pub(crate) type Records = Ordered<HeldRecord>;
 ///
 /// **Looked up, never walked**: its maps are persistent and keyed by hash.
 #[derive(Clone, Default)]
-pub(crate) struct LookupReaders {
+pub struct LookupReaders {
     by: Persistent<Consulted, Vec<Key>>,
     bodies: Persistent<Consulted, Vec<Qualifier>>,
     /// The witnesses whose key read each name.
@@ -196,14 +196,14 @@ impl LookupReaders {
 }
 
 /// What an edit to a unit's sources moved of what its lowering reads, found from the edit: the modules whose every declaration is asked, and the declarations of the others whose lookups read a binding that moved.
-pub(super) struct Moved {
+pub struct Moved {
     touched: HashSet<Qualifier>,
     reached: HashSet<Key>,
 }
 
 impl Moved {
     /// What moved, as resolving the unit's export view over the baseline's found it ([`Resolution`]): every module it seeded again is asked whole, its text touched or its scope read through a binding that moved, and of the others each declaration whose lookups read a binding that moved.
-    pub(super) fn found(baseline: &PreparedText, revised: Resolution) -> Self {
+    pub fn found(baseline: &PreparedText, revised: Resolution) -> Self {
         let readers = baseline.lookup_readers();
         let reached = revised
             .moved
@@ -222,7 +222,7 @@ impl Moved {
 /// A name a declaration's lowering resolved through its scope, as it was written: a path of several segments or an absolute one through the modules it may see, a bare one through the bindings in scope where it stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
-pub(crate) struct Lookup {
+pub struct Lookup {
     pub absolute: bool,
     pub path: Qualifier,
 }
@@ -232,7 +232,7 @@ pub(crate) struct Lookup {
 /// **Read where the resolution reads it.** A bare name and the head of a relative path are read off the lexical scope of the module body they are written in, a binding or a module; every further step, and a path's last segment, off the table and the interface of the module the step stands in; a glob off the whole of a module's interface. So a lookup answers as it did wherever every binding it read is the entry it was, and a declaration whose lookups all do lowers to what it lowered to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[curios_archive::archived]
-pub(crate) enum Consulted {
+pub enum Consulted {
     /// The label `at` names of the lexical scope of the module body its parent names: a binding, where `binding`, and a module otherwise.
     Scope { at: Qualifier, binding: bool },
     /// The label `at` names of the table and interface of the module its parent names: a binding, where `binding`, and a child module otherwise.
@@ -256,7 +256,7 @@ struct Unused {
 /// What one source declaration lowered to, beside the items themselves, which are its unit's: see the module documentation.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub(crate) struct LoweredDeclaration {
+pub struct LoweredDeclaration {
     /// The text it was lowered from, by its anchor and the text's stamp. `None` for a declaration no later lowering may keep: one that was built rather than written, one a name of which resolved to nothing, and one whose findings could not be placed in its text.
     key: Option<Key>,
     /// The text it was lowered from, whether or not a later lowering may keep it: what the unit's anchors hold of it. `None` for one built rather than written.
@@ -373,7 +373,7 @@ impl LoweredDeclaration {
 }
 
 /// `records`, in the order their items stand, each at the index its first item has among the unit's.
-pub(super) fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Records {
+pub fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Records {
     let mut ordered = Records::new();
     let mut first = 0;
     for record in records {
@@ -393,7 +393,7 @@ pub(super) fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Re
 /// **Each record and each scan an object of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_common::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
-pub(crate) struct BaselineHalf {
+pub struct BaselineHalf {
     /// What each source declaration lowered to beside its items, by the place of its first item ([`Records`]).
     #[archived_with(curios_archive::Skip)]
     pub(crate) declarations: Records,
@@ -413,7 +413,7 @@ pub(crate) struct BaselineHalf {
 
 /// An entry of a unit's baseline half as a store keeps it, an object of its own bytes: a declaration's record, or a file's scan.
 #[curios_archive::archived]
-pub(crate) enum HalfEntry {
+pub enum HalfEntry {
     Record(LoweredDeclaration),
     Scan(Qualifier, Scan),
 }
@@ -504,7 +504,7 @@ impl curios_common::Records for BaselineHalf {
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
-pub(super) struct Baseline<'a> {
+pub struct Baseline<'a> {
     unit: &'a PreparedText,
     by_text: &'a Persistent<Key, i64>,
     /// What the edit moved of what the lowering reads ([`Moved`]): `None` where a unit in scope moved, and every declaration is asked.
@@ -516,7 +516,7 @@ pub(super) struct Baseline<'a> {
 }
 
 impl<'a> Baseline<'a> {
-    pub(super) fn of(unit: &'a PreparedText) -> Self {
+    pub fn of(unit: &'a PreparedText) -> Self {
         Self {
             unit,
             by_text: unit.by_text(),
@@ -527,14 +527,14 @@ impl<'a> Baseline<'a> {
     }
 
     /// This baseline with `moved` as what the edit moved of what the lowering reads.
-    pub(super) fn moving(self, moved: Option<Moved>) -> Self {
+    pub fn moving(self, moved: Option<Moved>) -> Self {
         Self { moved, ..self }
     }
 
     /// The modules a walk over this baseline enters, every other being passed unentered with everything under it: each whose text the edit touched or whose scope a binding that moved is read in, each holding a declaration whose lookups read a binding that moved, each holding a kept witness whose key read a declaration of those, and each holding a declaration no later lowering may keep, with every module above each. `None` where a unit in scope moved, and every module is entered.
     ///
     /// **A module passed unentered is the baseline's whole**: its text stands, its scope stands, and nothing any of its declarations read moved, so lowering it again would write what the baseline holds.
-    pub(super) fn entered(&self) -> Option<HashSet<Qualifier>> {
+    pub fn entered(&self) -> Option<HashSet<Qualifier>> {
         let moved = self.moved.as_ref()?;
         let bodies = self.unit.bodies();
         let items = &self.unit.core().items;
@@ -596,7 +596,7 @@ impl<'a> Baseline<'a> {
     }
 
     /// The declaration of this unit the one `context` stands at was lowered as, by the place of its first item, kept without asking: its module's text is the one the baseline lowered, so its own is, and no binding its lookups read moved. `None` where either may have, and the declaration is asked ([`Baseline::standing`]).
-    pub(super) fn unasked(&self, context: &Context) -> Option<i64> {
+    pub fn unasked(&self, context: &Context) -> Option<i64> {
         let moved = self.moved.as_ref()?;
         if !self.stands(&context.prefix()) {
             return None;
@@ -611,14 +611,14 @@ impl<'a> Baseline<'a> {
     }
 
     /// Whether what the module body `module` is read off stands: its text the one the baseline lowered and nothing its `use` declarations read moved, so its scope is the baseline's.
-    pub(super) fn stands(&self, module: &Qualifier) -> bool {
+    pub fn stands(&self, module: &Qualifier) -> bool {
         self.moved
             .as_ref()
             .is_some_and(|moved| !moved.touched.contains(module))
     }
 
     /// Mark used each `use` site of the module body `context` is whose label a declaration kept unasked read: what asking its lookups again would have marked.
-    pub(super) fn mark_uses(&self, context: &Context) {
+    pub fn mark_uses(&self, context: &Context) {
         let unasked = self.unasked.borrow();
         if unasked.is_empty() {
             return;
@@ -643,7 +643,7 @@ impl<'a> Baseline<'a> {
     }
 
     /// Who read what of the unit lowered over this baseline, `uses` being what the `use` declarations of its bodies read: the baseline's, with the edges of every declaration `gone` takes away and every one `made` lowers replaced, of every body of `bodies`, each one whose `use` declarations were resolved again or that the unit no longer holds, and of every witness of `witnesses`, whose key `keyed` records what it read of.
-    pub(super) fn readers_of<'r>(
+    pub fn readers_of<'r>(
         &self,
         gone: impl IntoIterator<Item = &'r HeldRecord>,
         made: impl IntoIterator<Item = &'r HeldRecord>,
@@ -687,12 +687,12 @@ impl<'a> Baseline<'a> {
     }
 
     /// The unit lowered over.
-    pub(super) fn unit(&self) -> &'a PreparedText {
+    pub fn unit(&self) -> &'a PreparedText {
         self.unit
     }
 
     /// The declaration of this unit that the one `context` stands at was lowered as, by the place of its first item: the one lowered from the text that declaration is written in, where every name it resolved resolves here as it did.
-    pub(super) fn standing(&self, context: &Context) -> Option<i64> {
+    pub fn standing(&self, context: &Context) -> Option<i64> {
         let first = context.sited(|key, text| {
             let first = *self.by_text.get(&key)?;
 
@@ -723,7 +723,7 @@ impl<'a> Baseline<'a> {
     }
 
     /// Take the declaration whose first item stands at `first` into `lowered` as lowering it again would have written it, its items under the names this lowering gives them, their registry entries and rows, its import scopes and its lints: what the walk reads of the unit's declarations. What it minted, and its items and record as the unit holds them, are the baseline's, which the unit is a version of, and are left where they stand ([`Step`]).
-    pub(super) fn kept(&self, first: i64, context: &Context, lowered: &mut Lowering) {
+    pub fn kept(&self, first: i64, context: &Context, lowered: &mut Lowering) {
         let declaration = self.record(first);
         let from = lowered.items.len();
 

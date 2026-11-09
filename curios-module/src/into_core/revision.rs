@@ -19,7 +19,7 @@ use {
 
 /// One declaration as a walk over a baseline met it, in the order it met them: what its record and its first item are among the walk's, and where the baseline holds its first item, for a declaration the walk kept. Or a module the walk passed unentered, with everything under it, by where the baseline holds the first item of its last declaration (`passed`): what is put in after it stands after that.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Step {
+pub struct Step {
     pub kept: Option<i64>,
     pub passed: Option<i64>,
     pub record: usize,
@@ -28,14 +28,14 @@ pub(super) struct Step {
 
 impl Step {
     /// Whether the walk lowered this declaration now.
-    pub(super) fn made(&self) -> bool {
+    pub fn made(&self) -> bool {
         self.kept.is_none() && self.passed.is_none()
     }
 }
 
 /// What a unit lowered over a baseline holds otherwise than the baseline does.
 #[derive(Debug, Clone, Default)]
-pub(super) struct Revision {
+pub struct Revision {
     /// Every name declared by an item the unit does not hold as the baseline holds it: lowered now, or a kept witness named otherwise.
     pub anew: BTreeSet<curios_core::Global>,
     /// Every name the baseline declares and the unit does not.
@@ -43,7 +43,7 @@ pub(super) struct Revision {
 }
 
 /// A unit lowered over a baseline, as a version of the baseline's ([`revise`]).
-pub(super) struct Revised {
+pub struct Revised {
     pub items: curios_core::Items,
     pub records: Records,
     pub places: curios_core::Places,
@@ -56,7 +56,7 @@ pub(super) struct Revised {
 }
 
 /// The unit the walk over `baseline` made, `steps` being the declarations it met in order, `records` their records and `made` their items, each lowered or kept, under the names the walk gives them: the baseline's tables with what the walk changed.
-pub(super) fn revise(
+pub fn revise(
     baseline: &PreparedText,
     steps: &[Step],
     records: &[HeldRecord],
@@ -135,7 +135,7 @@ pub(super) fn revise(
 }
 
 /// One of a baseline's declarations a walk did not keep: its record, the place of its first item in the baseline, and the places and the names of its items there.
-pub(super) struct Gone<'b> {
+pub struct Gone<'b> {
     pub record: &'b HeldRecord,
     pub first: i64,
     pub places: Vec<usize>,
@@ -143,7 +143,7 @@ pub(super) struct Gone<'b> {
 }
 
 /// Each of `baseline`'s declarations the walk did not keep ([`Gone`]): of each body of `walked`, the ones none of `steps` keeps, and every one of each body of `removed`, which the unit no longer holds. Every other body's are kept, the walk having passed it.
-pub(super) fn gone<'b>(
+pub fn gone<'b>(
     baseline: &'b PreparedText,
     steps: &[Step],
     walked: impl IntoIterator<Item = Qualifier>,
@@ -185,7 +185,7 @@ pub(super) fn gone<'b>(
 }
 
 /// The texts of the declarations `gone` takes away that no record of `records` was lowered from or kept by: what the unit's anchors no longer hold.
-pub(super) fn texts_gone(gone: &[Gone<'_>], records: &[HeldRecord]) -> Vec<Key> {
+pub fn texts_gone(gone: &[Gone<'_>], records: &[HeldRecord]) -> Vec<Key> {
     let sited = records
         .iter()
         .filter_map(|record| record.text())
@@ -198,7 +198,7 @@ pub(super) fn texts_gone(gone: &[Gone<'_>], records: &[HeldRecord]) -> Vec<Key> 
 }
 
 /// The declarations of `records` a later lowering may keep, by the text each was lowered from: the place of each one's first item.
-pub(super) fn texts_of(records: &Records) -> Persistent<Key, i64> {
+pub fn texts_of(records: &Records) -> Persistent<Key, i64> {
     let mut texts = Persistent::new();
     for (first, record) in records.iter() {
         if let Some(key) = record.key() {
@@ -211,14 +211,14 @@ pub(super) fn texts_of(records: &Records) -> Persistent<Key, i64> {
 
 /// Each module body's declarations, by the place of each one's first item, with how many of them no later lowering may keep: what a lowering over the unit finds a body's declarations by, and whether it may pass the body unwalked. And the declarations that registered a `foreign` row, by the same place: what the unit's rows are found by in the order its declarations stand.
 #[derive(Clone, Default)]
-pub(crate) struct Bodies {
+pub struct Bodies {
     by: Sorted<Qualifier, Rc<Body>>,
     foreign: Ordered<()>,
 }
 
 /// One module body's declarations ([`Bodies`]).
 #[derive(Clone, Debug, Default)]
-pub(crate) struct Body {
+pub struct Body {
     pub firsts: BTreeSet<i64>,
     pub unkeyable: usize,
 }

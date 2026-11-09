@@ -12,7 +12,7 @@ use {
 };
 
 /// What the walk is asked over: the unit's items and the tables the roots and the report are read from.
-pub(super) struct Declarations<'a> {
+pub struct Declarations<'a> {
     pub items: &'a [FlatItem],
     /// What was taken of each item where it was lowered — see [`LoweredItem`].
     pub facts: &'a [&'a LoweredItem],
@@ -28,7 +28,7 @@ pub(super) struct Declarations<'a> {
 }
 
 /// Every `unused-declaration` lint of the unit, in item order; the caller sorts.
-pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> {
+pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> {
     curios_profile::profile!("unused_declarations");
     let Declarations {
         items,
@@ -142,7 +142,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
 }
 
 /// Whether a `_` prefix on its own name keeps the declaration at `name` unused on purpose, which makes it a root, so what it reads is used. A module's name keeps nothing.
-pub(super) fn kept(name: &Qualifier) -> bool {
+pub fn kept(name: &Qualifier) -> bool {
     name.last().starts_with('_')
 }
 

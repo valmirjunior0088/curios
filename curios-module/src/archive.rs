@@ -7,7 +7,7 @@ use {
     std::{borrow::Borrow, collections::HashMap, hash::Hash},
 };
 
-pub(crate) struct SortedEntries;
+pub struct SortedEntries;
 
 impl<K, V> Proxy<HashMap<K, V>> for SortedEntries
 where
@@ -32,4 +32,4 @@ where
     }
 }
 
-pub(crate) type OrderedMap = Via<SortedEntries>;
+pub type OrderedMap = Via<SortedEntries>;

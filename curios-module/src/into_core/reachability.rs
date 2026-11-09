@@ -14,7 +14,7 @@ use {
 
 /// What reaches each of a unit's items: see the module documentation.
 #[derive(Clone, Default)]
-pub(crate) struct Reachability {
+pub struct Reachability {
     /// The first name of every item no root reaches.
     dead: Persistent<curios_core::Global, ()>,
     /// The first names of the items whose edges reach each name.
@@ -29,7 +29,7 @@ pub(crate) struct Reachability {
 
 /// A unit's items as the lint reads them, by place: what each declares and what was taken of it where it was lowered.
 #[derive(Clone, Copy)]
-pub(super) struct Items<'u> {
+pub struct Items<'u> {
     pub items: &'u curios_core::Items,
     pub places: &'u curios_core::Places,
     pub records: &'u Records,
@@ -37,7 +37,7 @@ pub(super) struct Items<'u> {
 
 impl<'u> Items<'u> {
     /// What was taken of the item at `place` where it was lowered.
-    pub(super) fn facts(&self, place: usize) -> &'u LoweredItem {
+    pub fn facts(&self, place: usize) -> &'u LoweredItem {
         let (first, record) = self
             .records
             .before(position(place) + 1)
@@ -121,9 +121,7 @@ fn open_modules(public: &Table<PublicInterface>, own: &[Mount]) -> BTreeSet<Qual
 }
 
 /// The names `entry`'s terms name.
-pub(super) fn entry_names(
-    entry: Option<&curios_core::Entrypoint>,
-) -> BTreeSet<curios_core::Global> {
+pub fn entry_names(entry: Option<&curios_core::Entrypoint>) -> BTreeSet<curios_core::Global> {
     entry
         .into_iter()
         .flat_map(|entry| std::iter::once(&entry.body).chain(entry.type_.as_ref()))
