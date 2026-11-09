@@ -536,7 +536,7 @@ pub fn restored(unit: &Unit) -> Unit {
     let pack =
         Pack::read(curios_archive::Bytes::from(packed(&objects))).expect("a unit's objects pack");
 
-    Unit::restored(&stored.index, |digest| pack.get(digest)).expect("a stored unit restores")
+    Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a stored unit restores")
 }
 
 /// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each object by its digest, and where they are not, which parts.
@@ -545,7 +545,7 @@ pub fn restored(unit: &Unit) -> Unit {
 pub fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     complete_records(whole);
     complete_records(incremental);
-    let stored = |unit: &Unit| unit.stored().expect("a unit serializes").index;
+    let stored = |unit: &Unit| unit.stored().expect("a unit serializes").index().to_vec();
     if stored(whole) == stored(incremental) {
         return;
     }

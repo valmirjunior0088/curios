@@ -16,7 +16,7 @@ profile = [
     "curios-module/profile",
 ]
 
-# `Unit::with_certification`: a unit holding another record, how the soundness board's histories withhold one. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+# `test_support` and `Unit::with_certification`: a record of what was read filed whole, which `curios-pipeline`'s measurement of the prelude's image reads, and a unit holding another record, how the soundness board's histories withhold one. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 
 [dependencies]

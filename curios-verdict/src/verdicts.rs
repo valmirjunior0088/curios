@@ -623,7 +623,7 @@ impl Verdicts {
             path: store.verdict(&slot),
             slot,
             after,
-            contained: digest(&stored.index),
+            contained: digest(stored.index()),
             stored,
         })
     }
@@ -699,7 +699,7 @@ impl Cache for Verdicts {
         let filed = self
             .file_objects(&placement.slot, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
-            .and_then(|record| replace(&placement.path, &record, &placement.stored.index))
+            .and_then(|record| replace(&placement.path, &record, placement.stored.index()))
             .and_then(|()| self.collect(&placement.slot, &placement.stored));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.

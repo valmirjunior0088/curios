@@ -221,11 +221,11 @@ impl Produced {
             None => apart,
         };
 
-        Ok(Indexed {
-            index: halved(unit, &apart),
-            alone: items.into_iter().chain(forms).collect(),
+        Ok(Indexed::new(
+            halved(unit, &apart),
+            items.into_iter().chain(forms).collect(),
             kinds,
-        })
+        ))
     }
 
     /// Complete the record of each declaration's elaboration a filing has not completed ([`Candidating::complete`]): `items` being the objects the unit's lowered items are stored as, and `named` the digest of each elaborated item ([`Produced::elaborated`]).

@@ -55,5 +55,7 @@ curios-erase = { workspace = true, features = ["test-support"] }
 curios-anf = { workspace = true, features = ["test-support"] }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
+# A record of what was read filed whole, which the measurement of the prelude's image weighs. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-unit = { workspace = true, features = ["test-support"] }
 # The bytes a unit is stored as, which a suite compares across two compilations of it.
 curios-archive = { workspace = true }

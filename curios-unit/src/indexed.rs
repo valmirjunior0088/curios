@@ -15,14 +15,28 @@ use {
 ///
 /// **The index is a function of what was compiled**, since it names an object by what the object holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every object it names.
 pub struct Indexed {
-    pub index: Vec<u8>,
+    index: Vec<u8>,
     /// The objects stored alone: the lowered items and the erased forms.
-    pub(crate) alone: Vec<Object>,
+    alone: Vec<Object>,
     /// The entries stored as members of runs, a kind at a time.
-    pub(crate) kinds: Vec<Kind>,
+    kinds: Vec<Kind>,
 }
 
 impl Indexed {
+    /// A unit stored as `index`, which names `alone` and every entry of `kinds` and nothing else.
+    pub(crate) fn new(index: Vec<u8>, alone: Vec<Object>, kinds: Vec<Kind>) -> Self {
+        Self {
+            index,
+            alone,
+            kinds,
+        }
+    }
+
+    /// The index: what every compilation after the unit restores it from, and what a record digests.
+    pub fn index(&self) -> &[u8] {
+        &self.index
+    }
+
     /// The digest of every object the index names.
     pub fn digests(&self) -> impl Iterator<Item = &Digest> {
         self.alone
@@ -48,7 +62,7 @@ impl Indexed {
 }
 
 /// The entries of one kind a unit names, each by its digest, as a filing writes the ones the store lacks.
-pub(crate) enum Kind {
+pub enum Kind {
     /// Entries a unit restored and holds as the objects it found them as: written again, where the store lacks them, as a run of their kind ([`rerun`]).
     Stored(Vec<Object>),
     /// The elaborated items of `core`, at each place with its digest.
@@ -81,7 +95,7 @@ pub(crate) enum Kind {
 
 impl Kind {
     /// The digest of each entry, in the order the index names them.
-    pub(crate) fn digests(&self) -> Box<dyn Iterator<Item = &Digest> + '_> {
+    pub fn digests(&self) -> Box<dyn Iterator<Item = &Digest> + '_> {
         match self {
             Kind::Stored(objects) => Box::new(objects.iter().map(|object| &object.digest)),
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
@@ -95,7 +109,7 @@ impl Kind {
     }
 
     /// The entries `wanted` asks for, each once, as the members of one run of their kind.
-    fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+    pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
         let mut seen = BTreeSet::new();
         let mut fresh = |digest: &Digest| wanted(digest) && seen.insert(*digest);
         match self {
@@ -234,7 +248,7 @@ fn members(
 }
 
 /// What a certified unit stores of what judging its definitions read, `recorded`: its own part and the kind of its entries, what it was restored from where it was and its own otherwise, each definition's reads by the digest they are stored under ([`curios_core::ReadRecord::digest`]).
-pub(crate) fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -255,25 +269,8 @@ pub(crate) fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>,
     Ok((Cow::Owned(table), Kind::Reads(entries)))
 }
 
-/// The bytes a record of what was read is filed as where it is a constant of the executable, as the prelude's certification files it: its own part, the digest of each definition's reads and the one run holding them all, behind their lengths, so it is restored as a store's is and nothing of it is read until a walk asks.
-pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
-    let (table, kind) = reads_indexed(recorded)?;
-    let digests = crate::digests(kind.digests());
-    let run = kind
-        .objects(&|_| true)?
-        .first()
-        .map(|member| member.bytes.as_slice().to_vec())
-        .unwrap_or_default();
-
-    Ok(curios_archive::joined(&[
-        &table[..],
-        &digests[..],
-        &run[..],
-    ]))
-}
-
 /// What a unit stores of the lowering's baseline half `text` holds: its own part and the kind of its entries, what it was restored from where it was and its own otherwise.
-pub(crate) fn lowering_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn lowering_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = text.baseline_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -296,7 +293,7 @@ fn imports(text: &PreparedText) -> Result<&Imports, String> {
 }
 
 /// What a unit stores of the import scopes `text` holds: their own part and the kind of their entries, what they were restored from where they were and their own otherwise.
-pub(crate) fn imports_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn imports_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = text.imports_recorded().as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -320,7 +317,7 @@ fn anchors(text: &PreparedText) -> Result<&Anchors, String> {
 }
 
 /// What a unit stores of where the declarations `text` lowered lie: its own part and the kind of its entries, what it was restored from where it was and its own otherwise.
-pub(crate) fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = text.anchors_recorded().as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -339,7 +336,7 @@ pub(crate) fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>,
 }
 
 /// What a unit stores of the elaborator's traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each record by the digest it is stored under, as elaboration's ([`curios_elab::TraceRecord::digest`]).
-pub(crate) fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -361,9 +358,7 @@ pub(crate) fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8
 }
 
 /// What erasing a unit's items read, as a unit stores it: the table archived with the unit, and each item's record an entry of erasure's kind, by the digest it is stored under. A record restored is stored again as the object it was found as.
-pub(crate) fn asked_indexed(
-    recorded: &Recorded<AskedItems>,
-) -> Result<(Cow<'_, [u8]>, Kind), String> {
+pub fn asked_indexed(recorded: &Recorded<AskedItems>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),

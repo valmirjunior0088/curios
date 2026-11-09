@@ -232,7 +232,7 @@ impl Pack {
     }
 }
 
-/// The bytes of one pack holding `objects`, each once, read out of other packs: an object stored alone as it is, and the members of runs of each kind run again into one run of it ([`rerun`]), so a pack made of others keeps one table a kind. `Err` is a run that is not what its kind says, or holds no member an entry names.
+/// The bytes of one pack holding `objects`, each once, read out of other packs: an object stored alone as it is, and the members of runs of each kind run again into one run of it (`rerun`), so a pack made of others keeps one table a kind. `Err` is a run that is not what its kind says, or holds no member an entry names.
 pub fn repacked(objects: impl IntoIterator<Item = Object>) -> Result<Vec<u8>, String> {
     let mut alone = Vec::new();
     let mut members = BTreeMap::<u8, Vec<Object>>::new();

@@ -11,16 +11,26 @@
 //! Not one merged value. Each stage receives every predecessor *borrowed*, as its own opaque type rather than as anything this crate unpacks: `curios-module`'s resolution state and `curios-elab`'s erased unit keep their fields private, so [`Predecessors`] hands each stage a slice of the type that stage owns and lets it build its own view. Why borrowed and why opaque are `README.md`'s decisions.
 
 mod predecessors;
-pub use predecessors::*;
+pub use predecessors::Predecessors;
 
 mod unit;
-pub use unit::*;
+pub use unit::{ArchivedUnit, Unit};
 
 mod stored;
-pub use stored::*;
+use stored::*;
+pub use stored::{
+    ArchivedRecord, PREAMBLE, Record, apart_parts, digested, framed, halves, read_within,
+    record_length, segments,
+};
 
 mod pack;
-pub use pack::*;
+use pack::*;
+pub use pack::{Pack, pack_name, pack_names, packed, repacked};
 
 mod indexed;
-pub use indexed::*;
+pub use indexed::Indexed;
+use indexed::*;
+
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_unit::test_support::reads_filed` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

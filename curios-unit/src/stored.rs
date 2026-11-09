@@ -134,7 +134,7 @@ pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// The two halves [`halved`] laid out in `bytes`, or `None` for bytes that are no such layout. The one place [`halved`]'s layout is read.
+/// The two halves `halved` laid out in `bytes`, or `None` for bytes that are no such layout. The one place `halved`'s layout is read.
 pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     let (length, rest) = bytes.split_first_chunk::<8>()?;
     let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
@@ -148,7 +148,7 @@ pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 13]> {
 }
 
 /// `digests`, one after another: how an index names the objects a unit stores on its own, by what each holds and nothing of where it is kept.
-pub(crate) fn digests<'d>(digests: impl IntoIterator<Item = &'d Digest>) -> Vec<u8> {
+pub fn digests<'d>(digests: impl IntoIterator<Item = &'d Digest>) -> Vec<u8> {
     digests
         .into_iter()
         .flat_map(|digest| *digest.as_bytes())
@@ -156,7 +156,7 @@ pub(crate) fn digests<'d>(digests: impl IntoIterator<Item = &'d Digest>) -> Vec<
 }
 
 /// The objects `named` names ([`digests`]), each found by `find`. `Err` for bytes that are no list of digests, or one `find` holds no object for.
-pub(crate) fn found(
+pub fn found(
     named: &Bytes,
     find: &dyn Fn(&Digest) -> Option<Object>,
 ) -> Result<Vec<Object>, String> {

@@ -326,22 +326,22 @@ fn write_image(
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
     let objects = pack(&first);
     assert!(
-        first.index == second.index && objects == pack(&second),
+        first.index() == second.index() && objects == pack(&second),
         "/{root} archive is not deterministic"
     );
 
     // The compiler's own library is no package's, and no manifest claims a declaration of it: its rows are the host's to answer.
-    let record = Record::of(reads, after, Vec::new(), digest(&first.index));
+    let record = Record::of(reads, after, Vec::new(), digest(first.index()));
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 
     let path = directory.join(format!("{root}.rkyv"));
     println!(
         "/{root} archived to {} bytes, its objects to {}",
-        first.index.len(),
+        first.index().len(),
         objects.len()
     );
-    fs::write(&path, framed(&recorded, &first.index))
+    fs::write(&path, framed(&recorded, first.index()))
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
     let path = directory.join(format!("{root}.pack"));
     fs::write(&path, objects)

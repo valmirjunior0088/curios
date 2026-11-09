@@ -22,7 +22,7 @@ use {
         Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod,
         build_rename, display_names,
     },
-    curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
+    curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, test_support::*},
     std::{
         cell::RefCell,
         cmp::Reverse,
@@ -266,8 +266,8 @@ fn std_unit_reproduction() {
         println!("  items       {}", first.core().items.len());
         println!("  differing   {differing:?}");
         assert!(
-            first.stored().expect("a unit serializes").index
-                == second.stored().expect("a unit serializes").index
+            first.stored().expect("a unit serializes").index()
+                == second.stored().expect("a unit serializes").index()
                 && stored!(&first) == stored!(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
@@ -376,7 +376,7 @@ fn std_recompile_reproduction() {
             assert_stored_alike(&whole, &over);
             println!(
                 "  indexed     {:>10} bytes either way",
-                whole.stored().expect("a unit serializes").index.len()
+                whole.stored().expect("a unit serializes").index().len()
             );
         }
     });
@@ -587,7 +587,7 @@ fn std_image_division() {
         }
 
         let stored = std.stored().expect("the library's unit serializes");
-        let (unit, apart) = halves(&stored.index).expect("a unit's index");
+        let (unit, apart) = halves(stored.index()).expect("a unit's index");
         let [apart, _, _]: [curios_archive::Bytes; 3] =
             curios_archive::parted(&curios_archive::Bytes::from(apart.to_vec()))
                 .and_then(|parts| parts.try_into().ok())
@@ -665,7 +665,7 @@ fn std_image_division() {
             .collect::<BTreeMap<_, _>>()
             .values()
             .sum::<usize>();
-        row("the index", stored.index.len(), None);
+        row("the index", stored.index().len(), None);
         row("its objects", objects_held, None);
         row(
             "what a successor restores",
@@ -770,12 +770,12 @@ fn std_image_division() {
                 .objects(|_| true)
                 .expect("a unit's objects serialize")
         );
-        timed!("    digesting the index", digest(&stored.index));
+        timed!("    digesting the index", digest(stored.index()));
         let pack = Pack::read(curios_archive::Bytes::from(packed(&objects)))
             .expect("a unit's objects pack");
         timed!(
             "    restoring the unit",
-            Unit::restored(&stored.index, |digest| pack.get(digest)).expect("a unit restores")
+            Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a unit restores")
         );
     });
 }
