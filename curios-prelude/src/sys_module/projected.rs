@@ -14,9 +14,9 @@ use {
 };
 
 /// What the table says of one node: each parameter's plicity and type, in the parameters' order, and the result.
-pub(super) struct Projection {
-    pub(super) params: Vec<(Plicity, Term)>,
-    pub(super) output: Term,
+pub struct Projection {
+    pub params: Vec<(Plicity, Term)>,
+    pub output: Term,
 }
 
 /// The parameter a bare name operand is, by position.
@@ -85,7 +85,7 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
 }
 
 /// What core's table says of `node`, whose operands are the parameters `params` names. `None` where an operand is not a bare parameter, or where the table states a type this reads no rule for.
-pub(super) fn projection(
+pub fn projection(
     params: &[&str],
     node: &Intrinsic,
     syntax: &SyntaxRegistry,

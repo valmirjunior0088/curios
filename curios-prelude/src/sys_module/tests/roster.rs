@@ -3,7 +3,7 @@
 //! The subject is the description layer, not the roster's contents. What `/sys` declares is checked where it already is — the prelude build elaborates and certifies every one of these declarations, and `into_core/sys_tests.rs` pins the root's reachability and `/sys/Io`'s roster — so a second statement of the roster here would be a copy to keep in step rather than a check. What has no other check is the shape a `Decl` lowers to, how a node's row in `Intrinsic::signature` is read into a declaration's types, and how a parameter's plicity is read.
 
 use {
-    crate::sys_module::*,
+    super::*,
     curios_common::Plicity,
     curios_module::SYNTAX,
     curios_surface::{FuncSugarParam, LetSignature, Name, Pattern, Subterm},

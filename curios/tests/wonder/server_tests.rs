@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     curios_common::fill,
-    curios_prelude::std_module::*,
+    curios_prelude::test_support::*,
     curios_wonder::SETTLE,
     std::{
         fs,

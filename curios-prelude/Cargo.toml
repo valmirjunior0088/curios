@@ -22,7 +22,7 @@ profile = [
     "dep:curios-erase",
     "dep:curios-package",
 ]
-# `std_module`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+# `test_support`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = ["dep:curios-package"]
 
 # The program that is asked for the build's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `compile.rs` as a module.

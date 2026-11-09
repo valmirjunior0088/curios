@@ -10,7 +10,7 @@ use {
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_package::{Selection, Spelling, Target},
     curios_pipeline::compile_with_prelude,
-    curios_prelude::std_module::*,
+    curios_prelude::test_support::*,
     curios_surface::{Entrypoint, Formatted},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,

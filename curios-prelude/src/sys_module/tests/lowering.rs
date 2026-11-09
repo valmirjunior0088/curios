@@ -1,7 +1,7 @@
 //! The internal root `/sys` is reachable only through the standard library, a unit reaches only the prefixes it declared, and a user module may not collide with the prelude's.
 
 use {
-    crate::sys_module::{sys_module, test_support::*},
+    super::*,
     curios_module::SYNTAX,
     curios_surface::{Intrinsic, LetSignature, Subterm, Term, TopItem},
 };

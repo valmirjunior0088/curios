@@ -28,7 +28,7 @@ use {
 };
 
 /// Compile the prelude's two roots and file their images, with the documentation's records, in `out`. Answers each source file the lowering of `/std` read: what a build that ran this is run again for.
-pub(crate) fn compile(out: &Path) -> Vec<PathBuf> {
+pub fn compile(out: &Path) -> Vec<PathBuf> {
     let sys_modules = sys_source();
     let std_modules = std_source();
 

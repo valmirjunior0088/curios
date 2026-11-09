@@ -1,6 +1,6 @@
 //! The representation-exposure audit against the prelude's roots: what a signature may name of a root the prelude closes, and the standard library's own aliases through it.
 
-use crate::sys_module::test_support::*;
+use super::*;
 
 #[test]
 fn standard_library_direct_type_aliases_pass_exposure_audit() {

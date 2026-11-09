@@ -3,7 +3,7 @@
 use {curios_cert::Globals, curios_core::Item, curios_unit::Unit};
 
 /// The kernel's environment for a root walked after `predecessors`: each read where it stands with the record its unit carries, as the build mounts it.
-pub(super) fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
+pub fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
     let mut globals = Globals::default();
     for root in predecessors {
         globals.mount(root.core(), root.places(), root.certification());
@@ -13,6 +13,6 @@ pub(super) fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
 }
 
 /// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about.
-pub(super) fn items<'a>(prelude: &'a [&'a Unit]) -> impl Iterator<Item = &'a Item> {
+pub fn items<'a>(prelude: &'a [&'a Unit]) -> impl Iterator<Item = &'a Item> {
     prelude.iter().flat_map(|root| root.core().items.iter())
 }

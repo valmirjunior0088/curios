@@ -1,11 +1,13 @@
 //! What the sources this crate elaborates must be true of, beyond elaborating.
+//!
+//! `/sys` is projected by the build script's own module, compiled here by its path: the library reads it nowhere else.
+
+#[path = "sys_module.rs"]
+mod sys_module;
+use sys_module::*;
 
 use {
-    crate::{
-        std_module::{std_directory, std_source},
-        sys_module::{sys_module, sys_source},
-        *,
-    },
+    crate::{test_support::*, *},
     curios_abi::HostOp,
     curios_common::{Report, Source},
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term},
@@ -26,7 +28,7 @@ use {
 /// Every `.crs` file `/std` is authored in, in the one tree this crate holds, its modules of tests among them.
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk.
-pub(crate) fn authored() -> Vec<PathBuf> {
+pub fn authored() -> Vec<PathBuf> {
     let mut sources = Vec::new();
     let mut pending = Vec::from([std_directory()]);
 

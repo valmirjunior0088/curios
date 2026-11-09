@@ -14,14 +14,14 @@ use {
 /// One `/sys` binding, before it is a [`TopItem`].
 ///
 /// **Every field a declaration has is a field here**, so nothing is patched after the build: a gloss, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
-pub(super) struct Decl {
-    pub(super) doc: Option<Doc>,
-    pub(super) vis_pub: bool,
-    pub(super) label: String,
+pub struct Decl {
+    pub doc: Option<Doc>,
+    pub vis_pub: bool,
+    pub label: String,
     /// The telescope, in written order. **Empty is a constant, not a nullary function**: `LetSignature::Func` with no parameters lowers through `func_sugar_lambda` to a binderless lambda, which is a different declaration. The two forms are one rule, stated in [`Decl::signature`].
-    pub(super) params: Vec<(Plicity, String, Term)>,
-    pub(super) output: Term,
-    pub(super) body: Term,
+    pub params: Vec<(Plicity, String, Term)>,
+    pub output: Term,
+    pub body: Term,
 }
 
 impl Decl {
@@ -51,7 +51,7 @@ impl Decl {
         }
     }
 
-    pub(super) fn into_let(self) -> TopLet {
+    pub fn into_let(self) -> TopLet {
         let Self {
             doc,
             vis_pub,
@@ -70,17 +70,17 @@ impl Decl {
         }
     }
 
-    pub(super) fn into_item(self) -> TopItem {
+    pub fn into_item(self) -> TopItem {
         TopItem::Let(vec![self.into_let()])
     }
 }
 
 /// A run of declarations as the items they lower to.
-pub(super) fn items(decls: Vec<Decl>) -> Vec<TopItem> {
+pub fn items(decls: Vec<Decl>) -> Vec<TopItem> {
     decls.into_iter().map(Decl::into_item).collect()
 }
 
-pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
+pub fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
     Decl {
         doc: None,
         vis_pub: true,
@@ -94,7 +94,7 @@ pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
 /// `decl` under `lines`, the block a `---` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
 ///
 /// **A gloss says what the operation is, not what its carrier will not hold.** Where a value is narrowed is one rule stated once — `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
-pub(super) fn documented(lines: &[&str], decl: Decl) -> Decl {
+pub fn documented(lines: &[&str], decl: Decl) -> Decl {
     Decl {
         doc: Some(Doc {
             lines: lines.iter().map(|line| (*line).to_string()).collect(),
@@ -104,7 +104,7 @@ pub(super) fn documented(lines: &[&str], decl: Decl) -> Decl {
     }
 }
 
-pub(super) fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
+pub fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
         doc: None,
         span: None,
@@ -115,7 +115,7 @@ pub(super) fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 }
 
 // `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
-pub(super) fn pub_use(label: &str) -> TopItem {
+pub fn pub_use(label: &str) -> TopItem {
     TopItem::Use(TopUse {
         span: None,
         vis_pub: true,
@@ -124,7 +124,7 @@ pub(super) fn pub_use(label: &str) -> TopItem {
     })
 }
 
-pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> Decl {
+pub fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> Decl {
     pub_fn_marked(
         label,
         params
@@ -136,7 +136,7 @@ pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body:
     )
 }
 
-pub(super) fn pub_fn_marked(
+pub fn pub_fn_marked(
     label: &str,
     params: Vec<(Plicity, &str, Term)>,
     output: Term,
@@ -160,12 +160,7 @@ pub(super) fn pub_fn_marked(
 /// **An entry states what is its own, and nothing the table gives.** Its label, the names its parameters take and the node are the roster's, and which node a name builds is a decision: `gt` is `lt` mirrored, and `Nat/to_flt` rounds ties to even. Each parameter's type and plicity, every bound and the result are `Intrinsic::signature`'s, read by [`projection`], so an entry cannot state a type the table does not.
 ///
 /// A proof parameter is an operand like any other, which is what carries its bound into Core: the node holds the proof, and the kernel re-checks it against the same row this declaration's type was read from.
-pub(super) fn operation(
-    label: &str,
-    params: &[&str],
-    syntax: &SyntaxRegistry,
-    node: Intrinsic,
-) -> Decl {
+pub fn operation(label: &str, params: &[&str], syntax: &SyntaxRegistry, node: Intrinsic) -> Decl {
     let Some(Projection {
         params: telescope,
         output,
@@ -190,15 +185,11 @@ pub(super) fn operation(
     }
 }
 
-pub(super) fn unary(
-    label: &str,
-    syntax: &SyntaxRegistry,
-    ctor: impl FnOnce(Term) -> Intrinsic,
-) -> Decl {
+pub fn unary(label: &str, syntax: &SyntaxRegistry, ctor: impl FnOnce(Term) -> Intrinsic) -> Decl {
     operation(label, &["a"], syntax, ctor(name("a")))
 }
 
-pub(super) fn binary(
+pub fn binary(
     label: &str,
     syntax: &SyntaxRegistry,
     ctor: impl FnOnce(Term, Term) -> Intrinsic,
@@ -206,7 +197,7 @@ pub(super) fn binary(
     operation(label, &["a", "b"], syntax, ctor(name("a"), name("b")))
 }
 
-pub(super) fn ternary(
+pub fn ternary(
     label: &str,
     syntax: &SyntaxRegistry,
     ctor: impl FnOnce(Term, Term, Term) -> Intrinsic,
@@ -220,7 +211,7 @@ pub(super) fn ternary(
 }
 
 // An operation whose last operand is the proof of its bound.
-pub(super) fn guarded_unary(
+pub fn guarded_unary(
     label: &str,
     syntax: &SyntaxRegistry,
     ctor: fn(Term, Term) -> Intrinsic,
@@ -228,7 +219,7 @@ pub(super) fn guarded_unary(
     operation(label, &["a", "ok"], syntax, ctor(name("a"), name("ok")))
 }
 
-pub(super) fn guarded_binary(
+pub fn guarded_binary(
     label: &str,
     syntax: &SyntaxRegistry,
     ctor: fn(Term, Term, Term) -> Intrinsic,
@@ -246,17 +237,17 @@ pub(super) fn guarded_binary(
 /// **The label is the key.** `/sys` has two inputs emitting into one namespace — the carrier modules written from the intrinsic table, the subject modules built from `curios-abi`'s store — and `Handle` is in both. Keyed by label, a host row joins the module its subject names, whether that module already exists or is created by the row, so `Handle` is no special case, only the one label that has both.
 ///
 /// **A `/sys` module carries no gloss of its own, and that is a decision rather than an omission.** `/sys` does build a documentation record — `/std`'s pages adopt declarations out of it — so a module here *could* carry one. A carrier's prose goes on its type former instead, which is the name a reader reaches for, and stating that in the type is what keeps the two from drifting into both being written.
-pub(super) struct SysModule {
-    pub(super) label: String,
+pub struct SysModule {
+    label: String,
     /// What this label declares: a type former and the operations over it, then whatever host rows name it as their subject. A run of items rather than of declarations, because `Bool` also holds the two inductive propositions a decision reflects into; every re-export stays at the root.
-    pub(super) items: Vec<TopItem>,
+    items: Vec<TopItem>,
     /// Whether the root re-exports the type this module declares — every carrier a program reaches by name, and no module of operations alone.
     hoisted: bool,
 }
 
 impl SysModule {
     /// A carrier: a type former, its gloss, and the operations over it, hoisted to the root.
-    pub(super) fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<TopItem>) -> Self {
+    pub fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<TopItem>) -> Self {
         Self {
             label: label.to_string(),
             items: std::iter::once(documented(doc, former).into_item())
@@ -267,7 +258,7 @@ impl SysModule {
     }
 
     /// A module with no type former: the wire-code mirrors, the one process operation no row describes, and — with an empty run — a subject nothing declared, opened by the first host row that names it.
-    pub(super) fn ops(label: &str, decls: Vec<Decl>) -> Self {
+    pub fn ops(label: &str, decls: Vec<Decl>) -> Self {
         Self {
             label: label.to_string(),
             items: items(decls),
@@ -276,7 +267,7 @@ impl SysModule {
     }
 
     /// The `pub mod` this label declares, and the `pub use` hoisting its type to the root where one is hoisted.
-    pub(super) fn into_items(self) -> impl Iterator<Item = TopItem> {
+    pub fn into_items(self) -> impl Iterator<Item = TopItem> {
         let hoist = self.hoisted.then(|| pub_use(&self.label));
 
         [pub_mod(&self.label, self.items)].into_iter().chain(hoist)

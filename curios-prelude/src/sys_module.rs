@@ -24,6 +24,8 @@ use projected::*;
 #[cfg(test)]
 #[path = "sys_module/test_support.rs"]
 mod test_support;
+#[cfg(test)]
+use test_support::*;
 
 #[cfg(test)]
 #[path = "sys_module/tests.rs"]

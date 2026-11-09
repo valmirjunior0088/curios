@@ -50,7 +50,7 @@ fn prelude_fixture() -> RootSource {
 }
 
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate. A name the lowering filed as resolving to nothing is an error here as one it raised is.
-pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
+pub fn lower_with_prelude(src: &str) -> Result<(), String> {
     let modules = prelude_fixture();
     let prepared = curios_module::prepare_prelude(&modules, &[], &SYNTAX)
         .map_err(|error| error.to_string())?;
@@ -66,7 +66,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
 }
 
 /// [`lower_with_prelude`], with the entry seeing only `declared` of what the scope mounts — the lens for the undeclared-dependency refusal.
-pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String> {
+pub fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String> {
     let modules = prelude_fixture();
     let prepared = curios_module::prepare_prelude(&modules, &[], &SYNTAX)
         .map_err(|error| error.to_string())?;
@@ -89,7 +89,7 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
 }
 
 /// The fixture's prelude with `extra` closing its `/std`, lowered as the one unit it is: the lens for what the prelude's own lowering refuses.
-pub(super) fn prepare_with(extra: &str) -> Result<(), String> {
+pub fn prepare_with(extra: &str) -> Result<(), String> {
     curios_module::prepare_prelude(&prelude_with(extra), &[], &SYNTAX)
         .map(|_| ())
         .map_err(|error| error.to_string())

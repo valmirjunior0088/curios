@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    crate::std_module::std_directory,
+    crate::test_support::*,
     curios_core::{Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Visit},
     curios_module::SYNTAX,
     curios_surface::TopItem,
