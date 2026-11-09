@@ -11,25 +11,28 @@
 //! Where the elaborator cannot classify something it falls back conservatively and carries on, because a diagnostic is worth more to a programmer than a refusal. The kernel does the opposite: a shape it cannot classify is an [`Error`], not a default. A guessed universe level is the unsound direction — it claims a type is smaller than it is — and a checker that guesses is not a second opinion. The cost is that the kernel may reject a term the elaborator accepted; that is a disagreement to investigate, which is exactly what a second opinion is for.
 
 mod at;
-pub(crate) use at::*;
+pub use at::*;
 
 mod convert;
-pub use convert::*;
+pub use convert::{asked_classes, asked_within, convert, stated_payload, unread_payload};
 
 mod globals;
-pub use globals::*;
+use globals::*;
+pub use globals::{Globals, Held, Unvisited, held, induct_alike, struct_alike};
 
 mod infer;
-pub use infer::*;
+use infer::*;
+pub use infer::{check, enter_arm, enter_case, infer};
 
 mod memos;
 use memos::*;
 
 mod module;
-pub(crate) use module::*;
+pub use module::*;
 
 mod positions;
-pub(crate) use positions::*;
+pub use positions::Position;
+use positions::*;
 
 mod calls;
 use calls::*;
@@ -44,16 +47,19 @@ mod scope;
 use scope::*;
 
 mod sort;
-pub use sort::*;
+use sort::*;
+pub use sort::{
+    Sort, as_sort, carries_information, declared_into_prop, sort_of_intrinsic, synth_neutral,
+};
 
 mod spend;
 use spend::*;
 
 mod stating;
-pub(crate) use stating::*;
+pub use stating::*;
 
 mod whnf;
-pub(crate) use whnf::*;
+pub use whnf::*;
 
 #[cfg(any(test, feature = "test-support"))]
 mod test_support;

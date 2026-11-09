@@ -26,7 +26,7 @@ use {
 /// An `induct` declaration at one occurrence's universes and parameters.
 ///
 /// The arity and the sort are instantiated where the handle is made, for every rule reads them; a constructor is instantiated where one is read, so a family of many cases is read at an occurrence in its arity's size and not in all of its cases' ([`InductInstance`](curios_core::InductInstance)).
-pub(crate) struct InductAt {
+pub struct InductAt {
     name: Global,
     universes: Universes,
     params: Vec<Term>,
@@ -36,19 +36,19 @@ pub(crate) struct InductAt {
 
 impl InductAt {
     /// The family's declared result sort, at these universes.
-    pub(crate) fn result_sort(&self) -> &Term {
+    pub fn result_sort(&self) -> &Term {
         &self.result_sort
     }
 
     /// The declaration's own parameter telescope, at this occurrence's universes.
     ///
     /// What [`InductAt::indices`] and [`StructAt::fields`] hand back is the *terminal*, already opened at the parameters this handle holds. This is the telescope those parameters were declared at, which is what a rule needs to type the arguments the constructor above only counted.
-    pub(crate) fn parameters(&self) -> Telescope<Telescope<()>> {
+    pub fn parameters(&self) -> Telescope<Telescope<()>> {
         self.arity.clone()
     }
 
     /// `tag`'s signature at this occurrence's universes and parameters, instantiated alone, or `None` when the family has no such constructor.
-    pub(crate) fn signature(
+    pub fn signature(
         &self,
         kernel: &Kernel<'_>,
         tag: &Atom,
@@ -65,7 +65,7 @@ impl InductAt {
     }
 
     /// The family's constructor tags, in declaration order: what the arm rules and the elimination guard walk, having reached the family through this handle, which is what says the occurrence they belong to was checked.
-    pub(crate) fn tags(&self, kernel: &Kernel<'_>) -> Vec<Atom> {
+    pub fn tags(&self, kernel: &Kernel<'_>) -> Vec<Atom> {
         self.declaration(kernel)
             .constructor_order()
             .cloned()
@@ -73,7 +73,7 @@ impl InductAt {
     }
 
     /// The family's index telescope at this occurrence's parameters.
-    pub(crate) fn indices(&self) -> Telescope<()> {
+    pub fn indices(&self) -> Telescope<()> {
         self.arity.open(&self.params.iter().collect::<Vec<_>>())
     }
 
@@ -89,7 +89,7 @@ impl InductAt {
 /// A `struct` declaration at one occurrence's universes and parameters.
 ///
 /// The sort is instantiated where the handle is made, for every rule reads it; the parameters, the fields and one field's type are each instantiated where they are read, so a structure of many fields is read at an occurrence in what the rule asks of it ([`StructInstance`](curios_core::StructInstance)).
-pub(crate) struct StructAt {
+pub struct StructAt {
     name: Global,
     universes: Universes,
     params: Vec<Term>,
@@ -98,17 +98,17 @@ pub(crate) struct StructAt {
 
 impl StructAt {
     /// The family's declared result sort, at these universes.
-    pub(crate) fn result_sort(&self) -> &Term {
+    pub fn result_sort(&self) -> &Term {
         &self.result_sort
     }
 
     /// The declaration's own parameter telescope, at this occurrence's universes, the fields beneath it left out — [`InductAt::parameters`] for a structure.
-    pub(crate) fn parameters(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
+    pub fn parameters(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
         Ok(self.declaration(kernel).at(&self.universes).parameters()?)
     }
 
     /// The structure's field telescope at this occurrence's universes and parameters: what a rule reading every field takes.
-    pub(crate) fn fields(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
+    pub fn fields(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
         Ok(self
             .declaration(kernel)
             .at(&self.universes)
@@ -116,7 +116,7 @@ impl StructAt {
     }
 
     /// The type of the slot `field` reads off `value`, this structure, with that one field instantiated and opened ([`StructInstance::field_type`](curios_core::StructInstance::field_type)), or `None` for a slot past its fields.
-    pub(crate) fn field_type(
+    pub fn field_type(
         &self,
         kernel: &Kernel<'_>,
         value: &Term,
@@ -129,7 +129,7 @@ impl StructAt {
     }
 
     /// How many fields the structure declares.
-    pub(crate) fn field_count(&self, kernel: &Kernel<'_>) -> usize {
+    pub fn field_count(&self, kernel: &Kernel<'_>) -> usize {
         self.declaration(kernel).field_count()
     }
 

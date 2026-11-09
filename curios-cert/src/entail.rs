@@ -18,7 +18,7 @@ use {
 /// Whether `assumed` proves `lower ≤ upper` — the entailment a generic definition is checked under, where `assumed` is its own declared constraint set with the parameters held abstract.
 ///
 /// Sound and deliberately incomplete, in the kernel's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. Every step of the derivation is valid over the naturals — a left maximum is bounded exactly when each of its parts is, a hypothesis may be shifted up and never down, and a parameter carries its offset whatever it is assigned. What it cannot see is a consequence of the naturals being *totally* ordered: `u + 1 ≤ max(u, v)` forces `u + 1 ≤ v` in every instance, and no clause says so.
-pub(crate) fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
+pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
     curios_profile::profile!("entails");
     let mut model = LevelModel::of(upper);
 

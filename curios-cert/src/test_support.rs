@@ -3,7 +3,7 @@
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
 use {
-    crate::{Error, Globals, Kernel, Verdict, verdicts_from},
+    crate::{Error, Globals, Kernel, Verdict, recheck::verdicts_from},
     curios_common::{SyntaxRegistry, variants},
     curios_core::{Definitions, Zonked},
 };

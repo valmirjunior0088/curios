@@ -10,13 +10,13 @@ use {
 };
 
 #[derive(Default)]
-pub(super) struct ReadRecorder {
+pub struct ReadRecorder {
     reads: RefCell<Reads>,
 }
 
 impl ReadRecorder {
     /// `name`'s type, universe scheme or registry entry was read.
-    pub(super) fn signature(&self, name: &Global) {
+    pub fn signature(&self, name: &Global) {
         let mut reads = self.reads.borrow_mut();
         // Looked up before it is cloned: the same few names are read over and over within one judgment.
         if !reads.signatures.contains(name) {
@@ -25,7 +25,7 @@ impl ReadRecorder {
     }
 
     /// `name`'s body was asked for.
-    pub(super) fn body(&self, name: &Global) {
+    pub fn body(&self, name: &Global) {
         let mut reads = self.reads.borrow_mut();
         if !reads.bodies.contains(name) {
             reads.bodies.insert(*name);
@@ -33,7 +33,7 @@ impl ReadRecorder {
     }
 
     /// Everything read since the last take, leaving nothing behind for the next item.
-    pub(super) fn take(&self) -> Reads {
+    pub fn take(&self) -> Reads {
         self.reads.take()
     }
 }

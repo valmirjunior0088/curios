@@ -24,7 +24,7 @@ use {
 };
 
 #[derive(Default)]
-pub(super) struct Calls {
+pub struct Calls {
     /// What the arms enclosing the position being typed have established.
     context: SizeContext,
     /// The groups whose bodies are being checked, innermost last.
@@ -61,13 +61,13 @@ struct Frame {
 }
 
 /// Where the recorder stood when a scope bracket opened, for [`Calls::retract`] to return to.
-pub(super) struct CallsMark {
+pub struct CallsMark {
     context: usize,
     frames: usize,
 }
 
 /// What the recorder held when a walk that may be refused began, for [`Calls::take_back`] to return to.
-pub(super) struct Recorded {
+pub struct Recorded {
     /// For each frame open then, how many calls it held and how many parameters its caller had bound.
     frames: Vec<(usize, usize)>,
     partial: usize,
@@ -76,7 +76,7 @@ pub(super) struct Recorded {
 }
 
 impl Calls {
-    pub(super) fn mark(&self) -> CallsMark {
+    pub fn mark(&self) -> CallsMark {
         CallsMark {
             context: self.context.depth(),
             frames: self.frames.len(),
@@ -84,7 +84,7 @@ impl Calls {
     }
 
     /// Close whatever the bracket `mark` opened — the arm knowledge entered and the groups opened within it — answering whether any knowledge was closed.
-    pub(super) fn retract(&mut self, mark: CallsMark) -> bool {
+    pub fn retract(&mut self, mark: CallsMark) -> bool {
         let established = self.context.depth() > mark.context;
         self.context.exit_to(mark.context);
         self.frames.truncate(mark.frames);
@@ -93,7 +93,7 @@ impl Calls {
     }
 
     /// What the recorder holds now, for a walk that may be refused to be taken back to.
-    pub(super) fn recorded(&self) -> Recorded {
+    pub fn recorded(&self) -> Recorded {
         Recorded {
             frames: self
                 .frames
@@ -112,7 +112,7 @@ impl Calls {
     /// Take back what a refused walk recorded since `recorded`: the calls it added to the frames that stood open, the parameters it bound, the groups it counted as not descending, and the two flags, which a refusal leaves as the judgment it interrupted had set them. Asked once the walk's bracket has closed the frames the walk opened ([`Calls::retract`]), so the frames left are the ones `recorded` counted.
     ///
     /// A group's verdict, and the terms whose typing closed a group that does not descend, stay: each is filed under what it is about and is true of it however the walk around it ended.
-    pub(super) fn take_back(&mut self, recorded: Recorded) {
+    pub fn take_back(&mut self, recorded: Recorded) {
         for (frame, (calls, bound)) in self.frames.iter_mut().zip(recorded.frames) {
             frame.calls.truncate(calls);
             if let Some((_, parameters)) = &mut frame.caller {
@@ -125,32 +125,32 @@ impl Calls {
     }
 
     /// Whether the judgment about to run types a spine head, clearing the flag for the ones after it.
-    pub(super) fn take_spine_head(&mut self) -> bool {
+    pub fn take_spine_head(&mut self) -> bool {
         mem::take(&mut self.spine_head)
     }
 
     /// Mark the next judgment as typing the head of an application spine.
-    pub(super) fn set_spine_head(&mut self) {
+    pub fn set_spine_head(&mut self) {
         self.spine_head = true;
     }
 
     /// Whether the check about to run opens a member's leading lambdas, clearing the flag for the ones after it.
-    pub(super) fn take_parameters(&mut self) -> bool {
+    pub fn take_parameters(&mut self) -> bool {
         mem::take(&mut self.parameters)
     }
 
     /// Mark the next check as still opening a member's leading lambdas — the body of one that was.
-    pub(super) fn continue_parameters(&mut self) {
+    pub fn continue_parameters(&mut self) {
         self.parameters = true;
     }
 
     /// What the lambda the check about to run opens is handed, clearing it for the ones after it.
-    pub(super) fn take_assumed(&mut self) -> Option<Vec<CallMatrix>> {
+    pub fn take_assumed(&mut self) -> Option<Vec<CallMatrix>> {
         self.assumed.take()
     }
 
     /// The calls the typing of `member` about to run makes where its callee applies it, clearing them: `None` for any other local.
-    pub(super) fn take_handed(&mut self, member: &Free) -> Option<Vec<CallMatrix>> {
+    pub fn take_handed(&mut self, member: &Free) -> Option<Vec<CallMatrix>> {
         match &self.handed {
             Some((handed, _)) if handed == member => self.handed.take().map(|(_, handed)| handed),
             _ => None,
@@ -158,7 +158,7 @@ impl Calls {
     }
 
     /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a member local as the calls it makes.
-    pub(super) fn hand(&mut self, argument: &Term, handed: Vec<CallMatrix>) {
+    pub fn hand(&mut self, argument: &Term, handed: Vec<CallMatrix>) {
         match &**argument {
             Subterm::Func(_) => self.assumed = Some(handed),
             Subterm::Var(var) => self.handed = var.as_free().map(|member| (*member, handed)),
@@ -167,13 +167,13 @@ impl Calls {
     }
 
     /// Clear whatever the check of an argument left of what was handed to it, whether or not it took it.
-    pub(super) fn clear_handed(&mut self) {
+    pub fn clear_handed(&mut self) {
         self.assumed = None;
         self.handed = None;
     }
 
     /// What the local `name` unfolds to in reduction: where it names a member known to terminate of a group whose bodies are being checked, its selection out of the members known to terminate ([`Kernel::read_known`]), and nothing otherwise. A member withheld stands for nothing in its group's bodies.
-    pub(super) fn member_value(&self, name: &Free) -> Option<Term> {
+    pub fn member_value(&self, name: &Free) -> Option<Term> {
         self.frames.iter().rev().find_map(|frame| {
             let index = frame.members.iter().position(|member| member == name)?;
             frame.values.get(index).cloned().flatten()
@@ -181,7 +181,7 @@ impl Calls {
     }
 
     /// Whether `term` names a member of a group whose body is being checked. Such a term may hold a call, which is recorded where it is typed and graded against the member whose body states it, so no judgment about it is remembered: [`Kernel::infer_hit`](super::Kernel::infer_hit).
-    pub(super) fn names_member(&self, term: &Term) -> bool {
+    pub fn names_member(&self, term: &Term) -> bool {
         term.has_local_free()
             && self.frames.iter().any(|frame| {
                 frame.caller.is_some()
@@ -193,7 +193,7 @@ impl Calls {
     }
 
     /// A memo hit on a typing that closed a group that does not descend: count the group again, as the typing it stands for did.
-    pub(super) fn recall_partial(&mut self) {
+    pub fn recall_partial(&mut self) {
         self.partial += 1;
     }
 }

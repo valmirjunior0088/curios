@@ -131,7 +131,7 @@ enum Step {
 /// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
 ///
 /// **Reduction reads by value.** Typing walks a `let`'s tail over its binder, so the term it hands over may name one. Where reduction is entered from outside, the name gives way to what it stands for, once, and everything beneath — the tables' keys, the case equations' probes, the closed machine's gate — meets the spelling a substituted `let` leaves, which is the spelling each was argued over. A remembered reduct therefore never rests on a `let`'s binding, which an arm may replace and no key of these tables carries.
-pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+pub fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     if !kernel.reads_by_value() {
         let term = kernel.by_value(&term);
         return kernel.reading(|kernel| whnf(kernel, term));
@@ -404,7 +404,7 @@ fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceErr
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.
 ///
 /// Each operand is a [`Probe`], as the elaborator's twin reads it: an operand with no value at the type level is kept as written, so a probe that meets one misses rather than refusing the judgment it serves.
-pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Term, ReduceError> {
+pub fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Term, ReduceError> {
     if term.head_key().is_none() {
         return Ok(term.clone());
     }
@@ -485,7 +485,7 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
 /// The spelling a dispatched scrutinee resolves to: its application spine opened a layer at a time through heads that reduce to functions — the intrinsic a concept method elaborates to, `(?w).1(a, hi)` reaching `NatLe(a, hi)` — or `None` where nothing opened, where what it reached carries no head a probe can present, or where [`RESOLVED_SPELLING_LAYERS`] did not settle it.
 ///
 /// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: met only through its lazily settled reduct — after the decision procedure has already folded the probe, and as that fold's result — a dispatched guard's intrinsic shape would be answered from the procedure in an arm whose guard the procedure decides against, where the elaborator answers the dual spelling from the arm's equation.
-pub(crate) fn resolved_spelling(
+pub fn resolved_spelling(
     kernel: &mut Kernel,
     scrutinee: &Term,
 ) -> Result<Option<Term>, ReduceError> {
@@ -791,7 +791,7 @@ fn expose_rec_tail(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 /// Open a `rec` group's tail over its members. A pure binder operation: it mints nothing and unfolds no fixed point.
 ///
 /// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
-pub(crate) fn unfold_rec(rec: Rec) -> Term {
+pub fn unfold_rec(rec: Rec) -> Term {
     let members = rec.group.members();
     let refs = members.iter().collect::<Vec<_>>();
 
@@ -881,10 +881,7 @@ fn forced_group(kernel: &mut Kernel, folded: &Term) -> Result<Option<RecGroup>, 
 /// The one definitional unfolding [`force`] withholds: a folded recursive spelling — a `rec` value, a member selection, or a member application — stepped to the weak-head form of its body. `None` for every other shape.
 ///
 /// `force` keeps the folded spelling as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument; conversion consults this to see the two spellings as one.
-pub(crate) fn unfold_spelling(
-    kernel: &mut Kernel,
-    term: &Term,
-) -> Result<Option<Term>, ReduceError> {
+pub fn unfold_spelling(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, ReduceError> {
     if let Some((group, index)) = term.as_rec_proj() {
         let body = group.member_body(index);
 

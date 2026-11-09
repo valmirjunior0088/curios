@@ -1715,20 +1715,20 @@ fn ground(kernel: &mut Kernel, pairs: &mut Pairs, this: &Term, that: &Term) -> R
 }
 
 /// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck: a comparison of its own, inside no unfolding of the goal reduction was serving. A refusal that is no exhaustion of the budget — a term the kernel cannot compare — is that they are not known to: a question only widens what reduction sees.
-pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+pub fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<bool, ReduceError> {
     Ok(ground(kernel, &mut Pairs::default(), this, that)
         .probed_refusal()?
         .unwrap_or(false))
 }
 
 /// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Kernel::plainly`]).
-pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
+pub fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     kernel.plainly(|kernel| Classes::of(atoms, |this, that| grounded(kernel, this, that)))
 }
 
 /// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, as [`asked_classes`] classes a stuck fold's atoms.
-pub(crate) fn asked_within(kernel: &mut Kernel, within: &mut Within) -> Result<(), ReduceError> {
+pub fn asked_within(kernel: &mut Kernel, within: &mut Within) -> Result<(), ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     kernel.plainly(|kernel| within.class(|this, that| grounded(kernel, this, that)))
 }
@@ -1789,7 +1789,7 @@ fn stated(kernel: &mut Kernel, stated: &Term, tag: &Atom) -> Result<Option<State
 /// What a match with one arm and no catch-all ([`Cases::sole_arm`]) binds, its scrutinee not reduced: `None` where the rule does not speak and the scrutinee is reduced as for any other match, the payload where the match fires, and no payload where it stands.
 ///
 /// The instance the match states says the payload ([`stated`]), and the instance the constructor builds at it is put beside the stated one: where the two are one the proof can be no other value, and the match is its arm at that payload. The kernel's conversion decides it, as reduction asks of a missed equation; plain reduction asks nothing and holds the two to one spelling.
-pub(crate) fn unread_payload(
+pub fn unread_payload(
     kernel: &mut Kernel,
     instance: &Term,
     tag: &Atom,
@@ -1812,7 +1812,7 @@ pub(crate) fn unread_payload(
 }
 
 /// [`unread_payload`] for a closed match, which is asked nothing: a closed proof of a family with one constructor is that constructor, so the stated instance's indices are the constructor's. What the closed machine binds an arm's payload to ([`ClosedHost::stated_payload`](curios_core::ClosedHost::stated_payload)).
-pub(crate) fn stated_payload(
+pub fn stated_payload(
     kernel: &mut Kernel,
     instance: &Term,
     tag: &Atom,

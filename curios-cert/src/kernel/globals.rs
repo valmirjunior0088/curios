@@ -32,19 +32,19 @@ use {
 ///
 /// The universe context is not decoration: a definition unfolds only through an [`Instance`](curios_core::Instance) that states its scheme whole ([`UniverseContext::stated_by`]), which says at which levels.
 #[derive(Clone, Copy)]
-pub(crate) struct Held<'a> {
-    pub(crate) type_: &'a Term,
+pub struct Held<'a> {
+    pub type_: &'a Term,
     /// `None` for something with a type and no body: a definition marked a proof ([`curios_core::Definition::proof`]), whose body its own check read and no judgment after it does, and a fixture's opaque head.
-    pub(crate) value: Option<&'a Term>,
+    pub value: Option<&'a Term>,
     /// The sort its value inhabits, where it is a definition whose value is a type and states it ([`curios_core::Definition::value_sort`]): checked where the definition was checked.
-    pub(crate) value_sort: Option<&'a Term>,
-    pub(crate) universes: &'a UniverseContext,
+    pub value_sort: Option<&'a Term>,
+    pub universes: &'a UniverseContext,
 }
 
 /// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, and either with nothing to unfold to where it is marked a proof.
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
-pub(crate) fn held<'a>(
+pub fn held<'a>(
     definitions: &'a Definitions,
     places: &'a Places,
     name: &Global,
@@ -84,7 +84,7 @@ pub(crate) fn held<'a>(
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
 ///
 /// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and the variance vector it carries, which a later unit's elaborator compares two instances by and `accept` holds to the vector the walk computes: an entry carrying another is judged again, as a walk over every declaration would judge it. The polarity vector it carries is elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
-pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
+pub fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
     let InductDecl {
         universe_context,
         arity,
@@ -104,7 +104,7 @@ pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
 }
 
 /// [`induct_alike`] for two `struct` registry entries, whose fields its arity ends in.
-pub(crate) fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
+pub fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
     let StructDecl {
         universe_context,
         arity,
@@ -379,7 +379,7 @@ struct Definition {
 }
 
 /// The declarations of the module a walk judges over a baseline that the walk does not visit: each the baseline's, and reached by no edit, so a walk over every declaration would adopt each in its turn. See the module documentation.
-pub(crate) struct Unvisited<'s> {
+pub struct Unvisited<'s> {
     /// Where the module being judged holds each name.
     places: &'s Places,
     /// The names of the declarations the walk visits, judging each or asking its reads: it answers for each once settled.
@@ -390,7 +390,7 @@ pub(crate) struct Unvisited<'s> {
 
 impl<'s> Unvisited<'s> {
     /// The declarations of the module held at `places` but those declaring `visited`, none read yet.
-    pub(crate) fn new(places: &'s Places, visited: HashSet<Global>) -> Self {
+    pub fn new(places: &'s Places, visited: HashSet<Global>) -> Self {
         Self {
             places,
             visited,
@@ -415,7 +415,7 @@ impl<'s> Unvisited<'s> {
 
 /// What one walk reads a top-level name from: what it has written, then the declarations of a baseline it adopted or does not visit, then the units it was seeded with.
 #[derive(Default)]
-pub(super) struct Environment<'s> {
+pub struct Environment<'s> {
     /// The units in scope when the walk began, which it reads and never writes.
     scope: Option<&'s Globals<'s>>,
     /// The baseline whose verdicts the walk adopts, where it walks over one.
@@ -437,25 +437,25 @@ pub(super) struct Environment<'s> {
 
 impl<'s> Environment<'s> {
     /// Start from `scope` — the units an earlier walk established — rather than from nothing. Nothing of it is brought in.
-    pub(super) fn seed(&mut self, scope: &'s Globals<'s>) {
+    pub fn seed(&mut self, scope: &'s Globals<'s>) {
         self.scope = Some(scope);
     }
 
     /// Read the declarations this walk adopts, and the ones of `unvisited` once it has passed them, where `baseline` holds them.
-    pub(super) fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
+    pub fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
         self.baseline = Some(baseline);
         self.unvisited = Some(unvisited);
     }
 
     /// Stand at `place` in the module being judged: every declaration the walk does not visit stored before it is read from here on.
-    pub(super) fn at(&mut self, place: usize) {
+    pub fn at(&mut self, place: usize) {
         if let Some(unvisited) = &mut self.unvisited {
             unvisited.at = place;
         }
     }
 
     /// Whether `name` is a declaration the walk does not visit and has passed.
-    pub(super) fn passed(&self, name: &Global) -> bool {
+    pub fn passed(&self, name: &Global) -> bool {
         self.unvisited
             .as_ref()
             .is_some_and(|unvisited| unvisited.passed(name))
@@ -471,7 +471,7 @@ impl<'s> Environment<'s> {
     }
 
     /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed.
-    pub(super) fn passed_partial(&self, name: &Global) -> bool {
+    pub fn passed_partial(&self, name: &Global) -> bool {
         self.passed(name)
             && self.baseline.is_some_and(|baseline| {
                 baseline.certification.totality(name) == Some(Totality::Partial)
@@ -500,7 +500,7 @@ impl<'s> Environment<'s> {
     /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one and `value_sort` as the sort that body inhabits where it is a type the walk checked it at — or refuse it, where a definition already stands under `name`.
     ///
     /// **Written once.** A judgment reads what a name means when it is made, and a remembered reduct is a function of the definitions it unfolded. An entry written over a held name would leave both stating what the environment no longer holds, so the write is refused and neither is ever revisited: the memos, a sibling component, need to know nothing of this one.
-    pub(super) fn insert(
+    pub fn insert(
         &mut self,
         name: &Global,
         type_: &Term,
@@ -526,7 +526,7 @@ impl<'s> Environment<'s> {
     }
 
     /// Take `name` as the baseline holds it — or refuse it, where a definition already stands under `name` or the baseline holds none: written once, as [`Environment::insert`] writes.
-    pub(super) fn adopt(&mut self, name: &Global) -> Result<(), Error> {
+    pub fn adopt(&mut self, name: &Global) -> Result<(), Error> {
         let held = self
             .baseline
             .and_then(|baseline| held(baseline.definitions, baseline.places, name));
@@ -540,11 +540,7 @@ impl<'s> Environment<'s> {
     }
 
     /// Register an `induct` registry entry under `name`, or refuse it where one already stands there: written once, as [`Environment::insert`] writes a definition.
-    pub(super) fn declare_induct(
-        &mut self,
-        name: &Global,
-        declaration: &InductDecl,
-    ) -> Result<(), Error> {
+    pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) -> Result<(), Error> {
         if self.induct_decl(name).is_some() {
             return Err(Error::Redeclared(*name));
         }
@@ -555,18 +551,14 @@ impl<'s> Environment<'s> {
     }
 
     /// Hold `declaration` under `name` in place of the module's own entry registered there: the same family, stating what the walk read of its payloads where the declaration that declares it was judged (`kernel::stating`).
-    pub(super) fn restate_induct(&mut self, name: &Global, declaration: &InductDecl) {
+    pub fn restate_induct(&mut self, name: &Global, declaration: &InductDecl) {
         if let Some(held) = self.inducts.get_mut(name) {
             *held = declaration.clone();
         }
     }
 
     /// [`Environment::declare_induct`] for a `struct` registry entry.
-    pub(super) fn declare_struct(
-        &mut self,
-        name: &Global,
-        declaration: &StructDecl,
-    ) -> Result<(), Error> {
+    pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) -> Result<(), Error> {
         if self.struct_decl(name).is_some() {
             return Err(Error::Redeclared(*name));
         }
@@ -577,9 +569,7 @@ impl<'s> Environment<'s> {
     }
 
     /// The registry entries of the scope this walk was seeded with that no record files a polarity vector for and the walk has filed none for either.
-    pub(super) fn unvectored(
-        &self,
-    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+    pub fn unvectored(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
         let (mut inducts, mut structs) = self.scope.map(Globals::unvectored).unwrap_or_default();
         inducts.retain(|name, _| !self.vectors.contains_key(name));
         structs.retain(|name, _| !self.vectors.contains_key(name));
@@ -588,7 +578,7 @@ impl<'s> Environment<'s> {
     }
 
     /// The registry entries of the scope this walk was seeded with that no record files a variance vector for and the walk has filed none for either.
-    pub(super) fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+    pub fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
         let (mut inducts, mut structs) = self.scope.map(Globals::unvaried).unwrap_or_default();
         inducts.retain(|name, _| !self.variances.contains_key(name));
         structs.retain(|name, _| !self.variances.contains_key(name));
@@ -597,12 +587,12 @@ impl<'s> Environment<'s> {
     }
 
     /// File `vector` as the variance vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every comparison of two of the family's instances.
-    pub(super) fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
+    pub fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
         self.variances.insert(*name, vector);
     }
 
     /// How two instances of the family `name` compare in its `index`th universe parameter, by the vector this walk filed for it or the record of its unit files: [`Variance::Invariant`] where neither holds one, and past the end of one, which is the equality every level was compared at before a vector existed.
-    pub(super) fn variance(&self, name: &Global, index: usize) -> Variance {
+    pub fn variance(&self, name: &Global, index: usize) -> Variance {
         self.variances
             .get(name)
             .map(Vec::as_slice)
@@ -616,12 +606,12 @@ impl<'s> Environment<'s> {
     }
 
     /// File how the definition `name` applies its parameters: what the walk in progress concluded of it, or took, read from then on by every judgment that hands it a callback.
-    pub(super) fn file_applications(&mut self, name: &Global, applications: Applications) {
+    pub fn file_applications(&mut self, name: &Global, applications: Applications) {
         self.applications.insert(*name, applications);
     }
 
     /// How the definition `name` applies its parameters, by what this walk filed for it, the baseline's record where this walk has passed it, or the record of its unit in scope.
-    pub(super) fn applications(&self, name: &Global) -> Option<&Applications> {
+    pub fn applications(&self, name: &Global) -> Option<&Applications> {
         self.applications
             .get(name)
             .or_else(|| {
@@ -632,19 +622,19 @@ impl<'s> Environment<'s> {
     }
 
     /// File `vector` as the polarity vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every judgment that composes through the family.
-    pub(super) fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
+    pub fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
         self.vectors.insert(*name, vector);
     }
 
     /// How the family `name` uses its parameter at `index`, by the vector this walk filed for it or the record of its unit files: [`Polarity::Mixed`] where neither holds one, and past the end of one.
-    pub(super) fn polarity(&self, name: &Global, index: usize) -> Polarity {
+    pub fn polarity(&self, name: &Global, index: usize) -> Polarity {
         self.filed_polarities(name)
             .and_then(|vector| vector.get(index).copied())
             .unwrap_or(Polarity::Mixed)
     }
 
     /// Whether a walk judged the family `name` and filed its polarity vector: this walk, the baseline's where this walk has passed it, or the walk over the unit in scope that holds it. A family of the module stored after the one judged has none yet.
-    pub(super) fn judged(&self, name: &Global) -> bool {
+    pub fn judged(&self, name: &Global) -> bool {
         self.filed_polarities(name).is_some()
     }
 
@@ -666,7 +656,7 @@ impl<'s> Environment<'s> {
     }
 
     /// An `induct` registry entry, as data. See the module documentation on why a typing rule wants the checked handle instead.
-    pub(super) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+    pub fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.inducts
             .get(name)
             .or_else(|| {
@@ -677,7 +667,7 @@ impl<'s> Environment<'s> {
     }
 
     /// A `struct` registry entry, as data. See the module documentation on why a typing rule wants the checked handle instead.
-    pub(super) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+    pub fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.structs
             .get(name)
             .or_else(|| {
@@ -688,24 +678,24 @@ impl<'s> Environment<'s> {
     }
 
     /// The universe scheme `name` was generalized under, for a reference that states its instance.
-    pub(super) fn scheme_of(&self, name: &Global) -> Option<(&Term, &UniverseContext)> {
+    pub fn scheme_of(&self, name: &Global) -> Option<(&Term, &UniverseContext)> {
         self.held(name).map(|held| (held.type_, held.universes))
     }
 
     /// The value `name` was defined at, under its own universe parameters: what a definition is, read as an analysis of the scheme reads it rather than at an occurrence.
-    pub(super) fn body(&self, name: &Global) -> Option<&Term> {
+    pub fn body(&self, name: &Global) -> Option<&Term> {
         self.held(name).and_then(|held| held.value)
     }
 
     /// What `name` unfolds to at a stated universe instance, only where the instance states its scheme whole: see [`Held`].
-    pub(super) fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
+    pub fn value_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.held(name)
             .filter(|held| held.universes.stated_by(universes))
             .and_then(|held| held.value)
     }
 
     /// The sort `name`'s value inhabits at a stated universe instance, under its own parameters, where it states one: an instance short of the scheme is withheld, as its value is.
-    pub(super) fn value_sort_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
+    pub fn value_sort_at(&self, name: &Global, universes: &Universes) -> Option<&Term> {
         self.held(name)
             .filter(|held| held.universes.stated_by(universes))
             .and_then(|held| held.value_sort)

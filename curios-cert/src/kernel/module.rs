@@ -76,7 +76,7 @@ fn at_sorts<B: Bound>(value: &B, sorts: &[Quality]) -> B {
 /// A definition polymorphic in a level is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites. One that leaves a sort to its caller is checked at every assignment of them ([`at_every_sort`]), and stored as it is stated: an occurrence states the sorts with the levels, and reads the type and the body at them.
 ///
 /// What this check states of the definition, by its own reading, and defines it by ([`Stated`]): whether it is a proof a declaration wrote — one introduced as [`DefinitionKind::Authored`] whose type is a proposition at every assignment of its sorts, which the sort this check types the statement at answers with nothing run — and the sort its value inhabits, where its type is written as a sort, its value is no proof, and every assignment reaches one sort.
-pub(crate) fn check_definition(
+pub fn check_definition(
     kernel: &mut Kernel,
     name: &Global,
     kind: &DefinitionKind,
@@ -99,7 +99,7 @@ pub(crate) fn check_definition(
 }
 
 /// [`check_definition`]'s statements of a definition whose verdict a record vouches for, the walk judging nothing of it: the same questions, its body not checked, and the name defined by them.
-pub(crate) fn state_definition(
+pub fn state_definition(
     kernel: &mut Kernel,
     name: &Global,
     kind: &DefinitionKind,
@@ -154,9 +154,9 @@ fn stating(
 }
 
 /// What the kernel states of a definition it judged beside its terms ([`check_definition`]): whether it is a proof, whose body no judgment after its own check unfolds, and the sort its value inhabits, which a judgment asking a binder of the name its sort reads unreduced.
-pub(crate) struct Stated {
-    pub(crate) proof: bool,
-    pub(crate) value_sort: Option<Term>,
+pub struct Stated {
+    pub proof: bool,
+    pub value_sort: Option<Term>,
 }
 
 /// The one sort every assignment reached, where each reached one and they are one: a sort stated generically holds at every assignment only where none of them moves it.
@@ -170,7 +170,7 @@ fn agreed(reached: Vec<Option<Term>>) -> Option<Term> {
 }
 
 /// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does, with the sort its value inhabits where it states one. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
-pub(crate) fn define_as_stated(
+pub fn define_as_stated(
     kernel: &mut Kernel,
     name: &Global,
     type_: &Term,
@@ -192,7 +192,7 @@ pub(crate) fn define_as_stated(
 /// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
 ///
 /// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `kernel::calls`) — which is the verdict obligations (T) and (V) read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
-pub(crate) fn check_group<R>(
+pub fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
     tail: Option<&Scope<Many>>,
@@ -349,7 +349,7 @@ pub(crate) fn check_group<R>(
 /// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`.
 ///
 /// A group that leaves a sort to its caller is judged at every assignment of them ([`at_every_sort`]), the group read at each, and defined as it is stated. What the obligations read of it under its own spelling is what every assignment says: it descends where it does at each, and a member encloses a group that does not where it does at any.
-pub(crate) fn check_rec_group(
+pub fn check_rec_group(
     kernel: &mut Kernel,
     members: &[(Global, &DefinitionKind)],
     group: &RecGroup,
@@ -412,7 +412,7 @@ pub(crate) fn check_rec_group(
 }
 
 /// [`check_rec_group`]'s statements of a group whose verdict a record vouches for, the walk judging nothing of it: which members are proofs, at every assignment of its sorts, and each export defined by them.
-pub(crate) fn state_rec_group(
+pub fn state_rec_group(
     kernel: &mut Kernel,
     members: &[(Global, &DefinitionKind)],
     group: &RecGroup,
@@ -476,10 +476,7 @@ pub(crate) fn state_rec_group(
 /// Clause 3 is read off the entry as it is stated, so the family's own sort is one sort whatever a use states: the readers that take it literally read the entry, and an entry at an assignment would hand them a literal the entry does not hold. Every clause that types a telescope is judged at every assignment of the declaration's open sorts ([`at_every_sort`]), the entry read at each ([`InductDecl::at_qualities`](curios_core::InductDecl::at_qualities)).
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
-pub(crate) fn check_induct_decl(
-    kernel: &mut Kernel,
-    declaration: &InductDecl,
-) -> Result<(), Error> {
+pub fn check_induct_decl(kernel: &mut Kernel, declaration: &InductDecl) -> Result<(), Error> {
     curios_profile::profile!("check_induct_decl");
     check_case_counts(declaration)?;
     check_declared_sort(&declaration.result_sort)?;
@@ -590,7 +587,7 @@ fn walk_arity<B: Bound>(
 }
 
 /// Each case of `declaration` states at least its family's parameters and as many index targets as its family has indices, read off its telescope as it stands: every reader of a case opens its parameter prefix at the family's parameters, asserting the prefix is there, so a walk that judges anything of a module counts its cases first (`recheck`).
-pub(crate) fn check_case_counts(declaration: &InductDecl) -> Result<(), Error> {
+pub fn check_case_counts(declaration: &InductDecl) -> Result<(), Error> {
     let (parameters, indices) = (declaration.param_count(), declaration.index_count());
     for constructor in declaration.signatures() {
         let stated = constructor.telescope.len();
@@ -664,10 +661,7 @@ fn check_constructed(
 /// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
 ///
 /// One that leaves a sort to its caller is read as [`check_induct_decl`] reads an `induct`'s: its own sort off the entry as stated, and its telescopes at every assignment.
-pub(crate) fn check_struct_decl(
-    kernel: &mut Kernel,
-    declaration: &StructDecl,
-) -> Result<(), Error> {
+pub fn check_struct_decl(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), Error> {
     curios_profile::profile!("check_struct_decl");
     check_declared_sort(&declaration.result_sort)?;
 
@@ -788,11 +782,7 @@ fn check_signature<B: Bound + Clone>(
 }
 
 /// Check a term that closes the program — an entrypoint body, with no name to export — against the type its entry states: the program contract a compile supplies, or whatever the builder of the entry stated instead, so the kernel holds a program to its contract itself rather than taking elaboration's word that it was.
-pub(crate) fn check_entrypoint(
-    kernel: &mut Kernel,
-    body: &Term,
-    type_: &Term,
-) -> Result<(), Error> {
+pub fn check_entrypoint(kernel: &mut Kernel, body: &Term, type_: &Term) -> Result<(), Error> {
     curios_profile::profile!("check_entrypoint");
     kernel.restore_budget();
     kernel.assume_universes(&UniverseContext::empty());

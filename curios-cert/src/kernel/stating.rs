@@ -68,7 +68,7 @@ fn stated_term(kernel: &mut Kernel, term: &Term, binders: &[Term]) -> Term {
 }
 
 /// `entry` with every binder its body and its stated type bind stating whether it binds a proof.
-pub(crate) fn stated_entrypoint(kernel: &mut Kernel, entry: &Entrypoint) -> Entrypoint {
+pub fn stated_entrypoint(kernel: &mut Kernel, entry: &Entrypoint) -> Entrypoint {
     Entrypoint {
         body: stated_term(kernel, &entry.body, &[]),
         type_: entry
@@ -79,7 +79,7 @@ pub(crate) fn stated_entrypoint(kernel: &mut Kernel, entry: &Entrypoint) -> Entr
 }
 
 /// `declaration` with each binder of each constructor's signature stating whether it binds a proof, each asked at its type under the binders before it.
-pub(crate) fn stated_entry(kernel: &mut Kernel, declaration: &InductDecl) -> InductDecl {
+pub fn stated_entry(kernel: &mut Kernel, declaration: &InductDecl) -> InductDecl {
     let mut stated = declaration.clone();
     for constructor in stated.signatures_mut() {
         let proofs = kernel.scoped(|kernel| {
@@ -101,7 +101,7 @@ pub(crate) fn stated_entry(kernel: &mut Kernel, declaration: &InductDecl) -> Ind
 }
 
 /// `declaration` with no binder of any constructor's signature stating that it binds a proof: what a family stands as from where the walk registers it to where the declaration that declares it is judged and states its own.
-pub(crate) fn unstated_entry(declaration: &InductDecl) -> InductDecl {
+pub fn unstated_entry(declaration: &InductDecl) -> InductDecl {
     let mut unstated = declaration.clone();
     for constructor in unstated.signatures_mut() {
         let none = vec![false; constructor.telescope.proofs().len()];
@@ -125,7 +125,7 @@ fn stated_kind(kernel: &mut Kernel, kind: &DefinitionKind) -> DefinitionKind {
 }
 
 /// `item` with every binder its terms bind and every payload of the families it declares stating whether it binds a proof, as this kernel reads each. What it states of each name the item declares is the judgment's ([`check_definition`](super::check_definition), [`check_rec_group`](super::check_rec_group)).
-pub(crate) fn stated_marks(kernel: &mut Kernel, item: &Item) -> Item {
+pub fn stated_marks(kernel: &mut Kernel, item: &Item) -> Item {
     match item {
         Item::Let(definition) => Item::Let(Box::new(Definition {
             kind: stated_kind(kernel, &definition.kind),
@@ -163,7 +163,7 @@ pub(crate) fn stated_marks(kernel: &mut Kernel, item: &Item) -> Item {
 /// # Panics
 ///
 /// Where the two are not of one kind, which an item the baseline holds in another's place always is.
-pub(crate) fn carried_marks(item: &Item, stated: &Item) -> Item {
+pub fn carried_marks(item: &Item, stated: &Item) -> Item {
     match (item, stated) {
         (Item::Let(definition), Item::Let(from)) => Item::Let(Box::new(Definition {
             kind: carried_kind(&definition.kind, &from.kind),

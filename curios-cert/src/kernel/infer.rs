@@ -14,7 +14,7 @@
 
 mod eliminate;
 use eliminate::*;
-pub(crate) use eliminate::{enter_arm, enter_case};
+pub use eliminate::{enter_arm, enter_case};
 
 mod intrinsic;
 use intrinsic::*;
@@ -486,7 +486,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
 /// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate.
 ///
 /// **The type is typed as written**, never its reduct, which would accept what a redex dropped — an argument or an arm — with nothing having typed it. The elaborator settles an occurrence at its recorded floor, its argument's level (`curios-elab`'s `UniverseSolver::finalize`), so a written type lands in the sort its reduct does and the constructor size condition loses nothing to reading it.
-pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
+pub fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
     let inferred = infer(kernel, type_)?;
 
     as_sort(kernel, &inferred)

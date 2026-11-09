@@ -457,7 +457,7 @@ fn entries_among<'a, D>(
     registry.iter().filter(|(name, _)| among.contains(*name))
 }
 
-pub(crate) fn verdicts_from<'s>(
+pub fn verdicts_from<'s>(
     kernel: &mut Kernel<'s>,
     definitions: &Definitions,
     entry: Option<&Entrypoint>,
@@ -469,10 +469,10 @@ pub(crate) fn verdicts_from<'s>(
 
 /// A walk over a baseline: the earlier walk, handed over whole, where the module being judged holds each name, and what a store holds of verdicts filed before.
 #[derive(Clone, Copy)]
-pub(crate) struct Over<'s> {
-    pub(crate) baseline: Baseline<'s>,
-    pub(crate) places: &'s Places,
-    pub(crate) candidates: Option<&'s dyn Candidates>,
+pub struct Over<'s> {
+    pub baseline: Baseline<'s>,
+    pub places: &'s Places,
+    pub candidates: Option<&'s dyn Candidates>,
 }
 
 /// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a baseline, the walk visits the items whose terms or registry entries are not the baseline's and the declarations whose filed reads could reach them ([`Changed`]): it judges the first, and of the others adopts each verdict that stands in its turn and judges the rest ([`Baseline`]); every other declaration is the baseline's, read where the baseline holds it once the walk has passed it, as a walk that adopted it there would read it.

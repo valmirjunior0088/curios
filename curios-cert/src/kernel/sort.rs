@@ -57,7 +57,7 @@ impl Sort {
 /// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
 ///
 /// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, so neither may be taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family, classified as a well-formed type, would leave every consumer of the arity wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
-pub(super) fn arity_matches(counted: Counted, expected: usize, actual: usize) -> Result<(), Error> {
+pub fn arity_matches(counted: Counted, expected: usize, actual: usize) -> Result<(), Error> {
     match expected == actual {
         true => Ok(()),
         false => Err(Error::Arity {
@@ -71,7 +71,7 @@ pub(super) fn arity_matches(counted: Counted, expected: usize, actual: usize) ->
 /// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
 ///
 /// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
-pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Error> {
+pub fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Error> {
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
@@ -95,7 +95,7 @@ impl Sort {
     /// Classify `type_`, which the caller must already have checked to be a type — the **lookup** of the two roles the module header separates, never a judgment.
     ///
     /// Remembered per type, and probed here at every field and domain the rules below ask about: a type is a graph, and a record of two fields at one type asks one question where a walk per path asks two at every level. `Memos` states how long an answer stands.
-    pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
+    pub fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
         // A type is classified by value, as it is reduced: an answer is filed under the spelling a substituted `let` leaves, so one type asked about under two `let`-bound names is one question, and everything asked beneath is a part or a reduct of a type that was.
         if !kernel.reads_by_value() {
             let type_ = kernel.by_value(type_);
@@ -204,10 +204,7 @@ impl Sort {
 /// **Only a declaration's word is taken.** The head is a name this kernel defined, whose type it checked the body against before it stored either. A projection of a group the term itself carries states a claim nothing here has checked, and a member of the group being checked is a binder assumed at one: each is classified by what it reduces to, and [`Sort::classify`]'s neutral arm reads such a claim only where reduction leaves the spine standing.
 ///
 /// **Only `Prop` is answered.** A head declared into `Type` says its application is no proposition, no proposition standing where a `Type` is declared, and says nothing more: which type it is, and at which level, is its reduct's to say, so such a type is reduced as before.
-pub(crate) fn declared_into_prop(
-    kernel: &mut Kernel,
-    type_: &Term,
-) -> Result<Option<Level>, Error> {
+pub fn declared_into_prop(kernel: &mut Kernel, type_: &Term) -> Result<Option<Level>, Error> {
     if let Some(Sort::Prop(level)) = published(kernel, type_)? {
         return Ok(Some(level));
     }
@@ -310,7 +307,7 @@ fn func_sort(
 /// The sort of `type_`, having **typed** every part a type former binds rather than classifying it — [`Sort::of`]'s judgment counterpart, and the one `infer` calls.
 ///
 /// Only the two binder-carrying formers differ from the lookup, because only they hold a part nothing else establishes: a nominal occurrence's arguments are typed where the occurrence is inferred, an intrinsic former's element type by `infer_intrinsic`, and a neutral's sort is read off a binder that was assumed at a type its own telescope had checked. So every other shape delegates, on the *already reduced* term, and the memo makes that second reduction free.
-pub(super) fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
+pub fn infer_sort(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
     let reduced = kernel.reduce_forced(type_.clone())?;
 
     match &*reduced {
@@ -366,7 +363,7 @@ fn sort_of_binders<B: Bound>(
 /// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
 /// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy reading the element's sort as the former's would type a list of proofs at `Prop`.
-pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Sort, Error> {
+pub fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Sort, Error> {
     match intrinsic {
         Intrinsic::BoolType
         | Intrinsic::NatType
@@ -410,7 +407,7 @@ pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> R
 /// A stuck elimination is a neutral too, and its type is the result it states. `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
 ///
 /// This must never reach [`convert`](super::convert()): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
-pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
+pub fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
     // A projection's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
     if let Some((group, index)) = term.as_rec_proj() {
         return Ok(Some(group.member_type(index)));

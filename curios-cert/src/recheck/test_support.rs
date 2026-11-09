@@ -23,7 +23,7 @@ use {
 };
 
 /// A top-level definition, as `certify_definitions` binds one.
-pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
+pub fn authored(name: &Global, type_: Term, body: Term) -> Item {
     Item::Let(Box::new(Definition {
         name: *name,
         kind: DefinitionKind::Authored,
@@ -37,7 +37,7 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
 }
 
 /// [`authored`] marked a proof, as the module a walk hands back marks one its declaration wrote at a proposition: what a unit in scope holds.
-pub(super) fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
+pub fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
         Item::Let(definition) => Item::Let(Box::new(Definition {
             proof: true,
@@ -48,7 +48,7 @@ pub(super) fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
 }
 
 /// A nullary `Prop`-sorted family: `False` itself, and the shape `Box` takes but for its payload.
-pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
+pub fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
     InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
@@ -62,7 +62,7 @@ pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl 
 }
 
 /// `induct Eq(@A : Type 1) : (x : A, y : A) -> Prop 1 | refl(z : A) : (z, z) end` — the equality the forgeries transport along, a proposition at its carrier's level, where a value of the carrier fits.
-pub(super) fn equality_declaration() -> InductDecl {
+pub fn equality_declaration() -> InductDecl {
     let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
     let carrier = Free::local(20, Some("A"));
     let left = Free::local(21, Some("x"));
@@ -96,7 +96,7 @@ pub(super) fn equality_declaration() -> InductDecl {
 }
 
 /// The module the doc comment above describes: three declarations, and the five definitions that close on `False`.
-pub(super) fn forgery() -> Program {
+pub fn forgery() -> Program {
     let type_0 = Term::type_ground();
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -308,12 +308,12 @@ pub(super) fn forgery() -> Program {
 }
 
 /// The binder a one-member group's scopes close over.
-pub(super) fn member() -> Free {
+pub fn member() -> Free {
     Free::local(900, Some("f"))
 }
 
 /// `let bad : Absurd = <the member selection of `rec f : Absurd = body`>`, with `Absurd` an empty proposition.
-pub(super) fn selection_module(body: Term) -> Program {
+pub fn selection_module(body: Term) -> Program {
     let name = Global::Authored(Qualifier::from(["Absurd"]));
     let absurd = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let f = member();
@@ -345,7 +345,7 @@ pub(super) fn selection_module(body: Term) -> Program {
 }
 
 /// A one-constructor indexed family whose constructor aims at `target`, carried as a registry entry with no items lowering it.
-pub(super) fn indexed_definitions(target: Term) -> Definitions {
+pub fn indexed_definitions(target: Term) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Indexed"]));
 
     let declaration = InductDecl {
@@ -381,12 +381,12 @@ pub(super) fn indexed_definitions(target: Term) -> Definitions {
 }
 
 /// `let held : Type(level) = Nat`, as a whole module.
-pub(super) fn level_definition(level: &Level) -> Definitions {
+pub fn level_definition(level: &Level) -> Definitions {
     sorted_definition(Term::type_at(level.clone()))
 }
 
 /// `let held : sort = Nat`, as a whole module.
-pub(super) fn sorted_definition(sort: Term) -> Definitions {
+pub fn sorted_definition(sort: Term) -> Definitions {
     let definition = Definition {
         name: Global::Authored(Qualifier::from(["held"])),
         kind: DefinitionKind::Authored,
@@ -404,12 +404,12 @@ pub(super) fn sorted_definition(sort: Term) -> Definitions {
 }
 
 /// A constructor-free family declared at `Type(level)`, carried as a registry entry.
-pub(super) fn level_registry(level: &Level) -> Definitions {
+pub fn level_registry(level: &Level) -> Definitions {
     sorted_registry(Term::type_at(level.clone()))
 }
 
 /// A constructor-free family declared at `sort`, carried as a registry entry.
-pub(super) fn sorted_registry(sort: Term) -> Definitions {
+pub fn sorted_registry(sort: Term) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -433,7 +433,7 @@ pub(super) fn sorted_registry(sort: Term) -> Definitions {
 }
 
 /// A family indexed by the proposition `Held`, whose one constructor states its index either as a diverging `rec` or as `Held/qed()`.
-pub(super) fn indexed_by_proof(diverging: bool) -> Definitions {
+pub fn indexed_by_proof(diverging: bool) -> Definitions {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
     let witness = Free::local(900, Some("p"));
@@ -481,9 +481,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Definitions {
 }
 
 /// `Two`, at whatever sort its caller declares it, and `Held(t : Two)` with one constructor targeting `Two/a()`.
-pub(super) fn clashing_index_decls(
-    carrier_sort: Term,
-) -> (Global, Global, BTreeMap<Global, InductDecl>) {
+pub fn clashing_index_decls(carrier_sort: Term) -> (Global, Global, BTreeMap<Global, InductDecl>) {
     let two_name = Global::Authored(Qualifier::from(["Two"]));
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let two = Term::induct_type(two_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -537,7 +535,7 @@ pub(super) fn clashing_index_decls(
 }
 
 /// The module the doc comment above describes, with `Two`'s sort written as a redex that reduces to `Prop`.
-pub(super) fn aliased_sort_forgery() -> Program {
+pub fn aliased_sort_forgery() -> Program {
     let sort = Free::local(701, Some("s"));
     let aliased = Term::apply(
         Term::func([(sort, Term::type_ground())], Term::free_var(&sort)),
@@ -548,7 +546,7 @@ pub(super) fn aliased_sort_forgery() -> Program {
 }
 
 /// `held : Held(Two/b()) = Held/mk()` and `forged : False`, a match on it with no arm, `Two` declared at `carrier_sort`.
-pub(super) fn clashing_index_forgery(carrier_sort: Term) -> Program {
+pub fn clashing_index_forgery(carrier_sort: Term) -> Program {
     let (two_name, held_name, mut decls) = clashing_index_decls(carrier_sort);
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -653,7 +651,7 @@ fn pin_decls() -> (Global, Global, BTreeMap<Global, InductDecl>) {
 /// `Pin(1)` is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. What stands between it and a closed inhabitant of `False` is coverage: `no` has no arm and is not impossible at `Pin(1)`. Were its absence excused, `forged(Pin/no())` would reduce to the `yes` arm's body — a closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated, which is why the body below is the sort `Prop`, a term standing at `False` that nothing typed.
 ///
 /// Only a fixture reaches the kernel's own coverage loop with this shape: `curios-elab`'s matrix refuses the sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind.
-pub(super) fn sole_arm_forgery() -> Program {
+pub fn sole_arm_forgery() -> Program {
     let (pin_name, _, mut decls) = pin_decls();
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let false_type = || Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -714,7 +712,7 @@ pub(super) fn sole_arm_forgery() -> Program {
 }
 
 /// The control: the same two constructors with the scrutinee at `Pin(0)`, where `no` *is* impossible and `yes` is the arm reduction takes. The sole-arm elimination must stay accepted — it is the form a cast along a proof is written in, and it runs none of the proof — so a clause that refused every match with one arm would shut the forgery above with a brick.
-pub(super) fn sole_arm_control() -> Definitions {
+pub fn sole_arm_control() -> Definitions {
     let (pin_name, held_name, decls) = pin_decls();
     let held_type = || Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
 
@@ -759,7 +757,7 @@ pub(super) fn sole_arm_control() -> Definitions {
 }
 
 /// The control: the same two families with `Two` at `Type 0`, where `Two/b()` really does clash with `Two/a()`. Nothing inhabits `Held(Two/b())`, so the module proves nothing — what it pins is that the empty elimination stays legal.
-pub(super) fn relevant_index_control() -> Definitions {
+pub fn relevant_index_control() -> Definitions {
     let (two_name, held_name, mut decls) = clashing_index_decls(Term::type_ground());
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -810,7 +808,7 @@ pub(super) fn relevant_index_control() -> Definitions {
 /// `Two : Type 0` with constructors `a` and `b`, `Held(t : Two)` whose two constructors both target `Two/a()` under the given tags, and `vacuous : (x : Held(Two/b())) -> False` eliminating with no arms at all.
 ///
 /// Both constructors target `Two/a()`, so at `Two/b()` every one of them is genuinely impossible and the elimination is legal — *when the tags are distinct*. Giving them the same tag changes nothing about the targets and everything about which entry the coverage rule reads.
-pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Definitions {
+pub fn shadowed_constructor(tags: [&str; 2]) -> Definitions {
     let two_name = Global::Authored(Qualifier::from(["Two"]));
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -887,7 +885,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Definitions {
 }
 
 /// [`level_definition`] with a universe scheme of `parameter_count` parameters.
-pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Definitions {
+pub fn scheme_definition(level: &Level, parameter_count: usize) -> Definitions {
     let definition = Definition {
         name: Global::Authored(Qualifier::from(["held"])),
         kind: DefinitionKind::Authored,
@@ -909,7 +907,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Defini
 }
 
 /// [`level_registry`] with a universe scheme of `parameter_count` parameters.
-pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Definitions {
+pub fn scheme_registry(level: &Level, parameter_count: usize) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
     let declaration = InductDecl {
         universe_context: UniverseContext {
@@ -937,7 +935,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Definiti
 }
 
 /// `let held : Type.{u} = Levelled.{…}`, where `Levelled` declares two universe parameters and the occurrence supplies `width` of them.
-pub(super) fn instance_of_width(width: usize) -> Definitions {
+pub fn instance_of_width(width: usize) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
 
     // Two parameters and no constraints — the shape `check_instance`'s loop never inspects.
@@ -983,7 +981,7 @@ pub(super) fn instance_of_width(width: usize) -> Definitions {
 }
 
 /// `let held : Type.{expected} = Levelled.{instance}`, where `Levelled.{u}` is a family of no constructors whose sort is `Type.{u + 1}`: an occurrence whose sort is its scheme's read at the instance it states.
-pub(super) fn family_instance_at(instance: u32, expected: u32) -> Definitions {
+pub fn family_instance_at(instance: u32, expected: u32) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Levelled"]));
     let declaration = InductDecl {
         universe_context: UniverseContext {
@@ -1025,7 +1023,7 @@ pub(super) fn family_instance_at(instance: u32, expected: u32) -> Definitions {
 }
 
 /// `let lift.{u} : Type.{u + 1} = Type.{u}`, then `let held : Type.{expected} = lift.{instance}`: an occurrence whose type is its scheme's read at the instance it states.
-pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
+pub fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
     let lift = Global::Authored(Qualifier::from(["lift"]));
     let parameter = Level::param(UniverseParam(0));
     let scheme = Definition {
@@ -1057,7 +1055,7 @@ pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
 }
 
 /// A row no store issued, returning one `Nat`.
-pub(super) fn forged_row() -> ForeignFunction {
+pub fn forged_row() -> ForeignFunction {
     ForeignFunction {
         name: "/forged".to_string(),
         signature: WireSignature {
@@ -1068,11 +1066,7 @@ pub(super) fn forged_row() -> ForeignFunction {
 }
 
 /// `let held : claimed = <a call to row with no operands>`, with `False` declared alongside.
-pub(super) fn foreign_held_at(
-    row: ForeignFunction,
-    claimed: &Term,
-    false_name: &Global,
-) -> Definitions {
+pub fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: &Global) -> Definitions {
     let row = Arc::new(row);
 
     let definition = Definition {
@@ -1101,7 +1095,7 @@ pub(super) fn foreign_held_at(
 }
 
 /// `Foo`'s registry entry and its type-former definition, declaring `registry` and `definition` universe parameters respectively.
-pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Definitions {
+pub fn disagreeing_schemes(registry: usize, definition: usize) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Foo"]));
 
     let declaration = InductDecl {
@@ -1151,12 +1145,12 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Definit
 }
 
 /// `extract : (p : P(0)) -> Nat`, eliminating the two-constructor proposition `P` under a motive whose inner switch states `sort` while every arm of it is `Nat`.
-pub(super) fn lying_motive(sort: Term) -> Definitions {
+pub fn lying_motive(sort: Term) -> Definitions {
     extraction(sort, None, &["mk", "mk2"])
 }
 
 /// [`lying_motive`] under an honest motive, over a `P` of the constructors `tags` that takes one universe parameter its declaration never mentions, eliminated at `instance`.
-pub(super) fn levelled_extraction(instance: Level, tags: &[&str]) -> Definitions {
+pub fn levelled_extraction(instance: Level, tags: &[&str]) -> Definitions {
     extraction(Term::type_ground(), Some(instance), tags)
 }
 
@@ -1240,7 +1234,7 @@ fn extraction(sort: Term, instance: Option<Level>, tags: &[&str]) -> Definitions
 }
 
 /// The three motives [`fold_motive`] states over `match n`, for `n : Nat`.
-pub(super) enum FoldMotive {
+pub enum FoldMotive {
     /// `(_) => Eq()(n, 0)`: names the scrutinee instead of binding it, with the hypothesis returned whole in the successor arm.
     Captured,
     /// `(m) => Eq()(m, 0)`: binds the scrutinee, with the same successor arm — which is then the mismatch it should be.
@@ -1254,7 +1248,7 @@ pub(super) enum FoldMotive {
 /// Under the captured motive every arm's goal is `Eq()(n, 0)` as it is written, which the zero arm's `refl(0)` does not inhabit. The honest motive types the hypothesis at `Eq()(k, 0)`, and the successor arm is a mismatch against `Eq()(k + 1, 0)`.
 ///
 /// `Eq` is the two-index equality [`equality_declaration`] declares, at `Nat`, so the module needs nothing from the prelude; its `refl` payload is the value alone, the carrier being the family's parameter.
-pub(super) fn fold_motive(motive: FoldMotive) -> Definitions {
+pub fn fold_motive(motive: FoldMotive) -> Definitions {
     let equality = Global::Authored(Qualifier::from(["Eq"]));
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
@@ -1319,7 +1313,7 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Definitions {
 }
 
 /// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
-pub(super) fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
+pub fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     vec![
         ("no parameters", Vec::new(), vec![zero.clone()]),
@@ -1337,7 +1331,7 @@ pub(super) fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
 }
 
 /// `let held : Type = F(params)(indices)`, where `F(A : Type) : (i : Nat) -> Type` declares one of each.
-pub(super) fn occurrence_definitions(params: Vec<Term>, indices: Vec<Term>) -> Definitions {
+pub fn occurrence_definitions(params: Vec<Term>, indices: Vec<Term>) -> Definitions {
     let family = Global::Authored(Qualifier::from(["F"]));
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
@@ -1388,7 +1382,7 @@ pub(super) fn occurrence_definitions(params: Vec<Term>, indices: Vec<Term>) -> D
 }
 
 /// The four ways a one-parameter nominal value can disagree with its declaration.
-pub(super) fn nominal_value_cases() -> Vec<(&'static str, Definitions)> {
+pub fn nominal_value_cases() -> Vec<(&'static str, Definitions)> {
     let nat = Term::intrinsic(Intrinsic::NatType);
     vec![
         (
@@ -1411,7 +1405,7 @@ pub(super) fn nominal_value_cases() -> Vec<(&'static str, Definitions)> {
 }
 
 /// `struct S(A : Type) : Type { f : A }`, with a literal at `params`.
-pub(super) fn struct_value_definitions(params: Vec<Term>) -> Definitions {
+pub fn struct_value_definitions(params: Vec<Term>) -> Definitions {
     let name = Global::Authored(Qualifier::from(["S"]));
     let a = Free::local(980, Some("A"));
     let declaration = StructDecl {
@@ -1455,7 +1449,7 @@ pub(super) fn struct_value_definitions(params: Vec<Term>) -> Definitions {
 }
 
 /// `induct F(A : Type) : Type | mk(x : A) end`, with a constructor application at `params`.
-pub(super) fn variant_value_definitions(params: Vec<Term>) -> Definitions {
+pub fn variant_value_definitions(params: Vec<Term>) -> Definitions {
     let family = Global::Authored(Qualifier::from(["F"]));
     let a = Free::local(970, Some("A"));
     let declaration = InductDecl {
@@ -1508,7 +1502,7 @@ pub(super) fn variant_value_definitions(params: Vec<Term>) -> Definitions {
 }
 
 /// The two shapes: an application that under-saturates its lambda, and a neutral spine whose `plicities` are shorter than the arguments applied to it.
-pub(super) fn unsaturated_cases() -> Vec<(&'static str, Definitions)> {
+pub fn unsaturated_cases() -> Vec<(&'static str, Definitions)> {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -1547,7 +1541,7 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Definitions)> {
 }
 
 /// The three shapes: an arm over- and under-binding its payload, and a recursive application short of its member's binders.
-pub(super) fn unguarded_opener_cases() -> Vec<(&'static str, Definitions)> {
+pub fn unguarded_opener_cases() -> Vec<(&'static str, Definitions)> {
     vec![
         (
             "an arm binding two components of a one-component payload",
@@ -1568,7 +1562,7 @@ pub(super) fn unguarded_opener_cases() -> Vec<(&'static str, Definitions)> {
 }
 
 /// `held : match F/mk(3) : (s) => Type | mk(<binders>) => Nat end`, for `induct F : Type | mk(x : Nat) end`.
-pub(super) fn arm_definitions(binders: Vec<(Plicity, Free)>) -> Definitions {
+pub fn arm_definitions(binders: Vec<(Plicity, Free)>) -> Definitions {
     let family = Global::Authored(Qualifier::from(["F"]));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
@@ -1618,7 +1612,7 @@ pub(super) fn arm_definitions(binders: Vec<(Plicity, Free)>) -> Definitions {
 }
 
 /// `f : (a : Nat) -> Type = (a) => Nat` with `held : f(3)`, the argument written under `mark` where its parameter is plain.
-pub(super) fn marked_apply_definitions(mark: Plicity) -> Definitions {
+pub fn marked_apply_definitions(mark: Plicity) -> Definitions {
     let a = Free::local(993, Some("a"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
@@ -1645,12 +1639,12 @@ pub(super) fn marked_apply_definitions(mark: Plicity) -> Definitions {
 }
 
 /// The item [`eta_former_definitions`] declares.
-pub(super) fn eta_former_held() -> Global {
+pub fn eta_former_held() -> Global {
     Global::Authored(Qualifier::from(["held"]))
 }
 
 /// `struct S(A : Type) : Type { f : A }` with `held : T = S(Nat) { 3 }`, `T` an η-form of `S` applied over its whole list: `((@A : Type) => S(A))(@Nat)`, its binder under a mark `S`'s plain parameter does not take, or with `lying` `((A : Nat) => S(A))(3)`, its binder at a type `S`'s parameter does not take. Handed back beside the module is `T` as it was built.
-pub(super) fn eta_former_definitions(lying: bool) -> (Definitions, Term) {
+pub fn eta_former_definitions(lying: bool) -> (Definitions, Term) {
     let name = Global::Authored(Qualifier::from(["S"]));
     let a = Free::local(960, Some("A"));
     let bound = Free::local(962, Some("A"));
@@ -1703,7 +1697,7 @@ pub(super) fn eta_former_definitions(lying: bool) -> (Definitions, Term) {
 }
 
 /// The two items [`forwarding_definitions`] judges at a plain or a hidden type.
-pub(super) fn forwarding_items() -> [Global; 2] {
+pub fn forwarding_items() -> [Global; 2] {
     [
         Global::Authored(Qualifier::from(["by_name"])),
         Global::Authored(Qualifier::from(["by_literal"])),
@@ -1711,7 +1705,7 @@ pub(super) fn forwarding_items() -> [Global; 2] {
 }
 
 /// `g : (@n : Nat) -> Nat = (@n) => ((x : Nat) => x)(n)`, a function that forwards across a mark and whose η-contraction is `(x : Nat) => x`, with `by_name : T = g` and `by_literal : T` the same lambda, `T` the function type over `n : Nat` under `declared`.
-pub(super) fn forwarding_definitions(declared: Plicity) -> Definitions {
+pub fn forwarding_definitions(declared: Plicity) -> Definitions {
     let nat = Term::intrinsic(Intrinsic::NatType);
     let g = Global::Authored(Qualifier::from(["g"]));
     let lambda = |n: u64, x: u64| {
@@ -1746,7 +1740,7 @@ pub(super) fn forwarding_definitions(declared: Plicity) -> Definitions {
 }
 
 /// `rec f : (a : Nat, b : Nat) -> Type = (a, b) => Nat; f(3)` as a declared type.
-pub(super) fn rec_apply_definitions() -> Definitions {
+pub fn rec_apply_definitions() -> Definitions {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
     let f = Free::local(992, Some("f"));
@@ -1778,12 +1772,12 @@ pub(super) fn rec_apply_definitions() -> Definitions {
 }
 
 /// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
-pub(super) fn diverging_sink() -> Item {
+pub fn diverging_sink() -> Item {
     diverging("sink")
 }
 
 /// [`diverging_sink`] under another name.
-pub(super) fn diverging(name: &str) -> Item {
+pub fn diverging(name: &str) -> Item {
     let f = Free::local(920, Some("f"));
     let n = Free::local(921, Some("n"));
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -1807,7 +1801,7 @@ pub(super) fn diverging(name: &str) -> Item {
 /// `held : Nat = ((p : Vouched) => 0)(proof)` beside `sink` and `reaches`, where `proof` is `((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` when `reaching` and `Vouched/qed(())` otherwise.
 ///
 /// The one position this records that names `reaches` is the **argument**: `held`'s own type and body sit at `Nat`, which is neither a proposition nor a sort, and every other recorded position — the binders' types, the lambdas, `qed(())` — names nothing partial. So the obligation that refuses it is (V) at an argument position and no other, which is the fixture [the soundness board's *Rejected*](../../../documentation/design/soundness/the-soundness-board.md) says has to be constructed, the corpus passing (V) inert there.
-pub(super) fn proof_at_an_argument_definitions(reaching: bool) -> Definitions {
+pub fn proof_at_an_argument_definitions(reaching: bool) -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
     let vouched = || Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -1858,7 +1852,7 @@ pub(super) fn proof_at_an_argument_definitions(reaching: bool) -> Definitions {
 }
 
 /// `rec bad : Vouched = bad`: a group at a proposition with nothing to descend on, which `check_group`'s local gate must refuse — the verdict every budget has to reach the same way.
-pub(super) fn proof_typed_nullary_group() -> Definitions {
+pub fn proof_typed_nullary_group() -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
     let bad = Global::Authored(Qualifier::from(["bad"]));
     let member = fresh(Some("bad"));
@@ -1887,7 +1881,7 @@ pub(super) fn proof_typed_nullary_group() -> Definitions {
 }
 
 /// `held : Vouched = ((g : (Nat) -> Nat, h : (Nat) -> Nat) => Vouched/qed(()))(first, second)` beside the two diverging definitions it names, in that order.
-pub(super) fn two_sinks_definitions(first: &str, second: &str) -> Definitions {
+pub fn two_sinks_definitions(first: &str, second: &str) -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
     let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -1929,7 +1923,7 @@ pub(super) fn two_sinks_definitions(first: &str, second: &str) -> Definitions {
 }
 
 /// `reaches : (Nat) -> Nat = (m) => sink(m)`: partial by closure and nothing else.
-pub(super) fn reaching_definition() -> Item {
+pub fn reaching_definition() -> Item {
     let m = Free::local(923, Some("m"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let sink = Global::Authored(Qualifier::from(["sink"]));
@@ -1948,7 +1942,7 @@ pub(super) fn reaching_definition() -> Item {
 }
 
 /// `induct Vouched : Prop | qed(u : {})`, the proposition the proof below inhabits.
-pub(super) fn vouched_declaration() -> (Global, InductDecl) {
+pub fn vouched_declaration() -> (Global, InductDecl) {
     let name = Global::Authored(Qualifier::from(["Vouched"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::empty(),
@@ -1975,7 +1969,7 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
 }
 
 /// `held : Vouched = ((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` — a proof whose free variables name `reaches` and nothing else, so its verdict is exactly `reaches`'s.
-pub(super) fn held_proof() -> Item {
+pub fn held_proof() -> Item {
     let (vouched_name, _) = vouched_declaration();
     let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
     let g = Free::local(926, Some("g"));
@@ -2006,7 +2000,7 @@ pub(super) fn held_proof() -> Item {
 }
 
 /// The library a proof reaches partiality through — `sink` and `reaches` — with `held` and its proposition beside them when the fixture needs the proof.
-pub(super) fn reaching_library(with_proof: bool) -> Definitions {
+pub fn reaching_library(with_proof: bool) -> Definitions {
     let mut items = vec![diverging_sink(), reaching_definition()];
     let mut induct_decls = BTreeMap::new();
 
@@ -2027,7 +2021,7 @@ pub(super) fn reaching_library(with_proof: bool) -> Definitions {
 }
 
 /// The proof alone, as the compile path shapes it: the library lives in the environment, and only `held` is judged.
-pub(super) fn carried_proof_definitions() -> Definitions {
+pub fn carried_proof_definitions() -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
 
     declaring(
@@ -2041,7 +2035,7 @@ pub(super) fn carried_proof_definitions() -> Definitions {
 }
 
 /// What `proof_carrying_unit`'s proof carries at `Io({})`.
-pub(super) enum Carried {
+pub enum Carried {
     /// `exit(@{}, 0)`: a host row that diverges.
     Exit,
     /// `Io/pure(())`: nothing that fails to terminate.
@@ -2051,7 +2045,7 @@ pub(super) enum Carried {
 }
 
 /// `induct Held : Prop | qed(u : Io({}))`, with `bad : Held` built from what `carried` names.
-pub(super) fn proof_carrying_unit(carried: Carried) -> Definitions {
+pub fn proof_carrying_unit(carried: Carried) -> Definitions {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
 
@@ -2127,7 +2121,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Definitions {
 }
 
 /// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's payload under its honest mark or a lying one.
-pub(super) fn plicity_definitions(honest: bool, payload_count: usize) -> Definitions {
+pub fn plicity_definitions(honest: bool, payload_count: usize) -> Definitions {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
 
@@ -2182,12 +2176,7 @@ pub(super) fn plicity_definitions(honest: bool, payload_count: usize) -> Definit
 }
 
 /// `Held : (n : Nat) -> Type 0 | yes() : (0)`, the family whose two instances the forged equation coerces between.
-pub(super) fn indexed_family(
-    index: Free,
-    nat_type: Term,
-    zero: Term,
-    result_sort: Term,
-) -> InductDecl {
+pub fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) -> InductDecl {
     InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::build([(index, nat_type)], ())),
@@ -2205,7 +2194,7 @@ pub(super) fn indexed_family(
 }
 
 /// The module the doc comment below describes: four declarations, and the four definitions that close on `False`.
-pub(super) fn index_forgery() -> Definitions {
+pub fn index_forgery() -> Definitions {
     let type_0 = Term::type_ground();
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
@@ -2323,7 +2312,7 @@ pub(super) fn index_forgery() -> Definitions {
 }
 
 /// A stuck `match` on `scrutinee` whose motive claims `Prop` while both arms inhabit `Nat` — the one shape in Core that states its own sort instead of having one derived.
-pub(super) fn lying_type(scrutinee: &Free) -> Term {
+pub fn lying_type(scrutinee: &Free) -> Term {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     Term::bool_match(
@@ -2336,7 +2325,7 @@ pub(super) fn lying_type(scrutinee: &Free) -> Term {
 }
 
 /// One module per position at which a term stands as a *type*, each carrying [`lying_motive`] at that position and nothing else wrong.
-pub(super) fn lying_type_positions() -> Vec<(&'static str, Definitions)> {
+pub fn lying_type_positions() -> Vec<(&'static str, Definitions)> {
     let boolean = Term::intrinsic(Intrinsic::BoolType);
     let unit_type = Term::tuple_type_unit();
     let unit = Term::tuple(Vec::<Term>::new());
@@ -2422,7 +2411,7 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Definitions)> {
 }
 
 /// `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => .. | true => .. end }` — a structure whose field type is a stuck `match` claiming, through its motive, to be a proposition.
-pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> StructDecl {
+pub fn computed_field_wrapper(false_case: Term, true_case: Term) -> StructDecl {
     let scrutinee = Free::local(60, Some("b"));
     let field = Term::bool_match(
         Term::free_var(&scrutinee),
@@ -2447,7 +2436,7 @@ pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> Struc
 }
 
 /// `Wrap(true)`, the instance at which the field type above reduces to its true arm.
-pub(super) fn wrap_at_true(wrap_name: &Global) -> Term {
+pub fn wrap_at_true(wrap_name: &Global) -> Term {
     Subterm::StructType(StructType {
         name: *wrap_name,
         universes: Universes::default(),
@@ -2457,7 +2446,7 @@ pub(super) fn wrap_at_true(wrap_name: &Global) -> Term {
 }
 
 /// `wrapped : Wrap(true) = Wrap(true){held}`.
-pub(super) fn wrapped_at_true(wrap_name: &Global, held: Term) -> Item {
+pub fn wrapped_at_true(wrap_name: &Global, held: Term) -> Item {
     authored(
         &Global::Authored(Qualifier::from(["wrapped"])),
         wrap_at_true(wrap_name),
@@ -2466,7 +2455,7 @@ pub(super) fn wrapped_at_true(wrap_name: &Global, held: Term) -> Item {
 }
 
 /// [`index_forgery`]'s transport, reached through a `Prop`-sorted structure that really carries a `Nat`.
-pub(super) fn computed_field_forgery() -> Definitions {
+pub fn computed_field_forgery() -> Definitions {
     let type_0 = Term::type_ground();
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
@@ -2593,7 +2582,7 @@ pub(super) fn computed_field_forgery() -> Definitions {
 /// The scheme both universe-occurrence fixtures below are built on: `def A<u, v | u + 1 <= v> : Type v = Type u`.
 ///
 /// Its constraint is load-bearing rather than decorative, which is the whole point of the shape: checking the body needs `Type (u + 1) <= Type v`, and that holds under this hypothesis and under nothing else. So an occurrence of `A` is legitimate exactly where it discharges the constraint at its own levels, and [`Kernel::check_instance`](crate::Kernel) is what does that.
-pub(super) fn scheme_context() -> UniverseContext {
+pub fn scheme_context() -> UniverseContext {
     let ordered = UniverseConstraint {
         lower: Level::param(UniverseParam(0))
             .checked_add(1)
@@ -2609,7 +2598,7 @@ pub(super) fn scheme_context() -> UniverseContext {
 }
 
 /// The same two parameters with the scheme's constraint *not* declared — the context a user of `A` stands in when it has assumed nothing about its own levels.
-pub(super) fn open_context() -> UniverseContext {
+pub fn open_context() -> UniverseContext {
     UniverseContext {
         parameter_count: 2,
         quality_count: 0,
@@ -2620,7 +2609,7 @@ pub(super) fn open_context() -> UniverseContext {
 /// The scheme above, followed by one `user` that spells an occurrence of it.
 ///
 /// `user` is `(its own universe context, the term it is defined as)`, and its declared type is `Type v` throughout — so the two spellings of the occurrence differ in nothing but whether the instance is stated.
-pub(super) fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>) -> Definitions {
+pub fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>) -> Definitions {
     let scheme = Definition {
         name: Global::Authored(Qualifier::from(["A"])),
         kind: DefinitionKind::Authored,
@@ -2652,7 +2641,7 @@ pub(super) fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>)
 }
 
 /// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
-pub(super) fn scheme_occurrences() -> (Term, Term) {
+pub fn scheme_occurrences() -> (Term, Term) {
     let name = Global::Authored(Qualifier::from(["A"]));
     let bare = Term::instance(name, Universes::default());
     let instance = Term::instance(
@@ -2667,7 +2656,7 @@ pub(super) fn scheme_occurrences() -> (Term, Term) {
 }
 
 /// How `coerce`'s body below reaches its declared result type.
-pub(super) enum Route {
+pub enum Route {
     /// Directly, with no arm open — so no case equation is in scope and conversion answers about the two indices honestly.
     Direct,
     /// Through a `match` on `f<0>(x)` under a motive constant at the declared result, so the arm's case equation is the only thing the body's conversion can be consulting.
@@ -2681,7 +2670,7 @@ pub(super) enum Route {
 /// `induct E : Type 3 | wrap(T : Type 2) end` is an ordinary `Type`-sorted family whose payload is a universe, `induct Q : (e : E) -> Type 0` has no constructors and exists only to be indexed by one, and `f<u | u + 1 <= 2> : (x : Nat) -> E = (x) => match x | 0 => wrap(Type u) | _ => wrap(Type 0) end` mentions its universe parameter in a *payload* position. Both `f<0>` and `f<1>` discharge the constraint, and `f<u>(x)` sticks on the local `x` — so `f<0>(x)` and `f<1>(x)` are two stuck terms that differ only in a level and whose reducts genuinely differ, which is the pair the key must keep apart.
 ///
 /// The item under test is `coerce : (x : Nat, q : Q(f<0>(x))) -> Q(f<target>(x))`.
-pub(super) fn universe_refinement_definitions(target: Level, route: Route) -> Definitions {
+pub fn universe_refinement_definitions(target: Level, route: Route) -> Definitions {
     let one = Level::zero().succ().expect("level zero has a successor");
     let two = one.clone().succ().expect("level one has a successor");
     let three = two.clone().succ().expect("level two has a successor");
@@ -2814,7 +2803,7 @@ pub(super) fn universe_refinement_definitions(target: Level, route: Route) -> De
 }
 
 /// A unit a test puts in scope by hand: a module no unit holds, with the places an environment reads it by and the record filed beside it.
-pub(super) struct AlreadyJudged {
+pub struct AlreadyJudged {
     definitions: Definitions,
     places: Places,
     certification: Certification,
@@ -2822,7 +2811,7 @@ pub(super) struct AlreadyJudged {
 
 impl AlreadyJudged {
     /// `module` in scope with `certification` as the record of a walk over it.
-    pub(super) fn with(definitions: &Definitions, certification: &Certification) -> Self {
+    pub fn with(definitions: &Definitions, certification: &Certification) -> Self {
         Self {
             definitions: definitions.clone(),
             places: Places::of(definitions),
@@ -2831,7 +2820,7 @@ impl AlreadyJudged {
     }
 
     /// The environment a walk is handed: everything this unit puts in scope, and nothing else.
-    pub(super) fn globals(&self) -> Globals<'_> {
+    pub fn globals(&self) -> Globals<'_> {
         let mut globals = Globals::default();
         globals.mount(&self.definitions, &self.places, &self.certification);
 
@@ -2840,12 +2829,12 @@ impl AlreadyJudged {
 }
 
 /// Everything `module` puts in scope, with an empty record — so a walk classifies its items' totality for itself.
-pub(super) fn already_judged(definitions: &Definitions) -> AlreadyJudged {
+pub fn already_judged(definitions: &Definitions) -> AlreadyJudged {
     AlreadyJudged::with(definitions, &Certification::default())
 }
 
 /// A module carrying `items` and `induct_decls` and nothing else.
-pub(super) fn collision_definitions(
+pub fn collision_definitions(
     items: Vec<Item>,
     induct_decls: BTreeMap<Global, InductDecl>,
 ) -> Definitions {
@@ -2860,22 +2849,22 @@ pub(super) fn collision_definitions(
 }
 
 /// The definition name the environment and the module both declare.
-pub(super) fn shadowed_name() -> Global {
+pub fn shadowed_name() -> Global {
     Global::Authored(Qualifier::from(["shadowed"]))
 }
 
 /// The name judged in both configurations, whose body is the only thing that reveals which `shadowed` the walk used.
-pub(super) fn reader_name() -> Global {
+pub fn reader_name() -> Global {
     Global::Authored(Qualifier::from(["reader"]))
 }
 
 /// The family name the environment and the module both declare.
-pub(super) fn shadowed_family() -> Global {
+pub fn shadowed_family() -> Global {
     Global::Authored(Qualifier::from(["Shadowed"]))
 }
 
 /// `let shadowed : Nat = 0` beside `induct Shadowed : Type 0 end` — the two entries an earlier walk is taken to have judged.
-pub(super) fn judged_environment() -> Definitions {
+pub fn judged_environment() -> Definitions {
     collision_definitions(
         vec![authored(
             &shadowed_name(),
@@ -2899,7 +2888,7 @@ pub(super) fn judged_environment() -> Definitions {
 }
 
 /// `let reader : Nat = shadowed`.
-pub(super) fn reader() -> Item {
+pub fn reader() -> Item {
     authored(
         &reader_name(),
         Term::intrinsic(Intrinsic::NatType),
@@ -2908,7 +2897,7 @@ pub(super) fn reader() -> Item {
 }
 
 /// `let shadowed : Bool = true` beside `let reader : Nat = shadowed`.
-pub(super) fn shadowing_items() -> Definitions {
+pub fn shadowing_items() -> Definitions {
     collision_definitions(
         vec![
             authored(
@@ -2923,7 +2912,7 @@ pub(super) fn shadowing_items() -> Definitions {
 }
 
 /// `let Shadowed : Nat = 0`: a definition under the name [`judged_environment`] holds as a registry key and under no definition.
-pub(super) fn definition_under_the_family() -> Definitions {
+pub fn definition_under_the_family() -> Definitions {
     collision_definitions(
         vec![authored(
             &shadowed_family(),
@@ -2949,7 +2938,7 @@ fn constant(name: Global) -> Definition {
 }
 
 /// A group of one member, `name : type_ = body`, marked a proof: how a lemma proved by its own recursion is stored.
-pub(super) fn proof_group(name: &Global, type_: Term, body: Term) -> Item {
+pub fn proof_group(name: &Global, type_: Term, body: Term) -> Item {
     Item::Rec(RecItem::new(vec![(
         fresh(None),
         Definition {
@@ -2962,7 +2951,7 @@ pub(super) fn proof_group(name: &Global, type_: Term, body: Term) -> Item {
 }
 
 /// One group of two constants, `shadowed` and `fresh`: the first under a name [`judged_environment`] holds, the second under none.
-pub(super) fn group_held_in_part() -> Definitions {
+pub fn group_held_in_part() -> Definitions {
     collision_definitions(
         vec![Item::Rec(RecItem::new(vec![
             (fresh(None), constant(shadowed_name())),
@@ -2976,7 +2965,7 @@ pub(super) fn group_held_in_part() -> Definitions {
 }
 
 /// One group of two constants, both named `shadowed`.
-pub(super) fn group_naming_a_member_twice() -> Definitions {
+pub fn group_naming_a_member_twice() -> Definitions {
     collision_definitions(
         vec![Item::Rec(RecItem::new(vec![
             (fresh(None), constant(shadowed_name())),
@@ -2987,12 +2976,12 @@ pub(super) fn group_naming_a_member_twice() -> Definitions {
 }
 
 /// The name [`statement_declared`] declares once or twice.
-pub(super) fn statement_name() -> Global {
+pub fn statement_name() -> Global {
     Global::Authored(Qualifier::from(["p"]))
 }
 
 /// `p : Prop = Holds` and `thm : p = Holds/qed()`, closed with `thm` stated at `Absurd` — followed, when `twice`, by a second `p : Prop = ((x : Holds) => Absurd)(thm)`.
-pub(super) fn statement_declared(twice: bool) -> Program {
+pub fn statement_declared(twice: bool) -> Program {
     let holds_name = Global::Authored(Qualifier::from(["Holds"]));
     let absurd_name = Global::Authored(Qualifier::from(["Absurd"]));
     let theorem = Global::Authored(Qualifier::from(["thm"]));
@@ -3042,12 +3031,12 @@ pub(super) fn statement_declared(twice: bool) -> Program {
 }
 
 /// The name [`record_negative_in_itself`] declares.
-pub(super) fn negative_record_name() -> Global {
+pub fn negative_record_name() -> Global {
     Global::Authored(Qualifier::from(["Bad"]))
 }
 
 /// `struct Bad { f : (Bad) -> Absurd }`, closed with `w(Bad { w })` for `w = (b) => b.0(b)` stated at `Absurd` — beside, when `beside_a_family`, an empty `induct Bad : Type 0`.
-pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
+pub fn record_negative_in_itself(beside_a_family: bool) -> Program {
     let bad = negative_record_name();
     let absurd_name = Global::Authored(Qualifier::from(["Absurd"]));
     let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -3125,12 +3114,12 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
 }
 
 /// The family [`wrapper_of_its_parameter`] declares.
-pub(super) fn wrapper_family() -> Global {
+pub fn wrapper_family() -> Global {
     Global::Authored(Qualifier::from(["Wrapper"]))
 }
 
 /// `induct Wrapper(A : Type) | wrap(held : A) end`, or with `negatively` `| wrap(held : (A) -> Nat) end`, the entry stamped `Strict` in `A` either way: elaboration's vector, the truth of the first and a lie of the second.
-pub(super) fn wrapper_of_its_parameter(negatively: bool) -> Definitions {
+pub fn wrapper_of_its_parameter(negatively: bool) -> Definitions {
     wrapper_holding(|a| match negatively {
         true => taken(a),
         false => a,
@@ -3138,7 +3127,7 @@ pub(super) fn wrapper_of_its_parameter(negatively: bool) -> Definitions {
 }
 
 /// `(taken: of) -> Nat`.
-pub(super) fn taken(of: Term) -> Term {
+pub fn taken(of: Term) -> Term {
     Term::func_type(
         [(Free::local(991, Some("taken")), of)],
         Term::intrinsic(Intrinsic::NatType),
@@ -3146,7 +3135,7 @@ pub(super) fn taken(of: Term) -> Term {
 }
 
 /// `induct Wrapper(A : Type) | wrap(held : held(A)) end`, the entry stamped `Strict` in `A` whatever `held` makes of it.
-pub(super) fn wrapper_holding(held: impl FnOnce(Term) -> Term) -> Definitions {
+pub fn wrapper_holding(held: impl FnOnce(Term) -> Term) -> Definitions {
     let a = Free::local(990, Some("A"));
     let held = held(Term::free_var(&a));
 
@@ -3182,12 +3171,12 @@ pub(super) fn wrapper_holding(held: impl FnOnce(Term) -> Term) -> Definitions {
 }
 
 /// The family [`stored_in_the_wrapper`] declares.
-pub(super) fn stored_family() -> Global {
+pub fn stored_family() -> Global {
     Global::Authored(Qualifier::from(["Outer"]))
 }
 
 /// `induct Outer | c(held : Wrapper(Outer)) end`: strictly positive exactly where [`wrapper_family`] is in its parameter.
-pub(super) fn stored_in_the_wrapper() -> Definitions {
+pub fn stored_in_the_wrapper() -> Definitions {
     let outer = Term::induct_type(stored_family(), Vec::<Term>::new(), Vec::<Term>::new());
 
     collision_definitions(
@@ -3222,7 +3211,7 @@ pub(super) fn stored_in_the_wrapper() -> Definitions {
 }
 
 /// `induct Shadowed : Type 0 | mk(a : payload) end`, carried as a registry entry with no items lowering it.
-pub(super) fn shadowing_registry(payload: Term) -> Definitions {
+pub fn shadowing_registry(payload: Term) -> Definitions {
     collision_definitions(
         Vec::new(),
         BTreeMap::from([(
@@ -3249,12 +3238,12 @@ pub(super) fn shadowing_registry(payload: Term) -> Definitions {
 }
 
 /// The record [`two_registry_entries`] declares beside [`shadowed_family`].
-pub(super) fn kept_record() -> Global {
+pub fn kept_record() -> Global {
     Global::Authored(Qualifier::from(["Kept"]))
 }
 
 /// What [`two_registry_entries`] varies of the two entries it declares.
-pub(super) enum Varied {
+pub enum Varied {
     /// Nothing: the entries as an environment holds them.
     Nothing,
     /// Elaboration's stamps on both: a polarity vector, the owning module and the representation's privacy.
@@ -3266,7 +3255,7 @@ pub(super) enum Varied {
 }
 
 /// `induct Shadowed : Type 0 end` and `struct Kept { held : Nat }`, as registry entries with no items lowering them, differing from the unvaried pair in what `varied` names.
-pub(super) fn two_registry_entries(varied: Varied) -> Definitions {
+pub fn two_registry_entries(varied: Varied) -> Definitions {
     let stamped = matches!(varied, Varied::Stamps);
     let polarities = || match stamped {
         true => vec![Polarity::Mixed],
@@ -3321,7 +3310,7 @@ pub(super) fn two_registry_entries(varied: Varied) -> Definitions {
 
 /// What a fixture puts to the walk: a unit alone, or a program — a unit and the entry it closes with.
 /// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, carried with `variances`: a level only its parameter's type mentions.
-pub(super) fn wrap_declaration(variances: Vec<Variance>) -> InductDecl {
+pub fn wrap_declaration(variances: Vec<Variance>) -> InductDecl {
     let level = Level::param(UniverseParam(0));
     let carrier = Free::local(30, Some("A"));
     let held = Free::local(31, Some("a"));
@@ -3359,7 +3348,7 @@ pub(super) fn wrap_declaration(variances: Vec<Variance>) -> InductDecl {
 }
 
 /// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, carried with `variances`: a level its payload's `Type` mentions.
-pub(super) fn box_declaration(variances: Vec<Variance>) -> InductDecl {
+pub fn box_declaration(variances: Vec<Variance>) -> InductDecl {
     let level = Level::param(UniverseParam(0));
     let held = Free::local(32, Some("T"));
 
@@ -3387,7 +3376,7 @@ pub(super) fn box_declaration(variances: Vec<Variance>) -> InductDecl {
 }
 
 /// `induct Box.{u}: Type (u + 1) | box(T: F(Type u)) end` for an intrinsic carrier `former`, carried with `variances`: a level only the carrier's element mentions.
-pub(super) fn carried_box_declaration(
+pub fn carried_box_declaration(
     former: fn(Term) -> Intrinsic,
     variances: Vec<Variance>,
 ) -> InductDecl {
@@ -3412,12 +3401,12 @@ pub(super) fn carried_box_declaration(
 }
 
 /// The definition [`coercion_definitions`] puts at two instances of its family.
-pub(super) fn coercion_name() -> Global {
+pub fn coercion_name() -> Global {
     Global::Authored(Qualifier::from(["coerce"]))
 }
 
 /// One family and `coerce: (x: F.{from}(params)) -> F.{to}(params) = (x) => x`: the identity put at two instances of it.
-pub(super) fn coercion_definitions(
+pub fn coercion_definitions(
     family: Global,
     declaration: InductDecl,
     params: Vec<Term>,
@@ -3462,7 +3451,7 @@ fn coercion(from: Term, to: Term) -> Item {
 }
 
 /// A scope holding one certified unit that declares `family` and nothing else.
-pub(super) fn scope_of(family: Global, declaration: InductDecl) -> AlreadyJudged {
+pub fn scope_of(family: Global, declaration: InductDecl) -> AlreadyJudged {
     already_judged(&definitions_of(
         Vec::new(),
         BTreeMap::from([(family, declaration)]),
@@ -3471,7 +3460,7 @@ pub(super) fn scope_of(family: Global, declaration: InductDecl) -> AlreadyJudged
 }
 
 /// `Held.{u}: result_sort | c(x: payload) end`, carried with `variances`, in a module of its own: a family whose one payload is an instance of another unit's.
-pub(super) fn held_definitions(
+pub fn held_definitions(
     payload: Term,
     result_sort: Term,
     variances: Vec<Variance>,
@@ -3508,7 +3497,7 @@ pub(super) fn held_definitions(
 }
 
 /// `Box` beside `Fam.{u, w}: (D: Type w) -> Type | mk(): (Box.{u}) end` under `u + 1 ≤ w`, carried with `variances`, and `coerce` between `Fam.{0, 2}` and `Fam.{1, 2}` at the index `Box.{0}`: a level no payload and no index type of `Fam` mentions, which its one target puts at `Box`'s invariant position.
-pub(super) fn index_target_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
+pub fn index_target_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
     let boxed = Global::Authored(Qualifier::from(["Box"]));
     let family = Global::Authored(Qualifier::from(["Fam"]));
     let payload_level = Level::param(UniverseParam(0));
@@ -3562,7 +3551,7 @@ pub(super) fn index_target_definitions(variances: Vec<Variance>) -> (Global, Def
 }
 
 /// `struct Carrier.{u, v}(M: (Type u) -> Type v): Type max(u + 1, v) { pure: (A: Type u, x: A) -> M(A) }`, carried with `variances`, and `coerce` between its instances `from` and `to` at `M := (T) => Nat`: the level its method binds at beside the one only its parameter's type mentions.
-pub(super) fn method_level_module(
+pub fn method_level_module(
     variances: Vec<Variance>,
     from: [u32; 2],
     to: [u32; 2],
@@ -3634,7 +3623,7 @@ pub(super) fn method_level_module(
 }
 
 /// `Alias.{u} = (A: Type u) => A`, `Uses.{u}(A: Type u): Type u | c(x: Alias.{u}(A)) end` carried with `variances`, and `coerce` between `Uses.{0}(Nat)` and `Uses.{1}(Nat)`: a level a payload mentions only on an instance its reduction removes.
-pub(super) fn alias_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
+pub fn alias_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
     let alias = Global::Authored(Qualifier::from(["Alias"]));
     let family = Global::Authored(Qualifier::from(["Uses"]));
     let level = Level::param(UniverseParam(0));
@@ -3705,7 +3694,7 @@ pub(super) fn alias_definitions(variances: Vec<Variance>) -> (Global, Definition
 }
 
 /// `Arm.{u, w}(b: Bool): Type w | c(T: match b : (_) => Type w | false => Nat | true => Type u end) end` under `u + 1 ≤ w`, carried with `variances`, and `coerce` between `Arm.{0, 2}(true)` and `Arm.{1, 2}(true)`: a level a payload's type states under one arm of a match stuck on the parameter, and nowhere else the walk reads.
-pub(super) fn stuck_arm_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
+pub fn stuck_arm_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
     let family = Global::Authored(Qualifier::from(["Arm"]));
     let payload_level = Level::param(UniverseParam(0));
     let sort_level = Level::param(UniverseParam(1));
@@ -3763,7 +3752,7 @@ pub(super) fn stuck_arm_definitions(variances: Vec<Variance>) -> (Global, Defini
 }
 
 /// `Box` beside `Pick.{l, m}: Type (l + 1) = Box.{l}` and `Held.{u, v}: Type (u + 1) | c(x: Pick.{u, v}) end`, carried with `variances`, and `coerce` between the instances `from` and `to` of `Held`: a level a payload reaches only through a definition the walk unfolds, to another family's invariant position, beside one the unfolding drops.
-pub(super) fn picked_module(
+pub fn picked_module(
     variances: Vec<Variance>,
     from: [u32; 2],
     to: [u32; 2],
@@ -3840,7 +3829,7 @@ pub(super) fn picked_module(
 }
 
 /// `Wrap` beside `Ixd.{u}(A: Type u): (w: Wrap.{u}(A)) -> Type u | mk(a: A): (wrap.{u}(a)) end`, both irrelevant in their level, and `read: (x: Ixd.{0}(Nat)(wrap.{1}(3))) -> Nat` eliminating `x` with its one arm or with none: an index written at another instance of the level than its family's.
-pub(super) fn excused_arm_definitions(with_arm: bool) -> (Global, Definitions) {
+pub fn excused_arm_definitions(with_arm: bool) -> (Global, Definitions) {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
     let family = Global::Authored(Qualifier::from(["Ixd"]));
     let level = Level::param(UniverseParam(0));
@@ -3943,7 +3932,7 @@ pub(super) fn excused_arm_definitions(with_arm: bool) -> (Global, Definitions) {
 /// `induct Fam.{i, o | i + 1 ≤ o} : Type o | mk(A : Type i, f : (A) -> Fam.{i, o}) end`, carried with `variances`: Russell's carrier, universe-polymorphic in the level its payload holds and in the level it stands at.
 ///
 /// The second level stands in the result sort and at `Fam`'s own position in the forward field's codomain, and nowhere else the walk reads, so the fixpoint grants it irrelevant: the two instances' telescopes convert entry by entry, which is what irrelevance claims. What keeps the self-application out is the payload's own level, which the walk calls invariant and the declaration's constraint holds a rung below the sort.
-pub(super) fn russell_carrier(family: Global, variances: Vec<Variance>) -> InductDecl {
+pub fn russell_carrier(family: Global, variances: Vec<Variance>) -> InductDecl {
     let payload_level = Level::param(UniverseParam(0));
     let own_level = Level::param(UniverseParam(1));
     let carrier = Free::local(70, Some("A"));
@@ -3989,21 +3978,17 @@ pub(super) fn russell_carrier(family: Global, variances: Vec<Variance>) -> Induc
 }
 
 /// [`russell_carrier`]'s family at `levels`.
-pub(super) fn russell_at(family: Global, levels: [Level; 2]) -> Term {
+pub fn russell_at(family: Global, levels: [Level; 2]) -> Term {
     Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 /// The name [`russell_definitions`] and its siblings put [`russell_carrier`] under.
-pub(super) fn russell_name() -> Global {
+pub fn russell_name() -> Global {
     Global::Authored(Qualifier::from(["Fam"]))
 }
 
 /// [`russell_carrier`] beside `coerce : (x : Fam.{0, from}) -> Fam.{0, to} = (x) => x`: the identity across two instances apart in the level the walk calls irrelevant alone, both well formed since each satisfies `0 + 1 ≤ o`.
-pub(super) fn russell_coercion_definitions(
-    variances: Vec<Variance>,
-    from: u32,
-    to: u32,
-) -> Definitions {
+pub fn russell_coercion_definitions(variances: Vec<Variance>, from: u32, to: u32) -> Definitions {
     let family = russell_name();
     let at = |level: u32| russell_at(family, [Level::zero(), Level::constant(level)]);
 
@@ -4017,7 +4002,7 @@ pub(super) fn russell_coercion_definitions(
 /// [`russell_carrier`] beside `russell : Fam.{0, 1} = Fam.{0, 1}/mk(Fam.{0, 1}, (x) => x)`: the family's own type, a `Type 1`, handed to the payload that stands at `Type 0`.
 ///
 /// Russell's self-application over a carrier whose own level conversion compares at nothing. The irrelevance makes `Fam.{0, 1}` and `Fam.{0, o}` one type for every `o`, so no instance of the family has to be spelled at the sort the payload wants; what the payload is held to is the sort the declaration states at the instance written, which the irrelevance does not move.
-pub(super) fn russell_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
+pub fn russell_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
     let family = russell_name();
     let name = Global::Authored(Qualifier::from(["russell"]));
     let fam = russell_at(family, [Level::zero(), Level::constant(1)]);
@@ -4043,7 +4028,7 @@ pub(super) fn russell_definitions(variances: Vec<Variance>) -> (Global, Definiti
 }
 
 /// [`russell_carrier`] beside `lowered : Type 1 = Fam.{0, 2}`: the higher of two instances the walk calls one type, put at the sort the lower one states.
-pub(super) fn lowered_sort_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
+pub fn lowered_sort_definitions(variances: Vec<Variance>) -> (Global, Definitions) {
     let family = russell_name();
     let name = Global::Authored(Qualifier::from(["lowered"]));
     let definitions = definitions_of(
@@ -4059,7 +4044,7 @@ pub(super) fn lowered_sort_definitions(variances: Vec<Variance>) -> (Global, Def
     (name, definitions)
 }
 
-pub(super) trait Walked {
+pub trait Walked {
     fn parts(&self) -> (&Definitions, Option<&Entrypoint>);
 }
 
@@ -4076,7 +4061,7 @@ impl Walked for Program {
 }
 
 /// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the kernel's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
-pub(super) fn fixture_verdicts(
+pub fn fixture_verdicts(
     fixture: &impl Walked,
     budget: u64,
     globals: &Globals,
@@ -4086,7 +4071,7 @@ pub(super) fn fixture_verdicts(
 }
 
 /// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
-pub(super) fn fixture_certified(
+pub fn fixture_certified(
     fixture: &impl Walked,
     budget: u64,
     globals: &Globals,
@@ -4103,22 +4088,22 @@ pub(super) fn fixture_certified(
     )
 }
 
-pub(super) const BUDGET: u64 = 1_000_000;
+pub const BUDGET: u64 = 1_000_000;
 
-pub(super) fn global(symbol: &str) -> Global {
+pub fn global(symbol: &str) -> Global {
     Global::Authored(Qualifier::from([symbol]))
 }
 
-pub(super) fn nat() -> Term {
+pub fn nat() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
-pub(super) fn literal(n: usize) -> Term {
+pub fn literal(n: usize) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 /// `alias : Type = <alias>`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => <returned>`, and `five : Nat = identity(5)`: `three` unfolds `alias`, and `five` types `identity` and unfolds nothing.
-pub(super) fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definitions {
+pub fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term) -> Definitions {
     let x = Free::local(10, Some("x"));
 
     Definitions {
@@ -4148,12 +4133,12 @@ pub(super) fn reading_definitions(alias: Term, returned: impl Fn(&Free) -> Term)
 }
 
 /// The module every fixture here is an edit of: `alias` is `Nat` and `identity` returns its argument.
-pub(super) fn written() -> Definitions {
+pub fn written() -> Definitions {
     reading_definitions(nat(), Term::free_var)
 }
 
 /// The propositions a module written as Core text here uses, declared where the registry this crate's suites judge under names them: `False`, `True` and `Holds`, the reflection of a decision a bound states.
-pub(super) const PROPOSITIONS: &str = r#"
+pub const PROPOSITIONS: &str = r#"
 induct /std/Bool/False: pub Prop
 end
 
@@ -4184,7 +4169,7 @@ fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
 }
 
 /// The module `text` writes, read with nothing in scope and closing with no term: an environment another text is put over.
-pub(super) fn core_text_module(text: &str) -> Definitions {
+pub fn core_text_module(text: &str) -> Definitions {
     let (definitions, entry) = core_text_read(text);
     assert!(entry.is_none(), "an environment closes with no term");
 
@@ -4192,7 +4177,7 @@ pub(super) fn core_text_module(text: &str) -> Definitions {
 }
 
 /// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
-pub(super) fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
+pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
     let (definitions, entry) = core_text_read(text);
     let program = Program {
         definitions,
@@ -4209,12 +4194,12 @@ pub(super) fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verd
 }
 
 /// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
-pub(super) fn core_text_verdicts(text: &str) -> Vec<Verdict> {
+pub fn core_text_verdicts(text: &str) -> Vec<Verdict> {
     core_text_verdicts_over(text, &Globals::default())
 }
 
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
-pub(super) fn walked(definitions: &Definitions) -> Rechecked {
+pub fn walked(definitions: &Definitions) -> Rechecked {
     let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);
     assert_eq!(rechecked.verdicts, Vec::new());
 
@@ -4222,7 +4207,7 @@ pub(super) fn walked(definitions: &Definitions) -> Rechecked {
 }
 
 /// `module` walked over `baseline` as `certification` records it.
-pub(super) fn walked_over(
+pub fn walked_over(
     definitions: &Definitions,
     baseline: &Definitions,
     certification: &Certification,
@@ -4231,7 +4216,7 @@ pub(super) fn walked_over(
 }
 
 /// [`walked_over`], taking what it can from what `store` holds.
-pub(super) fn walked_among(
+pub fn walked_among(
     definitions: &Definitions,
     baseline: &Definitions,
     certification: &Certification,
@@ -4258,7 +4243,7 @@ pub(super) fn walked_among(
 }
 
 /// `certification` with `symbol`'s entry replaced by `entry`'s answer for it.
-pub(super) fn doctored(
+pub fn doctored(
     certification: &Certification,
     symbol: &str,
     entry: impl Fn(Certified) -> Certified,
@@ -4289,7 +4274,7 @@ pub(super) fn doctored(
 }
 
 /// A record of `written` in which `five` is marked: its reads hold `alias`'s signature, which no judgment of `five` reads. A walk that hands the mark back adopted the entry, and one that judged `five` filed its own reads in its place.
-pub(super) fn marked() -> Certification {
+pub fn marked() -> Certification {
     doctored(&walked(&written()).certification, "five", |certified| {
         Certified {
             reads: Reads {
@@ -4302,14 +4287,14 @@ pub(super) fn marked() -> Certification {
 }
 
 /// `module` with its items held as a version's: a module made of it by replacing an item shares every other item with it, as a recompile's module shares the ones it kept with its baseline's.
-pub(super) fn versioned(definitions: Definitions) -> Definitions {
+pub fn versioned(definitions: Definitions) -> Definitions {
     Definitions {
         items: definitions.items.version(),
     }
 }
 
 /// `module`, a version, with the item declaring `name` replaced by `item`.
-pub(super) fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definitions {
+pub fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definitions {
     let place = Places::of(definitions)
         .place(&global(name))
         .expect("the module declares the name")
@@ -4321,12 +4306,12 @@ pub(super) fn replaced(definitions: &Definitions, name: &str, item: Item) -> Def
 }
 
 /// `Type 5`, `Type 4` and `Type 0` as hand-built universes.
-pub(super) fn type_at(level: u32) -> Term {
+pub fn type_at(level: u32) -> Term {
     Term::type_at(Level::constant(level))
 }
 
 /// `name : type_ = body`, stating the sort `value_sort` its value inhabits ([`curios_core::Definition::value_sort`]): the field a type alias carries and the one `read_digest` leaves out.
-pub(super) fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
+pub fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
     match authored(name, type_, body) {
         Item::Let(definition) => Item::Let(Box::new(Definition {
             value_sort: Some(value_sort),
@@ -4339,7 +4324,7 @@ pub(super) fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) 
 /// Three aliases in a chain, each saying the sort its value inhabits: `H : Type 5 = h_body` saying `h`, `K : Type 5 = H` saying `k`, and `L : Type 5 = K` saying `l`.
 ///
 /// The walk states `L`'s value sort by `Sort::of(K)`, which reads `K`'s *published* sort with nothing run, so what it states of `L` is a function of what it stated of `K` and of nothing else about `K`, and nothing the module says of a sort.
-pub(super) fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
+pub fn chained_sort_definitions(h_body: Term, h: Term, k: Term, l: Term) -> Definitions {
     Definitions {
         items: vec![
             aliased(&global("H"), type_at(5), h_body, h),

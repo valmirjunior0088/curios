@@ -14,7 +14,7 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 ### The judgments flatten onto the root
 
-**Decision.** Every module re-exports at the root, so a consumer names `curios_cert::Kernel`, `curios_cert::convert`, `curios_cert::certify_definitions`. The crate name is the disambiguator: the judgments here name the same things the elaborator names its own, and `curios_cert::convert` beside the elaborator's `convert` reads as the second opinion it is.
+**Decision.** The root names what another crate reads with no namespace between, so a consumer names `curios_cert::Kernel`, `curios_cert::convert`, `curios_cert::certify_definitions`. The crate name is the disambiguator: the judgments here name the same things the elaborator names its own, and `curios_cert::convert` beside the elaborator's `convert` reads as the second opinion it is.
 
 **Rejected.** A `kernel::` namespace, which spells the disambiguation the crate name already makes.
 

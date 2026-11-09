@@ -11,7 +11,7 @@ use {
 };
 
 /// The type of `intrinsic`, having checked every operand against the type this operation demands of it.
-pub(super) fn infer_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Term, Error> {
+pub fn infer_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Result<Term, Error> {
     let signature = intrinsic.signature(&kernel.syntax());
     let operands = intrinsic.operands();
 
@@ -31,7 +31,7 @@ pub(super) fn infer_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> Res
 }
 
 /// Check each operand against what its operation demands of it, zipped in order. Shared by the intrinsics and by foreign calls, whose demands [`curios_core::foreign_signature`] states in the same vocabulary, so a type operand or an operand at a wire type is checked one way whichever operation holds it.
-pub(super) fn check_operands<'a>(
+pub fn check_operands<'a>(
     kernel: &mut Kernel,
     operands: impl IntoIterator<Item = &'a Term>,
     demands: &[Operand],

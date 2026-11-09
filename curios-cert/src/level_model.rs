@@ -12,14 +12,14 @@ use {
 /// What forward reasoning has derived below some top: each head reached with the highest offset `k` for which `head + k` is bounded, and the highest constant that is.
 ///
 /// A head absent from `reached` is one nothing has bounded yet, which is not the same as one bounded at offset zero — `head ≤ top` is a fact, and absence is the lack of one. `floor` is never below any reached offset, because a parameter carries its offset: `head + k` bounded gives `k` bounded.
-pub(crate) struct LevelModel {
+pub struct LevelModel {
     reached: BTreeMap<LevelHead, u64>,
     floor: u64,
 }
 
 impl LevelModel {
     /// The facts `upper` states about itself, with `upper` as the top: each of its atoms, and its floor.
-    pub(crate) fn of(upper: &Level) -> Self {
+    pub fn of(upper: &Level) -> Self {
         Self {
             reached: upper
                 .atoms()
@@ -30,7 +30,7 @@ impl LevelModel {
     }
 
     /// Every head `constraints` mention, and the floor, at the largest offset any upper side carries — Bezem and Coquand's starting point for loop-checking, from which every clause is admitted at a shift of zero or more.
-    pub(crate) fn throughout(constraints: &[UniverseConstraint]) -> Self {
+    pub fn throughout(constraints: &[UniverseConstraint]) -> Self {
         let start = constraints
             .iter()
             .map(|constraint| u64::from(floor(&constraint.upper)))
@@ -44,14 +44,14 @@ impl LevelModel {
     }
 
     /// Whether `head` has been bounded at any offset.
-    pub(crate) fn reaches(&self, head: LevelHead) -> bool {
+    pub fn reaches(&self, head: LevelHead) -> bool {
         self.reached.contains_key(&head)
     }
 
     /// The largest `s` for which `level + s` is bounded by what is derived — `None` when not even `level` is.
     ///
     /// A maximum is bounded exactly when every part is, so the shift is the least any part allows: the constant's distance to the floor, and each atom's distance to its head's reached offset. An unreached head allows none. The largest shift is the only one worth firing a clause at, since every smaller one derives facts the largest already implies.
-    pub(crate) fn admits(&self, level: &Level) -> Option<u64> {
+    pub fn admits(&self, level: &Level) -> Option<u64> {
         let mut shift = self.floor.checked_sub(u64::from(level.constant_part()))?;
         for (head, offset) in level.atoms() {
             let reached = self.reached.get(&head)?;
@@ -62,12 +62,12 @@ impl LevelModel {
     }
 
     /// Whether what is derived bounds `level` — [`LevelModel::admits`] at shift zero.
-    pub(crate) fn bounds(&self, level: &Level) -> bool {
+    pub fn bounds(&self, level: &Level) -> bool {
         self.admits(level).is_some()
     }
 
     /// One pass over `constraints`: every clause whose upper side the model admits fires at the largest shift admitted, raising its lower side. Whether anything rose — a pass that raised nothing has reached the least model.
-    pub(crate) fn pass(&mut self, constraints: &[UniverseConstraint]) -> bool {
+    pub fn pass(&mut self, constraints: &[UniverseConstraint]) -> bool {
         let mut raised = false;
         for constraint in constraints {
             if let Some(shift) = self.admits(&constraint.upper) {
@@ -81,7 +81,7 @@ impl LevelModel {
     /// The height no value of the least model above this one reaches when `constraints` hold no loop: the highest value now, raised once per head by the most one clause can add — Bezem and Coquand's Corollary 4.2, with the zero as one more head. Past it, a value is climbing without end.
     ///
     /// What one clause can add is its *gain*: how far its lower side's floor stands above the least part of its upper side that admitted it.
-    pub(crate) fn ceiling(&self, constraints: &[UniverseConstraint]) -> u64 {
+    pub fn ceiling(&self, constraints: &[UniverseConstraint]) -> u64 {
         let heads = heads(constraints)
             .chain(self.reached.keys().copied())
             .collect::<BTreeSet<_>>();
@@ -104,7 +104,7 @@ impl LevelModel {
     }
 
     /// Whether some value has passed `ceiling`, the floor standing at or above every value.
-    pub(crate) fn climbs_past(&self, ceiling: u64) -> bool {
+    pub fn climbs_past(&self, ceiling: u64) -> bool {
         self.floor > ceiling
     }
 

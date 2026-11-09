@@ -46,7 +46,7 @@ use {
 };
 
 /// Check every arm of an elimination of `scrutinee_type` at `result`.
-pub(super) fn check_induct_arms(
+pub fn check_induct_arms(
     kernel: &mut Kernel,
     at: &InductAt,
     family: &InductType,
@@ -179,7 +179,7 @@ fn case_value(family: &InductType, tag: &Atom, payload: &[Term]) -> Term {
 }
 
 /// Enter the arm of `tag` in an elimination of `scrutinee`, a value of `family`, for a reader of the finished term ([`Reader::enter_arm`](crate::Reader::enter_arm)): each of `binders` assumed at its payload field's type, then the case put in force as [`check_arm`] puts it — the solution the indices force, the scrutinee standing for the case's value ([`assume_case_value`]), each solved variable bound to its solution ([`bind_solutions`]). An arm the indices rule out, which the kernel types nothing of, is entered at the case's value alone.
-pub(crate) fn enter_arm(
+pub fn enter_arm(
     kernel: &mut Kernel,
     family: &InductType,
     scrutinee: &Term,
@@ -227,7 +227,7 @@ pub(crate) fn enter_arm(
 }
 
 /// Put the case `value` of `scrutinee` in force for a reader of its arm ([`Reader::case`](crate::Reader::case)), as an arm of a `Bool` or `Switch` elimination is checked under it: a variable scrutinee bound to the value, any other's equation recorded, and the equations in force restated under it ([`assume_case_value`], [`bind_solutions`]).
-pub(crate) fn enter_case(kernel: &mut Kernel, scrutinee: &Term, value: &Term) -> Result<(), Error> {
+pub fn enter_case(kernel: &mut Kernel, scrutinee: &Term, value: &Term) -> Result<(), Error> {
     let mut solutions = Vec::new();
     assume_case_value(kernel, scrutinee, value, &mut solutions)?;
 
@@ -243,7 +243,7 @@ pub(crate) fn enter_case(kernel: &mut Kernel, scrutinee: &Term, value: &Term) ->
 /// **`assumed` is every equation the arm assumed**, its own and those its solution restated ([`assume_case_value`]), each computed where the arm's own equations no longer answer: under its own equation a scrutinee is its case, and would refute nothing.
 ///
 /// **A spent budget is never withdrawn**, from the arm or from the reduction asked here, and a scrutinee with no value at the type level refutes nothing ([`Probe`]). What the refused arm recorded is taken back by the bracket it was typed in ([`Kernel::tried`]), so an arm withdrawn is one that was not typed.
-pub(super) fn unless_never_taken(
+pub fn unless_never_taken(
     kernel: &mut Kernel,
     checked: Result<(), Error>,
     assumed: &[(Term, Term)],
@@ -275,7 +275,7 @@ pub(super) fn unless_never_taken(
 /// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an arm taken once, at the scrutinee itself.
 ///
 /// **The scrutinee is read as it stands and not computed here.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs to accept what it accepts without: that is asked only of an arm that was refused ([`unless_never_taken`]). The shared [`another_case`] answers of a term as it stands.
-pub(super) fn never_taken(
+pub fn never_taken(
     kernel: &mut Kernel,
     scrutinee: &Term,
     value: &Term,
@@ -301,7 +301,7 @@ pub(super) fn never_taken(
 /// **The solution reaches the equations already in force.** Every reader in the arm reads it by value, the solution substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term no reader in the arm is handed; [`Kernel::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
 ///
 /// **Answers every equation the arm assumes**, each as its scrutinee and the case it states: its own, where the scrutinee is no variable, and those restated under its solution, recorded or not. They are what [`unless_never_taken`] puts to reduction where the arm is refused.
-pub(super) fn assume_case_value(
+pub fn assume_case_value(
     kernel: &mut Kernel,
     scrutinee: &Term,
     value: &Term,
@@ -341,7 +341,7 @@ fn specialize(
 /// Bind each variable the case solves to its solution, at the solution's own type, as a `let` binds a local: the arm is checked as written, typing reads a solved variable at that type, and every other reader reads the arm by value, the solution substituted. What the scope held of other locals that names the variable is read again where it is bound ([`Kernel::bind`]), and the enclosing `mark`/`retract` bracket retracts all of it with the arm.
 ///
 /// **At the solution's type, not the variable's.** A case value is typed at its case's targets, and an index equation the unifier leaves standing — one between forms it does not take apart, as a list spelled `[h, ..l]` — keeps the scrutinee's own type apart from them: in `/std/List/Member/uncons`'s `here` arm, `i : Member(x, [h, ..l])` stands for `here(x, l) : Member(x, [x, ..l])`. Bound at its variable's type, a solution would be a `let` holding a value of another type; bound at its own, each occurrence is typed as the solution substituted in its place was, and the solution is typed once.
-pub(super) fn bind_solutions(kernel: &mut Kernel, solutions: &[(Free, Term)]) -> Result<(), Error> {
+pub fn bind_solutions(kernel: &mut Kernel, solutions: &[(Free, Term)]) -> Result<(), Error> {
     for (name, solution) in solutions {
         let type_ = super::infer(kernel, solution)?;
         kernel.bind_solved(name, &type_, solution);
@@ -372,7 +372,7 @@ fn open_payload<T, B: Bound>(
 /// Refuse eliminating a proposition into a relevant result unless the family declares no constructor, or one whose every payload its index targets pin.
 ///
 /// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the motive lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
-pub(super) fn guard_large_elimination(
+pub fn guard_large_elimination(
     kernel: &mut Kernel,
     at: &InductAt,
     family: &InductType,

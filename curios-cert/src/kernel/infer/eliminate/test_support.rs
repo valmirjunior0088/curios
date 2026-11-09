@@ -12,42 +12,42 @@ use {
     },
 };
 
-pub(super) fn kernel() -> Kernel<'static> {
+pub fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
-pub(super) fn binder(index: u32, hint: &str) -> Free {
+pub fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
 }
 
-pub(super) fn nat(n: usize) -> Term {
+pub fn nat(n: usize) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
-pub(super) fn nat_type() -> Term {
+pub fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
 /// One constructor of a test family: its tag, the payload binder it carries if any, and the index target this case aims at.
-pub(super) struct Case {
-    pub(super) tag: &'static str,
-    pub(super) payload: Option<(Free, Term)>,
+pub struct Case {
+    pub tag: &'static str,
+    pub payload: Option<(Free, Term)>,
     /// The index targets this constructor produces, one per index of its family — several, because a target that mentions one binder *twice* is the shape the clash rule turns on and a single target cannot spell.
-    pub(super) indices: Vec<Term>,
+    pub indices: Vec<Term>,
 }
 
 /// A constructor carrying nothing, aimed at `index` — the one-index spelling of [`nullary_at`].
-pub(super) fn nullary(tag: &'static str, index: Term) -> Case {
+pub fn nullary(tag: &'static str, index: Term) -> Case {
     nullary_at(tag, vec![index])
 }
 
 /// A constructor carrying `binder : type_`, aimed at `index` — the one-index spelling of [`carrying_at`].
-pub(super) fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
+pub fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
     carrying_at(tag, binder, type_, vec![index])
 }
 
 /// A constructor carrying nothing, aimed at `indices`.
-pub(super) fn nullary_at(tag: &'static str, indices: Vec<Term>) -> Case {
+pub fn nullary_at(tag: &'static str, indices: Vec<Term>) -> Case {
     Case {
         tag,
         payload: None,
@@ -56,12 +56,7 @@ pub(super) fn nullary_at(tag: &'static str, indices: Vec<Term>) -> Case {
 }
 
 /// A constructor carrying `binder : type_`, aimed at `indices`. A binder named in more than one of them is the non-linear target `Eq`'s `refl(@z) : (z, z)` has.
-pub(super) fn carrying_at(
-    tag: &'static str,
-    binder: Free,
-    type_: Term,
-    indices: Vec<Term>,
-) -> Case {
+pub fn carrying_at(tag: &'static str, binder: Free, type_: Term, indices: Vec<Term>) -> Case {
     Case {
         tag,
         payload: Some((binder, type_)),
@@ -70,7 +65,7 @@ pub(super) fn carrying_at(
 }
 
 /// Declare a one-index family from its constructors.
-pub(super) fn declare(
+pub fn declare(
     kernel: &mut Kernel,
     path: &str,
     result_sort: Term,
@@ -86,7 +81,7 @@ pub(super) fn declare(
 }
 
 /// Declare a family whose indices have the given types, from its constructors.
-pub(super) fn declare_at(
+pub fn declare_at(
     kernel: &mut Kernel,
     path: &str,
     result_sort: Term,
@@ -140,7 +135,7 @@ pub(super) fn declare_at(
 }
 
 /// `match subject : (i, s) => motive | tag(binders) => body ... end`, over a scrutinee assumed at `family(index)`.
-pub(super) fn eliminate(
+pub fn eliminate(
     kernel: &mut Kernel,
     family: &Global,
     index: Term,
@@ -151,7 +146,7 @@ pub(super) fn eliminate(
 }
 
 /// [`eliminate`] over a scrutinee assumed at `family(indices)`, for a family carrying more than one.
-pub(super) fn eliminate_at(
+pub fn eliminate_at(
     kernel: &mut Kernel,
     family: &Global,
     indices: Vec<Term>,
@@ -193,14 +188,14 @@ pub(super) fn eliminate_at(
 }
 
 /// A successor over `tail`, in the successor-floor form reduction keeps.
-pub(super) fn succ(tail: Term) -> Term {
+pub fn succ(tail: Term) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), tail)))
 }
 
 /// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
 ///
 /// [`opaque_family`] below can only witness the index half of a motive, and a catch-all refines no index — so nothing built from it can tell the scrutinee instances apart.
-pub(super) fn scrutinee_family(kernel: &mut Kernel, name: &str, family: &Global) -> Term {
+pub fn scrutinee_family(kernel: &mut Kernel, name: &str, family: &Global) -> Term {
     let name = Global::Authored(Qualifier::from([name]));
     let index = binder(92, "n");
     kernel
@@ -224,7 +219,7 @@ pub(super) fn scrutinee_family(kernel: &mut Kernel, name: &str, family: &Global)
 }
 
 /// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
-pub(super) fn opaque_family(kernel: &mut Kernel, name: &str) -> Term {
+pub fn opaque_family(kernel: &mut Kernel, name: &str) -> Term {
     let name = Global::Authored(Qualifier::from([name]));
     kernel
         .declare(

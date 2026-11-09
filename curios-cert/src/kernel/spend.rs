@@ -18,7 +18,7 @@ use {
 #[cfg(feature = "profile")]
 use curios_core::take_looks;
 
-pub(super) struct Spend {
+pub struct Spend {
     /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
     budget: u64,
     remaining: u64,
@@ -32,7 +32,7 @@ pub(super) struct Spend {
 }
 
 impl Spend {
-    pub(super) fn new(budget: u64) -> Self {
+    pub fn new(budget: u64) -> Self {
         Self {
             budget,
             remaining: budget,
@@ -48,7 +48,7 @@ impl Spend {
     /// **Per new peak, not per call**, and the difference is the whole of what makes this row mean anything. A level's native frame is reclaimed when the level returns, so charging every `whnf` call would price a stack the reduction is not holding — and reduction calls itself once per operand of a nested intrinsic and once per link of a spine, so a wide, shallow computation would pay for depth it never reached. A high-water mark charges exactly the stack the reduction *peaks* at, which is the resource the row exists to bound, and it never refunds: the mark only rises.
     ///
     /// The two alternatives are both worse. Charging when `recurse` actually grows would price the 32 MiB segment exactly, and makes acceptance depend on the host thread's stack size — a two-megabyte test thread grows on its first call and an eight-megabyte main thread does not. Charging nothing leaves depth bounded by the host's stack alone, which is what this row exists to replace.
-    pub(super) fn enter_level(&mut self, cost: Cost) -> Result<(), ReduceError> {
+    pub fn enter_level(&mut self, cost: Cost) -> Result<(), ReduceError> {
         self.depth += 1;
 
         if self.depth > self.peak_depth {
@@ -60,7 +60,7 @@ impl Spend {
     }
 
     /// Leave a guarded reduction level. The peak stands; only the live count falls.
-    pub(super) fn leave_level(&mut self) {
+    pub fn leave_level(&mut self) {
         self.depth -= 1;
     }
 
@@ -69,7 +69,7 @@ impl Spend {
     /// The kernel is not strongly normalizing and does not pretend to be: a non-productive `rec` reduces forever. The budget is what makes every judgment terminate, and it is deterministic — the same program spends the same units on every machine — so exhausting it is a fact about the program, not about the host that checked it.
     ///
     /// [`Cost::STEP`] is the transition; a construction charge is what the same counter spends so that the budget bounds the memory a reduction builds and not only how many times it moves. A saturated cost is refused without being compared, so a size that overflowed while being computed never looks affordable.
-    pub(super) fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+    pub fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
         if cost.is_refused() {
             return Err(ReduceError::exhausted(self.remaining, cost));
         }
@@ -96,7 +96,7 @@ impl Spend {
     /// **The identities start over with it.** No judgment reads how far the counter had run — the carriers' algebra orders an atom by the age of each identity it holds, never by its value — so started over here a declaration's identities are its own, and a counter that ran on across the walk would spend the identity space of every declaration judged before it. Freshness asks only that no two binders open together share one, and the caller raises the counter past whatever is still open ([`Kernel::restore_budget`](super::Kernel::restore_budget)).
     ///
     /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
-    pub(super) fn restore_budget(&mut self) {
+    pub fn restore_budget(&mut self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
         curios_profile::sample!("term::looks", take_looks());
         self.heaviest = self.heaviest.heavier_of(self.consumed());
@@ -108,24 +108,24 @@ impl Spend {
     }
 
     /// What the declaration under judgment has consumed so far.
-    pub(super) fn consumed(&self) -> Consumption {
+    pub fn consumed(&self) -> Consumption {
         Consumption::new(self.budget - self.remaining, self.peak_depth)
     }
 
     /// The heaviest declaration this kernel has walked, including the one under judgment.
     ///
     /// A measurement's read, never a control — see [`Consumption`]. It reports the heaviest rather than a sum because the budget is per declaration, which makes the heaviest the figure a default has to clear.
-    pub(super) fn heaviest(&self) -> Consumption {
+    pub fn heaviest(&self) -> Consumption {
         self.heaviest.heavier_of(self.consumed())
     }
 
     /// A fresh binder identity, rendering as `hint`.
-    pub(super) fn fresh(&self, hint: Option<&str>) -> Free {
+    pub fn fresh(&self, hint: Option<&str>) -> Free {
         Free::local(self.minted.fresh(), hint)
     }
 
     /// Keep every binder minted from now on clear of `index`: one handed in from outside, which the counter would otherwise reach and hand out again — and an alias between two distinct binders is a capture.
-    pub(super) fn reserve(&mut self, index: u64) {
+    pub fn reserve(&mut self, index: u64) {
         self.minted.seed(
             index
                 .checked_add(1)

@@ -13,15 +13,15 @@ use {
 };
 
 /// One erased position an item's check recorded.
-pub(crate) struct Position {
-    pub(crate) term: Term,
-    pub(crate) erased: Erased,
+pub struct Position {
+    pub term: Term,
+    pub erased: Erased,
     /// Whether typing `term` closed a group that does not descend — noted where the group was typed, since the group is typed with the binders around it opened and `term` holds it closed.
-    pub(crate) encloses_partial: bool,
+    pub encloses_partial: bool,
 }
 
 #[derive(Default)]
-pub(super) struct Positions {
+pub struct Positions {
     recorded: Vec<Position>,
     /// The first classification that could not be decided.
     failure: Option<Error>,
@@ -33,24 +33,24 @@ pub(super) struct Positions {
 
 impl Positions {
     /// Whether a classification is already in flight, in which case this record is one of its own, or a reader reads: either way the record is dropped.
-    pub(super) fn suppressed(&self) -> bool {
+    pub fn suppressed(&self) -> bool {
         self.classifying || self.reading
     }
 
     /// Drop every record while `reading`, handing back whether records were already being dropped for a reader.
-    pub(super) fn hold_for_reading(&mut self, reading: bool) -> bool {
+    pub fn hold_for_reading(&mut self, reading: bool) -> bool {
         std::mem::replace(&mut self.reading, reading)
     }
 
     /// Raise the guard for a classification about to run.
     ///
     /// A bracket rather than a closure, and paired with [`Positions::settle`] — two calls that must agree, which is normally a thing to get wrong. It is unavoidable here and safe for one reason: the middle of the bracket is `erased_half`, which needs the whole [`Kernel`](super::Kernel), and handing this component the kernel that owns it is not a thing Rust will do. So the orchestration lives on `Kernel::record_checked`, which is the sole caller of either half and the only one that can exist.
-    pub(super) fn begin(&mut self) {
+    pub fn begin(&mut self) {
         self.classifying = true;
     }
 
     /// Lower the guard and hand back what the type classified as, keeping the first failure to surface with the drain.
-    pub(super) fn settle(&mut self, outcome: Result<Option<Erased>, Error>) -> Option<Erased> {
+    pub fn settle(&mut self, outcome: Result<Option<Erased>, Error>) -> Option<Erased> {
         self.classifying = false;
 
         match outcome {
@@ -63,7 +63,7 @@ impl Positions {
     }
 
     /// Record `term` at `erased`, handing back where it was recorded for [`Positions::enclose_partial`].
-    pub(super) fn push(&mut self, term: &Term, erased: Erased) -> usize {
+    pub fn push(&mut self, term: &Term, erased: Erased) -> usize {
         self.recorded.push(Position {
             term: term.clone(),
             erased,
@@ -74,14 +74,14 @@ impl Positions {
     }
 
     /// The position recorded at `index` enclosed a group that does not descend.
-    pub(super) fn enclose_partial(&mut self, index: usize) {
+    pub fn enclose_partial(&mut self, index: usize) {
         if let Some(position) = self.recorded.get_mut(index) {
             position.encloses_partial = true;
         }
     }
 
     /// Each position recorded since `since` whose term names one of `members` enclosed a group that does not descend: the group's members, assumed while its signatures and bodies are checked, stand in those positions as locals that hold no group.
-    pub(super) fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
+    pub fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
         for position in self.recorded.iter_mut().skip(since) {
             if members
                 .iter()
@@ -93,12 +93,12 @@ impl Positions {
     }
 
     /// How many positions are recorded and whether a classification has failed, for a walk that may be refused to be taken back to.
-    pub(super) fn recorded(&self) -> (usize, bool) {
+    pub fn recorded(&self) -> (usize, bool) {
         (self.recorded.len(), self.failure.is_some())
     }
 
     /// Take back what a refused walk recorded since `recorded`: its positions, and a classification that failed inside it.
-    pub(super) fn take_back(&mut self, (positions, failed): (usize, bool)) {
+    pub fn take_back(&mut self, (positions, failed): (usize, bool)) {
         self.recorded.truncate(positions);
         if !failed {
             self.failure = None;
@@ -106,7 +106,7 @@ impl Positions {
     }
 
     /// Take this item's positions and any classification that could not be decided, leaving both empty for the next item.
-    pub(super) fn drain(&mut self) -> (Vec<Position>, Option<Error>) {
+    pub fn drain(&mut self) -> (Vec<Position>, Option<Error>) {
         (std::mem::take(&mut self.recorded), self.failure.take())
     }
 }

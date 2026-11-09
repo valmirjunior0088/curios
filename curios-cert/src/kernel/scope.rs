@@ -12,7 +12,7 @@ use {
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
 #[derive(Clone, Copy)]
-pub(super) struct Mark {
+pub struct Mark {
     locals: usize,
     refinements: usize,
 }
@@ -21,7 +21,7 @@ pub(super) struct Mark {
 ///
 /// Locals are a stack, so the innermost opening identifies everything beneath it: a binder is only ever closed after every binder opened inside it, and an opening is never numbered twice. A judgment that read a local's type is true for as long as its prefix stands — and no longer, whatever the binder is called, since a name a caller hands in can come back at another type once the first is closed.
 #[derive(Clone, Copy)]
-pub(super) struct Prefix {
+pub struct Prefix {
     depth: usize,
     opening: u64,
 }
@@ -65,16 +65,16 @@ struct Value {
 }
 
 /// A `let`-bound local as an arm reads it, to bind again the ones its solution moves.
-pub(crate) struct LetBound {
-    pub(crate) name: Free,
-    pub(crate) type_: Term,
+pub struct LetBound {
+    pub name: Free,
+    pub type_: Term,
     /// What it stands for, as its `let` states it.
-    pub(crate) written: Term,
+    pub written: Term,
     /// What it stands for, by value — which names a variable exactly where a solution for that variable moves it.
-    pub(crate) value: Term,
-    pub(crate) encloses_partial: bool,
+    pub value: Term,
+    pub encloses_partial: bool,
     /// Whether an arm's index inversion bound it, which a binding again keeps.
-    pub(crate) solved: bool,
+    pub solved: bool,
 }
 
 /// A binder the walk in progress opened.
@@ -93,7 +93,7 @@ struct Local {
 }
 
 #[derive(Default)]
-pub(super) struct Scope {
+pub struct Scope {
     /// Binders opened by the walk in progress, outermost first.
     locals: Vec<Local>,
     /// Where each name's innermost binder sits in `locals`. A `let` is a binder, so a chain of them is as deep a scope as it is long, and a lookup that scanned for its name would cost the chain at every variable.
@@ -112,12 +112,12 @@ pub(super) struct Scope {
 
 impl Scope {
     /// Open a binder that stands for nothing: bring `name : type_` into scope for the walk in progress, answering whether that re-types a binder already in scope — an arm re-assumes a local at its specialized type, and the shadow is what a lookup finds for as long as the arm stands, which changes what a term naming it is typed at.
-    pub(super) fn assume(&mut self, name: &Free, type_: &Term) -> bool {
+    pub fn assume(&mut self, name: &Free, type_: &Term) -> bool {
         self.open(name, type_, None)
     }
 
     /// Open a `let`'s binder: bring `name : type_` into scope standing for `value`, which the caller has checked at `type_` where the `let` stands — `encloses_partial` saying that check enclosed a group that does not descend. Answers as [`Scope::assume`] does, an arm binding a local again at the value its solution gives it.
-    pub(super) fn bind(
+    pub fn bind(
         &mut self,
         name: &Free,
         type_: &Term,
@@ -160,7 +160,7 @@ impl Scope {
     }
 
     /// `term` by value: every `let`-bound local it names replaced by what the local stands for, itself by value. This is the term a `let` substituted into its tail leaves in `term`'s place, and it is what every reader of a spelling is handed — reduction and conversion, an elimination's scrutinee and result, an arm's equation, a recorded position, a graded call. Typing alone walks a tail by name, which is what types each value once.
-    pub(super) fn by_value(&self, term: &Term) -> Term {
+    pub fn by_value(&self, term: &Term) -> Term {
         if self.bound == 0 || !term.has_local_free() {
             return term.clone();
         }
@@ -174,7 +174,7 @@ impl Scope {
     }
 
     /// `term` as a graded call reads it: [`Scope::by_value`] but for a local an arm's index inversion solved, which stays as written, since the size order reads nothing an inversion concluded. A `let` bound over one reads it as written too, its own graded value having kept it.
-    pub(super) fn graded(&self, term: &Term) -> Term {
+    pub fn graded(&self, term: &Term) -> Term {
         if self.bound == 0 || !term.has_local_free() {
             return term.clone();
         }
@@ -191,17 +191,17 @@ impl Scope {
     }
 
     /// Whether the innermost local called `name` stands for nothing, so that a `let` binding it binds over a binder.
-    pub(super) fn assumes(&self, name: &Free) -> bool {
+    pub fn assumes(&self, name: &Free) -> bool {
         self.local(name).is_some_and(|local| local.value.is_none())
     }
 
     /// Whether `name` is a local a `let` bound.
-    pub(super) fn binds(&self, name: &Free) -> bool {
+    pub fn binds(&self, name: &Free) -> bool {
         self.local(name).is_some_and(|local| local.value.is_some())
     }
 
     /// Whether `term` names a `let`-bound local whose value enclosed a group that does not descend.
-    pub(super) fn names_partial(&self, term: &Term) -> bool {
+    pub fn names_partial(&self, term: &Term) -> bool {
         self.bound != 0
             && term.has_local_free()
             && term.mentions().locals().any(|name| {
@@ -212,7 +212,7 @@ impl Scope {
     }
 
     /// The `let`-bound locals in scope, outermost first. A name bound twice is reported once, at its innermost binding.
-    pub(super) fn bound_locals(&self) -> Vec<LetBound> {
+    pub fn bound_locals(&self) -> Vec<LetBound> {
         self.locals
             .iter()
             .enumerate()
@@ -232,12 +232,12 @@ impl Scope {
     }
 
     /// How many binders this walk has opened, closed ones included: a binder opened later is a higher opening.
-    pub(super) fn openings(&self) -> u64 {
+    pub fn openings(&self) -> u64 {
         self.openings
     }
 
     /// The newest of the binders the locals `term` names stand at, each the innermost of its name, or zero where it names none in scope.
-    pub(super) fn newest_binder_named(&self, term: &Term) -> u64 {
+    pub fn newest_binder_named(&self, term: &Term) -> u64 {
         term.mentions()
             .locals()
             .filter_map(|name| self.local(name))
@@ -247,7 +247,7 @@ impl Scope {
     }
 
     /// The binders in scope now, for [`Scope::stands`] to be asked about later.
-    pub(super) fn prefix(&self) -> Prefix {
+    pub fn prefix(&self) -> Prefix {
         Prefix {
             depth: self.locals.len(),
             opening: self.locals.last().map_or(0, |local| local.opening),
@@ -255,7 +255,7 @@ impl Scope {
     }
 
     /// Whether every binder `prefix` held is still in scope, as the opening it was.
-    pub(super) fn stands(&self, prefix: Prefix) -> bool {
+    pub fn stands(&self, prefix: Prefix) -> bool {
         match prefix.depth.checked_sub(1) {
             None => true,
             Some(innermost) => self
@@ -268,7 +268,7 @@ impl Scope {
     /// Whether any arm's case equation is currently in force: what files a judgment read off the scope apart from one that is the declaration's ([`Memos`](super::memos::Memos)), and what spares a stuck form the probe where there is nothing to consult.
     ///
     /// Reads the equations *in force*, not the equations recorded: while a settlement withholds the inner ones, nothing is left to consult where none stands.
-    pub(super) fn has_refinements(&self) -> bool {
+    pub fn has_refinements(&self) -> bool {
         self.in_force() != 0
     }
 
@@ -281,7 +281,7 @@ impl Scope {
     /// An equation is a claim about *one* term, so the only sound key is one that identifies terms already definitionally equal, and structural equality is the under-approximation of that which costs nothing to justify. Both spellings satisfy it — the written one *is* the scrutinee, and the reduced one is what the kernel's own reduction says it computes to.
     ///
     /// Keying through `project_erased_universes` would rest on the premise that a universe argument cannot affect what a term computes to, and the premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it is written for the Core-to-ANF hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identifies `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
-    pub(super) fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) -> bool {
+    pub fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) -> bool {
         let recorded = records_case_equation(&scrutinee);
         if recorded {
             self.refinements.push(Refinement {
@@ -305,7 +305,7 @@ impl Scope {
     /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it, names one, read through to the end ([`reads_solved`]). Binding a solved variable re-types the first kind of local and binds the second again (`Kernel::bind`), and a settlement reads both, a `let` by its value and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
-    pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
+    pub fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
         assert!(
             self.hidden.is_none(),
             "an arm's solution restated while an equation's reduced spelling was being settled"
@@ -364,7 +364,7 @@ impl Scope {
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.
     ///
     /// Probed by the keys [`Scope::refine`] stores under: the scrutinee itself, and the spelling its dispatch resolves to, which is what a probe presents once reduction has opened the same dispatch — so an intrinsic comparison meets a guard written through a concept before anything folds it.
-    pub(super) fn refinement_of(&self, term: &Term) -> Option<Term> {
+    pub fn refinement_of(&self, term: &Term) -> Option<Term> {
         self.in_force_innermost_first()
             .find(|entry| entry.key == *term || entry.resolved.as_ref() == Some(term))
             .map(|entry| entry.value.clone())
@@ -373,7 +373,7 @@ impl Scope {
     /// The case value `term` is refined to under a *reduced* spelling already settled, innermost arm first.
     ///
     /// The escalation the written spelling's probe misses reach, and it settles nothing itself: an equation whose reduced spelling has never been asked for cannot answer here.
-    pub(super) fn refinement_of_reduct(&self, term: &Term) -> Option<Term> {
+    pub fn refinement_of_reduct(&self, term: &Term) -> Option<Term> {
         let plain = usize::from(self.plain);
         self.in_force_innermost_first()
             .find(|entry| match &entry.reducts[plain] {
@@ -384,7 +384,7 @@ impl Scope {
     }
 
     /// The equations in force whose reduced spelling is settled and that `candidate` could be a reduct of, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
-    pub(super) fn settled_refinements(
+    pub fn settled_refinements(
         &self,
         candidate: &Term,
         proofs: &[Free],
@@ -410,11 +410,7 @@ impl Scope {
     ///
     /// **Reading the limit here is also what makes the settlement loop finite**, and that is a second job rather than a restatement of the first. An entry being settled is outside the limit for the whole of its own reduction, so a probe reached from inside cannot select it again; relaxing this while keeping the probes' half sends `refined_reduct` back into the entry it is already settling.
     /// **`candidate` is what decides whether the reduction happens at all**, and without that test the deferral buys nothing. A settlement is the whole cost the two-tier key exists to avoid, and a probe reached under freshly opened binders — `Sort::of` walking a telescope, an arm body's own erasure obligations — presents a stuck form on almost every reduction, so *some* term would trigger a settlement in any arm whatever. What [`could_reduce_to`] tests is the one thing a reduct's spelling cannot lie about.
-    pub(super) fn unasked_refinement(
-        &self,
-        candidate: &Term,
-        proofs: &[Free],
-    ) -> Option<(usize, Term)> {
+    pub fn unasked_refinement(&self, candidate: &Term, proofs: &[Free]) -> Option<(usize, Term)> {
         let plain = usize::from(self.plain);
         self.refinements[..self.in_force()]
             .iter()
@@ -430,7 +426,7 @@ impl Scope {
 
     /// How many equations in force `candidate` could be a reduct of — what a profile counts a missed probe by.
     #[cfg(feature = "profile")]
-    pub(super) fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
+    pub fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
         self.refinements[..self.in_force()]
             .iter()
             .filter(|entry| {
@@ -440,23 +436,23 @@ impl Scope {
     }
 
     /// Record what the equation at `index` reduces to, or that reducing it refused.
-    pub(super) fn settle_refinement(&mut self, index: usize, reduct: Option<Term>) {
+    pub fn settle_refinement(&mut self, index: usize, reduct: Option<Term>) {
         let plain = usize::from(self.plain);
         self.refinements[index].reducts[plain] = Reduct::Known(reduct);
     }
 
     /// Whether reduction is plain: it asks the kernel's conversion nothing.
-    pub(super) fn plain(&self) -> bool {
+    pub fn plain(&self) -> bool {
         self.plain
     }
 
     /// Make reduction plain, handing back whether it was already for [`Scope::end_plain`].
-    pub(super) fn begin_plain(&mut self) -> bool {
+    pub fn begin_plain(&mut self) -> bool {
         mem::replace(&mut self.plain, true)
     }
 
     /// Put back what [`Scope::begin_plain`] handed out.
-    pub(super) fn end_plain(&mut self, previous: bool) {
+    pub fn end_plain(&mut self, previous: bool) {
         self.plain = previous;
     }
 
@@ -465,17 +461,17 @@ impl Scope {
     /// **This is what makes an equation's reduced spelling rest only on equations outside it.** Those retract no earlier than it does, so a reduct computed under them stays true for exactly as long as the entry holding it. An eager reduction, run before the equation is pushed and while the stack below it is frozen, would have that guarantee for free; computing the same reduct later has to reconstruct the same view, and withholding is how.
     ///
     /// Withholding the entry itself is the other half: without it, reducing `key` meets `key` at the reducer's own first probe and answers the case value, so the equation would settle its reduced spelling to whatever it was assuming.
-    pub(super) fn hide_refinements_from(&mut self, index: usize) -> Option<usize> {
+    pub fn hide_refinements_from(&mut self, index: usize) -> Option<usize> {
         self.hidden.replace(index)
     }
 
     /// Put back what [`Scope::hide_refinements_from`] withheld.
-    pub(super) fn show_refinements(&mut self, previous: Option<usize>) {
+    pub fn show_refinements(&mut self, previous: Option<usize>) {
         self.hidden = previous;
     }
 
     /// The types of the binders currently in scope, outermost first.
-    pub(super) fn local_types(&self) -> Vec<Term> {
+    pub fn local_types(&self) -> Vec<Term> {
         self.locals
             .iter()
             .map(|local| local.type_.clone())
@@ -483,31 +479,31 @@ impl Scope {
     }
 
     /// The identities of the binders currently in scope, outermost first — parallel to [`Scope::local_types`].
-    pub(super) fn local_names(&self) -> Vec<Free> {
+    pub fn local_names(&self) -> Vec<Free> {
         self.locals.iter().map(|local| local.name).collect()
     }
 
     /// The type `name` was opened at, if it is a binder currently in scope.
     ///
     /// The innermost binder of the name: an arm opens a local again at its specialized type, and that is the one a lookup finds while the arm stands.
-    pub(super) fn local_type(&self, name: &Free) -> Option<&Term> {
+    pub fn local_type(&self, name: &Free) -> Option<&Term> {
         self.local(name).map(|local| &local.type_)
     }
 
     /// Whether the binder `name` is a proof, where that has been asked: `None` where it has not, or where `name` is no binder in scope.
-    pub(super) fn classified(&self, name: &Free) -> Option<bool> {
+    pub fn classified(&self, name: &Free) -> Option<bool> {
         self.local(name)?.proof
     }
 
     /// Remember whether the binder `name` is a proof.
-    pub(super) fn classify(&mut self, name: &Free, proof: bool) {
+    pub fn classify(&mut self, name: &Free, proof: bool) {
         if let Some(&at) = self.innermost.get(name) {
             self.locals[at].proof = Some(proof);
         }
     }
 
     /// The current depth of both stacks, to be handed back to [`Scope::retract`].
-    pub(super) fn mark(&self) -> Mark {
+    pub fn mark(&self) -> Mark {
         Mark {
             locals: self.locals.len(),
             refinements: self.refinements.len(),
@@ -517,7 +513,7 @@ impl Scope {
     /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether what a term naming a local reduces to changed: an equation was dropped, one an arm inside had restated answers as recorded again, or a local an arm inside had re-typed stands at the type it had before.
     ///
     /// Where equations are withheld — for a settlement, or for a question asked under the view one was made in ([`Scope::hide_refinements_from`]) — only a scope opened inside the withholding closes here. That is structural rather than checked by discipline: `Kernel::scoped` is this method's only caller and a withholding is a bracket as well, so the two nest. A settlement runs reduction, which opens no binder scope; a question runs conversion, which opens them and assumes no equation in them.
-    pub(super) fn retract(&mut self, mark: Mark) -> bool {
+    pub fn retract(&mut self, mark: Mark) -> bool {
         assert!(
             self.hidden.is_none_or(|limit| limit <= mark.refinements),
             "a scope closed past the equations a settlement or a question was withholding"

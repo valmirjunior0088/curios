@@ -54,7 +54,7 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
 /// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
 ///
 /// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows that a partial definition, a parser of `/std/Json/decode`, is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
-pub(crate) struct Totals<'g> {
+pub struct Totals<'g> {
     /// The units in scope, whose records answer for their own definitions.
     scope: &'g Globals<'g>,
     /// What this walk classified as not known to terminate: the items it judged, the verdicts it adopted, and the items of a unit in scope no record covers.
@@ -65,7 +65,7 @@ pub(crate) struct Totals<'g> {
 
 impl<'g> Totals<'g> {
     /// What `globals` holds classified, read where it stands, and what it holds unclassified: the items of a unit mounted without a covering record, classified here from their terms, exactly as a judged item is, every group in them one this walk never typed. Those are closed over one another to a fixpoint, since nothing says in which order they were stored.
-    pub(crate) fn seeded(kernel: &Kernel, globals: &'g Globals<'g>) -> Self {
+    pub fn seeded(kernel: &Kernel, globals: &'g Globals<'g>) -> Self {
         curios_profile::profile!("totals::seeded");
         let mut totals = Self {
             scope: globals,
@@ -82,19 +82,19 @@ impl<'g> Totals<'g> {
     }
 
     /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, by the baseline's record where `kernel` reads `name` as a declaration it does not visit, or by the record of the unit in scope that defines it.
-    pub(crate) fn partial(&self, kernel: &Kernel, name: &Global) -> bool {
+    pub fn partial(&self, kernel: &Kernel, name: &Global) -> bool {
         self.partial.contains(name) || kernel.passed_partial(name) || self.scope.partial(name)
     }
 
     /// Put `name` into the set on the word of an earlier walk's record: a definition whose verdict this walk adopts, which that walk classified as not known to terminate.
-    pub(crate) fn adopt(&mut self, name: Global) {
+    pub fn adopt(&mut self, name: Global) {
         self.partial.insert(name);
     }
 
     /// Classify a judged `item` into the set.
     ///
     /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment is in the set since it was seeded. So one pass over the item settles it, its members closed over one another where it is a group.
-    pub(crate) fn classify(&mut self, kernel: &Kernel, item: &Item) {
+    pub fn classify(&mut self, kernel: &Kernel, item: &Item) {
         let mut mentions = BTreeMap::new();
         self.locally(kernel, item, true, &mut mentions);
         self.close(kernel, &mentions);
@@ -162,12 +162,12 @@ impl<'g> Totals<'g> {
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 /// What [`calls_a_diverging_row`] found of each node of the positions a walk records, carried across the whole walk and keyed by the positions' canonical nodes: a position's term is recorded where it was typed, built there, so a type recorded at every level of a nesting is a copy at each, and two copies are compared node by node at every probe that finds one.
 #[derive(Default)]
-pub(crate) struct PositionVerdicts {
+pub struct PositionVerdicts {
     keys: Sharing,
     verdicts: HashMap<Term, bool>,
 }
 
-pub(crate) fn check_positions(
+pub fn check_positions(
     kernel: &Kernel,
     positions: &[Position],
     totals: &Totals<'_>,
@@ -198,7 +198,7 @@ pub(crate) fn check_positions(
 }
 
 /// Whether a value of `type_` is a proof: `type_` is a proposition, or a function that ultimately answers one. It is what this kernel states a binder binds where it marks one ([`curios_core::Scope::binds_proof`]), read of the binder's type by its own rules, and never what a module arriving says of it (`kernel::stating`). A sort is neither, so a binder at a type bears no mark: conversion reads a type's reduct, and a type is evaluated before it is bound.
-pub(crate) fn bears_proof(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
+pub fn bears_proof(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
     if matches!(erased_half(kernel, type_)?, Some(Erased::Proof)) {
         return Ok(true);
     }
@@ -221,7 +221,7 @@ pub(crate) fn bears_proof(kernel: &mut Kernel, type_: &Term) -> Result<bool, Err
 /// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.
 ///
 /// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
-pub(crate) fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Erased>, Error> {
+pub fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Erased>, Error> {
     // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
     if declared_into_prop(kernel, type_)?.is_some() {
         return Ok(Some(Erased::Proof));

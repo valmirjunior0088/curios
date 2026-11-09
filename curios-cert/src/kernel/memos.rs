@@ -90,7 +90,7 @@ impl<K: Eq + Hash, V: Clone> Lives<K, V> {
 }
 
 /// What the answers read off the scope were when a settlement narrowed the equations in force, of the reductions it reaches: set aside while it runs, and handed back where it restores them ([`Memos::set_aside`]).
-pub(super) struct Aside {
+pub struct Aside {
     plain: bool,
     local: [HashMap<Term, Term>; 2],
     local_forced: [HashMap<Term, Term>; 2],
@@ -115,7 +115,7 @@ pub struct Converted {
     pub unfolded: Rc<[(Term, Term)]>,
 }
 
-pub(super) struct Memos {
+pub struct Memos {
     /// Whether the memos are consulted at all. On by default; `Kernel::uncached` exists so a test can assert that switching them off changes no *semantic* verdict — the property that makes them an evaluation strategy rather than a store.
     enabled: bool,
     /// Weak-head reducts of local-free terms, per entry point: plain, and rec-forced. Free on a hit, and cleared at every declaration boundary — see the module documentation for why those two go together, and for why `whnf` reaches this at every level rather than only at the crate's edge.
@@ -146,7 +146,7 @@ pub(super) struct Memos {
 }
 
 impl Memos {
-    pub(super) fn new(enabled: bool) -> Self {
+    pub fn new(enabled: bool) -> Self {
         Self {
             enabled,
             whnf: HashMap::new(),
@@ -174,7 +174,7 @@ impl Memos {
     }
 
     /// What classifying the stuck operation `term` found, where it is remembered.
-    pub(super) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+    pub fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
         if !self.enabled {
             return None;
         }
@@ -185,7 +185,7 @@ impl Memos {
     }
 
     /// Remember what classifying the stuck operation `term` found, for as long as what it read stands.
-    pub(super) fn store_classification(&mut self, term: Term, classification: Classification) {
+    pub fn store_classification(&mut self, term: Term, classification: Classification) {
         if !self.enabled {
             return;
         }
@@ -197,7 +197,7 @@ impl Memos {
     }
 
     /// The remembered weak-head reduct of `term` at the given entry point, as plain reduction took it where `plain` and as a judgment's did otherwise.
-    pub(super) fn whnf(&self, term: &Term, forced: bool, plain: bool) -> Option<Term> {
+    pub fn whnf(&self, term: &Term, forced: bool, plain: bool) -> Option<Term> {
         if !self.enabled {
             return None;
         }
@@ -212,7 +212,7 @@ impl Memos {
     }
 
     /// Remember `term`'s weak-head reduct at the given entry point, for plain reduction where `plain` and for a judgment's otherwise.
-    pub(super) fn store_whnf(&mut self, term: Term, forced: bool, plain: bool, reduct: Term) {
+    pub fn store_whnf(&mut self, term: Term, forced: bool, plain: bool, reduct: Term) {
         if !self.enabled {
             return;
         }
@@ -226,19 +226,14 @@ impl Memos {
     }
 
     /// The remembered sort of `type_` as plain reduction read it where `plain`, and as a judgment's did otherwise, `in_arm` saying whether a case equation is in force, with the binders it was read under where it was read off the scope, which the caller asks the scope about before taking the answer.
-    pub(super) fn sort(
-        &self,
-        type_: &Term,
-        in_arm: bool,
-        plain: bool,
-    ) -> Option<(Option<Prefix>, Sort)> {
+    pub fn sort(&self, type_: &Term, in_arm: bool, plain: bool) -> Option<(Option<Prefix>, Sort)> {
         let life = self.judged(&[type_], in_arm)?;
 
         self.sorts[usize::from(plain)].get(&self.key(type_), life)
     }
 
     /// Remember `type_`'s sort for the reduction that read it, in the table [`Memos::sort`] reads it from under the same `in_arm`, under the binders `prefix` holds.
-    pub(super) fn store_sort(
+    pub fn store_sort(
         &mut self,
         type_: Term,
         in_arm: bool,
@@ -253,24 +248,14 @@ impl Memos {
     }
 
     /// The remembered erased half of a position at `type_`, as [`Memos::sort`] hands back a sort.
-    pub(super) fn half(
-        &self,
-        type_: &Term,
-        in_arm: bool,
-    ) -> Option<(Option<Prefix>, Option<Erased>)> {
+    pub fn half(&self, type_: &Term, in_arm: bool) -> Option<(Option<Prefix>, Option<Erased>)> {
         let life = self.judged(&[type_], in_arm)?;
 
         self.halves.get(&self.key(type_), life)
     }
 
     /// Remember the erased half of a position at `type_`, read under the binders `prefix` holds.
-    pub(super) fn store_half(
-        &mut self,
-        type_: Term,
-        in_arm: bool,
-        prefix: Prefix,
-        half: Option<Erased>,
-    ) {
+    pub fn store_half(&mut self, type_: Term, in_arm: bool, prefix: Prefix, half: Option<Erased>) {
         if let Some(life) = self.judged(&[&type_], in_arm) {
             let type_ = self.key(&type_);
             self.halves.insert(type_, life, prefix, half);
@@ -278,24 +263,14 @@ impl Memos {
     }
 
     /// The remembered type of `term`, `in_arm` saying whether a case equation is in force, as [`Memos::sort`] hands back a sort.
-    pub(super) fn infer(
-        &self,
-        term: &Term,
-        in_arm: bool,
-    ) -> Option<(Option<Prefix>, (Term, bool))> {
+    pub fn infer(&self, term: &Term, in_arm: bool) -> Option<(Option<Prefix>, (Term, bool))> {
         let life = self.judged(&[term], in_arm)?;
 
         self.types.get(&self.key(term), life)
     }
 
     /// Remember `term`'s type, in the table [`Memos::infer`] reads it from under the same `in_arm`.
-    pub(super) fn store_infer(
-        &mut self,
-        term: Term,
-        in_arm: bool,
-        prefix: Prefix,
-        typed: (Term, bool),
-    ) {
+    pub fn store_infer(&mut self, term: Term, in_arm: bool, prefix: Prefix, typed: (Term, bool)) {
         if let Some(life) = self.judged(&[&term], in_arm) {
             let term = self.key(&term);
             self.types.insert(term, life, prefix, typed);
@@ -303,7 +278,7 @@ impl Memos {
     }
 
     /// Whether `term` is remembered to check at `expected`: `Some`, with the binders that was read under where it was read off the scope.
-    pub(super) fn checked(
+    pub fn checked(
         &self,
         term: &Term,
         expected: &Term,
@@ -316,7 +291,7 @@ impl Memos {
     }
 
     /// Remember that `term` checks at `expected`, and whether its check closed a group that does not descend.
-    pub(super) fn store_checked(
+    pub fn store_checked(
         &mut self,
         term: &Term,
         expected: &Term,
@@ -335,7 +310,7 @@ impl Memos {
     }
 
     /// The remembered verdict of comparing `this` with `that` at `type_`, as [`Memos::infer`] hands back a type: the one plain reduction reached where `plain`, and a judgment's otherwise.
-    pub(super) fn converted(
+    pub fn converted(
         &self,
         type_: &Term,
         this: &Term,
@@ -352,7 +327,7 @@ impl Memos {
     }
 
     /// Remember the verdict of the comparison `goal` — its type, then its two sides — for the reduction it was reached under.
-    pub(super) fn store_converted(
+    pub fn store_converted(
         &mut self,
         goal: (Term, Term, Term),
         in_arm: bool,
@@ -380,24 +355,24 @@ impl Memos {
     }
 
     /// The closed machine's memo.
-    pub(super) fn closed(&mut self) -> &mut ClosedMemo {
+    pub fn closed(&mut self) -> &mut ClosedMemo {
         &mut self.closed
     }
 
     /// A run of the closed machine is about to start. With the memos off it starts from nothing, as every reduction then does: the memo the kernel holds is set aside and handed back, for [`Memos::end_closed_run`] to restore, so a run made inside another's fold leaves the outer one's memo as it found it.
-    pub(super) fn begin_closed_run(&mut self) -> Option<ClosedMemo> {
+    pub fn begin_closed_run(&mut self) -> Option<ClosedMemo> {
         (!self.enabled).then(|| mem::take(&mut self.closed))
     }
 
     /// The run [`Memos::begin_closed_run`] opened has ended: what it set aside is the memo again.
-    pub(super) fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
+    pub fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
         if let Some(outer) = outer {
             self.closed = outer;
         }
     }
 
     /// Discard every remembered reduct, sort, type, check and verdict. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
-    pub(super) fn begin_declaration(&mut self) {
+    pub fn begin_declaration(&mut self) {
         self.keys = Sharing::new();
         self.whnf.clear();
         self.forced.clear();
@@ -416,7 +391,7 @@ impl Memos {
     }
 
     /// Discard what was read off the scope: the local-bearing reducts, the classifications the kernel's conversion classed, and the scoped sorts, types, checks and verdicts. Called wherever the set of case equations in force changes and wherever a local is re-typed, by an arm or by the bracket that closes it: the two things besides the definition store that each is a function of.
-    pub(super) fn begin_equations(&mut self) {
+    pub fn begin_equations(&mut self) {
         for table in self.local.iter_mut().chain(&mut self.local_forced) {
             table.clear();
         }
@@ -435,7 +410,7 @@ impl Memos {
     /// A settlement narrows the equations in force: the answers read off the scope under the ones it withholds are set aside, of the reductions it reaches — plain reduction's alone inside a span of it, since nothing else runs there, and every scoped table otherwise, as [`Memos::begin_equations`] reaches them — and the settlement starts from none.
     ///
     /// **What was set aside is what asking again gives once the equations are restored.** A settlement reduces, and a question it puts to conversion opens binders and assumes no equation, so nothing it does reaches what the answers set aside read; [`Memos::hand_back`] puts them back where it restores the equations, and what the settlement remembered under the narrowed ones goes.
-    pub(super) fn set_aside(&mut self, plain: bool) -> Aside {
+    pub fn set_aside(&mut self, plain: bool) -> Aside {
         let mut aside = Aside {
             plain,
             local: Default::default(),
@@ -464,7 +439,7 @@ impl Memos {
     }
 
     /// Put back what [`Memos::set_aside`] set aside, where the settlement restores the equations it narrowed: what was remembered under the narrowed ones goes.
-    pub(super) fn hand_back(&mut self, mut aside: Aside) {
+    pub fn hand_back(&mut self, mut aside: Aside) {
         for index in reached(aside.plain) {
             self.local[index] = mem::take(&mut aside.local[index]);
             self.local_forced[index] = mem::take(&mut aside.local_forced[index]);
@@ -480,7 +455,7 @@ impl Memos {
     }
 
     /// Discard the typings read off the scope, and nothing else. Called wherever what the enclosing arms established for the call recorder changes: a group typed inside a term closes under it, so a type or a check remembered on one side of that change does not answer on the other. A reduct and a sort read none of it. Called too where an arm binds a `let`-bound local again: a typing of a term naming it read what it stood for, and a reduct, a sort and a verdict are keyed by value and name none.
-    pub(super) fn begin_sizes(&mut self) {
+    pub fn begin_sizes(&mut self) {
         self.types.begin_equations();
         self.checked.begin_equations();
     }
@@ -488,7 +463,7 @@ impl Memos {
     /// Discard every remembered type and check, the declaration's and the scope's, and nothing else. Called where a refused walk takes back the positions it recorded (`Kernel::tried`), and where a read ends (`Kernel::read`), whose typings recorded none: a hit records the position it answers and none inside its term, which the typing it stands for recorded, so a typing remembered there would answer for positions nothing recorded. A reduct, a sort, an erased half and a verdict record nothing.
     ///
     /// The typings remembered before the walk go too, though their positions stand. A refused walk outlives its refusal only at an arm no reduction takes, any other ending its item, so each typing lost costs one typing again there and nowhere else; keeping them would take a journal of what every walk remembers, kept for that one rare path.
-    pub(super) fn discard_typings(&mut self) {
+    pub fn discard_typings(&mut self) {
         self.types.begin_declaration();
         self.checked.begin_declaration();
     }

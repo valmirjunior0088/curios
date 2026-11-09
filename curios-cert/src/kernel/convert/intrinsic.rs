@@ -18,7 +18,7 @@ use {
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
 ///
 /// The chain that decides the pair or leaves what is left to compare is `curios-analysis`'s `convert_intrinsics`, the elaborator's too. What is the kernel's is the discharge: the atoms the chain hands back are classed by the kernel's own comparison, a residual is compared at `Type`, the levels by entailment, and each operand in order at its declared type, all inside the pairs the goal stands in, stopping at the first that fails.
-pub(super) fn convert_intrinsic(
+pub fn convert_intrinsic(
     kernel: &mut Kernel,
     pairs: &mut Pairs,
     this: &Intrinsic,
@@ -53,7 +53,7 @@ pub(super) fn convert_intrinsic(
 }
 
 /// Whether `this` and `that`, two host calls, are one call: `curios-analysis`'s `foreign_congruence` says which operands to compare, and at what, as it says it to the elaborator.
-pub(super) fn convert_foreign(
+pub fn convert_foreign(
     kernel: &mut Kernel,
     pairs: &mut Pairs,
     this: &Term,
@@ -84,7 +84,7 @@ fn obligations_convert(
 }
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
-pub(super) fn connectives_convert(
+pub fn connectives_convert(
     kernel: &mut Kernel,
     pairs: &mut Pairs,
     this: &Term,

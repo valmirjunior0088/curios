@@ -6,28 +6,35 @@
 //!
 //! So the trusted base is this crate's dependency closure, which `cargo tree -p curios-cert` enumerates, and `documentation/design/soundness/` argues the rules it holds. Sharing the representation is not sharing a judgment. Why the base is a crate boundary, and why the judgments flatten onto the root, are `README.md`'s decisions; why the kernel depends on nothing of the elaborator is `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`'s.
 //!
-//! The crate is a flat module space: every module re-exports at the root, so consumers use `curios_cert::Kernel` and `curios_cert::convert`.
+//! The crate is a flat module space: its root names what another crate reads, so consumers use `curios_cert::Kernel` and `curios_cert::convert`.
 
 mod entail;
-pub(crate) use entail::*;
+use entail::*;
 
 mod level_model;
-pub(crate) use level_model::*;
+use level_model::*;
 
 mod satisfy;
-pub use satisfy::*;
+pub use satisfy::satisfiable;
+use satisfy::*;
 
 mod obligation;
-pub(crate) use obligation::*;
+use obligation::*;
 
 mod baseline;
-pub use baseline::*;
+use baseline::*;
+pub use baseline::{Baseline, complete, part_digest};
 
 mod recheck;
-pub use recheck::*;
+pub use recheck::{
+    Rechecked, Verdict, certify_definitions, certify_definitions_over, certify_program,
+};
 
 mod kernel;
-pub use kernel::*;
+use kernel::*;
+pub use kernel::{
+    Counted, EnteredArm, Error, Globals, Kernel, Reader, carries_information, check, convert, infer,
+};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_cert::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

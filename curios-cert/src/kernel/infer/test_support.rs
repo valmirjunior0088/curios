@@ -11,32 +11,32 @@ use {
     },
 };
 
-pub(super) fn kernel() -> Kernel<'static> {
+pub fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
-pub(super) fn binder(index: u32, hint: &str) -> Free {
+pub fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
 }
 
-pub(super) fn nat(n: usize) -> Term {
+pub fn nat(n: usize) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
-pub(super) fn nat_type() -> Term {
+pub fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
-pub(super) fn bool_type() -> Term {
+pub fn bool_type() -> Term {
     Term::intrinsic(Intrinsic::BoolType)
 }
 
-pub(super) fn one() -> Level {
+pub fn one() -> Level {
     Level::zero().succ().expect("level zero has a successor")
 }
 
 /// A structure with one parameter and one field at that parameter's type — the shape an occurrence can state the wrong parameter count for.
-pub(super) fn parameterized_struct(kernel: &mut Kernel) -> Global {
+pub fn parameterized_struct(kernel: &mut Kernel) -> Global {
     let name = Global::Authored(Qualifier::from(["Boxed"]));
     let param = binder(0, "A");
     let field = binder(1, "value");
@@ -61,7 +61,7 @@ pub(super) fn parameterized_struct(kernel: &mut Kernel) -> Global {
 /// A dependent Σ, for the two fixtures below: `(t : Type, x : t)`, whose second entry's type *is* its first component.
 ///
 /// The dependency is the whole point. Inferring the components of a literal independently yields `(Type, Nat)`, a telescope binding nothing, and no conversion relates that to this one — so a rule that reaches this expectation only through inference cannot accept any inhabitant of it.
-pub(super) fn dependent_pair_type() -> Term {
+pub fn dependent_pair_type() -> Term {
     let t = binder(40, "t");
     let x = binder(41, "x");
 

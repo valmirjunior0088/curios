@@ -3,6 +3,7 @@
 use {
     crate::universes::solver::test_support::*,
     crate::universes::solver::*,
+    curios_cert::satisfiable,
     curios_common::Qualifier,
     curios_core::{Anchor, Anchored, Extent, Global},
 };
@@ -416,7 +417,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
     let mut verdicts = Vec::new();
     for (label, context) in &contexts {
         let elaborator = universe_context_validate(context).is_ok();
-        let kernel = context.is_closed() && curios_cert::satisfiable(&context.constraints);
+        let kernel = context.is_closed() && satisfiable(&context.constraints);
 
         assert_eq!(
             elaborator,
@@ -531,7 +532,7 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
     let mut sets = 0usize;
 
     let mut judge = |constraints: Vec<UniverseConstraint>| {
-        let kernel = curios_cert::satisfiable(&constraints);
+        let kernel = satisfiable(&constraints);
         let truth = satisfied_somewhere(&constraints, PARAMS, BOUND);
         let context = UniverseContext {
             parameter_count: PARAMS,

@@ -137,7 +137,7 @@ fn member_alike(this: &RecDefinition, that: &RecDefinition) -> bool {
 /// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context, the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, the variance vector it carries aside, which no judgment of another unit reads, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
 ///
 /// **The certifier's own, of what [`Stood`] says of a declaration of the walk's unit.** A walk records it of each part it read of another unit, and a walk over that walk's unit as a baseline digests the part again where the unit it reads is not the one that was read: the terms are the ones in its scope and the function is this one, so a verdict adopted across units rests on nothing another component computed. Each term is consed alone (`Sharing`), so it is digested under no position and under its binders' names: two parts that digest alike are one to every judgment, and two that differ in a name alone are judged again, which costs a judgment and admits nothing.
-pub(crate) fn read_digest(
+pub fn read_digest(
     globals: &Globals<'_>,
     name: &Global,
     body: bool,
@@ -159,7 +159,7 @@ pub(crate) fn read_digest(
 }
 
 /// [`read_digest`] of `name` as `module` holds it where `places` says, under the verdict `partial` and the vectors `polarities` and `variances`: what a walk reads of a declaration of its own unit, as it settled it or as the baseline holds it. `Ok(None)` where the module holds no such name.
-pub(crate) fn held_digest(
+pub fn held_digest(
     definitions: &Definitions,
     places: &Places,
     name: &Global,
@@ -183,7 +183,7 @@ pub(crate) fn held_digest(
 }
 
 /// What a signature read of a definition reads beside its terms: whether it is not known to terminate, the vectors of the entry its former carries, and how it applies its parameters.
-pub(crate) type Beside<'a> = (
+pub type Beside<'a> = (
     bool,
     Option<&'a [Polarity]>,
     Option<&'a [Variance]>,
@@ -363,7 +363,7 @@ impl Completing<'_> {
 }
 
 /// The thirty-two bytes a digest spells.
-pub(crate) fn bytes_of(digest: &str) -> Option<[u8; 32]> {
+pub fn bytes_of(digest: &str) -> Option<[u8; 32]> {
     Digest::from_hex(digest).map(|digest| *digest.as_bytes())
 }
 
@@ -375,14 +375,14 @@ struct Stood {
 }
 
 /// What a walk over a baseline has settled so far, and so which of the baseline's verdicts it may still adopt.
-pub(crate) struct Adopting<'a> {
+pub struct Adopting<'a> {
     baseline: Baseline<'a>,
     stood: HashMap<Global, Stood>,
 }
 
 impl<'a> Adopting<'a> {
     /// A walk over `baseline` that has settled nothing yet.
-    pub(crate) fn over(baseline: Baseline<'a>) -> Self {
+    pub fn over(baseline: Baseline<'a>) -> Self {
         Self {
             baseline,
             stood: HashMap::new(),
@@ -390,14 +390,14 @@ impl<'a> Adopting<'a> {
     }
 
     /// The baseline being walked over.
-    pub(crate) fn baseline(&self) -> Baseline<'a> {
+    pub fn baseline(&self) -> Baseline<'a> {
         self.baseline
     }
 
     /// The baseline's record of each name `item` declares, in the order the item declares them, where its verdict on `item` stands; `None` where it does not, and the walk judges the item.
     ///
     /// `item`'s terms are the baseline's ([`Baseline::holds`]). The verdict stands where the record covers each name `item` declares and files a vector for each registry entry `module` holds under one, and every name that record read — of this unit, settled before it, or of a unit in scope, which `abroad` answers for, told whether the read was of the name's body — stands in the part read.
-    pub(crate) fn adopts(
+    pub fn adopts(
         &self,
         item: &Item,
         abroad: impl Fn(&Global, bool) -> bool,
@@ -427,7 +427,7 @@ impl<'a> Adopting<'a> {
     }
 
     /// The baseline's record of each name `item` declares, in the order the item declares them, where it covers each and files a vector for each registry entry `module` holds under one; `None` where it does not, and the walk judges the item. What it read is not asked: [`Adopting::adopts`] asks it, and a declaration no edit can have reached takes its record as it stands.
-    pub(crate) fn recorded(&self, item: &Item) -> Option<Vec<(Totality, &'a Reads)>> {
+    pub fn recorded(&self, item: &Item) -> Option<Vec<(Totality, &'a Reads)>> {
         let certification = self.baseline.certification;
 
         item.declared_names()
@@ -445,7 +445,7 @@ impl<'a> Adopting<'a> {
     }
 
     /// Record `item` as adopted: everything read of it is the baseline's.
-    pub(crate) fn adopted(&mut self, item: &Item) {
+    pub fn adopted(&mut self, item: &Item) {
         for name in item.declared_names() {
             self.stood.insert(
                 *name,
@@ -460,7 +460,7 @@ impl<'a> Adopting<'a> {
     /// Record how `item`, judged by this walk where `module` holds it at the places `places` gives, came out against the baseline's declaration under each of its names: `partial` is the walk's classification of a name once the item is classified, and `polarities` and `variances` the vectors it has filed.
     ///
     /// **Told by the digest a read records** ([`held_digest`]), of the declaration as the walk settled it and as the baseline holds it: a part that digests alike is one to every judgment, and one that differs in a binder's name alone is told apart, so a record carried from the baseline digests what a walk that judged every declaration would.
-    pub(crate) fn judged(
+    pub fn judged(
         &mut self,
         (definitions, places): (&Definitions, &Places),
         item: &Item,

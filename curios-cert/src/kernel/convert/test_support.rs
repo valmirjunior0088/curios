@@ -12,24 +12,24 @@ use {
     },
 };
 
-pub(super) fn kernel() -> Kernel<'static> {
+pub fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
-pub(super) fn binder(index: u32, hint: &str) -> Free {
+pub fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
 }
 
-pub(super) fn nat(n: usize) -> Term {
+pub fn nat(n: usize) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
-pub(super) fn nat_type() -> Term {
+pub fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
 /// A nominal family at a stated sort — the only way to obtain a base proposition, since the registry is what says a nominal type is one.
-pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
+pub fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
 
     kernel
@@ -52,7 +52,7 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
 }
 
 /// `rec m : Type = (m) -> Nat; m`, optionally carrying a second unused member, so that two such groups are of two shapes: no position pairs them as binders, and they are compared by what each unfolds to.
-pub(super) fn equirecursive(member: Free, param: Free, padded: bool) -> Term {
+pub fn equirecursive(member: Free, param: Free, padded: bool) -> Term {
     let body = Term::func_type([(param, Term::free_var(&member))], nat_type());
     let mut items = vec![(member, Term::type_ground(), body)];
 
@@ -64,7 +64,7 @@ pub(super) fn equirecursive(member: Free, param: Free, padded: bool) -> Term {
 }
 
 /// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is `level`, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding.
-pub(super) fn polymorphic_fold(level: Level) -> Term {
+pub fn polymorphic_fold(level: Level) -> Term {
     let f = binder(70, "f");
     let t = binder(71, "t");
     let x = binder(72, "x");
@@ -101,7 +101,7 @@ pub(super) fn polymorphic_fold(level: Level) -> Term {
 }
 
 /// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
-pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
+pub fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
     kernel
         .declare_struct(
@@ -127,7 +127,7 @@ pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<
 
 /// How a fixture defines a family's former under the name it answers: as a projection of its own group, the spelling an `induct`'s has, or as the term itself.
 #[derive(Clone, Copy, Debug)]
-pub(super) enum Former {
+pub enum Former {
     Projected,
     Plain,
 }
@@ -145,11 +145,7 @@ impl Former {
 }
 
 /// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, declared with `variances` filed for it, with its former `Wrap.{u} = (A: Type u) => Wrap.{u}(A)` defined under the name it answers in the spelling `former` names: a level only its parameter's type mentions.
-pub(super) fn declare_wrap(
-    kernel: &mut Kernel,
-    variances: Vec<Variance>,
-    former: Former,
-) -> Global {
+pub fn declare_wrap(kernel: &mut Kernel, variances: Vec<Variance>, former: Former) -> Global {
     let name = Global::Authored(Qualifier::from(["Wrap"]));
     let level = Level::param(UniverseParam(0));
     let scheme = UniverseContext {
@@ -207,11 +203,7 @@ pub(super) fn declare_wrap(
 }
 
 /// `induct Leaf.{u}: Type | leaf() end`, declared with `variances` filed for it, with its former defined under the name it answers in the spelling `former` names: a family with no parameter, which its bare name applies in full.
-pub(super) fn declare_leaf(
-    kernel: &mut Kernel,
-    variances: Vec<Variance>,
-    former: Former,
-) -> Global {
+pub fn declare_leaf(kernel: &mut Kernel, variances: Vec<Variance>, former: Former) -> Global {
     let name = Global::Authored(Qualifier::from(["Leaf"]));
     let scheme = UniverseContext {
         parameter_count: 1,
@@ -256,7 +248,7 @@ pub(super) fn declare_leaf(
 }
 
 /// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, declared with `variances` filed for it: a level its payload's `Type` mentions.
-pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Global {
+pub fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Global {
     let name = Global::Authored(Qualifier::from(["Box"]));
     let level = Level::param(UniverseParam(0));
     let held = binder(82, "T");
@@ -296,7 +288,7 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
 /// `induct Wit(P : <param_sort>) : (p : P)` — a family whose index type *is* its own parameter.
 ///
 /// `induct_type_args` compares two index actuals at the type the declaration's telescope assigns, opened at the left instance's preceding actuals, so here the index pair is compared at whatever term stands in the parameter position. That makes the parameter's assumed type the whole of what decides the index goal, which is exactly the question a binder opened at a stand-in answers with the stand-in.
-pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term) -> Global {
+pub fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term) -> Global {
     let name = Global::Authored(Qualifier::from([path]));
     let param = binder(90, "P");
 
