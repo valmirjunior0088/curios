@@ -28,9 +28,6 @@ pub use context::{ArchivedChildInfo, ArchivedModuleInfo, ChildInfo, ModuleInfo};
 mod lowerer;
 use lowerer::*;
 
-mod match_compile;
-use match_compile::*;
-
 mod interface;
 use interface::*;
 pub use interface::{ArchivedEntry, ArchivedPublicInterface, Audiences, Entry, PublicInterface};
@@ -84,7 +81,7 @@ use {
         func_sugar_type_params, spell,
     },
     std::{
-        cell::{OnceCell, RefCell},
+        cell::{Cell, OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
         sync::Arc,
@@ -445,7 +442,7 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
 pub struct Loaded {
     module: Qualifier,
     /// What the module's items declare: read off its tree, or a baseline's scan of the same text.
-    pub heads: Rc<Vec<Headed>>,
+    heads: Rc<Vec<Headed>>,
     /// The text the module was read from. `None` for a module supplied already parsed.
     source: Option<Arc<Source>>,
     /// The module's tree: in hand where the file was parsed for its heads, and otherwise parsed when a declaration of it is first lowered.
@@ -2526,6 +2523,30 @@ pub fn into_core_entry(
     ))
 }
 
+/// What every nested context of one unit's lowering shares, behind one reference: what the declaration being lowered mints from, and the unit's own tables, which every declaration writes into and the lowering's caller reads back when it is over.
+///
+/// **Declared where the lowering is, its operations beside the contexts' in `context`**: [`lower_unit`] reads its tables back once every declaration is lowered.
+struct Shared {
+    declaring: Declaring,
+    universe_role: Cell<curios_core::UniverseRole>,
+    // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`.
+    minted: RefCell<curios_core::Minted>,
+    // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
+    witnesses: RefCell<BTreeMap<Qualifier, u32>>,
+    // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under.
+    imports: RefCell<curios_core::Imports>,
+    // Every `use` selector and glob of the unit, in the order resolution met them.
+    sites: RefCell<Vec<UseSite>>,
+    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
+    reached: RefCell<BTreeSet<Qualifier>>,
+    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
+    lints: RefCell<BTreeMap<Qualifier, Vec<Lint>>>,
+    // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
+    anchoring: Anchoring,
+    // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
+    closed: RefCell<HashSet<Qualifier>>,
+}
+
 /// [`into_core_unit`], with the final term an entry source closes with, lowered beside the unit.
 fn lower_unit(
     source: &UnitSource<'_>,
@@ -3047,7 +3068,7 @@ fn into_core_unit_within(
 
         Error::PrivateItemInPublicInterface {
             item: spelled(&owner),
-            referent: spelled(&unseen.referent),
+            referent: spelled(unseen.referent()),
             behind: behind.map(|module| module.join()),
         }
     };

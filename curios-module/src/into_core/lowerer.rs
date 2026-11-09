@@ -1,5 +1,8 @@
+mod match_compile;
+use match_compile::*;
+
 use {
-    super::{Context, MatchCompiler, SortSite},
+    super::{Context, SortSite},
     crate::{Error, Lint, LintedBinder},
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Span, recurse},
@@ -152,7 +155,7 @@ struct LoweredGroup {
 }
 
 pub struct Lowerer<'a, 'b> {
-    pub(super) context: &'a Context<'b>,
+    context: &'a Context<'b>,
     /// The declaration this lowers, which a lint names its binders by: the one identity a later lowering of the declaration unchanged gives them too. `None` for an entry's final term.
     declaration: Option<curios_core::Global>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.

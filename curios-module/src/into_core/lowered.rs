@@ -394,21 +394,21 @@ pub fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Records {
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct BaselineHalf {
-    /// What each source declaration lowered to beside its items, by the place of its first item ([`Records`]).
+    /// What each source declaration lowered to beside its items, by the place of its first item (`Records`).
     #[archived_with(curios_archive::Skip)]
-    pub(crate) declarations: Records,
+    pub declarations: Records,
     /// Each file-backed module's scan, by the module.
     #[archived_with(curios_archive::Skip)]
-    pub(crate) scans: Scans,
+    pub scans: Scans,
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
     #[archived_with(curios_common::InSharedKeyOrder)]
-    pub(crate) uses: Table<Vec<Consulted>>,
+    pub uses: Table<Vec<Consulted>>,
     /// Every lint each module body's declarations and `use` declarations were found to leave, by the body, before elaboration credits a binder: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
     #[archived_with(curios_common::InSharedKeyOrder)]
-    pub(crate) lints: Table<Vec<Lint>>,
+    pub lints: Table<Vec<Lint>>,
     /// Every name each witness's key read, by the witness: what its name can move with.
     #[archived_with(curios_common::InSharedKeyOrder)]
-    pub(crate) keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
+    pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
 }
 
 /// An entry of a unit's baseline half as a store keeps it, an object of its own bytes: a declaration's record, or a file's scan.

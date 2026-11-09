@@ -1,6 +1,6 @@
 use {
     super::{
-        Consulted, Lookup, PublicInterface, Reach, Scoped, carriers, named, out_of_reach,
+        Consulted, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named, out_of_reach,
         unresolved, visible_binding, visible_child,
     },
     crate::{Error, Lint, OrderedMap},
@@ -562,28 +562,6 @@ impl Declaring {
         sorts.begin();
         unbound.borrow_mut().clear();
     }
-}
-
-/// What every nested context of one unit's lowering shares, behind one reference: what the declaration being lowered mints from, and the unit's own tables, which every declaration writes into and the lowering's caller reads back when it is over.
-pub struct Shared {
-    declaring: Declaring,
-    universe_role: Cell<curios_core::UniverseRole>,
-    // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`.
-    pub(super) minted: RefCell<curios_core::Minted>,
-    // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
-    witnesses: RefCell<BTreeMap<Qualifier, u32>>,
-    // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under.
-    pub(super) imports: RefCell<curios_core::Imports>,
-    // Every `use` selector and glob of the unit, in the order resolution met them.
-    pub(super) sites: RefCell<Vec<UseSite>>,
-    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
-    pub(super) reached: RefCell<BTreeSet<Qualifier>>,
-    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
-    pub(super) lints: RefCell<BTreeMap<Qualifier, Vec<Lint>>>,
-    // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
-    pub(super) anchoring: Anchoring,
-    // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
-    closed: RefCell<HashSet<Qualifier>>,
 }
 
 impl Shared {

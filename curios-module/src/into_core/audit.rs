@@ -16,7 +16,7 @@ use {
 /// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal<'a>(
     entry: &Entry,
-    aliases: &'a BTreeMap<curios_core::Global, AliasEdge>,
+    aliases: &'a Aliases,
     scope: NominalScope<'_>,
 ) -> Option<(curios_core::Global, Vec<&'a AliasEdge>)> {
     let mut current =
@@ -31,7 +31,7 @@ fn exposed_nominal<'a>(
         if !seen.insert(current) {
             return None;
         }
-        let edge = aliases.get(&current)?;
+        let edge = aliases.edge(&current)?;
         current = edge.target;
         traversed.push(edge);
     }
@@ -107,7 +107,7 @@ impl<'a> NominalScope<'a> {
 /// Everyone who can see `referent`, whether by its own name, through a transparent alias that stands for it, or, for a name under an internal root, through an export that shows it ([`AudienceScope::seen`]) — beside the paths of those exports.
 fn referent_audience(
     audiences: AudienceScope<'_>,
-    sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+    aliases: &Aliases,
     item: &Qualifier,
     referent: &curios_core::Global,
 ) -> (Vec<Qualifier>, Vec<Qualifier>) {
@@ -117,7 +117,7 @@ fn referent_audience(
     let (mut audience, relays) = audiences.seen(qualifier, item);
 
     // A hop is matched by identity, and its qualifier is read off the name rather than split back out of a rendering.
-    for alias in sources.get(referent).into_iter().flatten() {
+    for alias in aliases.reaching(referent) {
         let Some(qualifier) = alias.qualifier() else {
             continue;
         };
@@ -129,12 +129,17 @@ fn referent_audience(
 
 /// A name some reader of an item cannot see, with the subtrees whose modules can, and the paths of the exports through which a name under an internal root is seen.
 pub struct Unseen {
-    pub(super) referent: curios_core::Global,
+    referent: curios_core::Global,
     reach: Vec<Qualifier>,
     relays: Vec<Qualifier>,
 }
 
 impl Unseen {
+    /// The name the readers do not see.
+    pub fn referent(&self) -> &curios_core::Global {
+        &self.referent
+    }
+
     /// The module that keeps the name from the readers it does not reach: the one on the name's own path that stands directly under the widest subtree it reaches, where that module is written without `pub`. `child` answers whether a module declares a child of a label, and whether it wrote `pub` on it.
     ///
     /// `None` where what stands there is the name itself, a declaration written without `pub`, and where the reach stops for a reason its own path does not show, an export elsewhere. A name under an internal root is kept by the module its export stands in, read off the export's path instead.
@@ -170,13 +175,13 @@ impl Unseen {
 /// Every consumer of `item`, exposed to `exposure`, must be able to see everything the item's signature names, its `dependencies`: the first that one of them cannot see is handed back. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: AudienceScope<'_>,
-    sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+    aliases: &Aliases,
     exposure: &[Qualifier],
     item: &Qualifier,
     dependencies: impl IntoIterator<Item = curios_core::Global>,
 ) -> Result<(), Unseen> {
     for referent in dependencies {
-        let (reach, relays) = referent_audience(audiences, sources, item, &referent);
+        let (reach, relays) = referent_audience(audiences, aliases, item, &referent);
         if !Audiences::covers(exposure, &reach) {
             return Err(Unseen {
                 referent,
@@ -212,8 +217,6 @@ pub fn audit_public_exposures(
     reexports: Option<&BTreeSet<(Qualifier, String)>>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
-    let sources = &aliases.sources;
-    let aliases = &aliases.edges;
     let at = |error: Error, place: Option<Span>| match place {
         Some(span) => error.at(span),
         None => error,
@@ -234,7 +237,7 @@ pub fn audit_public_exposures(
         let item = *path;
         audit_dependencies(
             audiences,
-            sources,
+            aliases,
             &exposure,
             &item,
             declared.signature.iter().copied(),
@@ -283,7 +286,7 @@ pub fn audit_public_exposures(
                 if let Some(dependencies) = &alias.dependencies {
                     audit_dependencies(
                         audiences,
-                        sources,
+                        aliases,
                         &exposure,
                         &item,
                         dependencies.iter().copied(),
@@ -294,13 +297,13 @@ pub fn audit_public_exposures(
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(&induct_decl.arity.mentions());
-                audit_dependencies(audiences, sources, &exposure, &item, nominal_dependencies)
+                audit_dependencies(audiences, aliases, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
                 if induct_decl.rep_public {
                     audit_dependencies(
                         audiences,
-                        sources,
+                        aliases,
                         &exposure,
                         &item,
                         induct_decl
@@ -318,13 +321,13 @@ pub fn audit_public_exposures(
                     param_dependencies.extend(globals(&domain.mentions()));
                     walk = rest.body();
                 }
-                audit_dependencies(audiences, sources, &exposure, &item, param_dependencies)
+                audit_dependencies(audiences, aliases, &exposure, &item, param_dependencies)
                     .map_err(exposed)?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
                         audiences,
-                        sources,
+                        aliases,
                         &exposure,
                         &item,
                         globals(&struct_decl.fields().mentions()),

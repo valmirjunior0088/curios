@@ -225,8 +225,23 @@ pub fn aliases<'f>(
 
 /// A unit's bare, transparent aliases: what each stands for, and for each name every alias that reaches it, which the exposure audit reads an audience through. Made once for the unit and kept with it: a unit lowered over a baseline that changed no alias holds the baseline's.
 pub struct Aliases {
-    pub(super) edges: BTreeMap<curios_core::Global, AliasEdge>,
-    pub(super) sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+    edges: BTreeMap<curios_core::Global, AliasEdge>,
+    sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+}
+
+impl Aliases {
+    /// What `name` stands for, where it is an alias.
+    pub fn edge(&self, name: &curios_core::Global) -> Option<&AliasEdge> {
+        self.edges.get(name)
+    }
+
+    /// Every alias that reaches `referent`, directly or through another alias.
+    pub fn reaching(
+        &self,
+        referent: &curios_core::Global,
+    ) -> impl Iterator<Item = &curios_core::Global> {
+        self.sources.get(referent).into_iter().flatten()
+    }
 }
 
 /// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
