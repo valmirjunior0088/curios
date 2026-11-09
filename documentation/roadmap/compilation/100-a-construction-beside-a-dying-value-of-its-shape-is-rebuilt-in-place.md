@@ -1,6 +1,6 @@
 # A construction beside a dying value of its shape is rebuilt in place
 
-This specification describes a removable cost: a construction beside a value of its own shape that dies with it allocates, where a proof that the value is used once would let the construction overwrite it. Its next step is stage 2, restating the decision.
+[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that a construction beside a dying value of its own shape rebuilds that value in place where the compiler has proved it unshared and dead there, and that `/std` writes what it rebuilds linearly. `curios-cps` holds no such proof and no rebuild, so every such construction allocates and the host collector absorbs it, and `/std/Map` returns the node it took apart where its insert parts above it. Its next step is stage 3, the facts.
 
 ## What it costs
 
@@ -18,10 +18,6 @@ Timed at `3062f2fe1`, release, x86-64 Linux, seven interleaved rounds of the tim
 So rebuilding in place is about a third of `spines` natively and a quarter to a third under V8, whose generational collector charges the write barrier this pays; declaring the row's slots mutable costs nothing measurable on either; and the heap the native engine starts at is not what the rest is.
 
 **How the figures are taken.** A scratch copy of the commit whose `curios/src/compile.rs` `optimized()` writes the optimized module to `$CURIOS_WASM_DUMP` and reads it from `$CURIOS_WASM_OVERRIDE` where each is set, and whose `curios-native` engine takes its initial heap in mebibytes from `$CURIOS_HEAP_MIB`. `spines`' module is dumped, printed and parsed back by `wasm-tools`; `Node`'s row is the struct of an `i8` tag and three reference slots, its three slots made `mut` for the second and third variants; for the third, the six `struct.new` of that row in `Node/insert`'s copy that rebuild a leaf with its new value or a fork around its new child become a `struct.set` of that slot on the node the function was handed, which stays in one local for the whole function. Native runs are `curios run` of `programs/spines/spines.crs` under the override; V8 runs are Node 26.4 importing the page `compile --target browser` writes, whose `index.wasm` is the same module, and calling its loader's `start` with each module's bytes, each run a process of its own.
-
-## What it reverses
-
-[A value costs when it is kept, not when it is named](../../design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md) states that the compiler carries no reuse machinery, leaving a construction beside a dying value of its own shape to the host collector, and rejects reference counts, a sticky sharing bit, regions and arenas, each a test of uniqueness at run time, and construction coalescing and tail-modulo-cons, which need the mutable field the representation lacks. A proof of single use made at compile time is among none of them, and the figures above are what the collector leaves. Stage 2 restates the decision; every rejection it holds stands.
 
 ## What is known
 
@@ -61,7 +57,6 @@ So rebuilding in place is about a third of `spines` natively and a quarter to a 
 
 ## Stages
 
-2. **The decision restated:** the rule, its peers and `/std`'s linear writing of what it rebuilds; and as rejected a test of uniqueness at run time, a uniqueness the user writes, a whole-program analysis held to no budget, and inferring which result of a call left an argument unwritten, which no peer does and which would serve one function's shape.
 3. **The facts,** as clients of the shared solver, each with its tests, and their cost on the harness's and the TOML driver's compile against a budget this stage states, beside a suite of what looks fresh and is shared: a map read after its insert, a map in a list, a map a closure, a cell or a description holds, a constant map, a constant leaf a fork holds, a map handed to the host, two maps sharing a subtree, and a search tree's insert that returns the node it was handed, whose loop no unique value enters.
 4. **The rebuild,** its verification and its emission, with every program of the corpus and every `/std` test run with rebuilding on and off and holding to one output; with it, `/std/Map` restated linearly, and a codegen test holding that `/std/Map/insert` rebuilds `Node` at every level in a loop that uses its map once.
 5. **Reuse versions,** through the specializer's copies and their allowance.
