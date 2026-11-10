@@ -64,7 +64,7 @@ macro_rules! name {
     };
 }
 
-/// Declares a `u32`-newtype identity type: `id!(Foo, "f")` generates a `pub struct Foo(pub(crate) u32)` with the standard identity derives, an `index()` accessor, and a `Display` that spells the prefix before the raw index (`f0`, `f1`, ...). The three-argument `id!(Foo, "f", mint)` form additionally implements `Mint`, making `Entropy<Foo>` a gensym source. IR crates that key arenas or gensym stable `u32` identities declare them this way, the numeric twin of the string-spelled `name!`.
+/// Declares a `u32`-newtype identity type: `id!(Foo, "f")` generates a `pub struct Foo(pub u32)` with the standard identity derives, an `index()` accessor, and a `Display` that spells the prefix before the raw index (`f0`, `f1`, ...). The three-argument `id!(Foo, "f", mint)` form additionally implements `Mint`, making `Entropy<Foo>` a gensym source. IR crates that key arenas or gensym stable `u32` identities declare them this way, the numeric twin of the string-spelled `name!`.
 #[macro_export]
 macro_rules! id {
     // The shared impl surface. Both declaration forms delegate here, so the impls cannot drift between them.
@@ -99,7 +99,7 @@ macro_rules! id {
 
     ($name:ident, $prefix:literal) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub struct $name(pub(crate) u32);
+        pub struct $name(pub u32);
 
         $crate::id!(@impls $name, $prefix);
     };
@@ -107,7 +107,7 @@ macro_rules! id {
     ($name:ident, $prefix:literal; archive) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-        pub struct $name(pub(crate) u32);
+        pub struct $name(pub u32);
 
         $crate::id!(@impls $name, $prefix);
     };
