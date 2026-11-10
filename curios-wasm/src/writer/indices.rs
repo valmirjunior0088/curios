@@ -8,7 +8,7 @@ use {
 
 /// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number — and a name declared twice is the same failure from the other side, refused at construction rather than silently resolving every reference to whichever declaration came second. A function's local index space is likewise the format's — its type's inputs followed by its locals — so a param list of any other length is refused here too: numbering from the list instead would put every local of that function in the wrong slot while the module still validates.
 #[derive(Debug, Clone)]
-pub(super) struct Indices<'a> {
+pub struct Indices<'a> {
     types: HashMap<&'a TypeName, usize>,
     fields: HashMap<(&'a TypeName, &'a FieldName), usize>,
     funcs: HashMap<&'a FuncName, usize>,
@@ -21,7 +21,7 @@ pub(super) struct Indices<'a> {
 }
 
 impl<'a> Indices<'a> {
-    pub(super) fn new(module: &'a Module) -> Self {
+    pub fn new(module: &'a Module) -> Self {
         let mut types = HashMap::new();
         let mut fields = HashMap::new();
 
@@ -187,63 +187,63 @@ impl<'a> Indices<'a> {
         }
     }
 
-    pub(super) fn resolve_type(&self, name: &'a TypeName) -> usize {
+    pub fn resolve_type(&self, name: &'a TypeName) -> usize {
         self.types
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks type `{}`", name))
     }
 
-    pub(super) fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
+    pub fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
         self.fields
             .get(&(parent_name, name))
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks field `{}` of type `{}`", name, parent_name))
     }
 
-    pub(super) fn resolve_func(&self, name: &'a FuncName) -> usize {
+    pub fn resolve_func(&self, name: &'a FuncName) -> usize {
         self.funcs
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks func `{}`", name))
     }
 
-    pub(super) fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
+    pub fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
         self.locals
             .get(&(parent_name, name))
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks local `{}` of func `{}`", name, parent_name))
     }
 
-    pub(super) fn resolve_table(&self, name: &'a TableName) -> usize {
+    pub fn resolve_table(&self, name: &'a TableName) -> usize {
         self.tables
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks table `{}`", name))
     }
 
-    pub(super) fn resolve_mem(&self, name: &'a MemName) -> usize {
+    pub fn resolve_mem(&self, name: &'a MemName) -> usize {
         self.mems
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks memory `{}`", name))
     }
 
-    pub(super) fn resolve_global(&self, name: &'a GlobalName) -> usize {
+    pub fn resolve_global(&self, name: &'a GlobalName) -> usize {
         self.globals
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks global `{}`", name))
     }
 
-    pub(super) fn resolve_elem(&self, name: &'a ElemName) -> usize {
+    pub fn resolve_elem(&self, name: &'a ElemName) -> usize {
         self.elems
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("`Indices` lacks elem `{}`", name))
     }
 
-    pub(super) fn resolve_data(&self, name: &'a DataName) -> usize {
+    pub fn resolve_data(&self, name: &'a DataName) -> usize {
         self.datas
             .get(name)
             .copied()

@@ -5,19 +5,30 @@
 //! The modeled surface is the whole envelope the pipeline pins — every declared item, segment mode, and instruction family the feature set `curios-binaryen` masks and Wasmtime's engine enables admits, memories and tables plural and each 32- or 64-bit addressed. What is *not* modeled is what that envelope excludes: threads, SIMD, exceptions, extended constant expressions, custom page sizes, stack switching. Nothing here is emitted on a module's behalf, and nothing here enforces how the surface is used — see `README.md` for both decisions.
 
 mod names;
-pub use names::*;
+pub use names::{
+    DataName, ElemName, FieldName, FuncName, GlobalName, LabelName, LocalName, MemName, TableName,
+    TypeName,
+};
 
 mod types;
-pub use types::*;
+pub use types::{
+    AbsHeapType, AddressType, ArrayType, BlockType, CompType, FieldType, FuncType, GlobalType,
+    HeapType, Limits, MemType, Mutability, NumType, PackedType, RecType, RefType, ResultType,
+    StorageType, StructType, SubType, TableType, ValType,
+};
 
 mod expr;
-pub use expr::*;
+use expr::*;
+pub use expr::{Expr, Instr, MemArg};
 
 mod module;
-pub use module::*;
+pub use module::{
+    DataMode, DataSegment, ElemList, ElemMode, ElemSegment, Export, Func, Global, Import, Module,
+    Table,
+};
 
 mod writer;
-pub use writer::*;
+pub use writer::to_bytes;
 
 mod parse;
 

@@ -903,7 +903,7 @@ fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer {
     ])
 }
 
-pub(crate) fn print_module(module: &Module) -> Printer {
+pub fn print_module(module: &Module) -> Printer {
     flat([
         pure("(module "),
         print_dollar_ident(module.name()),

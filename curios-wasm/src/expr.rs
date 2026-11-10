@@ -631,10 +631,10 @@ mnemonics! {
 }
 
 /// One memory-access instruction's text facts, from the table beside [`Instr`]: its WAT spelling, the log2 alignment its access width makes natural — which the printer omits and the parser defaults to — and the memarg it carries. Opcodes are deliberately absent: they live in the encoder beside every other instruction's, so this table holds nothing a second place also holds.
-pub(crate) struct MemAccess<'a> {
-    pub(crate) mnemonic: &'static str,
-    pub(crate) natural_align: u32,
-    pub(crate) mem_arg: &'a MemArg,
+pub struct MemAccess<'a> {
+    pub mnemonic: &'static str,
+    pub natural_align: u32,
+    pub mem_arg: &'a MemArg,
 }
 
 /// Declares the memory-access instructions' WAT spellings and natural alignments from one table, the way [`mnemonics!`] declares the operand-less ones — the printer and the parser both read it, so neither can drift from the other or from the alignment defaulting rule.
