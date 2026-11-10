@@ -8,7 +8,7 @@ use {
 };
 
 /// Inline known calls, a callee with several call sites only below [`MULTI_SITE_INLINE_LIMIT`], unless the call hands it a known function its body applies: then the callee is copied into the call up to the single-site allowance, out of `budget`, so the call through the closure becomes a call of the function, which the next sweep can take in turn. A copy for a known function serves the one call it is made at, as a copy for one call site does.
-pub(crate) fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
+pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
     let mut changed = false;
     // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
     for _ in 0..10_000 {
@@ -50,14 +50,14 @@ pub(crate) fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -
                 continue;
             };
             let args = args.clone();
-            let charged = duplicated && plan.nodes.len() > MULTI_SITE_INLINE_LIMIT;
+            let charged = duplicated && plan.nodes().len() > MULTI_SITE_INLINE_LIMIT;
             if charged
                 && !(applies_a_passed_function(module, &plan, callee, &args)
-                    && budget.admits(plan.nodes.len()))
+                    && budget.admits(plan.nodes().len()))
             {
                 continue;
             }
-            let copied = plan.nodes.len();
+            let copied = plan.nodes().len();
             if inline_call(module, node_id, callee, &args, return_to, plan) {
                 if charged {
                     budget.charge(copied);
@@ -90,7 +90,7 @@ fn applies_a_passed_function(
         .filter(|(_, arg)| matches!(arg, Atom::Fun(_)))
         .map(|(param, _)| *param)
         .collect::<BTreeSet<_>>();
-    plan.nodes.iter().any(|node| {
+    plan.nodes().iter().any(|node| {
         matches!(
             module.node(*node),
             Some(Node::ApplyFun { callee: Callee::Closure(value), .. }) if passed.contains(value)
@@ -99,7 +99,7 @@ fn applies_a_passed_function(
 }
 
 /// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps a reader linear instead of rescanning every node for each continuation.
-pub(crate) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
+pub fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
     let mut transfers: BTreeMap<ContinuationId, Vec<NodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
     for (id, node) in module.live_nodes() {
@@ -111,7 +111,7 @@ pub(crate) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId
     }
     transfers
 }
-pub(crate) fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) {
+pub fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) {
     match node {
         Node::ApplyFun { return_to, .. }
         | Node::Foreign { return_to, .. }
@@ -135,7 +135,7 @@ pub(crate) fn collect_control_targets(node: &Node, targets: &mut BTreeSet<Contin
         | Node::Unreachable => {}
     }
 }
-pub(crate) fn inline_call(
+pub fn inline_call(
     module: &mut Module,
     call: NodeId,
     callee: FunctionId,
@@ -144,9 +144,9 @@ pub(crate) fn inline_call(
     plan: CopyPlan,
 ) -> bool {
     let function = module.function(callee).unwrap().clone();
-    let node_ids: Vec<NodeId> = plan.nodes.into_iter().collect();
+    let node_ids: Vec<NodeId> = plan.nodes().iter().copied().collect();
     let nested_defs: BTreeMap<FunctionId, Function> = plan
-        .nested
+        .nested()
         .iter()
         .map(|&id| (id, module.function(id).unwrap().clone()))
         .collect();

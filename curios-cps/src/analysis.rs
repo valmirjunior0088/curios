@@ -8,22 +8,22 @@ use {
 };
 
 #[derive(Default)]
-pub(crate) struct CallAnalysis {
-    pub(crate) call_sites: BTreeMap<FunctionId, Vec<NodeId>>,
-    pub(crate) call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
-    pub(crate) node_owners: BTreeMap<NodeId, FunctionId>,
-    pub(crate) escaping: BTreeSet<FunctionId>,
+pub struct CallAnalysis {
+    pub call_sites: BTreeMap<FunctionId, Vec<NodeId>>,
+    pub call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
+    pub node_owners: BTreeMap<NodeId, FunctionId>,
+    pub escaping: BTreeSet<FunctionId>,
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question, and the specializer's of a component no member calls directly (`eligible_sccs`): see `analyze_calls`.
-    pub(crate) recursive: BTreeSet<FunctionId>,
-    pub(crate) sccs: SccAnalysis,
+    pub recursive: BTreeSet<FunctionId>,
+    pub sccs: SccAnalysis,
     /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
-    pub(crate) lexical_scope: BTreeMap<FunctionId, InScope<FunctionId>>,
+    pub lexical_scope: BTreeMap<FunctionId, InScope<FunctionId>>,
 }
 /// Strongly-connected components of a graph, the known-callee call graph's by default, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its nodes in their order.
-pub(crate) type SccId = usize;
-pub(crate) struct SccAnalysis<K = FunctionId> {
-    pub(crate) component_of: BTreeMap<K, SccId>,
-    pub(crate) members: Vec<Vec<K>>,
+pub type SccId = usize;
+pub struct SccAnalysis<K = FunctionId> {
+    pub component_of: BTreeMap<K, SccId>,
+    pub members: Vec<Vec<K>>,
 }
 
 impl<K> Default for SccAnalysis<K> {
@@ -36,7 +36,7 @@ impl<K> Default for SccAnalysis<K> {
 }
 
 /// Deterministic iterative Tarjan over `call_graph`. Uses an explicit frame stack rather than recursion so it stays within the default test-thread stack on deep call graphs. Components are numbered in the order their roots pop, and members are sorted, so the output is a pure function of the graph.
-pub(crate) fn analyze_sccs<K: Ord + Copy>(call_graph: &BTreeMap<K, BTreeSet<K>>) -> SccAnalysis<K> {
+pub fn analyze_sccs<K: Ord + Copy>(call_graph: &BTreeMap<K, BTreeSet<K>>) -> SccAnalysis<K> {
     let mut analysis = SccAnalysis::default();
     let mut index_of: BTreeMap<K, u32> = BTreeMap::new();
     let mut lowlink: BTreeMap<K, u32> = BTreeMap::new();
@@ -117,7 +117,7 @@ enum Within {
     Definitions(FunctionId),
 }
 
-pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
+pub fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
     for (function, _) in module.live_functions() {
         analysis.call_sites.entry(function).or_default();
@@ -262,18 +262,18 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
 /// The functions that hand their results back alike. A call whose return continuation is its function's own sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly, and agreement is symmetric: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point, so the classes are the undirected connected components of the tail-call graph.
 ///
 /// **A class whose results something else fixes is fixed.** A member ending in a tail call through a closure returns at the closure type's one uniform result; one ending in a tail foreign call, cell or channel operation or call-shaped intrinsic falls through to the return with what that operation produces; the entry answers the host, and is pinned explicitly because, having no call sites of its own, it would otherwise inherit a class's decision through a tail call; and an escaping member is reached by its closure wrapper's tail call at the shared `clsr/{arity}` type. Nothing deciding a result may re-key such a class.
-pub(crate) struct TailClasses {
+pub struct TailClasses {
     /// Each class's members in `FunctionId` order, the classes in the order their first member is met.
-    pub(crate) members: Vec<Vec<FunctionId>>,
+    pub members: Vec<Vec<FunctionId>>,
     /// The class each live function belongs to.
-    pub(crate) class_of: BTreeMap<FunctionId, usize>,
+    pub class_of: BTreeMap<FunctionId, usize>,
     /// The classes whose results something outside their own return edges fixes.
-    pub(crate) fixed: BTreeSet<usize>,
+    pub fixed: BTreeSet<usize>,
 }
 
 impl TailClasses {
     /// The tail-call classes of `module`'s live functions, a class holding a member of `escaping` among the fixed.
-    pub(crate) fn of(module: &Module, escaping: &BTreeSet<FunctionId>) -> Self {
+    pub fn of(module: &Module, escaping: &BTreeSet<FunctionId>) -> Self {
         let mut tail_calls = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
         let mut fixing = BTreeSet::<FunctionId>::new();
 
@@ -359,7 +359,7 @@ fn components(edges: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> Vec<Vec<Fun
 }
 
 /// The edges of `node` that transfer to `sentinel` — a function's returns, whether it jumps to one or switches into several.
-pub(crate) fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
+pub fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
     let edges: Vec<&Edge> = match node {
         Node::ApplyCont(edge) => vec![edge],
         Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
@@ -374,9 +374,7 @@ pub(crate) fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> 
 /// What transfers into each continuation: the known function whose call resumes there, or `None` for an entry that is anything else — a call through a closure, an operation delivering its result, a jump.
 ///
 /// Read by every pass that changes what a continuation's parameter holds, because the change is right only where it is right for every entry. `split_returns` widens a resume to several results only when each entry is a call it rewrites, and `uncurry_returns` has a resume expect an applied answer rather than a closure on the same condition. Judging a resume by the one call being rewritten would miss the joins a `match` lowers to — one parser called, another jumped in as a closure — rewriting them for the call and feeding the jumped closure to code reading an answer.
-pub(crate) fn continuation_entries(
-    module: &Module,
-) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
+pub fn continuation_entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
     let mut output = BTreeMap::<ContinuationId, Vec<Option<FunctionId>>>::new();
     for (_, node) in module.live_nodes() {
         match node {
@@ -408,10 +406,10 @@ pub(crate) fn continuation_entries(
 }
 
 /// Every node in `function`'s own body, stopping at each nested function's boundary: [`nodes_from`] enters a `LetFun`'s body and not its members. That suits a caller asking about this body alone, and is wrong for one about to *remove* a binding, which must cover the whole region that loses it — a value referenced only inside a function defined within this one is not among what these nodes read.
-pub(crate) fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
+pub fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
     nodes_from(module, module.function(function).unwrap().body)
 }
-pub(crate) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
+pub fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
     let mut found = BTreeSet::new();
     let mut work = vec![body];
     while let Some(node_id) = work.pop() {
@@ -447,7 +445,7 @@ pub(crate) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
     }
     found.into_iter().collect()
 }
-pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
+pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut known = BTreeMap::new();
 
     for (_, node) in module.live_nodes() {
@@ -613,7 +611,7 @@ pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     known
 }
 /// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded SCC parameter (its current class), a caller constant (`known_literals`), or otherwise an unobservable runtime value that forces `Conflict`.
-pub(crate) fn resolve_atom(
+pub fn resolve_atom(
     atom: &Atom,
     class: &Solver<Knowledge>,
     known_literals: &BTreeMap<ValueId, Atom>,

@@ -21,7 +21,7 @@ use {
 
 /// What flows into a value, ordered `Unreached < Constructed(_)/Variant(..) < Opaque`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Origin {
+pub enum Origin {
     /// No flow reached it — an unentered parameter or an unreachable binding.
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a merged flow, which travels as its widest construction with each narrower edge filled.
@@ -34,12 +34,12 @@ pub(crate) enum Origin {
 
 impl Origin {
     /// One construction of `width`, the fact a `LetValue` tuple establishes.
-    pub(crate) fn of_width(width: usize) -> Self {
+    pub fn of_width(width: usize) -> Self {
         Origin::Constructed(BTreeSet::from([width]))
     }
 
     /// How wide a *region* of this origin travels: its widest construction, and `None` where no construction describes the flow at all.
-    pub(crate) fn width(&self) -> Option<usize> {
+    pub fn width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => widths.last().copied(),
             Origin::Row(_, width) => Some(*width),
@@ -50,7 +50,7 @@ impl Origin {
     /// The one width every flow agrees on, and `None` where they do not.
     ///
     /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a merged tuple flow whose width is undecided there, so projecting it at the widest reads past whatever the narrower construction carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Row`] flow is settled by construction — every edge carries the row width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
-    pub(crate) fn settled_width(&self) -> Option<usize> {
+    pub fn settled_width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => match widths.len() {
                 1 => widths.last().copied(),
@@ -62,12 +62,12 @@ impl Origin {
     }
 
     /// Whether a site may take a value of this origin apart — see [`Origin::settled_width`] for why a merged flow may not.
-    pub(crate) fn is_settled(&self) -> bool {
+    pub fn is_settled(&self) -> bool {
         !matches!(self, Origin::Constructed(widths) if widths.len() > 1)
     }
 
     /// The row this origin's flows construct, where they are row constructions at all.
-    pub(crate) fn row(&self) -> Option<RowId> {
+    pub fn row(&self) -> Option<RowId> {
         match self {
             Origin::Row(row, _) => Some(*row),
             Origin::Unreached | Origin::Constructed(_) | Origin::Opaque => None,
@@ -117,7 +117,7 @@ fn flow_edge(module: &Module, solver: &mut Solver<Origin>, edge: &Edge) {
 }
 
 /// What flows into every value, to its least fixpoint.
-pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
+pub fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
     let escaping = analyze_calls(module).escaping;
     let seeds = module.value_ids().collect::<Vec<_>>();
 

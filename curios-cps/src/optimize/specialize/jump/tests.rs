@@ -116,7 +116,7 @@ fn independent_roots_advance_together_and_spend_the_actual_copy_cost() {
     let (mut module, roots, sites) = joins(false);
     let cost: usize = roots
         .iter()
-        .map(|root| CopyPlan::continuation(&module, *root).nodes.len() + 1)
+        .map(|root| CopyPlan::continuation(&module, *root).nodes().len() + 1)
         .sum();
     let before = module.nodes().len();
     let mut budget = CopyBudget::new(cost);
@@ -145,7 +145,7 @@ fn a_fresh_transfer_into_another_root_defers_that_roots_snapshot() {
 #[test]
 fn an_insufficient_allowance_mints_nothing_and_an_exact_allowance_succeeds() {
     let (mut module, join, _, _, _) = tagged_join();
-    let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
+    let cost = CopyPlan::continuation(&module, join).nodes().len() + 1;
     let original = module.to_string();
     let arenas = (
         module.nodes().len(),
@@ -260,7 +260,7 @@ fn more_matching_sites_win_a_budget_that_fits_only_one_copy() {
         },
     );
     module.verify().unwrap();
-    let cost = CopyPlan::continuation(&module, roots[1]).nodes.len() + 1;
+    let cost = CopyPlan::continuation(&module, roots[1]).nodes().len() + 1;
     let mut budget = CopyBudget::new(cost);
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     assert_eq!(target(&module, sites[0]), roots[0]);

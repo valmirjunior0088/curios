@@ -155,7 +155,7 @@ fn still_admissible(
 /// Split every admissible continuation parameter into its fields against one forward snapshot, record each group, and leave the cleanup to the chain.
 ///
 /// One split per call would leave region-wide convergence to the optimizer's own fixpoint at one round of every pass per split — this pass firing on nearly every round of a `Toml/decode` compile, with most of the fixpoint's time going to passes that rewrite nothing on any of them, as `fixpoint_pass_measurements` shows. A sweep applies what one snapshot admits and [`still_admissible`] declines what an earlier split in the sweep has since touched, so the rounds that remain are the ones a split genuinely depends on. Determinism is the order below; termination is unchanged, since every split still consumes an unrecorded aggregate parameter under the growth ceiling.
-pub(crate) fn split_parameters(module: &mut Module) -> bool {
+pub fn split_parameters(module: &mut Module) -> bool {
     let origins = origins(module);
     let mut admitted = admit(module, &origins);
     // Highest position first within a continuation, so an earlier position's index survives a later one's splice — the order `split_windows` applies its positions in, for the same reason.
@@ -456,7 +456,7 @@ impl WorkerEdits {
 }
 
 /// Split every independent known-function parameter admitted by one snapshot. Earlier positions survive descending splices; a newly rebuilt argument waits for fresh origins. Caller projections and parameter substitutions commit together, so a sweep scans the module once to redirect them.
-pub(crate) fn split_workers(module: &mut Module) -> bool {
+pub fn split_workers(module: &mut Module) -> bool {
     let origins = origins(module);
     let demands = demands(module);
     let calls = analyze_calls(module);
@@ -747,7 +747,7 @@ fn insert_above(module: &mut Module, carrier: NodeId, nodes: Vec<Node>) {
 /// Virtualize every window region the module admits, the widest first, each as [`split_widest_window`] virtualizes one.
 ///
 /// One region a call would leave the rest to the optimizer's own fixpoint, at a round of every pass for each region and another for the fold its split exposes, which is what [`split_parameters`] sweeps to avoid. A split records its groups and rewrites its slices, so the uses and the regions are read again from the module as each split leaves it: the widest region is then the widest of what remains, and a region a split has reached into is declined as it is from one round to the next. Termination is each split's own: it records a group over a parameter that had none, under the growth ceiling.
-pub(crate) fn split_windows(module: &mut Module) -> bool {
+pub fn split_windows(module: &mut Module) -> bool {
     let mut split = false;
     while split_widest_window(module) {
         split = true;

@@ -14,14 +14,14 @@ use {
 
 /// The rows a value may be a struct of: these, or any.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Rows {
+pub enum Rows {
     Of(BTreeSet<RowId>),
     Any,
 }
 
 impl Rows {
     /// Whether some flow reaching the value may build `row`.
-    pub(crate) fn may_be(&self, row: RowId) -> bool {
+    pub fn may_be(&self, row: RowId) -> bool {
         match self {
             Rows::Of(rows) => rows.contains(&row),
             Rows::Any => true,
@@ -79,7 +79,7 @@ impl Module {
 }
 
 /// The rows each ordinary value may be a struct of, including facts propagated through function results.
-pub(crate) fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
+pub fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
     row_facts(module)
         .into_iter()
         .filter_map(|(key, rows)| match key {

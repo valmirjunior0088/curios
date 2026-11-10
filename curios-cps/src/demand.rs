@@ -13,7 +13,7 @@ use {
 ///
 /// `Projected` carries the field indices read and `Applied` the arity called, so a use set that never reads the whole value stays distinguishable from one that does. The two refinements sit beside each other rather than in a chain: a value read as a tuple and a value invoked as a function are both narrower than opaque and neither is narrower than the other, so mixing them joins to `Opaque`. Absence from the map is **not** `Unused` — see [`demand_of`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Demand {
+pub enum Demand {
     /// No use at all. The point dead-parameter elimination reads.
     Unused,
     /// Every use so far projects a field, at these indices.
@@ -55,7 +55,7 @@ impl Lattice for Demand {
 /// The demand on `value`, reading absence as `Opaque`.
 ///
 /// The conservative direction here is the opposite of the representation client's, which forces the *top* for an unseeded value because it cannot be held in a register. Here the top is what keeps a value alive: answering `Unused` for one the walk never reached would delete a live parameter.
-pub(crate) fn demand_of(demands: &BTreeMap<ValueId, Demand>, value: ValueId) -> Demand {
+pub fn demand_of(demands: &BTreeMap<ValueId, Demand>, value: ValueId) -> Demand {
     demands.get(&value).cloned().unwrap_or(Demand::Opaque)
 }
 
@@ -76,7 +76,7 @@ fn defer_edge(module: &Module, solver: &mut Solver<Demand>, edge: &Edge) {
 }
 
 /// What every value's uses ask of it.
-pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
+pub fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
     let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |rules| {

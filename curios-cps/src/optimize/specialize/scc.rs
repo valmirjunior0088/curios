@@ -147,7 +147,7 @@ struct Candidate {
 }
 
 /// Apply independent SCC contexts under a lifetime copied-node allowance. Remaining callers are re-solved locally after each copy; newly established generic facts stop that component for cleanup. A changed source or newly copied incoming call defers dependent components, without rebuilding the module-wide call analysis.
-pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
+pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
     if !budget.admits(1) {
         return false;
     }
@@ -165,7 +165,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
         else {
             continue;
         };
-        if !budget.admits(copy.nodes.len()) {
+        if !budget.admits(copy.nodes().len()) {
             continue;
         }
         let Some(&intro) = intros.get(members.first().unwrap()) else {
@@ -195,7 +195,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
                     unreachable!()
                 };
                 // A call the copy reproduces is the component's own: a member's, and one a function nested in a member makes back into the component. Read as a caller from outside, a call through a closure a member defines would stand as a context of its own and never constrain the others, so a context naming what that call changes would look known, and its copy, the original pruned behind it, would be the same component again at the next round.
-                if copy.nodes.contains(&id) {
+                if copy.nodes().contains(&id) {
                     internal.push((member, args.clone()));
                 } else {
                     external.push(id);
@@ -224,7 +224,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
             external,
             groups,
             intro,
-            extent: copy.nodes,
+            extent: copy.into_nodes(),
             baseline: BTreeMap::new(),
             disabled: false,
         };
@@ -282,7 +282,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget)
         else {
             continue;
         };
-        if plan.nodes != component.extent {
+        if *plan.nodes() != component.extent {
             continue;
         }
         let first_node = module.nodes().len();

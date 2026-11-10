@@ -7,7 +7,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(crate) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bool {
+pub fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bool {
     // The closure calls a known function cannot be a call of, found before the nodes are borrowed — see [`Module::applies`].
     let unreachable = module
         .live_nodes()
@@ -60,7 +60,7 @@ pub(crate) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>
     }
     changed
 }
-pub(crate) fn forward_continuations(module: &mut Module) -> bool {
+pub fn forward_continuations(module: &mut Module) -> bool {
     let forwarding = module
         .live_continuations()
         .filter_map(|(id, continuation)| {
@@ -124,7 +124,7 @@ pub(crate) fn forward_continuations(module: &mut Module) -> bool {
     }
     changed
 }
-pub(crate) fn thread_edge(
+pub fn thread_edge(
     edge: &mut Edge,
     forwarding: &BTreeMap<ContinuationId, (Vec<ValueId>, Edge)>,
     changed: &mut bool,
@@ -172,7 +172,7 @@ pub(crate) fn thread_edge(
 /// This is the shape a convoy leaves. `match s: (x) => (e: E(x)) -> R | … end(evidence)` elaborates each arm to a function of the evidence it carries and applies the match's value to the evidence after it, so once erasure has dropped the evidence each arm binds a nullary function and jumps it to a join that does nothing but call it. Left alone, every arm allocates that function's environment and the join calls it indirectly. Called where it is known instead, each arm's function has one direct call and no escaping use, and inlining consumes it, so a convoy costs nothing at run time.
 ///
 /// Sound because the continuation's body is one node and everything it reads is in scope at each jump into it: its parameters are the jump's arguments, and anything else was in scope where it was defined, which every jump into it lies within, since a continuation is local to its function. The call keeps the body's arguments, with the jump's substituted for the parameters, and the body's return continuation, so its arity and protocol are unchanged. Only a jump handing over a known function is forwarded: a callee that is still a value gains nothing from moving and would only copy the node.
-pub(crate) fn forward_calls(module: &mut Module) -> bool {
+pub fn forward_calls(module: &mut Module) -> bool {
     let calling = module
         .live_continuations()
         .filter_map(|(id, continuation)| {
@@ -262,7 +262,7 @@ pub(crate) fn forward_calls(module: &mut Module) -> bool {
     }
     changed
 }
-pub(crate) fn retarget(
+pub fn retarget(
     target: &mut ContinuationId,
     resolve: &impl Fn(ContinuationId) -> ContinuationId,
     changed: &mut bool,
@@ -274,7 +274,7 @@ pub(crate) fn retarget(
     }
 }
 /// Fuse a chain of packed appends into one flat chunk build. A literal with non-constant atoms lowers to appends onto whatever precedes it — the free monoid's honest spelling — and each append allocates a one-element leaf and a node the first read then gathers. Where the chain is local and unshared, the elements build one exact flat leaf instead: `BytesChunk` alone when the chain is rooted at the empty packed value, or the root concatenated with the chunk otherwise. Only an intermediate append nothing else reads may fuse — a shared intermediate is a value the program observes — and a lone append onto a non-empty root stays as written, since a one-element chunk beside a concat node buys back exactly what it costs.
-pub(crate) fn fuse_append_chains(module: &mut Module) -> bool {
+pub fn fuse_append_chains(module: &mut Module) -> bool {
     let counts = module.value_use_counts();
 
     // Every packed append by its result — node, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
@@ -509,7 +509,7 @@ fn install_flat(
 }
 
 /// Flatten the list constructions whose reads are already in evidence, so the values a program only ever indexes are flat at birth instead of node-rooted with a gather on first read. Two admissions and no others — the demand route's rules, per the map-wall spec's list-half refinement. A settle (inserted by the door on stores into census-marked fields) over a statically flat value forwards the value, and over an unshared construction tree becomes the tree's one exact flat build. A construction whose own demand is `Indexed` — every use an element, length, window, or settle, interprocedurally — builds flat likewise, since its reads would have paid the gather anyway. Growth-shaped consumption is untouched, which is what keeps the builder and patchwork idioms at their O(1) steps.
-pub(crate) fn flatten_indexed_lists(module: &mut Module) -> bool {
+pub fn flatten_indexed_lists(module: &mut Module) -> bool {
     let mut changed = false;
 
     let collect = |module: &Module| {
@@ -664,7 +664,7 @@ pub(crate) fn flatten_indexed_lists(module: &mut Module) -> bool {
 /// Answer no for every row test whose operand no flow reaching it builds that row for ([`rows_reaching`]), in one sweep.
 ///
 /// A module with no row test pays nothing: the analysis is whole-module, so it runs only where a test stands for it to answer.
-pub(crate) fn answer_row_tests(module: &mut Module) -> bool {
+pub fn answer_row_tests(module: &mut Module) -> bool {
     let asks = module.live_nodes().any(|(_, node)| {
         matches!(
             node,
@@ -717,7 +717,7 @@ pub(crate) fn answer_row_tests(module: &mut Module) -> bool {
 /// Delete a known call only when its carried proof permits omission and every result is unread. A bodyless return sentinel has no local result demand, so a tail call is kept.
 ///
 /// The jump retains the resume's arity with fillers: the emitter supplies null or the receiving register's zero, and no result reads either. Taking one demand snapshot is sufficient because deleting these calls can only remove demands; newly dead results are found in the next optimizer round.
-pub(crate) fn eliminate_dead_calls(module: &mut Module) -> bool {
+pub fn eliminate_dead_calls(module: &mut Module) -> bool {
     let demands = demands(module);
     let mut replacements = Vec::new();
     for (id, node) in module.live_nodes() {
@@ -795,7 +795,7 @@ fn resolve_redirect(redirect: &BTreeMap<NodeId, NodeId>, mut id: NodeId) -> Node
     }
     id
 }
-pub(crate) fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
+pub fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
     for (_, function) in module.live_functions_mut() {
         if function.body == from {
             function.body = to;

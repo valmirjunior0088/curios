@@ -9,19 +9,19 @@ use {
 ///
 /// A bound past `2³²` bounds nothing anything reads it for, since no register a natural rides is wider, so it is no bound; that also caps the lattice's height, so a site's bound rises at most a bit a move and a counter growing round a loop settles unbounded within 33 moves, with no widening of its own. The lower end is always zero, which is what lets a monus or a quotient keep its first operand's bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Bound(Option<u32>);
+pub struct Bound(Option<u32>);
 
 impl Bound {
     /// Bounded by nothing.
-    pub(crate) const UNBOUNDED: Self = Self(None);
+    pub const UNBOUNDED: Self = Self(None);
     /// Below `2³⁰`: the non-negative half of the i31, under which a machine word holds a natural.
-    pub(crate) const WORD: Self = Self(Some(ENVELOPE_BITS.unsigned_abs() - 1));
+    pub const WORD: Self = Self(Some(ENVELOPE_BITS.unsigned_abs() - 1));
     /// Below 2: a predicate's answer.
-    pub(crate) const BIT: Self = Self(Some(1));
+    pub const BIT: Self = Self(Some(1));
     /// Below `2⁸`: a byte.
-    pub(crate) const BYTE: Self = Self(Some(8));
+    pub const BYTE: Self = Self(Some(8));
     /// Below `2³²`: a sequence's length, which every construction holds to `2³² - 1`.
-    pub(crate) const LENGTH: Self = Self(Some(32));
+    pub const LENGTH: Self = Self(Some(32));
 
     /// Below `2^bits`, which past `2³²` is no bound.
     fn below(bits: u64) -> Self {
@@ -32,27 +32,27 @@ impl Bound {
     }
 
     /// The least bound `value` lies below.
-    pub(crate) fn of(value: &Natural) -> Self {
+    pub fn of(value: &Natural) -> Self {
         Self::below(value.bits())
     }
 
     /// The least bound every natural below `value` lies below, which is what a remainder by `value` lies below; nothing lies below zero, as nothing a remainder by zero answers arrives, since it traps.
-    pub(crate) fn under(value: &Natural) -> Self {
+    pub fn under(value: &Natural) -> Self {
         Self::below(value.monus(&Natural::from(1u32)).bits())
     }
 
     /// Whether a machine word holds every value this admits.
-    pub(crate) fn is_word(self) -> bool {
+    pub fn is_word(self) -> bool {
         self.wider(Self::WORD) == Self::WORD
     }
 
     /// Whether a word read unsigned holds every value this admits.
-    pub(crate) fn is_length(self) -> bool {
+    pub fn is_length(self) -> bool {
         self.wider(Self::LENGTH) == Self::LENGTH
     }
 
     /// The narrower of two bounds, which a value both hold of lies below.
-    pub(crate) fn narrower(self, other: Self) -> Self {
+    pub fn narrower(self, other: Self) -> Self {
         match (self.0, other.0) {
             (Some(left), Some(right)) => Self(Some(left.min(right))),
             (Some(bits), None) | (None, Some(bits)) => Self(Some(bits)),
@@ -61,20 +61,20 @@ impl Bound {
     }
 
     /// The wider of two bounds, which either's value lies below.
-    pub(crate) fn wider(self, other: Self) -> Self {
+    pub fn wider(self, other: Self) -> Self {
         let mut wider = self;
         wider.join(other);
         wider
     }
 
     /// `bits` more: what a value below this, scaled by `2^bits`, lies below.
-    pub(crate) fn raised(self, bits: u64) -> Self {
+    pub fn raised(self, bits: u64) -> Self {
         self.0
             .map_or(Self::UNBOUNDED, |own| Self::below(u64::from(own) + bits))
     }
 
     /// `bits` fewer: what a value below this, divided by `2^bits`, lies below.
-    pub(crate) fn lowered(self, bits: u64) -> Self {
+    pub fn lowered(self, bits: u64) -> Self {
         self.0.map_or(Self::UNBOUNDED, |own| {
             Self(Some(
                 u32::try_from(u64::from(own).saturating_sub(bits)).unwrap_or(0),
@@ -83,7 +83,7 @@ impl Bound {
     }
 
     /// What a product of a value below this and one below `other` lies below.
-    pub(crate) fn times(self, other: Self) -> Self {
+    pub fn times(self, other: Self) -> Self {
         match other.0 {
             Some(bits) => self.raised(bits.into()),
             None => Self::UNBOUNDED,

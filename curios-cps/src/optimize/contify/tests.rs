@@ -328,8 +328,8 @@ fn a_loop_copy_is_contified_immediately_with_its_capturing_helpers() {
     } = polymorphic_loop(true, 0);
     nest_helpers(&mut module, loop_fn, 0);
     let extent = crate::CopyPlan::functions(&module, std::collections::BTreeSet::from([loop_fn]));
-    let added = extent.nodes.len() + super::CONTIFICATION_NODE_OVERHEAD;
-    let nested = extent.nested.len();
+    let added = extent.nodes().len() + super::CONTIFICATION_NODE_OVERHEAD;
+    let nested = extent.nested().len();
     let before_nodes = module.live_nodes().count();
     let before_functions = module.live_functions().count();
     let mut budget = 2;

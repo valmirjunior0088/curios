@@ -18,13 +18,13 @@ use {
 /// What one copy renames its original onto.
 ///
 /// `value` answers for a binding site and `atom` for a use, which are not the same question: a use may map to a literal or a function reference where a binding can only ever map to another value.
-pub(crate) struct Mapping<'a> {
-    pub(crate) value: &'a dyn Fn(ValueId) -> ValueId,
-    pub(crate) atom: &'a dyn Fn(&Atom) -> Atom,
-    pub(crate) cont: &'a dyn Fn(ContinuationId) -> ContinuationId,
-    pub(crate) callee: &'a dyn Fn(&Callee) -> Callee,
-    pub(crate) function: &'a dyn Fn(FunctionId) -> FunctionId,
-    pub(crate) node: &'a dyn Fn(NodeId) -> NodeId,
+pub struct Mapping<'a> {
+    pub value: &'a dyn Fn(ValueId) -> ValueId,
+    pub atom: &'a dyn Fn(&Atom) -> Atom,
+    pub cont: &'a dyn Fn(ContinuationId) -> ContinuationId,
+    pub callee: &'a dyn Fn(&Callee) -> Callee,
+    pub function: &'a dyn Fn(FunctionId) -> FunctionId,
+    pub node: &'a dyn Fn(NodeId) -> NodeId,
 }
 
 impl Mapping<'_> {
@@ -37,7 +37,7 @@ impl Mapping<'_> {
 }
 
 /// One node, rewritten onto the identities `map` names.
-pub(crate) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
+pub fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
     match node {
         Node::LetValue {
             result,
@@ -157,16 +157,31 @@ pub(crate) fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
 /// Admission reads the same nodes execution copies, closed transitively over nested definitions. A nested body may read values bound in its enclosing body, so both must be renamed together. Explicit roots remain distinct from nested functions: a function root's recursive calls follow its copy, a continuation root's backedges retain the original target, and the inliner substitutes a function root's parameters rather than minting them.
 ///
 /// Planning reads the module without minting identities. A bounded request stops at the first excess distinct node and discards its partial extent; binding-group members are enumerated at their binding node, so their width is not bounded by the node allowance. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
-pub(crate) struct CopyPlan {
+pub struct CopyPlan {
     functions: BTreeSet<FunctionId>,
     continuations: BTreeSet<ContinuationId>,
-    pub(crate) nodes: BTreeSet<NodeId>,
-    pub(crate) nested: BTreeSet<FunctionId>,
+    nodes: BTreeSet<NodeId>,
+    nested: BTreeSet<FunctionId>,
 }
 
 impl CopyPlan {
+    /// The nodes the copy reproduces: its extent.
+    pub fn nodes(&self) -> &BTreeSet<NodeId> {
+        &self.nodes
+    }
+
+    /// The functions defined lexically within the extent, which the copy reproduces with it.
+    pub fn nested(&self) -> &BTreeSet<FunctionId> {
+        &self.nested
+    }
+
+    /// The extent, the plan consumed.
+    pub fn into_nodes(self) -> BTreeSet<NodeId> {
+        self.nodes
+    }
+
     /// Decline as soon as the complete lexical extent crosses `limit`, before traversing the rest of an ineligible body.
-    pub(crate) fn functions_with_limit(
+    pub fn functions_with_limit(
         module: &Module,
         functions: BTreeSet<FunctionId>,
         limit: usize,
@@ -174,7 +189,7 @@ impl CopyPlan {
         Self::limited(module, functions, BTreeSet::new(), limit)
     }
 
-    pub(crate) fn continuation_with_limit(
+    pub fn continuation_with_limit(
         module: &Module,
         continuation: ContinuationId,
         limit: usize,
@@ -247,17 +262,17 @@ impl CopyPlan {
 }
 
 /// What one call to [`copy_bodies`] minted.
-pub(crate) struct Copies {
-    pub(crate) functions: BTreeMap<FunctionId, FunctionId>,
-    pub(crate) continuations: BTreeMap<ContinuationId, ContinuationId>,
+pub struct Copies {
+    pub functions: BTreeMap<FunctionId, FunctionId>,
+    pub continuations: BTreeMap<ContinuationId, ContinuationId>,
     /// Each copied node's copy.
-    pub(crate) nodes: BTreeMap<NodeId, NodeId>,
+    pub nodes: BTreeMap<NodeId, NodeId>,
 }
 
 /// Execute an admitted plan, copying its roots and everything nested inside them into fresh identities.
 ///
 /// Values, continuations, nodes and function identities owned by the copied extent are minted afresh and rewired to each other; anything defined outside it is shared, which is what makes the copy a copy rather than a second module. A seeded continuation is copied as itself, so its own parameters are renamed — a caller wanting the original's arity preserved reads the fresh id out of [`Copies`].
-pub(crate) fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
+pub fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
     let CopyPlan {
         functions,
         continuations,

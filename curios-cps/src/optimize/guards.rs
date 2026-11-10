@@ -11,7 +11,7 @@ use {
 /// Answer every window guard its arm decides, in one sweep.
 ///
 /// A suffix's guard, `Window/extent(k, n ∸ k, n)`, traps only where `k > n`, and the arm a switch on `n` takes past its cases `0` to `k - 1` is entered only where `n ≥ k`; inside that arm the guard answers its count, so its uses read the count and the guard goes. An arm learns what its switch decided where the switch is the one transfer into it, and what it learns holds of everything lexically inside it, since a continuation is in scope there alone and the scrutinee is bound before the switch.
-pub(crate) fn answer_window_guards(module: &mut Module) -> bool {
+pub fn answer_window_guards(module: &mut Module) -> bool {
     let differences = module
         .live_nodes()
         .filter_map(|(_, node)| match node {

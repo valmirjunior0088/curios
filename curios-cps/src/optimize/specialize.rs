@@ -1,14 +1,14 @@
 mod scc;
-pub(crate) use scc::*;
+pub use scc::*;
 
 mod pattern;
-pub(crate) use pattern::*;
+pub use pattern::*;
 
 mod call;
-pub(crate) use call::*;
+pub use call::*;
 
 mod jump;
-pub(crate) use jump::*;
+pub use jump::*;
 
 use {
     crate::{
@@ -19,7 +19,7 @@ use {
 };
 
 #[derive(Clone, PartialEq)]
-pub(crate) enum Knowledge {
+pub enum Knowledge {
     Unknown,
     Known(Atom),
     Conflict,
@@ -64,7 +64,7 @@ impl Lattice for Knowledge {
 /// Only members of an eligible SCC participate: the SCC must be recursive and must contain no escaping member and not the program entry, because an escaping or host-called function receives arguments this analysis cannot observe. `known_literals` seeds resolution of caller values already known to be constant.
 ///
 /// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make. That scope is the walk the verifier performs, so a reference bound earlier in an enclosing body chain counts as much as one in the member's own group — the site passing the reference and the body receiving it sit at different points of that chain, and only the receiving body's point decides.
-pub(crate) fn scc_invariant_knowns(
+pub fn scc_invariant_knowns(
     module: &Module,
     analysis: &CallAnalysis,
     known_literals: &BTreeMap<ValueId, Atom>,
@@ -111,7 +111,7 @@ pub(crate) fn scc_invariant_knowns(
         .collect()
 }
 /// The members of every SCC eligible for known-argument analysis: recursive, directly or through a function a member defines, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
-pub(crate) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec<FunctionId>> {
+pub fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec<FunctionId>> {
     analysis
         .sccs
         .members
@@ -135,7 +135,7 @@ pub(crate) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec
         .collect()
 }
 /// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the given parameter positions and call constraints.
-pub(crate) fn invariant_fixpoint<K: Ord>(
+pub fn invariant_fixpoint<K: Ord>(
     params_of: &BTreeMap<K, Vec<ValueId>>,
     constraints: &[(K, Vec<Atom>)],
     known_literals: &BTreeMap<ValueId, Atom>,
@@ -158,7 +158,7 @@ pub(crate) fn invariant_fixpoint<K: Ord>(
     })
 }
 /// Extract the parameters resolved to a single literal or function reference.
-pub(crate) fn useful_knowns(class: BTreeMap<ValueId, Knowledge>) -> BTreeMap<ValueId, Atom> {
+pub fn useful_knowns(class: BTreeMap<ValueId, Knowledge>) -> BTreeMap<ValueId, Atom> {
     let mut result = BTreeMap::new();
     for (param, knowledge) in class {
         if let Knowledge::Known(atom @ (Atom::Literal(_) | Atom::Fun(_))) = knowledge {
@@ -170,7 +170,7 @@ pub(crate) fn useful_knowns(class: BTreeMap<ValueId, Knowledge>) -> BTreeMap<Val
 /// The `LetValue`-bound constructions of a variant family whose tag is known: a construction of a row that carries [`Slot::Tag`] at slot zero, with a `Nat` literal standing there. These are the constructor call patterns branch specialization can bake into a callee.
 ///
 /// A family's row alone carries a tag. A product row's first field and a structural tuple's are data, so a literal there selects nothing: a product has one pattern, its construction, which is `split_workers`' to deliver.
-pub(crate) fn tagged_row_values(module: &Module) -> TaggedRows {
+pub fn tagged_row_values(module: &Module) -> TaggedRows {
     let mut result = BTreeMap::new();
     for (_, node) in module.live_nodes() {
         let Node::LetValue {
@@ -193,7 +193,7 @@ pub(crate) fn tagged_row_values(module: &Module) -> TaggedRows {
     result
 }
 /// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
-pub(crate) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
+pub fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut literals = BTreeMap::new();
     for (_, node) in module.live_nodes() {
         if let Node::LetValue {
@@ -208,7 +208,7 @@ pub(crate) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
     literals
 }
 /// The lexical introduction of each function, indexed once for a specialization sweep.
-pub(crate) fn function_introductions(module: &Module) -> BTreeMap<FunctionId, NodeId> {
+pub fn function_introductions(module: &Module) -> BTreeMap<FunctionId, NodeId> {
     let mut introductions = BTreeMap::new();
     for (id, node) in module.live_nodes() {
         if let Node::LetFun { functions, .. } = node {
@@ -218,10 +218,7 @@ pub(crate) fn function_introductions(module: &Module) -> BTreeMap<FunctionId, No
     introductions
 }
 /// The single `LetFun` node introducing every member, or `None` if the members are split across nodes. The clones are added to this node so they share the members' lexical scope.
-pub(crate) fn introducing_letfun(
-    module: &Module,
-    members: &BTreeSet<FunctionId>,
-) -> Option<NodeId> {
+pub fn introducing_letfun(module: &Module, members: &BTreeSet<FunctionId>) -> Option<NodeId> {
     for (id, node) in module.live_nodes() {
         if let Node::LetFun { functions, .. } = node {
             let introduced: BTreeSet<FunctionId> = functions.iter().copied().collect();
@@ -232,12 +229,12 @@ pub(crate) fn introducing_letfun(
     }
     None
 }
-pub(crate) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[Atom]>) {
+pub fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[Atom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {
         input.merge(args.and_then(|args| args.get(index)));
     }
 }
-pub(crate) fn record_known_literals(
+pub fn record_known_literals(
     params: &[ValueId],
     inputs: &[Knowledge],
     known: &mut BTreeMap<ValueId, Atom>,

@@ -29,7 +29,7 @@ use {
 
 /// How a function hands its result back to a caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReturnProtocol {
+pub enum ReturnProtocol {
     /// One value: the tuple as the callee built it. What every function speaks until this says otherwise.
     Tuple,
     /// The tuple's leading fields, delivered as that many results, rebuilt at the vocabulary the class's return edges agree on.
@@ -38,13 +38,13 @@ pub(crate) enum ReturnProtocol {
 
 /// The construction vocabulary a class's return edges agree on — what a resume must rebuild in, so the reads below it stay exact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReturnShape {
+pub enum ReturnShape {
     Tuple,
     Row(RowId),
 }
 
 /// What every live function's return protocol may be, total over the module's functions.
-pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
+pub fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
     let calls = analyze_calls(module);
     let classes = TailClasses::of(module, &calls.escaping);
     let demands = demands(module);
@@ -152,7 +152,7 @@ pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
 /// Deliver the leading fields of a returned construction as several results, wherever [`return_protocols`] finds a class every caller takes apart.
 ///
 /// Both sides are stated as local edits and the existing chain finishes the job. A return edge names the construction's fields instead of the construction, leaving that construction unread and so removable. A resume continuation takes the fields as parameters and rebuilds the tuple at its head, leaving the projections below to be forwarded through a construction that is now visible to them — which is precisely what they could not do while it was built inside the callee. Nothing here splices a node out of a chain, and nothing here deletes: the tuple that survives at each end is dead, and dead is what the following passes already handle.
-pub(crate) fn split_returns(module: &mut Module) -> bool {
+pub fn split_returns(module: &mut Module) -> bool {
     let widths = return_protocols(module)
         .into_iter()
         .filter_map(|(function, protocol)| match protocol {

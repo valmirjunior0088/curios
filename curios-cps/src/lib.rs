@@ -5,51 +5,58 @@
 //! Every CPS function owns a globally unique bodyless return continuation. Ordinary return is `ApplyCont(function.return_cont, [value])`; `Halt` is reserved for a host call that terminates the process.
 
 mod analysis;
-pub(crate) use analysis::*;
+use analysis::*;
 
 mod bound;
-pub(crate) use bound::*;
+use bound::*;
 
 mod dataflow;
-pub(crate) use dataflow::*;
+use dataflow::*;
 
 mod demand;
-pub(crate) use demand::*;
+use demand::*;
 
 mod intrinsic;
-pub use intrinsic::*;
+pub use intrinsic::{Intrinsic, IntrinsicEffect, Repr};
 
 mod module;
-pub use module::*;
+pub use module::{FieldGroup, Module, Row, Slot};
 
 mod node;
-pub use node::*;
+use node::*;
+pub use node::{
+    Atom, Callee, CellOp, ChannelOp, Continuation, ContinuationId, ENVELOPE_BITS, Edge, Function,
+    FunctionId, IntrinsicCall, Literal, Node, NodeId, Panic, Register, RowId, UseTarget, ValueDef,
+    ValueExpr, ValueId, atoms, int_is_small, nat_is_small,
+};
 
 mod optimize;
-pub use optimize::*;
+pub use optimize::optimize;
+use optimize::*;
 
 mod origin;
-pub(crate) use origin::*;
+use origin::*;
 
 mod row_flow;
-pub(crate) use row_flow::*;
+use row_flow::*;
 
 mod sharing;
-pub(crate) use sharing::*;
+use sharing::*;
 
 mod print;
 
 mod rebuild;
-pub use rebuild::*;
+pub use rebuild::rebuild_in_place;
 
 mod represent;
-pub use represent::*;
+pub use represent::{Representation, Storage, representation};
 
 mod survey;
-pub use survey::*;
+pub use survey::{Fate, Outcome, descendants, fates};
 
 mod verify;
-pub use verify::*;
+pub use verify::VerifyError;
+use verify::*;
 
 #[cfg(test)]
 mod test_support;

@@ -3,52 +3,52 @@
 //! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
 mod budget;
-pub(crate) use budget::*;
+pub use budget::*;
 
 mod clone;
-pub(crate) use clone::*;
+pub use clone::*;
 
 mod contify;
-pub(crate) use contify::*;
+pub use contify::*;
 
 mod cse;
-pub(crate) use cse::*;
+pub use cse::*;
 
 mod dead_parameters;
-pub(crate) use dead_parameters::*;
+pub use dead_parameters::*;
 
 mod evaluate;
-pub(crate) use evaluate::*;
+pub use evaluate::*;
 
 mod fields;
-pub(crate) use fields::*;
+pub use fields::*;
 
 mod guards;
-pub(crate) use guards::*;
+pub use guards::*;
 
 mod inline;
-pub(crate) use inline::*;
+pub use inline::*;
 
 mod protocol;
-pub(crate) use protocol::*;
+pub use protocol::*;
 
 mod reachable;
-pub(crate) use reachable::*;
+pub use reachable::*;
 
 mod shrink;
-pub(crate) use shrink::*;
+pub use shrink::*;
 
 mod simplify;
-pub(crate) use simplify::*;
+pub use simplify::*;
 
 mod sink;
-pub(crate) use sink::*;
+pub use sink::*;
 
 mod specialize;
-pub(crate) use specialize::*;
+pub use specialize::*;
 
 mod uncurry;
-pub(crate) use uncurry::*;
+pub use uncurry::*;
 
 use super::{Module, known_values};
 
@@ -57,32 +57,32 @@ use super::{Module, known_values};
 /// `/std/State/bind` is a nine-node extent — two of its own and seven in the `bind/1` it nests — so under a limit of eight a monadic step keeps a shared generic `bind` that receives both the action and the continuation as arguments and reaches each through a closure call, an indirect call per step that the hand-threaded control never pays.
 ///
 /// That argues for nine. The value is sixteen instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
-pub(crate) const MULTI_SITE_INLINE_LIMIT: usize = 16;
-pub(crate) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
+pub const MULTI_SITE_INLINE_LIMIT: usize = 16;
+pub const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 /// How many parameters a continuation may hold after a fields split. The widest admitted aggregate `curios`'s programs hold is the four-field scan state a walk reading UTF-8 a byte a turn carries beside its loop state (`programs/walk_mirror_baseline.crs`), and its corpus census finds pairs, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
-pub(crate) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
-pub(crate) const SCC_CLONE_NODE_LIMIT: usize = 256;
+pub const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
+pub const SCC_CLONE_NODE_LIMIT: usize = 256;
 /// Maximum cumulative copying of callees with several call sites into a call that hands them a known function they apply, each copy within [`SCC_CLONE_NODE_LIMIT`].
-pub(crate) const KNOWN_FUNCTION_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
+pub const KNOWN_FUNCTION_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative SCC-specialization copying under the complete-extent ceiling.
-pub(crate) const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
+pub const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative call-pattern copying, including head rebuilds.
-pub(crate) const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
+pub const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// Maximum cumulative jump-specialization copying, including head rebuilds.
-pub(crate) const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
+pub const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// How many nodes the reuse version of one function a rebuild in place copies may have.
-pub(crate) const REBUILD_CLONE_NODE_LIMIT: usize = SCC_CLONE_NODE_LIMIT;
+pub const REBUILD_CLONE_NODE_LIMIT: usize = SCC_CLONE_NODE_LIMIT;
 /// Maximum cumulative copying of reuse versions, each within [`REBUILD_CLONE_NODE_LIMIT`].
-pub(crate) const REBUILD_COPY_NODE_LIMIT: usize = 64 * REBUILD_CLONE_NODE_LIMIT;
+pub const REBUILD_COPY_NODE_LIMIT: usize = 64 * REBUILD_CLONE_NODE_LIMIT;
 /// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
-pub(crate) const ENTRY_CLONE_LIMIT: usize = 64;
+pub const ENTRY_CLONE_LIMIT: usize = 64;
 
 /// How many times the pass sequence may be re-run before the fixpoint gives up.
 ///
 /// A backstop against a pass pair that undoes each other's work, not a budget: what bounds the *real* work is the growth limits above, each of which refuses an individual rewrite. Reaching this limit therefore means the sequence did not converge, and the module is emitted in whatever half-optimized state the last round left it — silently, since nothing downstream can tell a fixpoint that finished from one that ran out.
 ///
 /// A limit in the tens would truncate real programs for pure loss rather than a tradeoff anything depends on, so the value is set far above any round count the corpus reaches: a backstop that a real program can reach is indistinguishable from a budget nobody documented.
-pub(crate) const ROUND_LIMIT: usize = 1024;
+pub const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
 pub fn optimize(module: &mut Module) {

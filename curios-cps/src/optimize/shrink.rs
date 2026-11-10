@@ -22,7 +22,7 @@ use {
 };
 
 /// Reduce every shrinking redex in `module`, and every one a reduction exposes, answering whether anything changed.
-pub(crate) fn shrink(module: &mut Module) -> bool {
+pub fn shrink(module: &mut Module) -> bool {
     let mut pass = Shrink::new(module);
     while let Some(redex) = pass.pending.pop() {
         match redex {
@@ -889,7 +889,7 @@ impl<'m> Shrink<'m> {
 }
 
 /// Make every transfer of `node` to `from` a transfer to `to`.
-pub(crate) fn retarget_transfers(node: &mut Node, from: ContinuationId, to: ContinuationId) {
+pub fn retarget_transfers(node: &mut Node, from: ContinuationId, to: ContinuationId) {
     let mut edge = |edge: &mut Edge| {
         if edge.target == from {
             edge.target = to;

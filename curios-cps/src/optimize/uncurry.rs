@@ -6,7 +6,7 @@
 mod tests;
 
 mod nest;
-pub(crate) use nest::*;
+pub use nest::*;
 
 use {
     crate::{
@@ -284,7 +284,7 @@ struct ClassPlan {
 }
 
 /// Absorb every independent tail class admitted by one call/entry snapshot. A class whose body, caller or resume an earlier rewrite touches waits for the next round; in particular a retargeted caller can introduce a tail edge joining previously separate classes.
-pub(crate) fn uncurry_returns(module: &mut Module) -> bool {
+pub fn uncurry_returns(module: &mut Module) -> bool {
     let calls = analyze_calls(module);
     let entries = continuation_entries(module);
     let observed = calls

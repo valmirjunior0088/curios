@@ -361,7 +361,7 @@ fn arenas(module: &Module) -> [usize; 4] {
 
 fn pad(module: &mut Module, function: FunctionId, nodes: usize) {
     let size = CopyPlan::functions(module, BTreeSet::from([function]))
-        .nodes
+        .nodes()
         .len();
     for _ in size..nodes {
         let result = module.add_value(None);
@@ -477,7 +477,7 @@ fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
                 }
                 assert_eq!(
                     CopyPlan::functions(&module, BTreeSet::from([callee]))
-                        .nodes
+                        .nodes()
                         .len(),
                     nodes,
                 );
@@ -549,7 +549,7 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
     ));
     assert_eq!(
         CopyPlan::functions(&module, BTreeSet::from([callee]))
-            .nodes
+            .nodes()
             .len(),
         MULTI_SITE_INLINE_LIMIT + 1,
     );

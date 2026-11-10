@@ -3,7 +3,7 @@
 use {crate::*, curios_num::Natural};
 
 /// Make `body` the entry function's body, with `params` as its parameters. The return continuation is reserved and never defined, which is exactly what a function's return sentinel is.
-pub(super) fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
+pub fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
     let function = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
@@ -21,11 +21,7 @@ pub(super) fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
 }
 
 /// Route `body` through a continuation taking `params`, and answer the node that enters it. A filler stands in for the incoming values: it inhabits whatever carrier the parameter settles at, so entering the continuation demands nothing and withholds nothing of its own.
-pub(super) fn through_continuation(
-    module: &mut Module,
-    params: Vec<ValueId>,
-    body: NodeId,
-) -> NodeId {
+pub fn through_continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> NodeId {
     let head = module.reserve_continuation();
     let args = params.iter().map(|_| Atom::Filler).collect();
 
@@ -42,7 +38,7 @@ pub(super) fn through_continuation(
 }
 
 /// Define the reserved `function` as `name(params)`, its body built by `body` against the function's own return sentinel, which it is handed.
-pub(super) fn define(
+pub fn define(
     module: &mut Module,
     function: FunctionId,
     name: &str,
@@ -64,7 +60,7 @@ pub(super) fn define(
 }
 
 /// Define the reserved `continuation` taking `params`, its body `body`.
-pub(super) fn resume(
+pub fn resume(
     module: &mut Module,
     continuation: ContinuationId,
     params: Vec<ValueId>,
@@ -81,12 +77,12 @@ pub(super) fn resume(
 }
 
 /// The `Nat` literal `value`.
-pub(super) fn nat(value: u32) -> Atom {
+pub fn nat(value: u32) -> Atom {
     Atom::Literal(Literal::Nat(Natural::from(value)))
 }
 
 /// Jump to a reserved-but-undefined continuation — the return sentinel, which demands nothing of what it carries.
-pub(super) fn finish(module: &mut Module, args: Vec<Atom>) -> NodeId {
+pub fn finish(module: &mut Module, args: Vec<Atom>) -> NodeId {
     let sentinel = module.reserve_continuation();
     module.add_node(Node::ApplyCont(Edge {
         target: sentinel,

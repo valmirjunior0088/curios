@@ -57,7 +57,7 @@ fn copy_reuse_versions(module: &mut Module, mut budget: CopyBudget) {
         ) else {
             continue;
         };
-        let size = plan.nodes.len();
+        let size = plan.nodes().len();
         if !budget.admits(size) {
             continue;
         }

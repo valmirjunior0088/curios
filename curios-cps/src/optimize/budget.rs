@@ -4,29 +4,29 @@ use std::cmp::Ordering;
 
 /// A module-wide allowance of newly copied nodes. Pruning never refunds work already performed.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct CopyBudget(usize);
+pub struct CopyBudget(usize);
 
 impl CopyBudget {
-    pub(crate) fn new(nodes: usize) -> Self {
+    pub fn new(nodes: usize) -> Self {
         Self(nodes)
     }
 
-    pub(crate) fn admits(&self, nodes: usize) -> bool {
+    pub fn admits(&self, nodes: usize) -> bool {
         nodes > 0 && nodes <= self.0
     }
 
     /// Spend an admitted copy's actual node count, after its rewrite succeeds.
-    pub(crate) fn charge(&mut self, nodes: usize) {
+    pub fn charge(&mut self, nodes: usize) {
         self.0 = self.0.checked_sub(nodes).expect("copy was admitted");
     }
 }
 
 /// Higher sharing per copied node wins; equal ratios retain the first site's identity order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CopyPriority {
-    pub(crate) sites: usize,
-    pub(crate) nodes: usize,
-    pub(crate) first: usize,
+pub struct CopyPriority {
+    pub sites: usize,
+    pub nodes: usize,
+    pub first: usize,
 }
 
 impl Ord for CopyPriority {

@@ -3,11 +3,11 @@
 use {super::*, crate::*, std::collections::BTreeSet};
 
 impl CopyPlan {
-    pub(crate) fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
+    pub fn functions(module: &Module, functions: BTreeSet<FunctionId>) -> Self {
         Self::new(module, functions, BTreeSet::new())
     }
 
-    pub(crate) fn continuation(module: &Module, continuation: ContinuationId) -> Self {
+    pub fn continuation(module: &Module, continuation: ContinuationId) -> Self {
         Self::new(module, BTreeSet::new(), BTreeSet::from([continuation]))
     }
 

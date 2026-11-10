@@ -354,7 +354,7 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
     output
 }
 
-pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Atom)) {
+pub fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Atom)) {
     match node {
         Node::LetValue { value, .. } => match value {
             ValueExpr::Literal(_) => {}

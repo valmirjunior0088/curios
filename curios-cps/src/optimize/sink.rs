@@ -23,7 +23,7 @@ use {
 };
 
 /// Move every droppable computation to where it is read, answering whether anything moved.
-pub(crate) fn sink_computations(module: &mut Module) -> bool {
+pub fn sink_computations(module: &mut Module) -> bool {
     let mut pass = Sink::new(module);
     let functions = pass
         .module

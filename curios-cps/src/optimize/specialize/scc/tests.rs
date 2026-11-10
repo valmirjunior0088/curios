@@ -53,7 +53,7 @@ fn independent_components_specialize_together_and_charge_their_complete_extents(
         .into_iter()
         .map(|root| {
             CopyPlan::functions(&module, BTreeSet::from([root]))
-                .nodes
+                .nodes()
                 .len()
         })
         .sum();
@@ -157,7 +157,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
     *body = dispatch;
     module.verify().unwrap();
     let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-        .nodes
+        .nodes()
         .len();
     let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(specialize_scc_calls(&mut module, &mut budget));
@@ -213,7 +213,7 @@ fn a_callback_bound_only_at_its_call_site_is_handed_to_a_copy_beside_it() {
     }
     module.verify().unwrap();
     let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-        .nodes
+        .nodes()
         .len();
     let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(specialize_scc_calls(&mut module, &mut budget));
@@ -284,7 +284,7 @@ fn insufficient_allowance_mints_nothing_and_the_exact_extent_is_charged_once() {
         let fixture = polymorphic_loop(true, 0);
         let mut module = fixture.module;
         let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-            .nodes
+            .nodes()
             .len();
         let allowance = cost - usize::from(!sufficient);
         let mut budget = CopyBudget::new(allowance);

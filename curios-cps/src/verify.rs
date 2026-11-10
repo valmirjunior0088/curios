@@ -15,7 +15,7 @@ use {
 
 /// The names a region may use: what encloses it, with what it binds, persistent, so a region's set is its parent's with the names it adds and shares every node of it. A region nested n deep sees every function, value and continuation bound above it, so a set copied into each region would cost the square of the nesting.
 #[derive(Debug, Clone)]
-pub(crate) struct InScope<T>(Sorted<T, ()>);
+pub struct InScope<T>(Sorted<T, ()>);
 
 impl<T> Default for InScope<T> {
     fn default() -> Self {
@@ -31,12 +31,12 @@ impl<T: Ord + Hash + Clone> InScope<T> {
         scope
     }
 
-    pub(crate) fn insert(&mut self, name: T) {
+    pub fn insert(&mut self, name: T) {
         self.0.insert(name, ());
     }
 
     /// Whether a region of this scope may use `name`.
-    pub(crate) fn contains(&self, name: &T) -> bool {
+    pub fn contains(&self, name: &T) -> bool {
         self.0.contains_key(name)
     }
 }

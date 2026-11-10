@@ -25,7 +25,7 @@ use {
 /// A lattice of facts, ordered by information content.
 ///
 /// The three laws the solver depends on: [`Lattice::join`] is commutative, associative, and idempotent, and [`Lattice::bottom`] is its identity. Monotonicity is what makes [`Solver::solve`] terminate at a least fixpoint rather than oscillate, so a `join` that can *lose* information — one that ever moves a fact back down the order — will not merely give a wrong answer, it may not converge.
-pub(crate) trait Lattice: Clone + PartialEq {
+pub trait Lattice: Clone + PartialEq {
     /// The identity of [`Lattice::join`] — "nothing established yet", the value every seeded key starts at.
     fn bottom() -> Self;
 
@@ -37,13 +37,13 @@ pub(crate) trait Lattice: Clone + PartialEq {
 type Rule<'r, F, K> = Box<dyn Fn(&mut Solver<F, K>) + 'r>;
 
 /// A client's constraint system, stated rule by rule for [`Solver::solve`].
-pub(crate) struct Rules<'r, F, K = ValueId> {
+pub struct Rules<'r, F, K = ValueId> {
     rules: Vec<Rule<'r, F, K>>,
 }
 
 impl<'r, F, K> Rules<'r, F, K> {
     /// A rule, run once and again wherever a fact it read moves.
-    pub(crate) fn add(&mut self, rule: impl Fn(&mut Solver<F, K>) + 'r) {
+    pub fn add(&mut self, rule: impl Fn(&mut Solver<F, K>) + 'r) {
         self.rules.push(Box::new(rule));
     }
 }
@@ -51,7 +51,7 @@ impl<'r, F, K> Rules<'r, F, K> {
 /// The facts established so far, and the rules each was read by.
 ///
 /// Handed to a rule by [`Solver::solve`]. Reads see every join performed before them, the rule's own among them, which is deliberate: the fixpoint is what the client's answer is defined as, and the order rules run in reaches the same one.
-pub(crate) struct Solver<F, K = ValueId> {
+pub struct Solver<F, K = ValueId> {
     facts: BTreeMap<K, F>,
     /// The rules that read each key, to run again where it moves. Written through a shared reference, since a read is one.
     readers: RefCell<BTreeMap<K, BTreeSet<usize>>>,
@@ -64,7 +64,7 @@ pub(crate) struct Solver<F, K = ValueId> {
 
 impl<F: Lattice, K: Ord + Clone> Solver<F, K> {
     /// The fact `key` holds, remembered as read by the rule running: `None` where it was never seeded nor joined — absence, not `bottom`, see the module documentation.
-    pub(crate) fn fact(&self, key: &K) -> Option<&F> {
+    pub fn fact(&self, key: &K) -> Option<&F> {
         self.readers
             .borrow_mut()
             .entry(key.clone())
@@ -76,7 +76,7 @@ impl<F: Lattice, K: Ord + Clone> Solver<F, K> {
     /// Raise `id`'s fact to include `incoming`, queueing again every rule that read it where that changed it.
     ///
     /// A key absent from the seeding is inserted rather than rejected, so a client may discover targets as it runs instead of enumerating them all up front.
-    pub(crate) fn join(&mut self, id: K, incoming: F) {
+    pub fn join(&mut self, id: K, incoming: F) {
         let current = self.facts.entry(id.clone()).or_insert_with(F::bottom);
         let mut updated = current.clone();
         updated.join(incoming);
@@ -97,7 +97,7 @@ impl<F: Lattice, K: Ord + Clone> Solver<F, K> {
     /// Seed every key at `bottom`, state the rules, and run them until no fact a rule read moves.
     ///
     /// Termination rests on the lattice laws rather than on a cap — a `join` obeying them can only move a finite lattice upward, and a rule runs again only for a move — so there is deliberately no limit here to mask a lattice that does not.
-    pub(crate) fn solve<'r>(
+    pub fn solve<'r>(
         keys: impl IntoIterator<Item = K>,
         state: impl FnOnce(&mut Rules<'r, F, K>),
     ) -> BTreeMap<K, F> {

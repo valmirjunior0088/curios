@@ -17,7 +17,7 @@ use {
 /// Deadness is read from [`crate::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. The lattice defers an argument's demand to the receiving parameter, so `Unused` here reaches further than a zero use count: a value threaded only into parameters nobody reads is dead however many edges carry it, and this pass deletes such a chain whole. The deletion stays well-formed because a parameter is always removed together with the argument every incoming edge passes into it, so no occurrence survives its binding.
 ///
 /// One snapshot of the lattice serves every entity, because removing a parameter only ever removes uses: a verdict of `Unused` cannot be falsified by an earlier removal in the same sweep, and each entity's edit touches its own parameter list and the edges or calls into it alone. One entity per call would fire on nearly every round of a `Toml/decode` compile, each round of every pass buying one continuation's cleanup.
-pub(crate) fn eliminate_dead_parameters(module: &mut Module) -> bool {
+pub fn eliminate_dead_parameters(module: &mut Module) -> bool {
     let demands = demands(module);
     let dead_value = |value: &ValueId| demand_of(&demands, *value) == Demand::Unused;
     let dead_indices = |params: &[ValueId]| {

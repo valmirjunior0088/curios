@@ -127,7 +127,7 @@ fn specializes_a_polymorphic_recursive_scc_per_call_context() {
     } = polymorphic_loop(true, 0);
 
     let copy_cost = CopyPlan::functions(&module, BTreeSet::from([loop_fn]))
-        .nodes
+        .nodes()
         .len();
     let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
     assert!(
@@ -238,7 +238,7 @@ fn specialization_is_deterministic() {
 fn specializes_a_constructor_argument_and_collapses_the_switch() {
     let (mut module, calls, consume) = tagged_consumer(0, &[0]);
     let copy_cost = CopyPlan::functions(&module, BTreeSet::from([consume]))
-        .nodes
+        .nodes()
         .len()
         + 1;
     let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
@@ -476,7 +476,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
 #[test]
 fn jump_specialization_threads_a_known_tag_edge_through_its_join() {
     let (mut module, join, some_jump, none_jump, x) = tagged_join();
-    let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
+    let cost = CopyPlan::continuation(&module, join).nodes().len() + 1;
     let mut budget = CopyBudget::new(cost * 4);
 
     assert!(specialize_jump_patterns(&mut module, &mut budget));
@@ -559,7 +559,7 @@ fn call_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
     set_constructor_rows(&mut module, &[Some(first), Some(first), Some(second), None]);
 
     let copy_cost = CopyPlan::functions(&module, BTreeSet::from([consume]))
-        .nodes
+        .nodes()
         .len()
         + 1;
     let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
@@ -603,7 +603,7 @@ fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
             default: Some(edge),
         };
         module.verify().unwrap();
-        let cost = CopyPlan::continuation(&module, join).nodes.len() + 1;
+        let cost = CopyPlan::continuation(&module, join).nodes().len() + 1;
         let mut budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
         assert!(specialize_jump_patterns(&mut module, &mut budget));
         module.verify().unwrap();

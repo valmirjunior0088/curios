@@ -19,15 +19,15 @@ use {
 
 /// A rebuild the facts admit: the construction at `node`, of `row`, may write into `of`, writing only `slots`.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Rebuild {
-    pub(crate) node: NodeId,
-    pub(crate) of: ValueId,
-    pub(crate) row: RowId,
-    pub(crate) slots: Vec<(usize, Atom)>,
+pub struct Rebuild {
+    pub node: NodeId,
+    pub of: ValueId,
+    pub row: RowId,
+    pub slots: Vec<(usize, Atom)>,
 }
 
 /// Every construction of a row the module may rebuild in place, in node order.
-pub(crate) fn rebuilds(module: &Module) -> Vec<Rebuild> {
+pub fn rebuilds(module: &Module) -> Vec<Rebuild> {
     let shape = Shape::of(module);
     let tags = constant_tags(module, &shape);
     let owned = BTreeSet::new();
@@ -45,19 +45,19 @@ pub(crate) fn rebuilds(module: &Module) -> Vec<Rebuild> {
 
 /// The version of a function a judgment is of: its base version, or its reuse version, which assumes unique the parameters it takes apart at a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum World {
+pub enum World {
     Base,
     Reuse,
 }
 
 /// Which calls reach a reuse version, each judged in the version of the function it stands in, and the functions some reached call reaches the reuse version of while another reaches the base one: each copied, its copy the reuse version.
-pub(crate) struct Routes {
-    pub(crate) copied: Vec<FunctionId>,
-    pub(crate) reuse: BTreeSet<(NodeId, World)>,
+pub struct Routes {
+    pub copied: Vec<FunctionId>,
+    pub reuse: BTreeSet<(NodeId, World)>,
 }
 
 /// Both versions of every function solved together, as the greatest fixpoint of uniqueness over both: a call reaches its callee's reuse version where it hands each parameter that version assumes a unique value dead after it, and a call's result takes the facts of the version it reaches, so a loop threading what a reuse version hands back holds it unique where that is consistent. A reuse version counts only where a call from a version that counts reaches it, so a cycle no unique value enters never does.
-pub(crate) fn routes(module: &Module) -> Routes {
+pub fn routes(module: &Module) -> Routes {
     let shape = Shape::of(module);
     let borrowed = BTreeSet::new();
     let mut assumed = BTreeMap::<FunctionId, BTreeSet<usize>>::new();

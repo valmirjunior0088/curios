@@ -32,7 +32,7 @@ fn edges(node: &Node) -> Vec<&Edge> {
 /// Apply independent patterns admitted by one snapshot, in sharing-per-copy order. The complete extent plus the head rebuild is charged against both the individual ceiling and the module's non-refundable allowance.
 ///
 /// One pattern per generic join lets ordinary cleanup reconsider its remaining transfers. An earlier rewrite invalidates a candidate when it changes the copied source or introduces transfers into the join; compatible lexical-anchor appends remain admissible. Newly minted entries wait for the next snapshot. Seeded backedges retain the generic join.
-pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
+pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
     if !budget.admits(1) {
         return false;
     }
@@ -116,7 +116,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        roots.insert(target, (intro, plan.nodes, projected));
+        roots.insert(target, (intro, plan.into_nodes(), projected));
     }
     let mut candidates = Vec::new();
     for ((target, pattern), carriers) in grouped {
@@ -196,7 +196,7 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBud
         else {
             continue;
         };
-        if plan.nodes != candidate.extent {
+        if *plan.nodes() != candidate.extent {
             continue;
         }
         let first_node = module.nodes().len();

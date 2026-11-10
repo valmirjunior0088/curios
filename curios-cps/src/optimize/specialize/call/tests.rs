@@ -32,7 +32,7 @@ fn independent_callees_advance_together_under_one_shared_lexical_anchor() {
         .iter()
         .map(|root| {
             CopyPlan::functions(&module, BTreeSet::from([*root]))
-                .nodes
+                .nodes()
                 .len()
                 + 1
         })
@@ -89,7 +89,7 @@ fn a_copied_call_into_another_generic_callee_defers_its_snapshot() {
 fn an_insufficient_allowance_preserves_arenas_and_an_exact_allowance_succeeds() {
     let (mut module, calls, callee) = tagged_consumer(0, &[0]);
     let cost = CopyPlan::functions(&module, BTreeSet::from([callee]))
-        .nodes
+        .nodes()
         .len()
         + 1;
     let original = module.to_string();
@@ -127,7 +127,7 @@ fn orphaned_call_sites_neither_win_priority_nor_retarget() {
         .map(|_| module.add_node(stale.clone()))
         .collect::<Vec<_>>();
     let cost = CopyPlan::functions(&module, BTreeSet::from([root]))
-        .nodes
+        .nodes()
         .len()
         + 1;
     let mut budget = CopyBudget::new(cost);

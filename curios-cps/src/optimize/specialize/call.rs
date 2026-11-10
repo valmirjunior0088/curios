@@ -22,7 +22,7 @@ struct Candidate {
 }
 
 /// Apply independent known-constructor contexts from one snapshot, selecting one context per generic callee so cleanup can reconsider its remaining callers. The complete extent and reconstruction node are charged only after application. New calls or changed source bodies defer dependent callees.
-pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
+pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
     if !budget.admits(1) {
         return false;
     }
@@ -100,7 +100,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        roots.insert(callee, (intro, plan.nodes, projected));
+        roots.insert(callee, (intro, plan.into_nodes(), projected));
     }
     grouped.retain(|(callee, pattern), _| {
         let Some((_, extent, projected)) = roots.get(callee) else {
@@ -177,7 +177,7 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBud
         ) else {
             continue;
         };
-        if plan.nodes != candidate.extent {
+        if *plan.nodes() != candidate.extent {
             continue;
         }
         let first_node = module.nodes().len();

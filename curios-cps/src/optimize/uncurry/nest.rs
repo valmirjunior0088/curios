@@ -17,7 +17,7 @@ use {
 /// Collapse every nest whose calls all apply it in turn, to the depth every call applies, answering whether one was.
 ///
 /// Nests are independent: a level is bound inside the one before it, a call's resumes are entered by calls of its function alone, and a collapse moves bodies without rewriting them, so one snapshot admits them all.
-pub(crate) fn uncurry_nests(module: &mut Module) -> bool {
+pub fn uncurry_nests(module: &mut Module) -> bool {
     let facts = Facts::of(module);
     let entries = continuation_entries(module);
     let nests = module

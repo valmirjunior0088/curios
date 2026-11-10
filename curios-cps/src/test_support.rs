@@ -15,7 +15,7 @@ use {
 };
 
 /// A halt reading `args`, through a row that does not return, `/exit: (Byte) -> Never` — the terminal a fixture ends a path with when what it passes must stay live.
-pub(super) fn halt(args: Vec<Atom>) -> Node {
+pub fn halt(args: Vec<Atom>) -> Node {
     Node::Halt {
         function: Arc::new(ForeignFunction {
             name: "/exit".to_string(),
@@ -29,12 +29,12 @@ pub(super) fn halt(args: Vec<Atom>) -> Node {
 }
 
 /// A halt reading nothing of the program's own: its code is the literal zero.
-pub(super) fn halt_zero() -> Node {
+pub fn halt_zero() -> Node {
     halt(vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))])
 }
 
 /// One function whose body is `body_of(&mut module)`, so each test states only the flow it is about.
-pub(super) fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {
+pub fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {
     let mut module = Module::default();
     let body = body_of(&mut module);
     let function = module.reserve_function();
@@ -53,7 +53,7 @@ pub(super) fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module
     module
 }
 
-pub(super) fn call_graph(edges: &[(u32, &[u32])]) -> BTreeMap<FunctionId, BTreeSet<FunctionId>> {
+pub fn call_graph(edges: &[(u32, &[u32])]) -> BTreeMap<FunctionId, BTreeSet<FunctionId>> {
     edges
         .iter()
         .map(|(function, successors)| {
@@ -65,15 +65,15 @@ pub(super) fn call_graph(edges: &[(u32, &[u32])]) -> BTreeMap<FunctionId, BTreeS
         .collect()
 }
 
-pub(super) struct PolymorphicLoop {
-    pub(super) module: Module,
-    pub(super) call1: NodeId,
-    pub(super) call2: NodeId,
-    pub(super) loop_fn: FunctionId,
+pub struct PolymorphicLoop {
+    pub module: Module,
+    pub call1: NodeId,
+    pub call2: NodeId,
+    pub loop_fn: FunctionId,
 }
 
 /// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When `second` differs from `add` the two contexts disagree. `padding` prepends dead `LetIntrinsic` nodes to `loop`'s body to inflate its node count.
-pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
+pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -232,7 +232,7 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
     }
 }
 
-pub(super) fn known_callee(module: &Module, node: NodeId) -> FunctionId {
+pub fn known_callee(module: &Module, node: NodeId) -> FunctionId {
     match module.node(node).unwrap() {
         Node::ApplyFun {
             callee: Callee::Known(callee),
@@ -243,7 +243,7 @@ pub(super) fn known_callee(module: &Module, node: NodeId) -> FunctionId {
 }
 
 // Build `helper(x) = x`, non-escaping, called from `entry` at one or two external sites. Returns the module and the helper function.
-pub(super) fn helper_called(two_sites: bool) -> (Module, FunctionId) {
+pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -317,7 +317,7 @@ pub(super) fn helper_called(two_sites: bool) -> (Module, FunctionId) {
 }
 
 /// `main` binds `v`, then defines `helper` and `owner` in one group: `helper(x)` returns `v`, which it captures, and `owner(y)` calls `helper(y)` once without mentioning `v` itself; `main` calls `owner` once. Every pass that moves `helper`'s body to its site must admit it — `v` is in scope there by lexical scoping, whatever `owner`'s own body names.
-pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
+pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -390,7 +390,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId)
 }
 
 /// A variant family's row of two slots, its tag and one payload: the vocabulary a tagged fixture builds in, and the one a pattern specialization reads.
-pub(super) fn tagged_family(module: &mut Module, name: &str) -> RowId {
+pub fn tagged_family(module: &mut Module, name: &str) -> RowId {
     module.add_row(Row {
         debug_name: Some(name.into()),
         slots: vec![Slot::Tag, Slot::Opaque],
@@ -398,7 +398,7 @@ pub(super) fn tagged_family(module: &mut Module, name: &str) -> RowId {
 }
 
 /// The dispatch shape: `consume(t)` switches on the tag of a value of a two-constructor family and returns its payload, and `main` calls it once for each of `sites`, each call handed a construction of the family at that site's tag. `padding` dead nodes inflate `consume` past whatever a test needs it to outgrow.
-pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, FunctionId) {
+pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, FunctionId) {
     let mut module = Module::new();
     let family = tagged_family(&mut module, "family");
     let entry = module.reserve_function();
@@ -544,14 +544,14 @@ pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<Nod
     (module, calls, consume)
 }
 
-pub(super) fn has_switch(module: &Module, function: FunctionId) -> bool {
+pub fn has_switch(module: &Module, function: FunctionId) -> bool {
     function_nodes(module, function)
         .iter()
         .any(|&id| matches!(module.node(id), Some(Node::Switch { .. })))
 }
 
 /// One entry function `main(x)` binding `result = op(args)` and returning it — the smallest module exercising a single intrinsic fold.
-pub(super) fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module, NodeId) {
+pub fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module, NodeId) {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -582,7 +582,7 @@ pub(super) fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module,
 }
 
 /// `main(x, y)` binding `first = op1`, `second = op2`, then `sum = first + second`, returned — the two-occurrence chain every CSE test starts from.
-pub(super) fn duplicate_pair_module(
+pub fn duplicate_pair_module(
     op1: Intrinsic,
     op2: Intrinsic,
     swap_second: bool,
@@ -637,7 +637,7 @@ pub(super) fn duplicate_pair_module(
 }
 
 /// The option-join shape: `main(x)` builds `some(x)` or `none()` in two predecessors, both jumping one join continuation whose body switches on the tag of the family's row — the allocation-then-rescrutinize shape jump-pattern specialization exists to collapse.
-pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
+pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     let mut module = Module::new();
     let family = tagged_family(&mut module, "option");
     let entry = module.reserve_function();
@@ -806,7 +806,7 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
 }
 
 /// Nest two helpers in `owner`, both capturing its first parameter, and pad the inner helper until the owner's complete copied extent reaches `nodes`.
-pub(super) fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> FunctionId {
+pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> FunctionId {
     let captured = module.function(owner).unwrap().params[0];
     let inner = module.reserve_function();
     let inner_return = module.reserve_continuation();
@@ -850,7 +850,7 @@ pub(super) fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize)
     });
     module.function_mut(owner).unwrap().body = body;
     let size = crate::CopyPlan::functions(module, std::collections::BTreeSet::from([owner]))
-        .nodes
+        .nodes()
         .len();
     for _ in size..nodes {
         let result = module.add_value(None);

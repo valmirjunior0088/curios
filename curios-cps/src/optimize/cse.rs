@@ -49,7 +49,7 @@ enum Task {
 }
 
 /// Remove every `LetIntrinsic` whose `(op, operands)` already has a binding in scope, rewriting its uses to the dominating result. One walk collects every duplicate — a duplicate of a duplicate resolves to the first binder because only the first occupies the table — and the rewrites apply as a batch afterwards.
-pub(crate) fn dedupe_intrinsics(module: &mut Module) -> bool {
+pub fn dedupe_intrinsics(module: &mut Module) -> bool {
     debug_assert_single_owner(module);
 
     let mut substitutions = BTreeMap::new();

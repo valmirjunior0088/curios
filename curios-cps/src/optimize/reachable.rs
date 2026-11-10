@@ -3,7 +3,7 @@ use {
     std::collections::{BTreeSet, VecDeque},
 };
 
-pub(crate) fn prune_unreachable(module: &mut Module) -> bool {
+pub fn prune_unreachable(module: &mut Module) -> bool {
     let Some(entry) = module.entry() else {
         return false;
     };

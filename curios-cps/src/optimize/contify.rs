@@ -14,7 +14,7 @@ use {
 /// The callee's captures need no check. Its one external site names it, so the `LetFun` binding it encloses that site, and every value the callee mentions without binding is bound before that `LetFun` — in scope at the site by the rule `verify_lexical_scopes` walks. A guard refusing the move unless the owner's own body *mentions* each such value would test the owner's text rather than its scope: a loop capturing an outer binding would stay a function call whenever its caller happens not to name the binding itself.
 ///
 /// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves the reachability condition that reads it: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. What does go stale — which function the snapshot says owns a site — nothing below reads. One contification per call would set a `Toml/decode` compile's round count, as `fixpoint_pass_measurements` shows.
-pub(crate) fn contify_calls(module: &mut Module) -> bool {
+pub fn contify_calls(module: &mut Module) -> bool {
     let analysis = analyze_calls(module);
     let mut admitted = Vec::new();
 
@@ -107,7 +107,7 @@ impl LoopEntryPlan {
         }
         let body_limit = SCC_CLONE_NODE_LIMIT.checked_sub(CONTIFICATION_NODE_OVERHEAD)?;
         let copy = CopyPlan::functions_with_limit(module, BTreeSet::from([callee]), body_limit)?;
-        if external.iter().any(|site| copy.nodes.contains(site)) {
+        if external.iter().any(|site| copy.nodes().contains(site)) {
             return None;
         }
         Some(Self {
@@ -146,7 +146,7 @@ impl LoopEntryPlan {
 /// Give one additional caller a contified copy of a small self-tail loop.
 ///
 /// The admitted plan bounds the complete copy and contification scaffolding, and proves the copy has one external entry. Copying and contification are one rewrite, so no intermediate function waits for a later round to make the expansion useful. One candidate is taken per call in function/site order, under the module's entry-copy budget.
-pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
+pub fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
@@ -162,7 +162,7 @@ pub(crate) fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> 
     true
 }
 
-pub(crate) fn function_reaches(
+pub fn function_reaches(
     graph: &BTreeMap<FunctionId, BTreeSet<FunctionId>>,
     start: FunctionId,
     target: FunctionId,
@@ -181,7 +181,7 @@ pub(crate) fn function_reaches(
     }
     false
 }
-pub(crate) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
+pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
     let function = module.function(callee).unwrap().clone();
     let Node::ApplyFun {
         callee: Callee::Known(found),
