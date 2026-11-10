@@ -3,13 +3,19 @@
 //! The document algebra is defined over `std::fmt` alone, and the crate depends on nothing. Why, and why it is split from `curios-parse`, are `README.md`'s decisions.
 
 mod combinator;
-pub use combinator::*;
+pub use combinator::{
+    ends, fill, flat, flow, group, hard_line, if_break, indent, line, named, named_at,
+    own_line_if_broken, pure, reached, sep_flat, soft_line,
+};
 
 mod document;
-pub use document::*;
+pub use document::{FillItem, FillStyle, Printer};
 
 mod run;
-pub use run::*;
+pub use run::{
+    Annotation, Original, Owed, each_named, render_annotated, run_printer, run_printer_placing,
+    run_printer_within,
+};
 
 #[cfg(test)]
 mod tests;

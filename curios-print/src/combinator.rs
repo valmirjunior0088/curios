@@ -44,27 +44,12 @@ where
     Printer::Concat(parts)
 }
 
-/// Defers building a document until the interpreter reaches it.
-///
-/// Wrap a printer's *recursive* calls in this and building stops descending: each child is built from the interpreter's frame rather than from inside its parent's, so a document nests as deep as the term without the builder doing the same. See [`Printer::Deferred`].
-pub fn deferred<F>(f: F) -> Printer
-where
-    F: FnOnce() -> Printer + 'static,
-{
-    Printer::Deferred(Some(Box::new(f)))
-}
-
 /// Runs the printer one indentation level deeper: every line *begun* inside it gets `indent_step` extra leading spaces, applied lazily at the first character after each newline so blank lines stay blank. The level is restored when the printer finishes.
 pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
 }
 
-/// `printer` on a line of its own: where something is already written on the current line, a newline and `printer` one indentation level deeper; at the start of a line, `printer` as it stands, so a block placed where a line begins anyway costs no blank line and no extra level. No [`group`] containing one renders flat.
-pub fn own_line(printer: Printer) -> Printer {
-    Printer::OwnLine(Box::new(printer))
-}
-
-/// `printer` flat on the current line where it fits there, and otherwise broken on a line of its own, as [`own_line`] places one: a newline and one indentation level deeper where something is already written on the line, and as it stands at the start of one.
+/// `printer` flat on the current line where it fits there, and otherwise broken on a line of its own, as a printer on a line of its own is placed: a newline and one indentation level deeper where something is already written on the line, and as it stands at the start of one.
 pub fn own_line_if_broken(printer: Printer) -> Printer {
     Printer::OwnLineIfBroken(Box::new(printer))
 }
