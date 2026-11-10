@@ -46,9 +46,9 @@ where
 
 /// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so it loses [`Parser::or`]'s tie-break to any alternative that read further — which, the failure being uncommitted, is what makes a keyword or punctuation probe safe as the first token of an alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file — and cut at the first whitespace, so a token shorter than the literal is quoted alone rather than with its neighbour: `=` where `=>` was expected read as `'= '`.
 pub fn take_exact<'a>(expected: &'static str) -> impl Parser<'a, ()> {
-    move |state: ParserState<'a>| match state.string.starts_with(expected) {
-        true => Ok(((), state.jump_to(state.offset + expected.len()))),
-        false => Err(ParserError::expected(state, expected)),
+    move |state: ParserState<'a>| match state.after(expected) {
+        Some(next) => Ok(((), next)),
+        None => Err(ParserError::expected(state, expected)),
     }
 }
 
@@ -70,7 +70,7 @@ pub fn take_while<'a>(f: impl FnMut(char) -> bool) -> impl Parser<'a, &'a str> {
 
 /// The input from the current offset to its end, consuming none of it and reading none: what a grammar asks for where a failure says what it found in a token's place, or where the next character alone decides. A slice of the source, so asking costs nothing the input's length sets — where [`look_ahead`](crate::look_ahead) over a [`take_while`] that accepts everything reads every character left, at every position it is tried.
 pub fn ahead<'a>() -> impl Parser<'a, &'a str> {
-    |state: ParserState<'a>| Ok((state.string, state))
+    |state: ParserState<'a>| Ok((state.rest(), state))
 }
 
 /// Succeeds (consuming nothing) only when the input is exhausted. Top-level grammars end with this so trailing garbage is a parse error — [`run_parser`](crate::run_parser) itself does not require the input to be fully consumed.
@@ -122,11 +122,7 @@ pub fn obtained(rest: &str, limit: usize) -> String {
 /// Succeeds (consuming nothing) only when the byte immediately before the current offset is whitespace, or we are at the start of input. The infix operator parser uses it to require a space on the *left* of an operator — the right space is required by consuming whitespace after the symbol — so `a - 42` is subtraction while the glued `-42` stays a literal.
 pub fn preceded_by_space<'a>() -> impl Parser<'a, ()> {
     |state: ParserState<'a>| {
-        let preceded = state.offset == 0
-            || state.source.text[..state.offset]
-                .chars()
-                .next_back()
-                .is_some_and(is_blank);
+        let preceded = state.char_before().is_none_or(is_blank);
 
         match preceded {
             true => Ok(((), state)),
@@ -140,7 +136,7 @@ pub fn preceded_by_space<'a>() -> impl Parser<'a, ()> {
 
 /// Succeeds (consuming nothing) only when the remaining input does *not* start with `unexpected`. A negative look-ahead — e.g. to read a postfix `!` only when it is not the start of the `!=` operator.
 pub fn not_ahead<'a>(unexpected: &'static str) -> impl Parser<'a, ()> {
-    move |state: ParserState<'a>| match state.string.starts_with(unexpected) {
+    move |state: ParserState<'a>| match state.rest().starts_with(unexpected) {
         true => Err(ParserError::unexpected(state, unexpected)),
         false => Ok(((), state)),
     }

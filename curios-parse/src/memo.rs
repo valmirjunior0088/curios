@@ -20,7 +20,7 @@ where
     A: Clone + 'static,
 {
     move |state: ParserState<'a>| {
-        let offset = state.offset;
+        let offset = state.offset();
 
         if let Some(entry) = MEMO.with(|memo| memo.borrow().get(&(key, offset)).cloned()) {
             return match entry {
@@ -39,7 +39,7 @@ where
         let result = parser.into_parser().parse(state);
 
         let entry: MemoEntry = match &result {
-            Ok((value, next)) => Ok((Rc::new(value.clone()) as Rc<dyn Any>, next.offset)),
+            Ok((value, next)) => Ok((Rc::new(value.clone()) as Rc<dyn Any>, next.offset())),
             Err(error) => Err(error.clone()),
         };
 

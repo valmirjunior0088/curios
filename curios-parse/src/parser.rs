@@ -6,7 +6,7 @@ use {
 /// What a parser answers at a position: its value and where the input stands past it, or a [`ParserError`].
 pub type Parsed<'a, A> = Result<(A, ParserState<'a>), ParserError>;
 
-/// A single-use parser: anything that is run once at an input position and answers a value with the rest of the input, or a [`ParserError`]. Being single-use lets a combinator move what it captured into its result without cloning, and is why the repetition combinators ([`many0`](crate::many0), [`sep_by0`](crate::sep_by0), ...) take what hands them a parser for each iteration ([`Repeated`](crate::Repeated)).
+/// A single-use parser: anything that is run once at an input position and answers a value with the rest of the input, or a [`ParserError`]. Being single-use lets a combinator move what it captured into its result without cloning, and is why the repetition combinators ([`many0`](crate::many0), [`sep_by0_trailing`](crate::sep_by0_trailing), ...) take what hands them a parser for each iteration ([`Repeated`](crate::Repeated)).
 ///
 /// **Every function of the input is one**, so a nonterminal is a plain function — `fn term<'a>(state: ParserState<'a>) -> Parsed<'a, Term>` — whose body builds its combinators as values of its own and runs them, and a combinator returns the closure it is. Nothing is boxed: a grammar function is compiled once and run at every position, a combinator it builds on the way is a value on its stack, and a nonterminal that names itself, or another that names it back, is a function calling a function.
 ///
@@ -32,11 +32,7 @@ pub trait Parser<'a, A>: Sized {
                 Err(error) => error,
             };
 
-            if first.offset >= second.offset {
-                Err(first)
-            } else {
-                Err(second)
-            }
+            Err(first.further(second))
         }
     }
 
@@ -195,10 +191,8 @@ pub fn expecting<'a, T, M>(
     parser: impl IntoParser<'a, T, M>,
 ) -> impl Parser<'a, T> {
     move |state: ParserState<'a>| {
-        let start = state.offset;
-
         parser.into_parser().parse(state).map_err(|error| {
-            match error.is_committed() || error.offset != start {
+            match error.is_committed() || !error.stands_at(&state) {
                 true => error,
                 false => error.with_message(message),
             }

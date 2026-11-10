@@ -21,7 +21,7 @@ enum Message {
 #[derive(Debug, Clone)]
 pub struct ParserError {
     committed: bool,
-    pub(crate) offset: usize,
+    offset: usize,
     /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `committed` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
     from: Option<usize>,
     message: Message,
@@ -38,6 +38,24 @@ impl ParserError {
         Self::saying(state, Message::Said(message.into()))
     }
 
+    /// Where the failure sits, a byte offset into its source.
+    pub(crate) fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Whether the failure sits where `state` stands: one its parser raised before reading anything.
+    pub(crate) fn stands_at(&self, state: &ParserState) -> bool {
+        self.offset == state.offset()
+    }
+
+    /// Of this failure and `other`, the one that read further, this one on a tie: which of two uncommitted alternatives a report names.
+    pub(crate) fn further(self, other: Self) -> Self {
+        match self.offset >= other.offset {
+            true => self,
+            false => other,
+        }
+    }
+
     /// The failure of a literal that was not at `state`: `Expected '…', obtained …`, naming what stands there as [`obtained`] says it, up to the literal's length.
     pub(crate) fn expected(state: ParserState, expected: &'static str) -> Self {
         Self::saying(state, Message::Expected(expected))
@@ -51,10 +69,10 @@ impl ParserError {
     fn saying(state: ParserState, message: Message) -> Self {
         Self {
             committed: false,
-            offset: state.offset,
+            offset: state.offset(),
             from: None,
             message,
-            source: state.source.clone(),
+            source: state.source().clone(),
             tag: None,
         }
     }

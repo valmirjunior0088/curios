@@ -7,13 +7,10 @@ use {
 /// Pairs the parser's output with the [`Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
 pub fn spanned<'a, T, M>(parser: impl IntoParser<'a, T, M>) -> impl Parser<'a, (Span, T)> {
     move |state: ParserState<'a>| {
-        let start = state.offset;
+        let start = state;
         let (item, state) = parser.into_parser().parse(state)?;
 
-        Ok((
-            (Span::new(state.source.clone(), start, state.offset), item),
-            state,
-        ))
+        Ok(((start.span_to(&state), item), state))
     }
 }
 
@@ -45,8 +42,8 @@ pub fn mark<'a>() -> impl Parser<'a, Mark> {
     |state: ParserState<'a>| {
         Ok((
             Mark {
-                offset: state.offset,
-                source: state.source.clone(),
+                offset: state.offset(),
+                source: state.source().clone(),
             },
             state,
         ))

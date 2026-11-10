@@ -50,30 +50,23 @@ pub fn recover<'a, T, M>(
         let mut items = Vec::new();
 
         loop {
-            let start = state.offset;
             match each.next().parse(state) {
                 Ok((item, next_state)) => {
-                    if start == next_state.offset {
+                    if !next_state.moved_from(&state) {
                         panic!("Infinite repetition");
                     }
 
                     items.push(Recovered::Item {
                         item,
-                        span: Span::new(next_state.source.clone(), start, next_state.offset),
+                        span: state.span_to(&next_state),
                     });
                     state = next_state;
                 }
                 Err(error) if error.is_committed() => {
-                    let text = &state.source.text;
-                    let past_start = start + text[start..].chars().next().map_or(0, char::len_utf8);
-                    let from = error.offset.max(past_start);
-                    let resume = anchor(text, from).unwrap_or(text.len());
+                    let (span, resumed) = state.resumed(error.offset(), &anchor);
 
-                    items.push(Recovered::Broken {
-                        error,
-                        span: Span::new(state.source.clone(), start, resume),
-                    });
-                    state = state.jump_to(resume);
+                    items.push(Recovered::Broken { error, span });
+                    state = resumed;
                 }
                 Err(_) => return Ok((items, state)),
             }
@@ -92,7 +85,7 @@ fn many_core<'a, T, M>(
         let error = loop {
             match each.next().parse(state) {
                 Ok((item, next_state)) => {
-                    if state.offset == next_state.offset {
+                    if !next_state.moved_from(&state) {
                         panic!("Infinite repetition");
                     }
 
@@ -127,7 +120,7 @@ fn parse_separator<'a, S>(
     state: ParserState<'a>,
 ) -> Result<Option<ParserState<'a>>, ParserError> {
     match separator.parse(state) {
-        Ok((_, next_state)) if state.offset == next_state.offset => {
+        Ok((_, next_state)) if !next_state.moved_from(&state) => {
             panic!("Infinite repetition")
         }
         Ok((_, next_state)) => Ok(Some(next_state)),
@@ -136,15 +129,14 @@ fn parse_separator<'a, S>(
     }
 }
 
-/// The one loop behind the four `sep_by*` combinators. `require_first` decides whether a failed first item is the whole parser's failure or an empty list; `trailing` whether a separator followed by a recoverable item failure ends the list with the separator consumed instead of failing. Panics on zero-width progress, like [`many_core`].
+/// The one loop behind the two `sep_by*` combinators. `require_first` decides whether a failed first item is the whole parser's failure or an empty list; a separator followed by a recoverable item failure ends the list with the separator consumed instead of failing. Panics on zero-width progress, like [`many_core`].
 fn sep_by_core<'a, T, S, M, N>(
     mut each: impl Repeated<'a, T, M>,
     mut separator: impl Repeated<'a, S, N>,
     require_first: bool,
-    trailing: bool,
 ) -> impl Parser<'a, Vec<T>> {
     move |state: ParserState<'a>| {
-        let offset = state.offset;
+        let start = state;
 
         let (item, mut state) = match each.next().parse(state) {
             Ok(output) => output,
@@ -152,24 +144,24 @@ fn sep_by_core<'a, T, S, M, N>(
             Err(_) => return Ok((Vec::new(), state)),
         };
 
-        if offset == state.offset {
+        if !state.moved_from(&start) {
             panic!("Infinite repetition");
         }
 
         let mut items = vec![item];
 
         while let Some(next_state) = parse_separator(separator.next(), state)? {
-            let offset = next_state.offset;
+            let after_separator = next_state;
             match each.next().parse(next_state) {
                 Ok((item, next_state)) => {
-                    if offset == next_state.offset {
+                    if !next_state.moved_from(&after_separator) {
                         panic!("Infinite repetition");
                     }
 
                     items.push(item);
                     state = next_state;
                 }
-                Err(error) if !trailing || error.is_committed() => return Err(error),
+                Err(error) if error.is_committed() => return Err(error),
                 // The separator was trailing: keep it consumed, end the list.
                 Err(_) => {
                     state = next_state;
@@ -182,34 +174,18 @@ fn sep_by_core<'a, T, S, M, N>(
     }
 }
 
-/// Zero or more `each` items separated by `separator` (separators dropped). An empty list is fine, but once a separator is consumed the next item is mandatory — no trailing separator; use [`sep_by0_trailing`] where one is legal. As with [`many0`], `each` and `separator` hand over a fresh single-use [`Parser`] per iteration, and an iteration that consumes no input panics as an infinite repetition.
-pub fn sep_by0<'a, T, S, M, N>(
-    each: impl Repeated<'a, T, M>,
-    separator: impl Repeated<'a, S, N>,
-) -> impl Parser<'a, Vec<T>> {
-    sep_by_core(each, separator, false, false)
-}
-
-/// Like [`sep_by0`], but admits (and drops) one trailing separator: a separator followed by a failed item parse ends the list with the separator consumed instead of failing, so `{ a, b, }` parses like `{ a, b }`.
+/// Zero or more `each` items separated by `separator` (separators dropped), admitting and dropping one trailing separator: a separator followed by a failed item parse ends the list with the separator consumed instead of failing, so `{ a, b, }` parses like `{ a, b }`. As with [`many0`], `each` and `separator` hand over a fresh single-use [`Parser`] per iteration, and an iteration that consumes no input panics as an infinite repetition.
 pub fn sep_by0_trailing<'a, T, S, M, N>(
     each: impl Repeated<'a, T, M>,
     separator: impl Repeated<'a, S, N>,
 ) -> impl Parser<'a, Vec<T>> {
-    sep_by_core(each, separator, false, true)
+    sep_by_core(each, separator, false)
 }
 
-/// One or more `each` items separated by `separator` (separators dropped). Once a separator is consumed the next item is mandatory, as in [`sep_by0`], so trailing separators are rejected — [`sep_by1_trailing`] is the variant that admits them.
-pub fn sep_by1<'a, T, S, M, N>(
-    each: impl Repeated<'a, T, M>,
-    separator: impl Repeated<'a, S, N>,
-) -> impl Parser<'a, Vec<T>> {
-    sep_by_core(each, separator, true, false)
-}
-
-/// Like [`sep_by1`], but admits (and drops) one trailing separator — the nonempty sibling of [`sep_by0_trailing`]: `(a, b,)` parses like `(a, b)`, while an empty list still fails on the first item.
+/// One or more `each` items separated by `separator` (separators dropped), admitting and dropping one trailing separator — the nonempty sibling of [`sep_by0_trailing`]: `(a, b,)` parses like `(a, b)`, while an empty list still fails on the first item.
 pub fn sep_by1_trailing<'a, T, S, M, N>(
     each: impl Repeated<'a, T, M>,
     separator: impl Repeated<'a, S, N>,
 ) -> impl Parser<'a, Vec<T>> {
-    sep_by_core(each, separator, true, true)
+    sep_by_core(each, separator, true)
 }
