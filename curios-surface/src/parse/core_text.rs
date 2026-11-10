@@ -311,7 +311,7 @@ fn parse_declared_name<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label)
     spanned(parse_witness_name)
         .map(|(span, id)| {
             let span = trimmed(span);
-            let label = Label::spanned(&span.source.text[span.start..span.end], span.clone());
+            let label = Label::spanned(&span.source.text()[span.start..span.end], span.clone());
 
             (Global::Witness(id), label)
         })

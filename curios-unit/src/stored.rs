@@ -54,7 +54,7 @@ pub fn digested(reads: Vec<(PathBuf, Arc<Source>)>) -> Vec<(String, String)> {
         .map(|(path, text)| {
             (
                 path.to_string_lossy().into_owned(),
-                digest(text.text.as_bytes()),
+                digest(text.text().as_bytes()),
             )
         })
         .collect()

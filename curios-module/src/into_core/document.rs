@@ -609,7 +609,11 @@ impl Reader<'_> {
         each_named(&mut head, |text, written| {
             let referent = match written {
                 Some(written) => source.and_then(|source| {
-                    let place = (source.path.clone(), written.start, written.end);
+                    let place = (
+                        source.path().map(ToOwned::to_owned),
+                        written.start,
+                        written.end,
+                    );
                     self.mentions.get(&place).copied()
                 }),
                 None => self.resolve(text, module),

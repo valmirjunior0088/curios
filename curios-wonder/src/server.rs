@@ -363,10 +363,10 @@ impl Server {
 
     /// `span` as a place an editor opens. In a document the editor holds it is where the span stands in the buffer, and nothing where the buffer was edited there since the span was taken; in any other file it is the span's own range.
     fn located(&self, span: &Span) -> Option<Location> {
-        let path = curios_module::identity(span.source.path.as_deref()?);
+        let path = curios_module::identity(span.source.path()?);
         let range = match self.documents.get(&path) {
             Some(buffer) => {
-                let moved = Standing::of(&span.source.text, buffer).moved(span)?;
+                let moved = Standing::of(span.source.text(), buffer).moved(span)?;
 
                 Range {
                     start: position_of(buffer, span.start.checked_add_signed(moved)?),
@@ -481,7 +481,7 @@ impl<'a> Standing<'a> {
 
 /// The name standing at `offset` of `buffer`, by what the buffer's last check left: the name [`Named::at`] finds in the text that holds the offset, where that text stands in the buffer as it was checked.
 fn named_at<'a>(buffer: &str, checked: &'a [Written], offset: usize) -> Option<&'a Named> {
-    let standing = Standing::of(&checked.first()?.text.source.text, buffer);
+    let standing = Standing::of(checked.first()?.text.source.text(), buffer);
 
     checked.iter().find_map(|written| {
         let moved = standing.moved(&written.text)?;
@@ -495,7 +495,7 @@ fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
     let Some(first) = checked.first() else {
         return Vec::new();
     };
-    let standing = Standing::of(&first.text.source.text, buffer);
+    let standing = Standing::of(first.text.source.text(), buffer);
 
     let mut symbols = Vec::<DocumentSymbol>::new();
     for written in checked {
@@ -770,8 +770,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
 
     let lies_in = |span: &Span| {
         span.source
-            .path
-            .as_deref()
+            .path()
             .map(curios_module::identity)
             .unwrap_or_else(|| document.to_path_buf())
     };
@@ -809,7 +808,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
 
 /// The span's byte range as protocol positions: line, and the UTF-16 unit count from the line's start — the one place the protocol's unit is spoken.
 fn range_of(span: &Span) -> Range {
-    let text = &span.source.text;
+    let text = span.source.text();
     // An empty span still has to be visible, so it covers the character it points at.
     let end = match span.end > span.start {
         true => span.end,

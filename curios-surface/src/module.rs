@@ -302,7 +302,7 @@ pub struct TopBroken {
 impl TopBroken {
     /// The text the item stood in, verbatim — what a printer shows for it, since there is no tree to print.
     pub fn text(&self) -> &str {
-        &self.span.source.text[self.span.start..self.span.end]
+        &self.span.source.text()[self.span.start..self.span.end]
     }
 }
 
@@ -435,7 +435,7 @@ impl Module {
 
 /// `span` without the whitespace and the plain comments that end it. `comments` are the parse's, ascending.
 fn own_text(span: &Span, comments: &[Span]) -> Span {
-    let text = &span.source.text;
+    let text = &span.source.text();
     let mut end = span.end;
     loop {
         end = span.start + text[span.start..end].trim_end().len();

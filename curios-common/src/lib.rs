@@ -7,58 +7,72 @@
 mod macros;
 
 mod arena;
-pub use arena::*;
+pub use arena::{ArchivedArena, Arena, ArenaId};
 
 mod persistent;
-pub use persistent::*;
+pub use persistent::{
+    InKeyOrder, InOrder, InSharedKeyOrder, KeyOrder, Ordered, Persistent, SharedKeyOrder, Sorted,
+    Summary,
+};
 
 mod entropy;
-pub use entropy::*;
+pub use entropy::{Entropy, Mint};
 
 mod span;
-pub use span::*;
+pub use span::{
+    ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, LINE_WIDTH, Note, Report, Source,
+    Span,
+};
 
 mod interner;
-pub use interner::*;
+pub use interner::{Table, intern};
 
 mod qualifier;
-pub use qualifier::*;
+pub use qualifier::{
+    ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char, is_keyword,
+};
 
 mod symbol;
-pub use symbol::*;
+pub use symbol::{ArchivedSymbol, InterningText, Symbol};
 
 mod plicity;
-pub use plicity::*;
+pub use plicity::{ArchivedPlicity, Plicity};
 
 mod sign;
-pub use sign::*;
+pub use sign::{ArchivedSign, Sign};
 
 mod mount;
-pub use mount::*;
+pub use mount::{ArchivedMount, ArchivedRootKind, Mount, RootKind};
 
 mod infix_op;
-pub use infix_op::*;
+pub use infix_op::{ArchivedInfixOp, InfixOp, InfixOpResolver};
 
 mod syntax;
-pub use syntax::*;
+pub use syntax::{
+    ChannelSyntax, CharacterSyntax, ConceptField, Derivation, DerivationSyntax, EntailmentSyntax,
+    EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
+};
 
 mod recurse;
-pub use recurse::*;
+pub use recurse::{grown, recurse};
 
 mod digest;
-pub use digest::*;
+pub use digest::{Digest, Fingerprint, Member, Object, digest};
 
 mod recorded;
-pub use recorded::*;
+pub use recorded::{Filed, Recorded, Records};
 
 mod candidates;
-pub use candidates::*;
+pub use candidates::{Candidates, Facet, candidate_name, candidate_prefix};
 
 mod nearest;
-pub use nearest::*;
+pub use nearest::nearest;
 
 mod keyed;
-pub use keyed::*;
+pub use keyed::Keyed;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_common::test_support::Temporary` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(feature = "test-support")]

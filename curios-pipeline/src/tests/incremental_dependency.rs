@@ -56,7 +56,7 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
                 .anchors()]);
             let span = report.span.as_ref().expect("a lint is placed");
 
-            span.source.path.clone().expect("in a file")
+            span.source.path().expect("in a file").to_path_buf()
         })
         .collect::<Vec<_>>();
     assert_eq!(

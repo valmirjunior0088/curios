@@ -235,7 +235,7 @@ fn comment_spacing<'a>(message: &'static str) -> impl Parser<'a, ()> {
 fn parse_doc_line<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
     spanned(take_exact("---"))
         .flat_map(|(span, ())| {
-            let text = &span.source.text;
+            let text = &span.source.text();
             let line_start = text[..span.start].rfind('\n').map_or(0, |index| index + 1);
             match text[line_start..span.start].chars().all(is_blank) {
                 true => pure(()).boxed(),
@@ -254,7 +254,7 @@ fn parse_doc_line<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
 /// The source from the head a documentation block runs up to.
 pub fn text_after(doc: &Doc) -> &str {
     match &doc.span {
-        Some(span) => &span.source.text[span.end..],
+        Some(span) => &span.source.text()[span.end..],
         None => "",
     }
 }

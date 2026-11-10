@@ -200,7 +200,7 @@ impl History {
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),
-                    Written::CoreText => read(verdicts, predecessors, &source, &text.text),
+                    Written::CoreText => read(verdicts, predecessors, &source, text.text()),
                 }
             })
             .map_err(stopped)?;

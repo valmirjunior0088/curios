@@ -34,7 +34,7 @@ impl Formatted {
             false => program_formatted(source)?,
         };
 
-        Ok(match output == source.text {
+        Ok(match output == source.text() {
             true => Formatted::Unchanged(output),
             false => Formatted::Changed(output),
         })
@@ -53,7 +53,7 @@ const INDENT: usize = 4;
 
 /// Whether `source` was read from a file of Core text, `.crsc`, by the extension of the path it was read from.
 fn written_as_core_text(source: &Source) -> bool {
-    source.path.as_ref().is_some_and(|path| {
+    source.path().is_some_and(|path| {
         path.extension()
             .is_some_and(|extension| extension == "crsc")
     })
@@ -62,8 +62,8 @@ fn written_as_core_text(source: &Source) -> bool {
 /// What the renderer follows: the text `source` was read from, with the comments the parse consumed, each classified.
 fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
     Original {
-        text: &source.text,
-        comments: classify(&source.text, comments),
+        text: source.text(),
+        comments: classify(source.text(), comments),
         added,
         dropped,
         closes,

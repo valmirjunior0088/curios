@@ -251,7 +251,7 @@ impl Records for Anchors {
                     usize::try_from(text.start).map_err(|error| error.to_string())?,
                     usize::try_from(text.end).map_err(|error| error.to_string())?,
                 );
-                if start > end || end > source.text.len() {
+                if start > end || end > source.text().len() {
                     return Err("a stored text lies outside its source".to_string());
                 }
                 anchors.texts.insert(
@@ -281,19 +281,16 @@ impl Anchors {
             let at = match placed.get(&held) {
                 Some(at) => *at,
                 None => {
-                    let path = sited.source.path.as_deref();
+                    let path = sited.source.path();
                     let alike = by_path.get(&path).and_then(|candidates| {
                         candidates
                             .iter()
-                            .find(|at| sources[**at].source.text == sited.source.text)
+                            .find(|at| sources[**at].source.text() == sited.source.text())
                             .copied()
                     });
                     let at = alike.unwrap_or_else(|| {
                         sources.push(SourceTexts {
-                            source: Source::of(
-                                sited.source.path.clone(),
-                                sited.source.text.clone(),
-                            ),
+                            source: Source::of(path.map(ToOwned::to_owned), sited.source.text()),
                             texts: Vec::new(),
                         });
                         by_path.entry(path).or_default().push(sources.len() - 1);
@@ -420,7 +417,7 @@ impl Anchors {
 
     /// Record that `span` covers a text of `anchor`, and hand back that text as a lowering takes extents within it. A text recorded again lies where it was recorded last.
     pub fn site(&mut self, anchor: Anchor, span: &Span) -> Within {
-        let stamp = stamp(&span.source.text[span.start..span.end]);
+        let stamp = stamp(&span.source.text()[span.start..span.end]);
         let sited = Sited {
             source: span.source.clone(),
             start: span.start,
@@ -439,7 +436,7 @@ impl Anchors {
     pub fn text(&self, anchor: Anchor, stamp: u32) -> Option<&str> {
         let sited = self.texts.get(&(anchor, stamp))?;
 
-        Some(&sited.source.text[sited.start..sited.end])
+        Some(&sited.source.text()[sited.start..sited.end])
     }
 
     /// The span `extent` lies on: its range in the text it was taken from, where this table holds that text; the whole of the anchor's text where that text is gone and the anchor has one; and nothing otherwise.
@@ -487,7 +484,7 @@ impl Within {
 
     /// The text itself.
     pub fn text(&self) -> &str {
-        &self.sited.source.text[self.sited.start..self.sited.end]
+        &self.sited.source.text()[self.sited.start..self.sited.end]
     }
 
     /// The extent of `span` in this text. `None` for a span that does not lie in it: one of another source, or one reaching outside the text.

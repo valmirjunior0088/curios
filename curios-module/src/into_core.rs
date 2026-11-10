@@ -474,7 +474,7 @@ impl Loaded {
         };
 
         if let Some(scan) = scans.and_then(|scans| scans.get(module))
-            && scan.source.text == text.text
+            && scan.source.text() == text.text()
         {
             // A scan this thread made lies in the very source the file was read as, and is shared. One restored from a store lies in a source of its own, so its heads are placed in the one just read.
             let heads = match Arc::ptr_eq(&scan.source, &text) {
@@ -3574,7 +3574,14 @@ pub fn document_unit(
             };
             let span = mention.span;
 
-            Some(((span.source.path.clone(), span.start, span.end), referent))
+            Some((
+                (
+                    span.source.path().map(ToOwned::to_owned),
+                    span.start,
+                    span.end,
+                ),
+                referent,
+            ))
         })
         .collect();
 

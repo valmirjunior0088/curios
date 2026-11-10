@@ -131,10 +131,7 @@ pub fn ordered(mut lints: Vec<Lint>, anchors: &curios_core::Anchors) -> Vec<Lint
     lints.sort_by_cached_key(|lint| {
         let located = lint.at.and_then(|at| anchors.resolve(&at)).map(|span| {
             (
-                span.source
-                    .path
-                    .as_ref()
-                    .map(|path| path.display().to_string()),
+                span.source.path().map(|path| path.display().to_string()),
                 span.start,
             )
         });

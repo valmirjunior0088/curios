@@ -63,7 +63,7 @@ impl Declaration {
         let text = &self.text;
 
         heading(
-            &text.source.text[text.start..text.end],
+            &text.source.text()[text.start..text.end],
             self.label.start.checked_sub(text.start)?,
         )
     }
@@ -191,7 +191,7 @@ impl<'a> Reading<'a> {
                                 None => {
                                     let written = &mention.span;
 
-                                    written.source.text[written.start..written.end].to_string()
+                                    written.source.text()[written.start..written.end].to_string()
                                 }
                             },
                             written: mention.span,
@@ -244,8 +244,7 @@ impl<'a> Reading<'a> {
             .entry(ptr::from_ref(source))
             .or_insert_with(|| {
                 source
-                    .path
-                    .as_deref()
+                    .path()
                     .is_some_and(|path| identity(path) == self.file)
             })
     }
@@ -253,17 +252,17 @@ impl<'a> Reading<'a> {
     /// Whether the file `span` names still holds the text the span was taken in, an editor's text standing for the disk's.
     fn stands(&self, span: &Span) -> bool {
         let source: &Arc<Source> = &span.source;
-        let Some(path) = &source.path else {
+        let Some(path) = source.path() else {
             return false;
         };
 
         *self
             .standing
             .borrow_mut()
-            .entry(path.clone())
+            .entry(path.to_path_buf())
             .or_insert_with(|| match self.overlay.get(path) {
-                Some(held) => held == source.text,
-                None => fs::read_to_string(path).is_ok_and(|held| held == source.text),
+                Some(held) => held == source.text(),
+                None => fs::read_to_string(path).is_ok_and(|held| held == source.text()),
             })
     }
 }

@@ -126,10 +126,10 @@ impl PreparedText {
             })
             .collect::<Vec<_>>();
         texts.sort_by(|one, other| {
-            let path = |text: &Text| text.span.source.path.clone();
-
-            path(one)
-                .cmp(&path(other))
+            one.span
+                .source
+                .path()
+                .cmp(&other.span.source.path())
                 .then(one.span.start.cmp(&other.span.start))
         });
 

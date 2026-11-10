@@ -197,7 +197,7 @@ impl TestSubject {
             units: program.into_units(),
             entrypoint,
             loader: loader.tested(),
-            text: source.text.clone(),
+            text: source.text().to_owned(),
             entry,
             filing: Some(filing),
         })
@@ -227,7 +227,7 @@ impl TestSubject {
             units: Vec::new(),
             entrypoint,
             loader: loader.tested(),
-            text: source.text.clone(),
+            text: source.text().to_owned(),
             entry: invoked.to_path_buf(),
             filing: None,
         }

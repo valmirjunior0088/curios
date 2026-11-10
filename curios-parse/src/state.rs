@@ -15,7 +15,7 @@ impl<'a> ParserState<'a> {
     pub(crate) fn new(source: &'a Arc<Source>) -> Self {
         Self {
             offset: 0,
-            string: &source.text,
+            string: source.text(),
             source,
         }
     }
@@ -37,7 +37,7 @@ impl<'a> ParserState<'a> {
 
     /// The character just before here, or `None` at the start of the input.
     pub(crate) fn char_before(&self) -> Option<char> {
-        self.source.text[..self.offset].chars().next_back()
+        self.source.text()[..self.offset].chars().next_back()
     }
 
     /// The state past `literal`, where the input here starts with it.
@@ -63,7 +63,7 @@ impl<'a> ParserState<'a> {
         failed: usize,
         anchor: impl Fn(&str, usize) -> Option<usize>,
     ) -> (Span, Self) {
-        let text = &self.source.text;
+        let text = &self.source.text();
         let past_start = self.offset + text[self.offset..].chars().next().map_or(0, char::len_utf8);
         let resume = anchor(text, failed.max(past_start)).unwrap_or(text.len());
 
@@ -117,11 +117,11 @@ impl<'a> ParserState<'a> {
         self.string.is_empty()
     }
 
-    /// Rebuilds the state at an absolute byte `offset` into the same source. Used by [`memoize`](crate::memoize) to resume from a cached parse without re-walking the input, and by [`take_exact`](crate::take_exact) to step over a matched literal; all parser offsets are byte offsets, so slicing `source.text` is exact.
+    /// Rebuilds the state at an absolute byte `offset` into the same source. Used by [`memoize`](crate::memoize) to resume from a cached parse without re-walking the input, and by [`take_exact`](crate::take_exact) to step over a matched literal; all parser offsets are byte offsets, so slicing the source's text is exact.
     pub(crate) fn jump_to(self, offset: usize) -> Self {
         Self {
             offset,
-            string: &self.source.text[offset..],
+            string: &self.source.text()[offset..],
             source: self.source,
         }
     }

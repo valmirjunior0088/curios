@@ -86,12 +86,12 @@ impl ParserError {
             Message::Unexpected(unexpected) => format!("unexpected '{unexpected}'"),
             Message::Expected(expected) => format!(
                 "Expected '{expected}', obtained {}",
-                obtained(&self.source.text[self.offset..], expected.chars().count())
+                obtained(&self.source.text()[self.offset..], expected.chars().count())
             ),
         };
 
         let at = self.from.unwrap_or(self.offset);
-        match self.source.text[at..].chars().next() {
+        match self.source.text()[at..].chars().next() {
             Some(char) if unseen(char) => {
                 let code = shown(char.encode_utf8(&mut [0; 4]));
                 match said.contains(&code) {

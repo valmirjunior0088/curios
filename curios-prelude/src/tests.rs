@@ -216,16 +216,12 @@ fn sys_spellings() -> Vec<Spelling> {
     for text in std.texts(None, |_| true) {
         for mention in text.mentions() {
             let span = &mention.span;
-            let path = span
-                .source
-                .path
-                .as_deref()
-                .expect("a source of `/std` is a file");
-            if let Some(part) = part_spelled(&span.source.text[span.start..span.end]) {
+            let path = span.source.path().expect("a source of `/std` is a file");
+            if let Some(part) = part_spelled(&span.source.text()[span.start..span.end]) {
                 spellings.push(Spelling {
                     part: part.to_string(),
                     reader: reader_of(path),
-                    place: place_of(path, &span.source.text, span.start),
+                    place: place_of(path, span.source.text(), span.start),
                 });
             }
         }

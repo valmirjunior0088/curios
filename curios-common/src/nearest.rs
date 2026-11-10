@@ -39,7 +39,7 @@ pub fn edit_distance(this: &str, that: &str, limit: usize) -> Option<usize> {
     (distance <= limit).then_some(distance)
 }
 
-/// The name among `candidates` a reader most likely meant by `written`, or `None` where none is near: a candidate that differs from it in case alone, else the closest one within a third of its length by [`edit_distance`], three letters being the least a name counts for.
+/// The name among `candidates` a reader most likely meant by `written`, or `None` where none is near: a candidate that differs from it in case alone, else the closest one within a third of its length by `edit_distance`, three letters being the least a name counts for.
 ///
 /// rustc's rule, for the reason rustc has it: a third of the name is wide enough for a slip and narrow enough that a short name is not offered every other short name. Ties go to the candidate that sorts first, so the answer is the same whatever order the candidates arrive in. A candidate spelled exactly as `written` is no near miss and is passed over: it is the same name in another namespace.
 pub fn nearest<'a>(

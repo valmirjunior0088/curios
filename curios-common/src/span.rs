@@ -7,7 +7,7 @@ use {
         fs,
         hash::{Hash, Hasher},
         io, iter,
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{Arc, OnceLock},
     },
 };
@@ -38,8 +38,8 @@ fn columns(cluster: &str) -> usize {
 #[curios_archive::archived]
 pub struct Source {
     #[archived_with(curios_archive::Map<curios_archive::AsString>)]
-    pub path: Option<PathBuf>,
-    pub text: String,
+    path: Option<PathBuf>,
+    text: String,
     /// The byte offset each line begins at, found the first time a place in the text is named or a report quotes it, so that naming a place is a search rather than a count of every line before it. Never stored, being read off `text`.
     #[archived_with(curios_archive::Skip)]
     lines: OnceLock<Box<[usize]>>,
@@ -82,6 +82,16 @@ impl Source {
         let text = fs::read_to_string(&path)?;
 
         Ok(Self::new(path, text))
+    }
+
+    /// The file the text was read from or stands in for, or the label it arrived under; `None` for inline text.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// The text, which every [`Span`] into this source indexes by byte offset.
+    pub fn text(&self) -> &str {
+        &self.text
     }
 
     /// The byte offset of the 1-based `line` and `column`, the coordinate [`Span::line_column`] names a place by, so a place a diagnostic prints is one that can be asked about: columns count Unicode scalar values, and the column past a line's last is its end. `None` for a place the text does not hold.

@@ -485,7 +485,7 @@ fn row(named: &Named) -> String {
 fn placed(span: &Span) -> String {
     let (line, column) = span.line_column();
 
-    match &span.source.path {
+    match span.source.path() {
         Some(path) => format!("{}:{line}:{column}", path.display()),
         None => format!("{line}:{column}"),
     }

@@ -71,7 +71,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         package: &package,
         executable: &name,
         entry: &entry,
-        text: &source.text,
+        text: source.text(),
         loader: &loader,
         tests: None,
     };

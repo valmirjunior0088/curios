@@ -169,10 +169,10 @@ fn a_declaration_of_the_compilers_own_library_is_placed_where_its_file_still_hol
         .expect("the checkout this compiler was built in holds the library's sources");
     let file = place
         .source
-        .path
-        .clone()
-        .expect("a library file has a path");
-    assert_eq!(&place.source.text[place.start..place.end], "print");
+        .path()
+        .expect("a library file has a path")
+        .to_path_buf();
+    assert_eq!(&place.source.text()[place.start..place.end], "print");
 
     let moved = Overlay::of([(file, "-- another text\n".to_string())]);
     let unplaced = print(&moved);

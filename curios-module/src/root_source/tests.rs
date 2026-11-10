@@ -234,7 +234,10 @@ fn a_changed_file_is_parsed_again() {
     let module = after.load(&qualifier).unwrap();
 
     assert!(!Arc::ptr_eq(&header_read(&before), &header_read(&after)));
-    assert_eq!(header_read(&after).text, "pub mod parse;\npub mod more;\n");
+    assert_eq!(
+        header_read(&after).text(),
+        "pub mod parse;\npub mod more;\n"
+    );
     assert_eq!(module.items.len(), 2, "and the new text is what was parsed");
 }
 

@@ -207,7 +207,7 @@ fn entrypoint_parses_capture_tail_comments() {
     let (_, comments) = Entrypoint::parse_with_comments(&source).expect("fixture parses");
     let texts = comments
         .iter()
-        .map(|span| span.source.text[span.start..span.end].to_string())
+        .map(|span| span.source.text()[span.start..span.end].to_string())
         .collect::<Vec<_>>();
     assert_eq!(texts, ["-- item", "-- tail"]);
 }

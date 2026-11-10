@@ -739,7 +739,7 @@ pub fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
 
             (
                 span.line_column().0,
-                span.source.text[span.start..span.end].to_string(),
+                span.source.text()[span.start..span.end].to_string(),
             )
         })
         .collect::<Vec<_>>();
@@ -789,7 +789,8 @@ pub fn pasted(source: &str) -> Result<String, String> {
         .map(|report| {
             let span = report.span.as_ref().expect("a goal report is located");
             assert_eq!(
-                span.source.text, source,
+                span.source.text(),
+                source,
                 "a goal's span points into the program"
             );
             let answer = solution(&report.message)

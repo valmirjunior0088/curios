@@ -67,7 +67,7 @@ impl Subject {
         };
         // A file that cannot be read is a program's to report.
         let form = source.as_ref().map_or(Form::Program, |source| {
-            Form::of(&unlinked.file, &source.text)
+            Form::of(&unlinked.file, source.text())
         });
 
         Some((unlinked.note(taken, form), source))

@@ -76,7 +76,7 @@ pub fn payload_of(
                     package: &name.0,
                     executable: &name.1,
                     entry: path,
-                    text: &source.text,
+                    text: source.text(),
                     loader: &loader,
                     tests: None,
                 },

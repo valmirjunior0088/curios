@@ -867,7 +867,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
             &store(),
             Predecessors::over(prelude),
             &UnitSource::mounted(&tested_root),
-            &tested.text,
+            tested.text(),
         )
     })
     .map(|_| ())
@@ -887,7 +887,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
             &verdicts,
             Predecessors::over(prelude),
             &UnitSource::mounted(&built_root),
-            &built.text,
+            built.text(),
         )
     })
     .err();

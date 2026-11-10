@@ -604,7 +604,7 @@ fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
             .iter()
             .map(|(source, _)| source)
             .chain(&held.read)
-            .find(|source| source.text == text)
+            .find(|source| source.text() == text)
             .cloned()
     });
     if let Some(hit) = hit {
@@ -623,7 +623,7 @@ fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
 ///
 /// A parse that succeeds is the file's last good one from then on. One that fails is not entered and evicts nothing, and a source the thread does not hold — an earlier text of its file, or a text with no file — is parsed and not remembered.
 pub fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
-    let key = source.path.as_deref().map(identity);
+    let key = source.path().map(identity);
 
     let hit = PARSED.with(|parsed| {
         let parsed = parsed.borrow();

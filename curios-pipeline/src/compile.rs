@@ -636,7 +636,7 @@ fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<Tes
                         body: test
                             .extent
                             .and_then(|extent| extent.resolved(anchors))
-                            .map(|span| span.source.text[span.start..span.end].to_string())
+                            .map(|span| span.source.text()[span.start..span.end].to_string())
                             .unwrap_or_default(),
                     })
                 })

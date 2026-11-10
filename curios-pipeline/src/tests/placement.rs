@@ -20,7 +20,7 @@ fn placed(source: &str) -> Vec<Option<String>> {
         .map(|report| {
             let span = report.span.as_ref()?;
 
-            Some(span.source.text[span.start..span.end].to_string())
+            Some(span.source.text()[span.start..span.end].to_string())
         })
         .collect()
 }
@@ -38,7 +38,7 @@ fn noted(source: &str) -> Vec<(String, String)> {
             let span = &note.span;
 
             (
-                span.source.text[span.start..span.end].to_string(),
+                span.source.text()[span.start..span.end].to_string(),
                 note.message.clone(),
             )
         })
@@ -135,12 +135,12 @@ fn a_proof_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
     "#;
     let reports = refusal(source);
     let span = reports[0].span.as_ref().expect("the obligation is placed");
-    assert_eq!(&span.source.text[span.start..span.end], "loop");
+    assert_eq!(&span.source.text()[span.start..span.end], "loop");
     // The occurrence in the body, not the name the declaration is written under.
     assert!(
-        span.source.text[..span.start].ends_with("-> P = "),
+        span.source.text()[..span.start].ends_with("-> P = "),
         "placed after {:?}",
-        &span.source.text[..span.start]
+        &span.source.text()[..span.start]
     );
 }
 
@@ -257,11 +257,11 @@ fn a_conflicting_export_is_placed_at_the_selector_that_arrives_second() {
     "#;
     let reports = refusal(source);
     let span = reports[0].span.as_ref().expect("the conflict is placed");
-    assert_eq!(&span.source.text[span.start..span.end], "x");
+    assert_eq!(&span.source.text()[span.start..span.end], "x");
     assert!(
-        span.source.text[..span.start].ends_with("pub use /B/{y, "),
+        span.source.text()[..span.start].ends_with("pub use /B/{y, "),
         "placed after {:?}",
-        &span.source.text[..span.start]
+        &span.source.text()[..span.start]
     );
 }
 
@@ -453,15 +453,15 @@ fn an_import_of_a_declared_label_notes_the_declaration() {
     let reports = refusal(source);
     let refused = reports[0].span.as_ref().expect("the conflict is placed");
     assert!(
-        refused.source.text[..refused.start].ends_with("use /std/{"),
+        refused.source.text()[..refused.start].ends_with("use /std/{"),
         "placed after {:?}",
-        &refused.source.text[..refused.start]
+        &refused.source.text()[..refused.start]
     );
     let other = &reports[0].notes[0].span;
     assert!(
-        other.source.text[..other.start].ends_with("let "),
+        other.source.text()[..other.start].ends_with("let "),
         "noted after {:?}",
-        &other.source.text[..other.start]
+        &other.source.text()[..other.start]
     );
     assert_eq!(
         reports[0].notes[0].message,

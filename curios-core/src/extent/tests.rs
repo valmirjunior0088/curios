@@ -7,7 +7,7 @@ fn anchor(name: &str) -> Anchor {
 /// The span of `needle`'s first occurrence in `source`.
 fn span_of(source: &Arc<Source>, needle: &str) -> Span {
     let start = source
-        .text
+        .text()
         .find(needle)
         .expect("the fixture's text holds what it is asked for");
 
@@ -15,7 +15,7 @@ fn span_of(source: &Arc<Source>, needle: &str) -> Span {
 }
 
 fn text_of(span: &Span) -> &str {
-    &span.source.text[span.start..span.end]
+    &span.source.text()[span.start..span.end]
 }
 
 /// An extent is taken in its declaration's text and resolved back to the same bytes.
