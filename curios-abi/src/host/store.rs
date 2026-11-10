@@ -323,7 +323,7 @@ impl WireSignature {
         self.params.iter().chain(lane).copied().collect()
     }
 
-    /// What the row's import answers: its results, then [`LANE_OUT`] where the row returns, and nothing where it does not.
+    /// What the row's import answers: its results, then `LANE_OUT` where the row returns, and nothing where it does not.
     pub fn imported_results(&self) -> Vec<WireType> {
         match &self.returns {
             WireReturn::Answers(results) => results.types().into_iter().chain([LANE_OUT]).collect(),

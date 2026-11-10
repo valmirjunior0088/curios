@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_abi::errno,
+    curios_abi::ErrnoCodes,
     curios_common::test_support::*,
     rustix::{
         fs::OFlags,
@@ -281,7 +281,7 @@ fn a_serial_open_refuses_a_speed_no_setting_holds() {
                 1,
                 SerialFlow::None
             ),
-            Err(Failure::Other(errno::EINVAL))
+            Err(Failure::Other(ErrnoCodes::EINVAL))
         );
     }
 }

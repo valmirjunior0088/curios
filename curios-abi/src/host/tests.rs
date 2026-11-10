@@ -11,12 +11,12 @@ fn answers(op: HostOp) -> &'static WireResults {
 /// Every named code sits below `OTHER_BASE` and the errno passthrough lowers at or above it, so a raw OS errno — including the errno-less `Other(0)` — can never decode as `OK` or a named failure.
 #[test]
 fn errno_lane_is_disjoint_from_named_codes() {
-    let named = [status::OK, status::EOF]
+    let named = [StatusCodes::OK, StatusCodes::EOF]
         .into_iter()
         .chain(Failure::NAMED.iter().map(|failure| failure.code()));
 
-    assert!(named.into_iter().all(|code| code < status::OTHER_BASE));
-    assert_eq!(Failure::Other(0).code(), status::OTHER_BASE);
+    assert!(named.into_iter().all(|code| code < StatusCodes::OTHER_BASE));
+    assert_eq!(Failure::Other(0).code(), StatusCodes::OTHER_BASE);
 }
 
 /// A status the guest reads is the success, the end of a stream, the base of the errno lane or a failure it names: the table gives every other status a failure, so none crosses that `Failure` cannot answer.

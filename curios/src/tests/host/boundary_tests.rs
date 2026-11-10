@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*,
-    curios_abi::{HostOp, status},
+    curios_abi::{HostOp, StatusCodes},
     curios_native::{ForeignBindings, test_support::*},
 };
 
@@ -38,7 +38,10 @@ fn a_failure_s_padding_reaches_no_reader() {
         written(
             OPEN,
             HostOp::FileOpen,
-            vec![RawValue::Nat(status::NOT_FOUND), RawValue::Bytes(vec![])],
+            vec![
+                RawValue::Nat(StatusCodes::NOT_FOUND),
+                RawValue::Bytes(vec![])
+            ],
         ),
         b"not_found"
     );
@@ -52,7 +55,7 @@ fn a_status_a_row_is_not_expected_to_answer_is_the_failure_it_names() {
             OPEN,
             HostOp::FileOpen,
             vec![
-                RawValue::Nat(status::CONNECTION_RESET),
+                RawValue::Nat(StatusCodes::CONNECTION_RESET),
                 RawValue::Bytes(vec![])
             ],
         ),
@@ -67,7 +70,7 @@ fn a_status_its_row_cannot_answer_is_an_invalid_reply() {
         written(
             OPEN,
             HostOp::FileOpen,
-            vec![RawValue::Nat(status::EOF), RawValue::Bytes(vec![])],
+            vec![RawValue::Nat(StatusCodes::EOF), RawValue::Bytes(vec![])],
         ),
         b"invalid_reply"
     );
@@ -76,14 +79,14 @@ fn a_status_its_row_cannot_answer_is_an_invalid_reply() {
 /// A status past every named one, and past the largest errno an operating system reports, is still a failure, carried as the number it is.
 #[test]
 fn a_status_no_failure_is_named_by_is_carried_as_its_number() {
-    let past = status::ERRNO_MAX + 1;
+    let past = StatusCodes::ERRNO_MAX + 1;
 
     assert_eq!(
         written(
             OPEN,
             HostOp::FileOpen,
             vec![
-                RawValue::Nat(status::OTHER_BASE + past),
+                RawValue::Nat(StatusCodes::OTHER_BASE + past),
                 RawValue::Bytes(vec![])
             ],
         ),
@@ -107,7 +110,7 @@ fn a_file_kind_no_code_names_fails_the_stat() {
             "#,
             HostOp::FileStat,
             vec![
-                RawValue::Nat(status::OK),
+                RawValue::Nat(StatusCodes::OK),
                 RawValue::Nat(7),
                 RawValue::Nat(0),
                 RawValue::Nat(0),
@@ -131,7 +134,7 @@ fn a_write_that_accepts_nothing_is_a_failure() {
         "#,
         MockHost::builder().build().0,
         HostOp::HandleWrite,
-        vec![RawValue::Nat(status::OK), RawValue::Nat(0)],
+        vec![RawValue::Nat(StatusCodes::OK), RawValue::Nat(0)],
     );
 
     assert_eq!(code, Ok(7));

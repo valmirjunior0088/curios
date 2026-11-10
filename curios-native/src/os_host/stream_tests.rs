@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     super::*,
     crate::*,
-    curios_abi::{errno, event},
+    curios_abi::{ErrnoCodes, EventCodes},
     curios_common::test_support::*,
     rustix::fs::OFlags,
     std::{path::Path, thread, time::Duration},
@@ -115,7 +115,7 @@ fn a_reply_to_come_wakes_the_wait_once_it_has_come() {
 
     signal.send(()).unwrap();
     host.wait(vec![token.clone()]).unwrap();
-    assert_eq!(host.handle_ready(vec![token.clone()]), [event::READY]);
+    assert_eq!(host.handle_ready(vec![token.clone()]), [EventCodes::READY]);
 
     let settled = host.settled(token.clone()).unwrap().expect("it has come");
     assert_eq!(*settled.downcast::<u64>().unwrap(), 7);
@@ -158,19 +158,19 @@ fn a_standard_stream_is_open_one_way() {
 
     assert_eq!(
         host.handle_read(Handle::Stdout, 8),
-        Err(Failure::Other(errno::EBADF))
+        Err(Failure::Other(ErrnoCodes::EBADF))
     );
     assert_eq!(
         host.handle_read(Handle::Stderr, 0),
-        Err(Failure::Other(errno::EBADF))
+        Err(Failure::Other(ErrnoCodes::EBADF))
     );
     assert_eq!(
         host.handle_write(Handle::Stdin, b"x".to_vec()),
-        Err(Failure::Other(errno::EBADF))
+        Err(Failure::Other(ErrnoCodes::EBADF))
     );
     assert_eq!(
         host.handle_write(Handle::Stdin, vec![]),
-        Err(Failure::Other(errno::EBADF))
+        Err(Failure::Other(ErrnoCodes::EBADF))
     );
 }
 
@@ -258,7 +258,7 @@ fn a_look_answers_each_handle_in_its_order() {
 
     assert_eq!(
         host.handle_ready(vec![later.clone(), passed.clone(), Handle::Stderr]),
-        [0, event::READY, event::READY]
+        [0, EventCodes::READY, EventCodes::READY]
     );
 
     host.handle_close(passed);
@@ -348,5 +348,5 @@ fn a_closed_standard_input_names_nothing() {
 
     assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::NotFound));
     let watch = host.handle_watch(Handle::Stdin, true, false);
-    assert_eq!(host.handle_ready(vec![watch]), [event::READY]);
+    assert_eq!(host.handle_ready(vec![watch]), [EventCodes::READY]);
 }

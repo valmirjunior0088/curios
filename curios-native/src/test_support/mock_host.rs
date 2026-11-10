@@ -1,9 +1,9 @@
 use {
     crate::{Direction, Table, lookup_address, names_a_variable, serial_frame, serial_speed},
     curios_abi::{
-        Answer, ChildExit, ChildHandles, ClockReading, ClosedCode, Failure, FileKind, FileStat,
-        Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
-        StdioMode, Termination, TtySize, errno, event,
+        Answer, ChildExit, ChildHandles, ClockReading, ClosedCode, ErrnoCodes, EventCodes, Failure,
+        FileKind, FileStat, Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp,
+        SerialParity, Settled, StdioMode, Termination, TtySize,
     },
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
@@ -650,7 +650,7 @@ impl MockHost {
 
     /// Whether `handle` names a stream that moves bytes in `direction`, as the native host answers it: a stream open only the other way — a standard stream, a file opened for the other, a child's pipe — is `EBADF`, and anything that is not a stream at all, a closed standard stream among them, is `NotFound`.
     fn stream(&self, handle: &Handle, direction: Direction) -> Result<(), Failure> {
-        let wrong_way = Err(Failure::Other(errno::EBADF));
+        let wrong_way = Err(Failure::Other(ErrnoCodes::EBADF));
 
         if self.closed(handle) {
             return Err(Failure::NotFound);
@@ -1065,7 +1065,7 @@ impl HostOps for MockHost {
 
         on.iter()
             .map(|handle| match self.ready(&mut table, handle) {
-                true => event::READY,
+                true => EventCodes::READY,
                 false => 0,
             })
             .collect()
@@ -1400,7 +1400,7 @@ impl HostOps for MockHost {
         if serial_frame(data_bits, parity, stop_bits, flow).is_none()
             || serial_speed(baud).is_none()
         {
-            return Err(Failure::Other(errno::EINVAL));
+            return Err(Failure::Other(ErrnoCodes::EINVAL));
         }
 
         let Some(chunks) = self.serial_devices.get(&path) else {
@@ -1670,7 +1670,7 @@ impl MockIo {
         self.serial_opens.lock().unwrap().clone()
     }
 
-    /// Every control the guest applied to an open serial port, in order: the [`serial_op`](curios_abi::serial_op) tag and the level.
+    /// Every control the guest applied to an open serial port, in order: the [`SerialOp`] code and the level.
     pub fn serial_controls(&self) -> Vec<(u64, bool)> {
         self.serial_controls.lock().unwrap().clone()
     }

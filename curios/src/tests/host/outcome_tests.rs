@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*,
-    curios_abi::{HostOp, status},
+    curios_abi::{HostOp, StatusCodes},
     curios_native::{ForeignBindings, test_support::*},
 };
 
@@ -51,12 +51,12 @@ fn bytes(bytes: &[u8]) -> RawValue {
 
 /// A failure of `permission_denied`, padded with `padding`.
 fn denied(padding: Vec<RawValue>) -> Vec<RawValue> {
-    [vec![nat(status::PERMISSION_DENIED)], padding].concat()
+    [vec![nat(StatusCodes::PERMISSION_DENIED)], padding].concat()
 }
 
 /// A success carrying `payload`.
 fn ok(payload: Vec<RawValue>) -> Vec<RawValue> {
-    [vec![nat(status::OK)], payload].concat()
+    [vec![nat(StatusCodes::OK)], payload].concat()
 }
 
 /// Each case's row fails, and the program exits with the code its failure maps to.
@@ -210,7 +210,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             vec![
                 looked_up(),
                 opened(),
-                (HostOp::SocketConnect, vec![nat(status::WOULD_BLOCK)]),
+                (HostOp::SocketConnect, vec![nat(StatusCodes::WOULD_BLOCK)]),
                 (HostOp::SocketFinishConnect, denied(vec![])),
             ],
         ),

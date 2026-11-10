@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_abi::{HostOps, errno},
+    curios_abi::{ErrnoCodes, HostOps},
 };
 
 /// The controlling terminal a scripted host answers at `/dev/tty`.
@@ -138,7 +138,7 @@ fn a_serial_open_refuses_a_speed_no_setting_holds() {
                 1,
                 SerialFlow::None
             ),
-            Err(Failure::Other(errno::EINVAL))
+            Err(Failure::Other(ErrnoCodes::EINVAL))
         );
     }
 

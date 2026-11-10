@@ -8,7 +8,7 @@ use {
         nested, print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
         spell, string, sub, tree, universe_context_written, value, word, word_value,
     },
-    curios_abi::{ForeignFunction, stdio},
+    curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
@@ -1512,9 +1512,9 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         },
         Intrinsic::HandleType => IntrinsicForm::Named("Handle"),
         // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
-        Intrinsic::Handle(stdio::STDIN) => IntrinsicForm::Named("Handle/stdin"),
-        Intrinsic::Handle(stdio::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
-        Intrinsic::Handle(stdio::STDERR) => IntrinsicForm::Named("Handle/stderr"),
+        Intrinsic::Handle(StdioCodes::STDIN) => IntrinsicForm::Named("Handle/stdin"),
+        Intrinsic::Handle(StdioCodes::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
+        Intrinsic::Handle(StdioCodes::STDERR) => IntrinsicForm::Named("Handle/stderr"),
         Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
         Intrinsic::CellType(elem) => IntrinsicForm::Call {
             path: "Cell".into(),

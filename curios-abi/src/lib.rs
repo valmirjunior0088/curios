@@ -3,7 +3,20 @@
 //! Both ends cite these definitions: `curios-native` when it answers each row the standard library declares with its method from the same table, decodes the operands and encodes the reply, and when it types the `ffi.*` imports, and the compiler when it mints `/sys`'s codes, checks a call's operands, and emits the wasm imports. This crate sits below every compiler stage and both runtimes — its only dependencies are the shared foundations `curios-num` and `curios-archive` — so the front-end and the runtime both import it without inverting the pipeline's layering. Why the host's table is authored once as typed rows and projected, why `exit` is a row that does not return, why the wire vocabulary nests no list, and why a function is its import name are `README.md`'s decisions.
 
 mod codes;
-pub use codes::*;
+use codes::*;
+pub use codes::{
+    Code, CodeCarrier, CodeSet, ErrnoCodes, EventCodes, StatusCodes, StdioCodes, code_sets,
+};
 
 mod host;
-pub use host::*;
+pub use host::{
+    ADVANCE, Answer, Answered, ArchivedForeignFunction, ArchivedForeignStore, ArchivedNamespace,
+    ArchivedWireLeaf, ArchivedWireReference, ArchivedWireResults, ArchivedWireReturn,
+    ArchivedWireScalar, ArchivedWireSignature, ArchivedWireType, Carrier, ChildExit, ChildHandles,
+    ClockReading, ClosedCode, DEADLOCK, ENTRY, Encoded, Failure, FileKind, FileStat,
+    ForeignFunction, ForeignStore, Handle, HostOp, HostOps, LANE_IN, Later, Mode, Namespace, PANIC,
+    PayloadSlots, Refusal, ReplyShape, ResultShape, RowReply, SerialFlow, SerialOp, SerialParity,
+    Settled, StdioMode, Termination, TokenMint, TtySize, WireLeaf, WirePayload, WireReference,
+    WireReply, WireResults, WireReturn, WireScalar, WireShape, WireSignature, WireType, WireValue,
+    host_answers,
+};

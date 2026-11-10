@@ -5,9 +5,9 @@ use {
         serial_speed,
     },
     curios_abi::{
-        Answer, ChildExit, ChildHandles, ClockReading, Failure, FileKind, FileStat, Handle,
-        HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode,
-        Termination, TtySize, event,
+        Answer, ChildExit, ChildHandles, ClockReading, EventCodes, Failure, FileKind, FileStat,
+        Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
+        StdioMode, Termination, TtySize,
     },
     rustix::{
         event::{
@@ -445,15 +445,17 @@ impl<'a> Waits<'a> {
                             waits.watched.push(Watched { fd, asked });
                             waits.places.push(place);
                         }
-                        None => reports[place] = event::READY,
+                        None => reports[place] = EventCodes::READY,
                     }
                 }
-                Some(OsResource::Deadline(Some(at))) if *at <= now => reports[place] = event::READY,
+                Some(OsResource::Deadline(Some(at))) if *at <= now => {
+                    reports[place] = EventCodes::READY
+                }
                 Some(OsResource::Deadline(Some(at))) => {
                     waits.deadline = Some(waits.deadline.map_or(*at, |soonest| soonest.min(*at)));
                 }
                 Some(OsResource::Deadline(None)) => {}
-                _ => reports[place] = event::READY,
+                _ => reports[place] = EventCodes::READY,
             }
         }
 
@@ -1036,7 +1038,7 @@ impl HostOps for OsHost {
             .poll(Some(Instant::now()))
             .unwrap_or_else(|_| waits.places.clone());
         for place in fired {
-            reports[place] = event::READY;
+            reports[place] = EventCodes::READY;
         }
 
         reports
@@ -1057,7 +1059,7 @@ impl HostOps for OsHost {
                 Instant::now(),
                 wake.map(|wake| wake.read.as_fd()),
             );
-            if reports.contains(&event::READY) {
+            if reports.contains(&EventCodes::READY) {
                 return Ok(());
             }
             if waits.stranded {

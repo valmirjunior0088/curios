@@ -32,7 +32,7 @@ use test_support::*;
 mod tests;
 
 use {
-    curios_abi::{CodeCarrier, Failure, code_sets, stdio},
+    curios_abi::{CodeCarrier, Failure, StdioCodes, code_sets},
     curios_common::{RootKind, SyntaxRegistry},
     curios_module::{RootSource, SYNTAX},
     curios_num::{Natural, Rounding},
@@ -985,15 +985,15 @@ fn handle_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["The stream the host feeds the program."],
-            operation("stdin", &[], syntax, Intrinsic::Handle(stdio::STDIN)),
+            operation("stdin", &[], syntax, Intrinsic::Handle(StdioCodes::STDIN)),
         ),
         documented(
             &["The stream the program writes its output to."],
-            operation("stdout", &[], syntax, Intrinsic::Handle(stdio::STDOUT)),
+            operation("stdout", &[], syntax, Intrinsic::Handle(StdioCodes::STDOUT)),
         ),
         documented(
             &["The stream the program writes its diagnostics to."],
-            operation("stderr", &[], syntax, Intrinsic::Handle(stdio::STDERR)),
+            operation("stderr", &[], syntax, Intrinsic::Handle(StdioCodes::STDERR)),
         ),
     ]
 }

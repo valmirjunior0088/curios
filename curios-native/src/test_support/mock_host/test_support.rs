@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_abi::{HostOps, event},
+    curios_abi::{EventCodes, HostOps},
 };
 
 /// What `later` comes to, filed with `host` and waited for as a run waits for it.
@@ -31,7 +31,7 @@ pub fn watched(host: &MockHost, handle: &Handle, readable: bool, writable: bool)
     let ready = host.handle_ready(vec![watch.clone()]);
     host.handle_close(watch);
 
-    ready == [event::READY]
+    ready == [EventCodes::READY]
 }
 
 /// Spawn `program` with its standard output piped and the rest inherited.

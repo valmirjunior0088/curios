@@ -3,7 +3,7 @@
 use {
     super::{test_support::*, *},
     crate::*,
-    curios_abi::{HostOps, event},
+    curios_abi::{EventCodes, HostOps},
     std::{num::NonZeroU32, sync::mpsc},
 };
 
@@ -99,7 +99,7 @@ fn a_scripted_reply_comes_on_its_second_look() {
         .later(Box::pin(async move { Box::new(reply.await) as Settled }))
         .expect_err("the first look finds it pending");
 
-    assert_eq!(host.handle_ready(vec![token.clone()]), [event::READY]);
+    assert_eq!(host.handle_ready(vec![token.clone()]), [EventCodes::READY]);
     let settled = host.settled(token.clone()).unwrap().expect("it has come");
     assert_eq!(*settled.downcast::<u64>().unwrap(), 7);
     assert!(host.settled(token).is_err());
@@ -195,7 +195,7 @@ fn a_wait_sleeps_to_its_soonest_deadline_and_one_nothing_can_end_is_refused() {
         host.wait(vec![watch.clone(), late.clone(), soon.clone()])
             .is_ok()
     );
-    assert_eq!(host.handle_ready(vec![soon, late]), [event::READY, 0]);
+    assert_eq!(host.handle_ready(vec![soon, late]), [EventCodes::READY, 0]);
     assert!(host.wait(vec![watch]).is_err());
 }
 
@@ -244,7 +244,7 @@ fn a_reading_and_a_deadline_share_one_timeline() {
 
     assert_eq!(host.clock_mono().unwrap().secs, 5);
     let passed = host.clock_deadline(3, 0);
-    assert_eq!(host.handle_ready(vec![passed]), [event::READY]);
+    assert_eq!(host.handle_ready(vec![passed]), [EventCodes::READY]);
 
     let ahead = host.clock_deadline(9, 0);
     assert!(host.wait(vec![ahead]).is_ok());

@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_abi::event,
+    curios_abi::EventCodes,
     rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
 };
 
@@ -32,7 +32,7 @@ pub fn watched(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -
     let ready = host.handle_ready(vec![watch.clone()]);
     host.handle_close(watch);
 
-    ready == [event::READY]
+    ready == [EventCodes::READY]
 }
 
 /// Whether a watch of `handle`, asking to read or to write as said, is ready within five seconds: a program's wait, beside a deadline so that a handle never readied fails its test rather than holding it.
@@ -45,7 +45,7 @@ pub fn awaited(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -
     host.handle_close(watch);
     host.handle_close(deadline);
 
-    ready == [event::READY]
+    ready == [EventCodes::READY]
 }
 
 /// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `dns_lookup` would answer for it.

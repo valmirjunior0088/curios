@@ -12,7 +12,7 @@ use {
         SerialFlow, SerialOp, SerialParity, StdioMode, Termination, TtySize, WireLeaf, WireResults,
         WireReturn, WireType,
     },
-    crate::status,
+    crate::StatusCodes,
     std::{
         convert::identity,
         pin::Pin,
@@ -287,7 +287,7 @@ impl WirePayload for TtySize {
     }
 }
 
-/// The kind crosses as its [`file_kind`](crate::file_kind) code.
+/// The kind crosses as its `FileKindCodes` code.
 impl WirePayload for FileStat {
     type Label = ();
 
@@ -451,7 +451,7 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 
     fn encode(self) -> Encoded {
         match self {
-            Ok(value) => with_payload(status::OK, Some(value)),
+            Ok(value) => with_payload(StatusCodes::OK, Some(value)),
             Err(failure) => with_payload::<T>(failure.code(), None),
         }
     }
@@ -467,8 +467,8 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 
     fn encode(self) -> Encoded {
         match self {
-            Ok(Some(value)) => with_payload(status::OK, Some(value)),
-            Ok(None) => with_payload::<T>(status::EOF, None),
+            Ok(Some(value)) => with_payload(StatusCodes::OK, Some(value)),
+            Ok(None) => with_payload::<T>(StatusCodes::EOF, None),
             Err(failure) => with_payload::<T>(failure.code(), None),
         }
     }
@@ -484,7 +484,7 @@ impl<T: WirePayload> WireReply for Option<T> {
 
     fn encode(self) -> Encoded {
         match self {
-            Some(value) => with_payload(status::OK, Some(value)),
+            Some(value) => with_payload(StatusCodes::OK, Some(value)),
             None => with_payload::<T>(Failure::NotFound.code(), None),
         }
     }

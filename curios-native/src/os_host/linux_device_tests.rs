@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_abi::errno,
+    curios_abi::ErrnoCodes,
     rustix::termios::ControlModes,
 };
 
@@ -37,7 +37,7 @@ fn a_serial_open_is_refused_a_frame_the_device_did_not_take() {
 
     assert_eq!(
         host.serial_open(name, 9600, 7, SerialParity::Even, 1, SerialFlow::None),
-        Err(Failure::Other(errno::EINVAL))
+        Err(Failure::Other(ErrnoCodes::EINVAL))
     );
 }
 

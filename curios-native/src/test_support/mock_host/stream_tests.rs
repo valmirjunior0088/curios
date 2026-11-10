@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_abi::{HostOps, event},
+    curios_abi::{EventCodes, HostOps},
 };
 
 #[test]
@@ -380,7 +380,7 @@ fn a_watch_is_ready_for_what_it_asks() {
         host.handle_watch(child, true, true),
         host.handle_watch(stream, true, true),
     ];
-    assert_eq!(host.handle_ready(watches), [0, event::READY]);
+    assert_eq!(host.handle_ready(watches), [0, EventCodes::READY]);
 }
 
 /// A standard stream the program closed names nothing, as a closed handle does: a read, a write and a flush answer `NotFound`, a watch of it is ready so a waiter wakes into the call that says why, and the streams left open answer as before.
@@ -398,7 +398,7 @@ fn a_closed_standard_stream_names_nothing() {
     );
     assert_eq!(host.handle_flush(Handle::Stdout), Err(Failure::NotFound));
     let watch = host.handle_watch(Handle::Stdin, true, false);
-    assert_eq!(host.handle_ready(vec![watch]), [event::READY]);
+    assert_eq!(host.handle_ready(vec![watch]), [EventCodes::READY]);
 
     assert_eq!(host.handle_write(Handle::Stderr, b"kept".to_vec()), Ok(4));
     assert_eq!(io.output(), b"kept");

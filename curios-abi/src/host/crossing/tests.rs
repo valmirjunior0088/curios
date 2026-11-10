@@ -7,14 +7,14 @@ fn a_failure_pads_the_payload_it_does_not_carry() {
     assert_eq!(
         Err::<Handle, _>(Failure::WouldBlock).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::WOULD_BLOCK),
+            WireValue::Nat(StatusCodes::WOULD_BLOCK),
             WireValue::Handle(Handle::none())
         ])
     );
     assert_eq!(
         Err::<TtySize, _>(Failure::Other(25)).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::OTHER_BASE + 25),
+            WireValue::Nat(StatusCodes::OTHER_BASE + 25),
             WireValue::Nat(0),
             WireValue::Nat(0)
         ])
@@ -26,13 +26,16 @@ fn a_stream_answers_its_bytes_or_its_end() {
     assert_eq!(
         Ok::<_, Failure>(Some(b"ab".to_vec())).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::OK),
+            WireValue::Nat(StatusCodes::OK),
             WireValue::Bytes(b"ab".to_vec())
         ])
     );
     assert_eq!(
         Ok::<Option<Vec<u8>>, Failure>(None).encode(),
-        Encoded::Reply(vec![WireValue::Nat(status::EOF), WireValue::Bytes(vec![])])
+        Encoded::Reply(vec![
+            WireValue::Nat(StatusCodes::EOF),
+            WireValue::Bytes(vec![])
+        ])
     );
 }
 
@@ -41,7 +44,7 @@ fn an_absence_crosses_as_not_found() {
     assert_eq!(
         None::<Vec<u8>>.encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::NOT_FOUND),
+            WireValue::Nat(StatusCodes::NOT_FOUND),
             WireValue::Bytes(vec![])
         ])
     );
@@ -53,7 +56,7 @@ fn a_child_exit_fills_the_field_that_applies() {
     assert_eq!(
         Ok::<_, Failure>(ChildExit::Code(3)).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::OK),
+            WireValue::Nat(StatusCodes::OK),
             WireValue::Nat(3),
             WireValue::Nat(0)
         ])
@@ -61,7 +64,7 @@ fn a_child_exit_fills_the_field_that_applies() {
     assert_eq!(
         Ok::<_, Failure>(ChildExit::Signal(NonZeroU32::new(9).unwrap())).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::OK),
+            WireValue::Nat(StatusCodes::OK),
             WireValue::Nat(0),
             WireValue::Nat(9)
         ])
@@ -82,7 +85,7 @@ fn a_spawn_answers_the_empty_token_for_a_stream_it_did_not_pipe() {
         })
         .encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::OK),
+            WireValue::Nat(StatusCodes::OK),
             WireValue::Handle(Handle::Other(vec![7])),
             none(),
             WireValue::Handle(Handle::Other(vec![8])),
@@ -92,7 +95,7 @@ fn a_spawn_answers_the_empty_token_for_a_stream_it_did_not_pipe() {
     assert_eq!(
         Err::<ChildHandles, _>(Failure::NotFound).encode(),
         Encoded::Reply(vec![
-            WireValue::Nat(status::NOT_FOUND),
+            WireValue::Nat(StatusCodes::NOT_FOUND),
             none(),
             none(),
             none(),

@@ -62,7 +62,7 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 ### A wire code is one row
 
-**Decision.** `codes.rs` states each wire code once, as a row of one table: its constant and value, the name the guest reads it by where the guest reads it at all, and, for a status that names a failure, the `Failure` it is the code of. The modules of constants, `Failure::code` and `Failure::NAMED`, and `code_sets`, from which the compiler mints `/sys`'s code modules and the browser builds its tables, are projections of those rows. `/sys/status` also holds the codes of the named failures as a list, and `/std/Io/Error` proves that it names every one of them.
+**Decision.** `codes.rs` states each wire code once, as a row of one table: its constant and value, the name the guest reads it by where the guest reads it at all, and, for a status that names a failure, the `Failure` it is the code of. The types of constants, one per set (`StatusCodes`, `ErrnoCodes` and the rest), `Failure::code` and `Failure::NAMED`, and `code_sets`, from which the compiler mints `/sys`'s code modules and the browser builds its tables, are projections of those rows. `/sys/status` also holds the codes of the named failures as a list, and `/std/Io/Error` proves that it names every one of them.
 
 **Rationale.** A code is agreed on by three parties with no call to carry it. Written at each — a constant, a `/sys` declaration beside it, a JavaScript key — it agrees only while each author copies the others, and a status added on the host's side is an `other` on the guest's until someone notices. One row has one value and one guest name; a failure the table gives no code does not compile, and a failure the library gives no case does not elaborate.
 

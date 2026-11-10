@@ -1,7 +1,7 @@
 //! What the harness is configured with that no program changes: the codes it answers with, the standard streams' tokens, the first token it may mint, the report of a program suspended on nothing, and the name each host row is declared under beside the host method that answers it. Everything is read off `curios-abi`, so the browser cannot drift from the compiler and the native host as a hand-copied constants file could, and rendered once, as JSON.
 
 use {
-    curios_abi::{CodeCarrier, DEADLOCK, Failure, Handle, HostOp, code_sets, errno},
+    curios_abi::{CodeCarrier, DEADLOCK, ErrnoCodes, Failure, Handle, HostOp, code_sets},
     serde_json::{Map, Value, json},
 };
 
@@ -34,7 +34,7 @@ pub fn configuration() -> String {
         let table = match (group.name, group.carrier) {
             // A failure the harness answers by an errno of its own crosses in the status lane, as any host's does.
             ("status", _) => codes
-                .chain([("EBADF", Failure::Other(errno::EBADF).code())])
+                .chain([("EBADF", Failure::Other(ErrnoCodes::EBADF).code())])
                 .map(|(constant, value)| (constant.to_string(), Value::from(value.to_string())))
                 .collect::<Map<_, _>>(),
             (_, CodeCarrier::Byte) => codes

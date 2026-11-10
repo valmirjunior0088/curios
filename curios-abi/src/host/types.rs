@@ -1,9 +1,12 @@
 //! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its [`open_mode`] tag, and [`ClockReading`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-native`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its [`OpenModeCodes`] tag, and [`ClockReading`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-native`), not here.
 
 use {
-    crate::{file_kind, open_mode, serial_flow, serial_op, serial_parity, stdio, stdio_mode},
+    crate::{
+        FileKindCodes, OpenModeCodes, SerialFlowCodes, SerialOpCodes, SerialParityCodes,
+        StdioCodes, StdioModeCodes,
+    },
     curios_num::Natural,
     std::num::NonZeroU32,
 };
@@ -19,11 +22,11 @@ pub enum Handle {
 
 impl Handle {
     /// The well-known stdin handle token minted by the `/sys` prelude.
-    const STDIN: u32 = stdio::STDIN;
+    const STDIN: u32 = StdioCodes::STDIN;
     /// The well-known stdout handle token.
-    const STDOUT: u32 = stdio::STDOUT;
+    const STDOUT: u32 = StdioCodes::STDOUT;
     /// The well-known stderr handle token.
-    const STDERR: u32 = stdio::STDERR;
+    const STDERR: u32 = StdioCodes::STDERR;
     /// The first handle token a host mints, one past the standard streams' so a minted file or socket handle never collides with one; each host counts up from here with a [`TokenMint`].
     pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
@@ -107,7 +110,7 @@ impl Default for TokenMint {
     }
 }
 
-/// Why a fallible host operation failed, mirrored by `/std/Io/Error` and decoded into it by `/std/internal/Status`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-native`).
+/// Why a fallible host operation failed, mirrored by `/std/Io/Error` and decoded into it by `/std/internal/Status`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::StatusCodes::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-native`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     NotFound,
@@ -151,7 +154,7 @@ pub struct TtySize {
     pub rows: u64,
 }
 
-/// What `file_stat` found at a path, its kind one of the closed [`file_kind`] codes.
+/// What `file_stat` found at a path, its kind one of the closed `FileKindCodes` codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
     File,
@@ -164,19 +167,19 @@ pub enum FileKind {
 impl FileKind {
     /// Every kind's code: the set a `file_stat` reply's kind is checked against.
     pub const WIRE_CODES: &'static [u64] = &[
-        file_kind::FILE,
-        file_kind::DIRECTORY,
-        file_kind::SYMLINK,
-        file_kind::OTHER,
+        FileKindCodes::FILE,
+        FileKindCodes::DIRECTORY,
+        FileKindCodes::SYMLINK,
+        FileKindCodes::OTHER,
     ];
 
-    /// The [`file_kind`] code the guest decodes.
+    /// The `FileKindCodes` code the guest decodes.
     pub fn code(self) -> u64 {
         match self {
-            FileKind::File => file_kind::FILE,
-            FileKind::Directory => file_kind::DIRECTORY,
-            FileKind::Symlink => file_kind::SYMLINK,
-            FileKind::Other => file_kind::OTHER,
+            FileKind::File => FileKindCodes::FILE,
+            FileKind::Directory => FileKindCodes::DIRECTORY,
+            FileKind::Symlink => FileKindCodes::SYMLINK,
+            FileKind::Other => FileKindCodes::OTHER,
         }
     }
 }
@@ -220,7 +223,7 @@ pub trait ClosedCode: Copy + PartialEq + 'static {
     }
 }
 
-/// The open mode of `file_open`, mirrored by `/std/File`'s `Mode` inductive, its tags [`open_mode`]'s.
+/// The open mode of `file_open`, mirrored by `/std/File`'s `Mode` inductive, its tags `OpenModeCodes`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Read,
@@ -231,14 +234,14 @@ pub enum Mode {
 
 impl ClosedCode for Mode {
     const CODES: &'static [(Self, u64)] = &[
-        (Mode::Read, open_mode::READ),
-        (Mode::Write, open_mode::WRITE),
-        (Mode::Append, open_mode::APPEND),
-        (Mode::ReadWrite, open_mode::READ_WRITE),
+        (Mode::Read, OpenModeCodes::READ),
+        (Mode::Write, OpenModeCodes::WRITE),
+        (Mode::Append, OpenModeCodes::APPEND),
+        (Mode::ReadWrite, OpenModeCodes::READ_WRITE),
     ];
 }
 
-/// How `proc_spawn` wires one of a child's standard streams, its tags [`stdio_mode`]'s.
+/// How `proc_spawn` wires one of a child's standard streams, its tags `StdioModeCodes`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StdioMode {
     Inherit,
@@ -248,9 +251,9 @@ pub enum StdioMode {
 
 impl ClosedCode for StdioMode {
     const CODES: &'static [(Self, u64)] = &[
-        (StdioMode::Inherit, stdio_mode::INHERIT),
-        (StdioMode::Pipe, stdio_mode::PIPE),
-        (StdioMode::Null, stdio_mode::NULL),
+        (StdioMode::Inherit, StdioModeCodes::INHERIT),
+        (StdioMode::Pipe, StdioModeCodes::PIPE),
+        (StdioMode::Null, StdioModeCodes::NULL),
     ];
 }
 
@@ -263,7 +266,7 @@ pub struct ChildHandles {
     pub stderr: Option<Handle>,
 }
 
-/// The parity `serial_open` frames a character with, its tags [`serial_parity`]'s.
+/// The parity `serial_open` frames a character with, its tags `SerialParityCodes`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialParity {
     None,
@@ -273,13 +276,13 @@ pub enum SerialParity {
 
 impl ClosedCode for SerialParity {
     const CODES: &'static [(Self, u64)] = &[
-        (SerialParity::None, serial_parity::NONE),
-        (SerialParity::Even, serial_parity::EVEN),
-        (SerialParity::Odd, serial_parity::ODD),
+        (SerialParity::None, SerialParityCodes::NONE),
+        (SerialParity::Even, SerialParityCodes::EVEN),
+        (SerialParity::Odd, SerialParityCodes::ODD),
     ];
 }
 
-/// How `serial_open` paces the wire, its tags [`serial_flow`]'s.
+/// How `serial_open` paces the wire, its tags `SerialFlowCodes`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialFlow {
     None,
@@ -288,12 +291,12 @@ pub enum SerialFlow {
 
 impl ClosedCode for SerialFlow {
     const CODES: &'static [(Self, u64)] = &[
-        (SerialFlow::None, serial_flow::NONE),
-        (SerialFlow::Hardware, serial_flow::HARDWARE),
+        (SerialFlow::None, SerialFlowCodes::NONE),
+        (SerialFlow::Hardware, SerialFlowCodes::HARDWARE),
     ];
 }
 
-/// What `serial_control` does to a port, its tags [`serial_op`]'s.
+/// What `serial_control` does to a port, its tags `SerialOpCodes`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialOp {
     Dtr,
@@ -303,9 +306,9 @@ pub enum SerialOp {
 
 impl ClosedCode for SerialOp {
     const CODES: &'static [(Self, u64)] = &[
-        (SerialOp::Dtr, serial_op::DTR),
-        (SerialOp::Rts, serial_op::RTS),
-        (SerialOp::DiscardInput, serial_op::DISCARD_INPUT),
+        (SerialOp::Dtr, SerialOpCodes::DTR),
+        (SerialOp::Rts, SerialOpCodes::RTS),
+        (SerialOp::DiscardInput, SerialOpCodes::DISCARD_INPUT),
     ];
 }
 
