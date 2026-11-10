@@ -5,13 +5,16 @@
 //! The pieces are neutral — a property is the database's and segmentation is UAX #29's — as `README.md` decides, and a choice made over them is its consumer's.
 
 mod property;
-pub use property::*;
+pub use property::{
+    EastAsianWidth, GraphemeBreak, IndicConjunctBreak, east_asian_width, grapheme_break,
+    indic_conjunct_break, is_default_ignorable, is_emoji_presentation, is_extended_pictographic,
+};
 
 mod graphemes;
-pub use graphemes::*;
+pub use graphemes::{Graphemes, graphemes};
 
 mod packed;
-pub use packed::*;
+pub use packed::{ClassCodes, PACKED_RUN, PackedTable, class_codes, packed_tables};
 
 #[cfg(feature = "test-support")]
 pub mod test_support;
