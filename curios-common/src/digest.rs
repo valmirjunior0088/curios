@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_archive::Bytes,
-    sha2::{Digest as _, Sha256},
+    sha2::Sha256,
     std::{fmt, hash::Hasher},
 };
 
@@ -28,7 +28,7 @@ pub struct Digest([u8; 32]);
 impl Digest {
     /// The digest of `bytes`.
     pub fn of(bytes: &[u8]) -> Self {
-        Self(Sha256::digest(bytes).into())
+        Self(<Sha256 as sha2::Digest>::digest(bytes).into())
     }
 
     /// The digest whose thirty-two bytes are `bytes`, as a table that keeps digests spells them.
@@ -105,7 +105,7 @@ pub struct Fingerprint(Sha256);
 impl Fingerprint {
     /// A fingerprint with nothing folded into it yet.
     pub fn new() -> Self {
-        Self(Sha256::new())
+        Self(Sha256::default())
     }
 
     /// One length-framed part of a key: the part's byte length as a little-endian `u64`, then its bytes.
@@ -114,14 +114,13 @@ impl Fingerprint {
     pub fn feed(&mut self, part: impl AsRef<[u8]>) {
         let part = part.as_ref();
 
-        self.0.update((part.len() as u64).to_le_bytes());
-        self.0.update(part);
+        sha2::Digest::update(&mut self.0, (part.len() as u64).to_le_bytes());
+        sha2::Digest::update(&mut self.0, part);
     }
 
     /// Everything written so far, as the hex digest a key part is spelled in.
     pub fn hex(self) -> String {
-        self.0
-            .finalize()
+        sha2::Digest::finalize(self.0)
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect()
@@ -136,11 +135,11 @@ impl Default for Fingerprint {
 
 impl Hasher for Fingerprint {
     fn write(&mut self, bytes: &[u8]) {
-        self.0.update(bytes);
+        sha2::Digest::update(&mut self.0, bytes);
     }
 
     fn finish(&self) -> u64 {
-        let digest = self.0.clone().finalize();
+        let digest = sha2::Digest::finalize(self.0.clone());
 
         u64::from_le_bytes(digest[..8].try_into().expect("a digest is 32 bytes wide"))
     }

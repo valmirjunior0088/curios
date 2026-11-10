@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::Streams,
     curios_browser::{ARGUMENT, INDEX_HTML, Posted, Reply, Step, content_type, runner},
-    httparse::{EMPTY_HEADER, Error, Request as HttparseRequest, Status},
+    httparse::{EMPTY_HEADER, Error, Status},
     std::{
         collections::BTreeMap,
         ffi::OsString,
@@ -23,10 +23,7 @@ use {
     },
     tungstenite::{
         Message, WebSocket,
-        handshake::server::{
-            Request as TungsteniteRequest, Response as TungsteniteResponse, create_response,
-            write_response,
-        },
+        handshake::server::{create_response, write_response},
         http::Version,
         protocol::{CloseFrame, Role, WebSocketConfig, frame::coding::CloseCode},
     },
@@ -263,7 +260,7 @@ impl Response {
 enum Answer<'r, 'a> {
     Response(Response),
     Socket {
-        switch: TungsteniteResponse,
+        switch: tungstenite::handshake::server::Response,
         held: Held<'r, 'a>,
     },
 }
@@ -356,7 +353,9 @@ fn said(reply: &Reply) -> Message {
 }
 
 /// The request `stream` carries, read to the end of its head, with what the client sent past it, or the response refusing it: a head past [`HEAD`] or stating more than [`HEADERS`] headers, and one that is no HTTP request's.
-fn request(mut stream: &TcpStream) -> io::Result<Result<(TungsteniteRequest, Vec<u8>), Response>> {
+fn request(
+    mut stream: &TcpStream,
+) -> io::Result<Result<(tungstenite::handshake::server::Request, Vec<u8>), Response>> {
     let mut head = Vec::new();
     let mut chunk = [0; 4096];
 
@@ -368,7 +367,7 @@ fn request(mut stream: &TcpStream) -> io::Result<Result<(TungsteniteRequest, Vec
         head.extend_from_slice(&chunk[..read]);
 
         let mut headers = [EMPTY_HEADER; HEADERS];
-        let mut parsed = HttparseRequest::new(&mut headers);
+        let mut parsed = httparse::Request::new(&mut headers);
         let refused = match parsed.parse(&head) {
             Ok(Status::Complete(length)) if length <= HEAD => {
                 return Ok(stated(&parsed).map(|request| (request, head[length..].to_vec())));
@@ -386,12 +385,14 @@ fn request(mut stream: &TcpStream) -> io::Result<Result<(TungsteniteRequest, Vec
 }
 
 /// `parsed` as the request it states, or the refusal of one whose method, target or headers spell none.
-fn stated(parsed: &HttparseRequest<'_, '_>) -> Result<TungsteniteRequest, Response> {
+fn stated(
+    parsed: &httparse::Request<'_, '_>,
+) -> Result<tungstenite::handshake::server::Request, Response> {
     let version = match parsed.version {
         Some(1) => Version::HTTP_11,
         _ => Version::HTTP_10,
     };
-    let mut request = TungsteniteRequest::builder()
+    let mut request = tungstenite::handshake::server::Request::builder()
         .method(parsed.method.unwrap_or_default())
         .uri(parsed.path.unwrap_or_default())
         .version(version);
@@ -408,12 +409,16 @@ fn no_request() -> Response {
 }
 
 /// The header `name` of `request`, where it states one in visible ASCII.
-fn header<'r>(request: &'r TungsteniteRequest, name: &str) -> Option<&'r str> {
+fn header<'r>(request: &'r tungstenite::handshake::server::Request, name: &str) -> Option<&'r str> {
     request.headers().get(name)?.to_str().ok()
 }
 
 /// What answers `request`, served on `port`.
-fn replied<'r, 'a>(request: &TungsteniteRequest, site: &'r Site<'a>, port: u16) -> Answer<'r, 'a> {
+fn replied<'r, 'a>(
+    request: &tungstenite::handshake::server::Request,
+    site: &'r Site<'a>,
+    port: u16,
+) -> Answer<'r, 'a> {
     if !header(request, "host").is_some_and(|host| own(host, port)) {
         return Response::text(
             "421 Misdirected Request",
@@ -453,7 +458,11 @@ fn own(authority: &str, port: u16) -> bool {
 }
 
 /// The socket of `run` the handshake `request` asks for: refused where it states an `Origin` other than this server's, where it is no handshake WebSocket's version 13 takes, and where another socket drives the run.
-fn socket<'r, 'a>(request: &TungsteniteRequest, run: &'r Run<'a>, port: u16) -> Answer<'r, 'a> {
+fn socket<'r, 'a>(
+    request: &tungstenite::handshake::server::Request,
+    run: &'r Run<'a>,
+    port: u16,
+) -> Answer<'r, 'a> {
     let foreign = header(request, "origin").is_some_and(|origin| {
         !origin
             .strip_prefix("http://")

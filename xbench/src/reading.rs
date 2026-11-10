@@ -6,7 +6,7 @@
 
 use {
     crate::Platform,
-    serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _},
+    serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error},
     toml::value::{Date, Datetime},
 };
 

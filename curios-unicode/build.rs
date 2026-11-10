@@ -8,7 +8,7 @@ use {
     sha2::{Digest, Sha256},
     std::{
         env,
-        fmt::Write as _,
+        fmt::Write,
         fs,
         io::Read,
         path::{Path, PathBuf},

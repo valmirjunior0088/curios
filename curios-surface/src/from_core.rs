@@ -200,32 +200,33 @@ fn placeholder() -> Term {
 
 /// One node of the tree: every Core form as the surface writes it.
 fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
-    use curios_core::Subterm as Core;
-
     Some(match curios_core::Term::unwrap_or_clone(term) {
         // A level is implicit in the surface and settles by where the word stands, so a sort is its word.
-        Core::Sort(curios_core::Sort { quality, .. }) => match quality {
+        curios_core::Subterm::Sort(curios_core::Sort { quality, .. }) => match quality {
             curios_core::Quality::Type => Subterm::Type.into(),
             curios_core::Quality::Prop => Subterm::Prop.into(),
             curios_core::Quality::Param(_) | curios_core::Quality::Meta(_) => Subterm::Sort.into(),
         },
         // An instance is the name it is of, since no source states the levels, and a written name is the name.
-        Core::Instance(curios_core::Instance { name, .. })
-        | Core::Transient(curios_core::Transient::Name(name)) => global(&name, frame)?,
-        // A method named by its path is that path: its concept's, extended by the field's label.
-        Core::Transient(curios_core::Transient::Method(curios_core::Method { concept, field })) => {
-            global(
-                &curios_core::Global::Authored(concept.qualifier()?.with(&field)),
-                frame,
-            )?
+        curios_core::Subterm::Instance(curios_core::Instance { name, .. })
+        | curios_core::Subterm::Transient(curios_core::Transient::Name(name)) => {
+            global(&name, frame)?
         }
-        Core::Intrinsic(intrinsic) => {
+        // A method named by its path is that path: its concept's, extended by the field's label.
+        curios_core::Subterm::Transient(curios_core::Transient::Method(curios_core::Method {
+            concept,
+            field,
+        })) => global(
+            &curios_core::Global::Authored(concept.qualifier()?.with(&field)),
+            frame,
+        )?,
+        curios_core::Subterm::Intrinsic(intrinsic) => {
             let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
 
             recurse(|| written_intrinsic(form, &frame))?
         }
         // A call across the wire reads as a call of its declaration, the type a row that does not return is handed under its mark. A row of no operand is still called.
-        Core::Foreign(curios_core::Foreign {
+        curios_core::Subterm::Foreign(curios_core::Foreign {
             function,
             declared,
             mut arguments,
@@ -237,7 +238,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 marked(arguments, explicits, &frame)?,
             )
         }
-        Core::FuncType(curios_core::FuncType { telescope }) => {
+        curios_core::Subterm::FuncType(curios_core::FuncType { telescope }) => {
             let marks = telescope.marks();
             let mut params = Vec::with_capacity(telescope.len());
             let output = parameter_types(telescope.cursor(), &marks, frame, &mut params)?;
@@ -251,7 +252,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             })
             .into()
         }
-        Core::Func(curios_core::Func { telescope }) => {
+        curios_core::Subterm::Func(curios_core::Func { telescope }) => {
             let marks = telescope.marks();
             // A type-former lambda reads as the former it eta-expands, where a program writes that former.
             if let Some(former) = curios_core::former_eta(&telescope)
@@ -277,10 +278,10 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             })
             .into()
         }
-        Core::Apply(curios_core::Apply { head, arguments }) => {
+        curios_core::Subterm::Apply(curios_core::Apply { head, arguments }) => {
             apply(unchecked(head, frame)?, call_arguments(arguments, frame)?)
         }
-        Core::TupleType(curios_core::TupleType { telescope }) => {
+        curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => {
             let mut fields = Vec::with_capacity(telescope.len());
             let mut cursor = telescope.cursor();
             while let Some((hint, type_)) = cursor.entry() {
@@ -298,7 +299,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
             Subterm::TupleType(TupleType { fields }).into()
         }
-        Core::Tuple(curios_core::Tuple { fields, names }) => {
+        curios_core::Subterm::Tuple(curios_core::Tuple { fields, names }) => {
             let mut names = names.into_iter().chain(std::iter::repeat(None));
             let fields = fields
                 .into_iter()
@@ -313,7 +314,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
             Subterm::Tuple(Tuple { fields }).into()
         }
-        Core::Proj(curios_core::Proj { head, field }) => {
+        curios_core::Subterm::Proj(curios_core::Proj { head, field }) => {
             let field = written_field(&field, frame)?;
 
             Subterm::Proj(Proj {
@@ -323,7 +324,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             .into()
         }
         // The parameters, then the indices, one call each where the family has both, as its type former is applied at a use site: `Sized(Nat)(1)`.
-        Core::InductType(curios_core::InductType {
+        curios_core::Subterm::InductType(curios_core::InductType {
             name,
             params,
             indices,
@@ -343,7 +344,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             written
         }
         // The constructor called, the type's parameters left to where it stands: `Result/success(42)`.
-        Core::Variant(curios_core::Variant {
+        curios_core::Subterm::Variant(curios_core::Variant {
             name,
             params,
             tag,
@@ -385,7 +386,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 
             apply(head, hidden_run(members, frame)?)
         }
-        Core::StructType(curios_core::StructType { name, params, .. }) => {
+        curios_core::Subterm::StructType(curios_core::StructType { name, params, .. }) => {
             let marks = frame.spelling.nominal_marks(&name, params.len());
             let head = global(&name, frame)?;
             match params.is_empty() {
@@ -393,9 +394,9 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 false => apply(head, nominal_arguments(params, marks, 0, frame)?),
             }
         }
-        Core::Struct(literal) => written_struct(literal, frame)?,
-        Core::Match(elimination) => written_match(elimination, frame)?,
-        Core::Let(curios_core::Let { bindings, tail, .. }) => {
+        curios_core::Subterm::Struct(literal) => written_struct(literal, frame)?,
+        curios_core::Subterm::Match(elimination) => written_match(elimination, frame)?,
+        curios_core::Subterm::Let(curios_core::Let { bindings, tail, .. }) => {
             let labels = frame.mint.scope_labels(&tail);
             let terms = labels
                 .iter()
@@ -424,7 +425,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             .into()
         }
         // A recursive group is the `let … and …;` whose members see one another.
-        Core::Rec(curios_core::Rec { group, tail }) => {
+        curios_core::Subterm::Rec(curios_core::Rec { group, tail }) => {
             let labels = frame.mint.scope_labels(&tail);
             let terms = labels
                 .iter()
@@ -452,7 +453,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             })
             .into()
         }
-        Core::Var(var) => {
+        curios_core::Subterm::Var(var) => {
             let name = var.as_free()?;
             // A reference reaching the tree is what keeps a witness binder's name.
             if let Some(node) = chain(frame.witnesses).find(|node| &node.label == name) {
@@ -460,24 +461,29 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             }
             named(&frame.word(name))
         }
-        Core::Transient(curios_core::Transient::NumLit(curios_core::NumLit::Number {
-            magnitude,
-            sign,
-        })) => numeral(magnitude, sign),
-        Core::Transient(curios_core::Transient::NumLit(curios_core::NumLit::Character(
-            character,
-        ))) => Subterm::ProofLiteral(ProofLiteral::Char(character)).into(),
-        Core::Transient(curios_core::Transient::Infix(curios_core::Infix { op, left, right })) => {
-            infix(op, sub(left, frame)?, sub(right, frame)?)
-        }
-        Core::Transient(curios_core::Transient::Derive) => Subterm::Derive.into(),
+        curios_core::Subterm::Transient(curios_core::Transient::NumLit(
+            curios_core::NumLit::Number { magnitude, sign },
+        )) => numeral(magnitude, sign),
+        curios_core::Subterm::Transient(curios_core::Transient::NumLit(
+            curios_core::NumLit::Character(character),
+        )) => Subterm::ProofLiteral(ProofLiteral::Char(character)).into(),
+        curios_core::Subterm::Transient(curios_core::Transient::Infix(curios_core::Infix {
+            op,
+            left,
+            right,
+        })) => infix(op, sub(left, frame)?, sub(right, frame)?),
+        curios_core::Subterm::Transient(curios_core::Transient::Derive) => Subterm::Derive.into(),
         // A sequencing site holds its continuation hoisted and an ascription a type beside a term: no source spells either.
-        Core::Transient(curios_core::Transient::Bang(_) | curios_core::Transient::Ascribed(_)) => {
+        curios_core::Subterm::Transient(
+            curios_core::Transient::Bang(_) | curios_core::Transient::Ascribed(_),
+        ) => {
             return None;
         }
-        Core::Transient(curios_core::Transient::Matrix(matrix)) => written_matrix(matrix, frame)?,
+        curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) => {
+            written_matrix(matrix, frame)?
+        }
         // A goal is what a program writes for a term it leaves open, whatever elaboration knows of it.
-        Core::Metavar(_) => Subterm::Goal.into(),
+        curios_core::Subterm::Metavar(_) => Subterm::Goal.into(),
     })
 }
 
@@ -874,11 +880,9 @@ pub fn written_intrinsic<T, D: Dialect>(
     form: IntrinsicForm<T>,
     writer: &impl Writer<T, D>,
 ) -> Option<Term<D>> {
-    use IntrinsicForm as Form;
-
     Some(match form {
-        Form::Named(path) => writer.sys(path)?,
-        Form::Call {
+        IntrinsicForm::Named(path) => writer.sys(path)?,
+        IntrinsicForm::Call {
             path,
             implicits,
             explicits,
@@ -890,21 +894,23 @@ pub fn written_intrinsic<T, D: Dialect>(
                 false => apply(writer.sys(&path)?, arguments),
             }
         }
-        Form::Infix(op, left, right) => infix(op, writer.operand(left)?, writer.operand(right)?),
-        Form::Bool(value) => Subterm::Literal(Literal::Bool(value)).into(),
-        Form::Nat(value) => numeral(value, Sign::Unmarked),
-        Form::NatAbove { tail, floor } => infix(
+        IntrinsicForm::Infix(op, left, right) => {
+            infix(op, writer.operand(left)?, writer.operand(right)?)
+        }
+        IntrinsicForm::Bool(value) => Subterm::Literal(Literal::Bool(value)).into(),
+        IntrinsicForm::Nat(value) => numeral(value, Sign::Unmarked),
+        IntrinsicForm::NatAbove { tail, floor } => infix(
             InfixOp::Add,
             writer.operand(tail)?,
             numeral(floor, Sign::Unmarked),
         ),
-        Form::Byte(value) => Subterm::NumLit(NumLit {
+        IntrinsicForm::Byte(value) => Subterm::NumLit(NumLit {
             magnitude: Natural::from(value),
             radix: Radix::Hex(2),
             sign: Sign::Unmarked,
         })
         .into(),
-        Form::Int(value) => {
+        IntrinsicForm::Int(value) => {
             let sign = match value < Integer::from(0i32) {
                 true => Sign::Negative,
                 false => Sign::Positive,
@@ -912,8 +918,8 @@ pub fn written_intrinsic<T, D: Dialect>(
 
             numeral(value.magnitude(), sign)
         }
-        Form::Flt(value) => written_flt(value, writer)?,
-        Form::Bytes(entries) => {
+        IntrinsicForm::Flt(value) => written_flt(value, writer)?,
+        IntrinsicForm::Bytes(entries) => {
             let segments = entries
                 .into_iter()
                 .map(|entry| written_segment(entry, writer))
@@ -921,7 +927,7 @@ pub fn written_intrinsic<T, D: Dialect>(
 
             Subterm::Literal(Literal::Bytes(segments)).into()
         }
-        Form::List(entries) => {
+        IntrinsicForm::List(entries) => {
             let entries = entries
                 .into_iter()
                 .map(|entry| {
@@ -939,7 +945,7 @@ pub fn written_intrinsic<T, D: Dialect>(
             Subterm::Literal(Literal::List(entries)).into()
         }
         // A token the host minted, which no source spells.
-        Form::Handle(_) => return None,
+        IntrinsicForm::Handle(_) => return None,
     })
 }
 
