@@ -4,20 +4,20 @@ use std::ffi::{c_char, c_int, c_void};
 
 /// Opaque handle to a Binaryen module (`BINARYEN_REF(Module)`).
 #[repr(C)]
-pub(crate) struct BinaryenModule {
+pub struct BinaryenModule {
     _private: [u8; 0],
 }
 
-pub(crate) type BinaryenModuleRef = *mut BinaryenModule;
+pub type BinaryenModuleRef = *mut BinaryenModule;
 
-pub(crate) type BinaryenFeatures = u32;
+pub type BinaryenFeatures = u32;
 
 /// Buffers are allocated with `malloc()` and must be released with [`free`].
 #[repr(C)]
-pub(crate) struct BinaryenModuleAllocateAndWriteResult {
-    pub(crate) binary: *mut c_void,
-    pub(crate) binary_bytes: usize,
-    pub(crate) source_map: *mut c_char,
+pub struct BinaryenModuleAllocateAndWriteResult {
+    pub binary: *mut c_void,
+    pub binary_bytes: usize,
+    pub source_map: *mut c_char,
 }
 
 unsafe extern "C" {
