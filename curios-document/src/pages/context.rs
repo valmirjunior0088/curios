@@ -19,7 +19,7 @@ const KEYWORDS: &[&str] = &[
 /// One module's page, the root's doubling as the landing page.
 #[derive(Template)]
 #[template(path = "page.html")]
-pub(super) struct Page {
+pub struct Page {
     /// `../` per directory below the bundle: what every link to the bundle's root is prefixed with.
     root: String,
     /// The module's path, `/std/Option`; the landing page's is the prefix itself.
@@ -136,7 +136,7 @@ struct WitnessRow {
 }
 
 /// The page of `module` in `bundle`, with every link resolved from where the page sits.
-pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
+pub fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
     let record = bundle.record;
     let depth = bundle.depth(&module.path);
     let root = "../".repeat(depth);
@@ -331,7 +331,7 @@ fn segments(bundle: &Bundle<'_>, depth: usize, signature: &Signature) -> Vec<Seg
 }
 
 /// The keyword a declaration is written with.
-pub(super) fn keyword(kind: Kind) -> &'static str {
+pub fn keyword(kind: Kind) -> &'static str {
     match kind {
         Kind::Definition => "let",
         Kind::Inductive => "induct",
@@ -343,7 +343,7 @@ pub(super) fn keyword(kind: Kind) -> &'static str {
 }
 
 /// What a member of a declaration of `kind` is called in the index: a constructor a case, a field a field, a concept's method a method. The other kinds expose no members, so the word for one is never shown.
-pub(super) fn member_kind(kind: Kind) -> &'static str {
+pub fn member_kind(kind: Kind) -> &'static str {
     match kind {
         Kind::Inductive => "case",
         Kind::Structure => "field",

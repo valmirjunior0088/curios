@@ -1,18 +1,18 @@
 //! A documentation comment as a page shows it: paragraphs, separated in the source by an empty `---` line, each a run of text and code spans. A code span is what a pair of backticks encloses, the one piece of notation the prose grammar has; a backtick with no partner is text, so a comment is never refused for its punctuation.
 
 /// One paragraph of a comment.
-pub(super) struct Paragraph {
-    pub(super) spans: Vec<Span>,
+pub struct Paragraph {
+    pub spans: Vec<Span>,
 }
 
 /// A run of a paragraph: text, or the inside of a pair of backticks.
-pub(super) enum Span {
+pub enum Span {
     Text(String),
     Code(String),
 }
 
 /// The paragraphs of a comment's lines; `None` is no comment, and so no paragraphs.
-pub(super) fn paragraphs(lines: Option<&[String]>) -> Vec<Paragraph> {
+pub fn paragraphs(lines: Option<&[String]>) -> Vec<Paragraph> {
     lines
         .unwrap_or_default()
         .split(|line| line.is_empty())
@@ -24,7 +24,7 @@ pub(super) fn paragraphs(lines: Option<&[String]>) -> Vec<Paragraph> {
 }
 
 /// `text` cut at its backtick pairs. An empty pair contributes nothing, and an unpaired backtick is text.
-pub(super) fn spans(text: &str) -> Vec<Span> {
+pub fn spans(text: &str) -> Vec<Span> {
     let mut spans = Vec::new();
     let mut rest = text;
 
